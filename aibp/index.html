@@ -2513,12 +2513,6 @@
       <section id="battleRoom" class="battle-room" aria-label="在线战斗室" hidden>
         <p role="status" aria-live="polite"></p>
         <div data-room-content></div>
-        <details id="battleRoomAssets" class="battle-room-assets" hidden>
-          <summary>导入本机卡图</summary>
-          <label>图片文件夹 <input type="file" webkitdirectory multiple></label>
-          <output aria-live="polite"></output>
-          <button type="button" hidden>移除本机卡图</button>
-        </details>
         <dialog id="battleRoomImage">
           <form method="dialog"><button type="submit">关闭卡图</button></form>
           <img alt="">
@@ -2906,7 +2900,7 @@
 
   <script src="../assets/campaign-session.js?v=20260917"></script>
   <script src="../hero/hero-catalog.js"></script>
-  <script src="room-assets.js?v=20261117-titan-types" defer></script>
+  <script src="room-assets.js?v=20261117-hosted-only" defer></script>
   <script src="battle-room.js?v=20261117-titan-types" defer></script>
   <script src="../technology/gear-inventory.js?v=20261117-titan-types"></script>
   <script src="../assets/campaign-notes.js?v=20261015-aibp-summary1"></script>
@@ -4151,8 +4145,7 @@
         }
         // Encrypted configuration assets are already decoded to in-memory URLs.
         const resolved = window.HeliosAssets.resolve(src);
-        const exists = !!aibpImageIndex?.has(src) || !!window.ATO_BATTLE_ASSETS?.hasLocalAibp(src)
-          || /^(?:blob:|data:image\/)/.test(resolved);
+        const exists = !!aibpImageIndex?.has(src) || /^(?:blob:|data:image\/)/.test(resolved);
         const cached = optionalImageChecks.get(src);
         cached.expiresAt = exists ? Infinity : Date.now() + 30000;
         cached.needs = null;

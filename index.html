@@ -136,7 +136,6 @@
       font-weight: 800;
     }
 
-    #campaignProfileField[hidden] { display: none; }
 
     .auth-message {
       min-height: 20px;
@@ -2687,7 +2686,6 @@
                 当前账号
                 <span id="sessionAccountName" class="session-account"></span>
               </label>
-              <label id="campaignProfileField" hidden>战役档案<select id="campaignProfileSelect" aria-label="战役档案"></select></label>
               <button id="logoutButton" type="button" class="secondary" data-dashboard-readonly-allowed>登出</button>
               <button id="previousDayButton" type="button" class="secondary" data-dashboard-readonly-allowed>回到前一天</button>
             </div>
@@ -3962,8 +3960,6 @@
       loginModeButton: document.querySelector("#loginModeButton"),
       registerModeButton: document.querySelector("#registerModeButton"),
       sessionAccountName: document.querySelector("#sessionAccountName"),
-      campaignProfileField: document.querySelector("#campaignProfileField"),
-      campaignProfileSelect: document.querySelector("#campaignProfileSelect"),
       campaignSaveStatus: document.querySelector("#campaignSaveStatus"),
       dashboardWriterNotice: document.querySelector("#dashboardWriterNotice"),
       dashboardWriterMessage: document.querySelector("#dashboardWriterMessage"),
@@ -7142,15 +7138,6 @@
 
     function renderProfiles() {
       if (sessionUser) elements.sessionAccountName.textContent = sessionUser.username;
-      const profiles = Object.values(archive.profiles);
-      elements.campaignProfileField.hidden = profiles.length < 2;
-      elements.campaignProfileSelect.replaceChildren(...profiles.map(profile => {
-        const option = document.createElement("option");
-        option.value = profile.id;
-        option.textContent = profile.name;
-        return option;
-      }));
-      elements.campaignProfileSelect.value = archive.activeProfileId;
     }
 
     function renderCycles() {
@@ -14679,20 +14666,6 @@
       clearLocalStorageAfterLogout();
     });
     elements.cycleSelect.addEventListener("change", () => switchCycle(elements.cycleSelect.value));
-    elements.campaignProfileSelect.addEventListener("change", () => {
-      const id = elements.campaignProfileSelect.value;
-      if (!Object.hasOwn(archive.profiles, id) || id === archive.activeProfileId) return;
-      saveState();
-      archive.activeProfileId = id;
-      const cycle = currentProfile().activeCycleId;
-      const url = new URL(window.location.href);
-      url.searchParams.set("cycle", cycle);
-      window.history.replaceState(null, "", url);
-      renderDashboardArchive(archive);
-      queueCampaignSave();
-      void flushCampaignSave();
-      dashboardCycleChannel?.postMessage({ type: "active-cycle-changed", cycleId: cycle });
-    });
     elements.exportButton.addEventListener("click", exportState);
     elements.importButton.addEventListener("click", () => elements.importInput.click());
     elements.importInput.addEventListener("change", () => importStateFile(elements.importInput.files[0]));

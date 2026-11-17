@@ -77,8 +77,5 @@ body.aibp-room-only > .app > main { display: block; height: auto; padding: clamp
 body.aibp-room-only > #sidebarToggle,
 body.aibp-room-only > .app > aside,
 body.aibp-room-only > .app > main > :not(#battleRoom) { display: none !important; }
-.battle-room-assets { margin-top: 12px; }
-.battle-room-assets > summary { cursor: pointer; }
-.battle-room-assets > :is(label, output) { display: block; margin-top: 7px; }
 #battleRoomImage { max-width: min(95vw, 640px); max-height: 94vh; }
 #battleRoomImage img { display: block; max-width: 100%; max-height: 75vh; object-fit: contain; margin-top: 8px; }

@@ -12,7 +12,7 @@ Pages 发布静态页面。Pages Functions 通过同域 Service Binding 把登�
 
 玩家可更新自己英雄的凶险、泰坦状态和装备使用数、掷骰，并和队友一起更新克拉托斯池。房主可以推进轮次或结束战斗。房间由独立的 SQLite Durable Object 保存，使用 WebSocket 推送，各设备上的 AIBP 敌方牌堆仍由房主的本机 AIBP 操作，房间结果暂不回写战役。
 
-发布了卡图的站点可直接显示卡面。AIBP 战斗室也保留「导入本机卡图」，可选择保留项目路径的「图片」文件夹（如 `aibp/ps/...`、`technology/images/gear_cards/...`）。浏览器在本机缓存所选 JPEG、PNG 和 WebP。刷新后 AIBP 重新读取图片，已有装备可以在战斗室点开卡面。桌面素材库或安卓使用标准 `.atopack`。
+网页战斗室使用 Pages 发布的卡图，点击装备或泰坦的卡图入口即可查看。桌面素材库或安卓使用标准 `.atopack`。
 
 ## 本地运行
 

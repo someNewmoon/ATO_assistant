@@ -322,6 +322,8 @@
     const controls = host && !state.closed ? '<button type="button" data-action="round">下一轮</button><button type="button" data-action="end">结束战斗</button>' : '';
     const pool = Object.entries(poolNames).map(([key, label]) => '<div>' + marker('images/battle-markers/' + key + '.webp', label)
       + buttons('pool', key, state.pool[key], undefined, label, 99, edit) + '</div>').join('');
+    const clearPool = edit ? '<button type="button" data-action="pool-clear"'
+      + (Object.values(state.pool).every(value => value === 0) ? ' disabled' : '') + '>一键清空</button>' : '';
     const heroes = state.heroes.map(heroCard);
     const own = role === 'player' ? '<h3 class="battle-room-heading">我的英雄</h3>' + heroes[seat] : '';
     const overview = role === 'player'
@@ -342,7 +344,7 @@
     const selection = focus >= 0 && active.name;
     summary.innerHTML = '<div class="battle-room-head"><div><h2>' + escape(state.title) + '</h2><p>第 ' + state.round
       + ' 轮' + (state.closed ? ' · 已结束' : '') + '</p></div><div>' + controls + '</div></div>' + links;
-    content.innerHTML = own + '<section class="battle-room-pool"><h3>克拉托斯池</h3><div>' + pool + '</div></section>' + diceForm()
+    content.innerHTML = own + '<section class="battle-room-pool"><header><h3>克拉托斯池</h3>' + clearPool + '</header><div>' + pool + '</div></section>' + diceForm()
       + (edit ? rollLog : '') + (role !== 'player' ? '<h3 class="battle-room-heading">状态总览</h3>' : '') + overview
       + (edit ? '' : rollLog);
     if (focus >= 0) {
@@ -515,6 +517,8 @@
       if (value === 'discarded') armedCard = '';
       void send({ id: crypto.randomUUID(), type: action, key, seat: Number(seat), slot: Number(slot), value });
       render();
+    } else if (action === 'pool-clear') {
+      send({ id: crypto.randomUUID(), type: action });
     } else if (action) {
       if (action === 'end' && !window.confirm('确认结束本场战斗？结束后，房间将转为只读。')) return;
       void send({ id: crypto.randomUUID(), type: action, key, seat: Number(seat), delta: Number(delta) });

@@ -49,7 +49,7 @@
         });
       }
       marker.className = "battle-piece " + (boss ? "battle-piece-apostle" : "battle-piece-titan");
-      marker.classList.toggle("is-selected", boss ? mode === "apostle-sight" : selected === index && mode !== "apostle-sight");
+      marker.classList.toggle("is-selected", boss ? mode?.startsWith("apostle-") : selected === index && mode?.startsWith("titan-"));
       if (!boss) marker.style.setProperty("--piece-accent", accents[index]);
       marker.style.left = (piece.column - 0.5) * 5 + "%";
       marker.style.top = (14 - piece.row + 0.5) / 14 * 100 + "%";

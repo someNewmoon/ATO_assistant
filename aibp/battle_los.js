@@ -842,6 +842,24 @@
     return queue.slice(1);
   }
 
+  function apostleDestinationSteps(pieces, point, size) {
+    const footprint = losSourceCells(point, size);
+    if (pieces.titans.some(titan => footprint.some(({ c, r }) => c === titan.column && r === titan.row))) return null;
+    return Math.abs(point.column - pieces.apostle.column) + Math.abs(point.row - pieces.apostle.row);
+  }
+
+  function computeApostleMoves(pieces, size, speed) {
+    const half = (size - 1) / 2;
+    const moves = [];
+    for (let c = 1 + half; c <= COLUMNS - half; c++) {
+      for (let r = 1 + half; r <= ROWS - half; r++) {
+        const steps = apostleDestinationSteps(pieces, { column: c, row: r }, size);
+        if (steps && steps <= speed) moves.push({ c, r, steps });
+      }
+    }
+    return moves;
+  }
+
   // ---- primordial movement paths ---------------------------------------
   // P38 movement uses orthogonal steps, ignores terrain/models for movement,
   // and zigs/zags between the two axes until the target lies on a straight path.
@@ -1035,19 +1053,20 @@
     };
     if (!state.active || !map || !terrainApi) return empty;
 
-    const tactical = ["titan-move", "titan-attack", "apostle-sight"].includes(state.mode);
+    const tactical = ["titan-move", "titan-attack", "apostle-sight", "apostle-move"].includes(state.mode);
     const mode = tactical ? state.mode : "";
     const pieceState = tactical ? terrainApi.getBoardPieces(map, apostle, settings.level) : null;
     const selected = Number.isInteger(state.selectedTitan) && state.selectedTitan >= 0 && state.selectedTitan < (pieceState?.titans.length || 4)
       ? state.selectedTitan : 0;
-    const sourceAnchor = tactical ? (mode === "apostle-sight" ? pieceState.apostle : pieceState.titans[selected]) : state.anchor;
-    const profile = (tactical ? mode === "apostle-sight" : state.source === "apostle")
+    const bossMode = mode === "apostle-sight" || mode === "apostle-move";
+    const sourceAnchor = tactical ? (bossMode ? pieceState.apostle : pieceState.titans[selected]) : state.anchor;
+    const profile = (tactical ? bossMode : state.source === "apostle")
       ? (terrainApi.getApostleProfile(apostle, settings.level ?? map.startLevel) || null)
       : null;
     // 移速以调用方给的为准（主控台读的是 Boss 等级属性表里的当前等级）；没给才退回
     // 面板数据里按 map.startLevel 算出来的那份。∞ / 0 都是合法值，只排除 undefined/NaN。
     const speedOverride = Number(settings.speed);
-    const profileWithSpeed = profile && Number.isFinite(speedOverride)
+    const profileWithSpeed = profile && (Number.isFinite(speedOverride) || speedOverride === Infinity)
       ? { ...profile, speed: speedOverride }
       : profile;
     const size = profileWithSpeed ? profileWithSpeed.size : 1;
@@ -1097,6 +1116,8 @@
       const speed = Number.isFinite(state.moveSpeed) ? Math.max(0, Math.min(20, state.moveSpeed)) : 5;
       return { ...base, moveCells: computeTitanMoves(source[0], pieceState, selected, speed, tiles, terrainApi, occ, bossSize) };
     }
+
+    if (mode === "apostle-move") return { ...base, moveCells: computeApostleMoves(pieceState, size, profileWithSpeed?.speed ?? Infinity) };
 
     const center = losSourceCenter(sourceAnchor, size);
     const blindspots = new Set(
@@ -1208,14 +1229,15 @@
       return arrow;
     };
 
-    overlay.obscuring.forEach(({ c, r, cloud }) => {
+    const showSight = overlay.mode !== "titan-attack" && overlay.mode !== "apostle-move";
+    if (showSight) overlay.obscuring.forEach(({ c, r, cloud }) => {
       layer.appendChild(cell(c, r, cloud
         ? "battle-map-los-obscuring battle-map-los-cloud"
         : "battle-map-los-obscuring"));
     });
 
     const extra = overlay.wallsIgnored ? " battle-map-los-wall-ignored" : "";
-    (overlay.walls.h || []).forEach((w) => {
+    if (showSight) (overlay.walls.h || []).forEach((w) => {
       const el = d.createElement("div");
       el.className = `battle-map-los-wall horizontal${extra}`;
       el.style.left = `${w.x0 / COLUMNS * 100}%`;
@@ -1223,7 +1245,7 @@
       el.style.top = `${(ROWS - w.y) / ROWS * 100}%`;
       layer.appendChild(el);
     });
-    (overlay.walls.v || []).forEach((w) => {
+    if (showSight) (overlay.walls.v || []).forEach((w) => {
       const el = d.createElement("div");
       el.className = `battle-map-los-wall vertical${extra}`;
       el.style.top = `${(ROWS - w.y1) / ROWS * 100}%`;
@@ -1235,14 +1257,16 @@
     if (!overlay.source.length) return;
 
     for (const { c, r, steps } of overlay.moveCells || []) {
-      const movementCell = cell(c, r, "battle-map-titan-move");
+      const movementCell = cell(c, r, overlay.mode === "apostle-move" ? "battle-map-apostle-move" : "battle-map-titan-move");
       movementCell.textContent = String(steps);
       layer.appendChild(movementCell);
     }
-    overlay.visible.forEach(({ c, r }) => layer.appendChild(cell(c, r, "battle-map-los-visible")));
-    overlay.blocked.forEach(({ c, r }) => layer.appendChild(cell(c, r, "battle-map-los-blocked")));
+    if (showSight) {
+      overlay.visible.forEach(({ c, r }) => layer.appendChild(cell(c, r, "battle-map-los-visible")));
+      overlay.blocked.forEach(({ c, r }) => layer.appendChild(cell(c, r, "battle-map-los-blocked")));
+    }
     overlay.inRange.forEach(({ c, r, hasLos }) => {
-      layer.appendChild(cell(c, r, hasLos
+      layer.appendChild(cell(c, r, showSight && hasLos
         ? "battle-map-los-in-range has-los"
         : "battle-map-los-in-range"));
     });
@@ -1256,7 +1280,7 @@
         row: overlay.source.reduce((sum, item) => sum + item.r, 0) / overlay.source.length,
       }
       : null;
-    if (sourceCenter) {
+    if (sourceCenter && overlay.mode !== "titan-attack") {
       const sourceColumns = overlay.source.map((item) => item.c);
       const sourceRows = overlay.source.map((item) => item.r);
       const sourceSize = overlay.profile && overlay.profile.size
@@ -1323,12 +1347,14 @@
       for (let c = 1; c <= COLUMNS; c++) {
         for (let r = 1; r <= ROWS; r++) {
           const key = cellKey(c, r);
+          const steps = overlay.distance[key];
+          if (!Number.isFinite(steps)) continue;
           const el = cell(c, r, overlay.sourceKeys.has(key)
             ? "battle-map-los-distance is-source"
-            : (overlay.range && overlay.range.grid[key]
+            : (overlay.mode === "titan-attack" || overlay.range?.grid[key]
               ? "battle-map-los-distance in-range"
               : "battle-map-los-distance"));
-          el.textContent = String(overlay.distance[key]);
+          el.textContent = String(steps);
           layer.appendChild(el);
         }
       }
@@ -1349,6 +1375,7 @@
     hasLOS,
     computeLOSMap,
     computeRangeMap,
+    apostleDestinationSteps,
     normalizeWeapon,
     computeTitanWeapon,
     computeTitanMoves,

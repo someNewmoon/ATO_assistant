@@ -56,6 +56,12 @@
           send({ type: "board-layout", map: next, keepTitans: Boolean(next.pieces),
             layoutRevision: room.board.layoutRevision });
         },
+        onApostleMove(point) {
+          send({ type: "board-apostle-move", point, from: room.board.map.pieces.apostle });
+        },
+        onApostleFace(facing) {
+          send({ type: "board-face", facing });
+        },
         onTitanMove(seat, point, speed) {
           send({ type: "board-move", seat, point, from: room.board.map.pieces.titans[seat], speed });
         },

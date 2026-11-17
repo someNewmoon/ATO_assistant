@@ -262,6 +262,10 @@ export class BattleRoom extends DurableObject {
       else room.closed = true;
       return;
     }
+    if (body.type === 'pool-clear') {
+      for (const key of poolKeys) room.pool[key] = 0;
+      return;
+    }
     if (body.type === 'pool') {
       if (!poolKeys.includes(body.key)) reject('未知克拉托斯标记。');
       room.pool[body.key] = counter(room.pool[body.key], body.delta, 99);

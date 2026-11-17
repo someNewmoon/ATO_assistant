@@ -1,10 +1,11 @@
+import '../../aibp/boss-levels-data.js';
 import terrain from '../../ss/terrain-data.js';
 import los from '../../aibp/battle_los.js';
 import { ApiError, object } from './campaign.js';
 
 const H = 14;
 const W = 20;
-const modes = ['titan-move', 'titan-attack', 'apostle-sight'];
+const modes = ['titan-move', 'titan-attack', 'apostle-sight', 'apostle-move'];
 
 function fail(text, status = 400) {
   throw new ApiError(status, text);
@@ -93,6 +94,26 @@ export function applyRoomBoard(room, actor, body) {
     return;
   }
   if (!board) fail('请先载入房间版图。');
+  if (body.type === 'board-apostle-move') {
+    const profile = terrain.getApostleProfile(board.apostle, board.level);
+    const size = profile?.size || 1;
+    const current = board.map.pieces.apostle;
+    if (body.from?.column !== current.column || body.from?.row !== current.row) fail('骇物位置已更新，请重选目的格。', 409);
+    const point = terrain.boardCell(body.point, size);
+    if (!point || point.column !== body.point.column || point.row !== body.point.row) fail('骇物落位无效。');
+    const steps = los.apostleDestinationSteps(board.map.pieces, point, size);
+    if (steps === null) fail('骇物不能重叠到泰坦所在格。', 409);
+    if (steps > (profile?.speed ?? Infinity)) fail('这一位置超出骇物的移动范围。', 409);
+    Object.assign(current, point);
+    board.layoutRevision++;
+    return;
+  }
+  if (body.type === 'board-face') {
+    if (![0, 90, 180, 270].includes(body.facing)) fail('骇物朝向无效。');
+    board.map.pieces.apostle.facing = body.facing;
+    board.layoutRevision++;
+    return;
+  }
   if (body.type === 'board-overlay') {
     board.los = cleanOverlay(body.overlay, seats);
     return;
@@ -106,10 +127,7 @@ export function applyRoomBoard(room, actor, body) {
       const boss = map.pieces.apostle;
       if (boss.column !== old.column || boss.row !== old.row) {
         const size = terrain.getApostleProfile(board.apostle, board.level)?.size || 1;
-        const cells = los.losSourceCells(boss, size);
-        if (map.pieces.titans.some(piece => cells.some(({ c, r }) => c === piece.column && r === piece.row))) {
-          fail('骇物不能重叠到泰坦所在格。', 409);
-        }
+        if (los.apostleDestinationSteps(board.map.pieces, boss, size) === null) fail('骇物不能重叠到泰坦所在格。', 409);
       }
     }
     board.map = map;

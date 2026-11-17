@@ -2419,7 +2419,7 @@
   </style>
   <link rel="stylesheet" href="c45_specials.css?v=20260926-titan-group-layout1">
   <link rel="stylesheet" href="battle_map_control.css?v=20261117-battle-polish">
-  <link rel="stylesheet" href="battle_tactics.css?v=20261117-battle-polish">
+  <link rel="stylesheet" href="battle_tactics.css?v=20261117-board-pool">
   <link rel="stylesheet" href="../api/cycle-theme.css">
   <script src="../assets/theme.js?v=20261114-light-sidebar1" defer></script>
   <link rel="stylesheet" href="editorial.css?v=20261105-pile-row-alignment1">
@@ -2438,7 +2438,7 @@
   <link rel="stylesheet" href="../assets/mobile/play.css?v=20261028-apk-portrait1">
   <script src="../assets/mobile/layout.js?v=20261028-apk-portrait1" defer></script>
   <script src="../assets/mobile/play.js?v=20261114-theatre-return" defer></script>
-  <link rel="stylesheet" href="battle-room.css?v=20261117-dice">
+  <link rel="stylesheet" href="battle-room.css?v=20261117-board-pool">
   <script src="theatre-battle.js?v=2"></script>
   <script src="../theatre/terms.js?v=2"></script>
 </head>
@@ -2683,13 +2683,14 @@
                   </label>
                   <label data-board-min-field hidden>最小 X <input data-board-min type="number" min="2" max="32" step="1"></label>
                   <label data-board-max-field hidden>最大 <input data-board-max type="number" min="1" max="32" step="1"></label>
-                  <label data-board-facing-field hidden>骇物朝向
-                    <select data-board-facing aria-label="骇物朝向">
-                      <option value="0">朝上</option><option value="90">朝右</option>
-                      <option value="180">朝下</option><option value="270">朝左</option>
-                    </select>
-                  </label>
-                  <button type="button" data-board-place-boss aria-pressed="false" hidden>移动骇物</button>
+                  <div data-board-facing-field class="battle-tactics-facing" role="group" aria-label="骇物朝向" hidden>
+                    <span>骇物朝向</span>
+                    <button type="button" data-board-face="0" aria-label="朝上">↑ 上</button>
+                    <button type="button" data-board-face="180" aria-label="朝下">↓ 下</button>
+                    <button type="button" data-board-face="270" aria-label="朝左">← 左</button>
+                    <button type="button" data-board-face="90" aria-label="朝右">→ 右</button>
+                  </div>
+                  <button type="button" data-board-mode="apostle-move" data-board-place-boss aria-pressed="false" hidden>移动骇物</button>
                 </div>
                 <p class="battle-tactics-info" data-board-tactics-info role="status"></p>
               </section>
@@ -2934,10 +2935,10 @@
   <script src="../assets/campaign-session.js?v=20260917"></script>
   <script src="../hero/hero-catalog.js?v=20261117-battle-polish"></script>
   <script src="room-assets.js?v=20261117-battle-polish" defer></script>
-  <script src="room-board.js?v=20261117-battle-polish" defer></script>
+  <script src="room-board.js?v=20261117-board-pool" defer></script>
   <script src="room-card-state.js" defer></script>
   <script src="room-dice.js" defer></script>
-  <script src="battle-room.js?v=20261117-dice" defer></script>
+  <script src="battle-room.js?v=20261117-board-pool" defer></script>
   <script src="../technology/gear-inventory.js?v=20261117-dice"></script>
   <script src="../assets/campaign-notes.js?v=20261015-aibp-summary1"></script>
   <script src="../assets/cycle-symbols.js?v=20261115-module-logo"></script>
@@ -2949,10 +2950,10 @@
   <!-- Boss 等级属性表先于 ss/terrain-data.js 加载：始徒移速直接取该表当前等级的值。 -->
   <script src="boss-levels-data.js?v=20261012-los-speed1"></script>
   <script src="../ss/terrain-data.js?v=20261117-board"></script>
-  <script src="battle_los.js?v=20261117-board"></script>
+  <script src="battle_los.js?v=20261117-board-pool"></script>
   <script src="tactical-sprites.js?v=20261117-dice"></script>
-  <script src="battle_board_pieces.js?v=20261117-dice"></script>
-  <script src="battle_map_control.js?v=20261117-battle-polish"></script>
+  <script src="battle_board_pieces.js?v=20261117-board-pool"></script>
+  <script src="battle_map_control.js?v=20261117-board-pool"></script>
   <script src="b4d7e218.js?v=20260926-hidden-ready2"></script>
   <script src="c9f0a6d3.js?v=20261011-panel-trait1"></script>
   <script src="5158e31a.js?v=20261019-blackbeak-shared-backs2"></script>

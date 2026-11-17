@@ -96,10 +96,10 @@
     const losPathClearButton = root.querySelector("[data-battle-map-los-path-clear]");
     const losPathSummary = root.querySelector("[data-battle-map-los-path-summary]");
     const tactics = root.querySelector("[data-board-tactics]");
-    const tacticModes = ["titan-move", "titan-attack", "apostle-sight"];
+    const tacticModes = ["titan-move", "titan-attack", "apostle-sight", "apostle-move"];
     const editBoard = () => options.canEditBoard?.() !== false;
     const hasTactics = (mode) => tacticModes.includes(mode);
-    let placeBoss = false;
+
     let selectedId = "";
     // Line-of-sight UI state.
     //   source  "titan" = 1 格；"apostle" = 当前始徒，尺寸/盲区/移速都读自面板数据。
@@ -235,8 +235,8 @@
           apostle, size: window.BattleTerrain.getApostleProfile(apostle, level)?.size || 1,
           selected: losState.selectedTitan, mode: losState.mode, names: options.titanNames?.(), roster: options.titanRoster?.(),
           portraits: options.heroPortraits?.(),
-          onSelectBoss: !placeBoss && editBoard() && tactics ? toggleBossMove : undefined,
-          onSelect: !placeBoss && hasTactics(losState.mode) && options.allowTacticalControls !== false ? selectTitan : undefined,
+          onSelectBoss: losState.mode !== "apostle-move" && editBoard() && tactics ? () => setTacticalMode("apostle-move") : undefined,
+          onSelect: ["titan-attack", "titan-move"].includes(losState.mode) && options.allowTacticalControls !== false ? selectTitan : undefined,
         });
         return;
       }
@@ -376,7 +376,7 @@
 
     // 泰坦是否站在高地板块格上（始徒不吃高地，恒 false）。
     function sourceOnHighGround(map) {
-      if (losState.mode === "apostle-sight" || (!losState.mode && losState.source !== "titan")) return false;
+      if (["apostle-sight", "apostle-move"].includes(losState.mode) || (!losState.mode && losState.source !== "titan")) return false;
       const occ = lastOcc;
       if (!occ || !occ.elevated || !occ.elevated.size) return false;
       return (losState.mode ? lastOverlay?.source || [] : losSourceCells(map)).some(({ c, r }) => occ.elevated.has(`${c},${r}`));
@@ -664,7 +664,7 @@
       if (!losState.mode) return losState;
       const { weapon, selectedTitan } = losState;
       return {
-        ...losState, source: losState.mode === "apostle-sight" ? "apostle" : "titan",
+        ...losState, source: losState.mode.startsWith("apostle-") ? "apostle" : "titan",
         moveSpeed: losState.titanSpeeds[selectedTitan],
         weapon: window.BattleLOS.normalizeWeapon(weapon.kind === "reach" ? { kind: "reach", max: weapon.reach } : weapon),
       };
@@ -675,7 +675,8 @@
       const mode = losState.mode;
       const moving = mode === "titan-move";
       const attacking = mode === "titan-attack";
-      const boss = mode === "apostle-sight";
+      const bossSight = mode === "apostle-sight";
+      const bossMove = mode === "apostle-move";
       const names = options.titanNames?.() || [];
       const pieces = window.BattleTerrain.getBoardPieces(map, options.getApostle(), options.getLevel());
       const control = key => tactics.querySelector(`[data-board-${key}]`);
@@ -685,7 +686,7 @@
       for (const [name, visible] of [
         ["titan", moving || attacking], ["speed", moving], ["weapon", attacking],
         ["min", attacking && losState.weapon.kind === "ranged"], ["max", attacking && losState.weapon.kind !== "melee"],
-        ["facing", editBoard() || boss],
+        ["facing", editBoard()],
       ]) control(`${name}-field`).hidden = !visible;
       const select = control("titan");
       select.replaceChildren(...pieces.titans.map((piece, index) => {
@@ -699,34 +700,26 @@
       control("weapon").value = losState.weapon.kind;
       control("min").value = losState.weapon.min;
       control("max").value = losState.weapon.kind === "reach" ? losState.weapon.reach : losState.weapon.max;
-      control("facing").value = String(pieces.apostle.facing);
-      control("facing").disabled = !editBoard();
+      tactics.querySelectorAll("[data-board-face]").forEach(button => {
+        button.setAttribute("aria-pressed", String(Number(button.dataset.boardFace) === pieces.apostle.facing));
+        button.disabled = !editBoard();
+      });
       control("place-boss").hidden = !editBoard();
-      control("place-boss").textContent = placeBoss ? "取消移动骇物" : "移动骇物";
-      control("place-boss").setAttribute("aria-pressed", String(placeBoss));
+      control("place-boss").textContent = bossMove ? "退出骇物移动" : "移动骇物";
       const target = lastOverlay?.weaponTarget;
+      const speed = lastOverlay?.profile?.speed;
       control("tactics-info").textContent = moving ? "绿格显示可达格和所需步数。"
-        : attacking ? "蓝底表示视线，金框表示武器射程。"
-          + (target ? `距骇物 ${target.distance} 格 · ${target.inRange ? "射程内" : "射程外"} · ${target.visible ? "有视线" : "无视线"}` : "")
-          : boss ? (placeBoss ? "点击版图设置骇物的中心位置。" : "紫底表示骇物视线，斜纹表示盲区。")
-            : "选择模式开始操作棋子。";
+        : attacking ? "金框显示武器射程。"
+          + (target ? `距骇物 ${target.distance} 格 · ${target.inRange ? "射程内" : "射程外"}` : "")
+          : bossMove ? `骇物移速 ${speedLabel(speed)} · 数字为步数，点击高亮位置移动骇物。`
+            : bossSight ? "紫底表示骇物视线，斜纹表示盲区。" : "选择模式开始操作棋子。";
     }
 
     function setTacticalMode(mode) {
       losState.mode = hasTactics(mode) ? mode : "";
       losState.active = Boolean(losState.mode);
-      placeBoss = false;
       selectedId = "";
       renderLosAndNotify();
-    }
-
-    function toggleBossMove() {
-      if (!editBoard()) return;
-      if (losState.mode !== "apostle-sight") setTacticalMode("apostle-sight");
-      placeBoss = !placeBoss;
-      const map = ensureMap();
-      renderStarts(map);
-      renderTactics(map);
     }
 
     if (tactics) {
@@ -735,18 +728,21 @@
           setTacticalMode(losState.mode === mode && !options.tacticalOnly ? "" : mode);
         });
       }
-      tactics.querySelector("[data-board-place-boss]").addEventListener("click", toggleBossMove);
+      tactics.addEventListener("click", event => {
+        const button = event.target.closest("[data-board-face]");
+        if (!button || !editBoard()) return;
+        const facing = Number(button.dataset.boardFace);
+        if (options.onApostleFace) return options.onApostleFace(facing);
+        const map = ensureMap();
+        const pieces = window.BattleTerrain.getBoardPieces(map, options.getApostle(), options.getLevel());
+        if (pieces.apostle.facing === facing) return;
+        pieces.apostle.facing = facing;
+        commit({ ...map, pieces });
+        options.onLosChange?.();
+      });
       tactics.addEventListener("change", event => {
         const field = event.target;
         if (field.matches("[data-board-titan]")) return selectTitan(Number(field.value));
-        if (field.matches("[data-board-facing]") && editBoard()) {
-          const map = ensureMap();
-          const pieces = window.BattleTerrain.getBoardPieces(map, options.getApostle(), options.getLevel());
-          pieces.apostle.facing = Number(field.value);
-          commit({ ...map, pieces });
-          options.onLosChange?.();
-          return;
-        }
         const numeric = Number(field.value);
         if (field.matches("[data-board-speed]")) {
           losState.titanSpeeds[losState.selectedTitan] = Math.min(20, Math.max(0, Math.round(numeric)));
@@ -780,16 +776,15 @@
           commit({ ...map, pieces });
           options.onLosChange?.();
         }
-      } else if (placeBoss && editBoard()) {
-        const size = window.BattleTerrain.getApostleProfile(options.getApostle(), options.getLevel())?.size || 1;
+      } else if (mode === "apostle-move" && editBoard()) {
+        const size = lastOverlay?.profile?.size || 1;
         const position = window.BattleTerrain.boardCell({ column, row }, size);
-        const footprint = window.BattleLOS.losSourceCells(position, size);
-        if (pieces.titans.some(titan => footprint.some(({ c, r }) => c === titan.column && r === titan.row))) {
-          tactics.querySelector("[data-board-tactics-info]").textContent = "该位置与泰坦重叠，请另选一格。";
+        if (!lastOverlay?.moveCells?.some(cell => cell.c === position.column && cell.r === position.row)) {
+          tactics.querySelector("[data-board-tactics-info]").textContent = "请选择骇物移动范围内的空位。";
           return;
         }
+        if (options.onApostleMove) return options.onApostleMove(position);
         Object.assign(pieces.apostle, position);
-        placeBoss = false;
         commit({ ...map, pieces });
         options.onLosChange?.();
       }

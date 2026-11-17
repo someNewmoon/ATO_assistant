@@ -11,12 +11,14 @@
 
 .battle-tactics-modes, .battle-tactics-fields { display: flex; flex-wrap: wrap; gap: 8px; align-items: end; }
 .battle-tactics-modes button { flex: 1 0 max-content; min-height: 36px; }
-.battle-tactics-modes button[aria-pressed="true"], [data-board-place-boss][aria-pressed="true"] {
+.battle-tactics-modes button[aria-pressed="true"], [data-board-place-boss][aria-pressed="true"],
+.battle-tactics-facing button[aria-pressed="true"] {
   border-color: #82bce4;
   background: #325574;
   color: white;
 }
 .battle-tactics-fields label { display: grid; gap: 3px; }
+.battle-tactics-facing { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
 .battle-tactics-fields [hidden] { display: none; }
 .battle-tactics-fields input { width: 4.5rem; }
 .battle-tactics-info { margin: 0; font-size: .9rem; color: #cddce7; }
@@ -36,7 +38,7 @@
   isolation: isolate;
   pointer-events: none;
 }
-.battle-piece-titan { border-radius: 18%; }
+.battle-piece-titan { border-radius: 18%; background: transparent; }
 button.battle-piece { pointer-events: auto; cursor: pointer; min-height: 0; }
 .battle-piece.is-selected { box-shadow: 0 0 0 2px #fff2ca, 0 0 9px #dda95a; }
 .battle-piece svg { width: 100%; height: 100%; position: absolute; inset: 0; pointer-events: none; }
@@ -59,7 +61,6 @@ button.battle-piece { pointer-events: auto; cursor: pointer; min-height: 0; }
   color: #ffe19a;
   text-shadow: 0 1px 2px black;
 }
-.tactical-attack .battle-map-los-visible { background: #539ce24d; box-shadow: inset 0 0 0 1px #a4d4ff55; }
 .tactical-attack .battle-map-los-in-range { background: transparent; box-shadow: inset 0 0 0 2px #ffd27b; }
 .tactical-attack .battle-map-los-distance.in-range { color: #fff0be; }
 .tactical-boss .battle-map-los-visible { background: #ae83e54d; box-shadow: inset 0 0 0 1px #dcbeff59; }
@@ -116,3 +117,15 @@ button.battle-piece { pointer-events: auto; cursor: pointer; min-height: 0; }
 }
 
 [data-board-tactics] [data-board-mode][hidden] { display: none; }
+
+.battle-map-apostle-move {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  background: #2e83b768;
+  box-shadow: inset 0 0 0 1px #b4e4ff;
+  color: #e6f7ff;
+  font-weight: 700;
+  font-size: clamp(8px, 1vw, 16px);
+  text-shadow: 0 1px 3px #132d46;
+}

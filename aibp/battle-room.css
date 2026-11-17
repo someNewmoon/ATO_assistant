@@ -59,7 +59,7 @@
 .battle-room-counter strong { min-width: 1.3em; text-align: center; font-variant-numeric: tabular-nums; }
 .battle-room-pool, .battle-room form.battle-room-dice, .battle-room-rolls, .battle-room-team { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--room-border); max-width: none; }
 .battle-room :is(.battle-room-stats, .battle-room-pool > div, .battle-room-dice > div) { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; }
-.battle-room-pool h3 { margin-bottom: 8px; }
+.battle-room-pool header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
 .battle-room-rolls ol { max-height: 12rem; overflow-y: auto; margin: 7px 0 0; padding-inline-start: 1.6em; }
 .battle-room-team > summary { cursor: pointer; margin-bottom: 8px; }
 .battle-room-result { font-size: .92em; }

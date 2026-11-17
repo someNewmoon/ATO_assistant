@@ -28,6 +28,7 @@ if (secondScreenToken) {
   document.cookie = `ato_second_screen_token=${encodeURIComponent(secondScreenToken)}; path=/; SameSite=Lax; max-age=15552000`;
 }
 const endpoint = "../api/campaign-state.php?action=second-screen"
+  + (new URLSearchParams(window.location?.search || "").get("preview") === "aibp" ? "&preview=aibp" : "")
   + (secondScreenToken ? `&token=${encodeURIComponent(secondScreenToken)}` : "");
 const elements = {
   mapFrame: document.querySelector("#mapFrame"),
@@ -705,7 +706,15 @@ function renderBattleTerrainCards(map, visible) {
   });
 }
 
-function renderBattleStarts(apostle, map) {
+function renderBattleStarts(apostle, map, los) {
+  if (window.BattleBoardPieces && (los?.mode || (map.pieces && map.showStarts !== false))) {
+    const level = los?.level ?? map.startLevel;
+    window.BattleBoardPieces.render(elements.battleStartLayer, window.BattleTerrain.getBoardPieces(map, apostle, level), {
+      apostle, size: window.BattleTerrain.getApostleProfile(apostle, level)?.size || 1,
+      selected: los?.selectedTitan, mode: los?.mode,
+    });
+    return;
+  }
   elements.battleStartLayer.replaceChildren();
   elements.battleStartLayer.hidden = map.showStarts === false;
   if (map.showStarts === false) return;
@@ -779,7 +788,7 @@ function renderBattleLos(apostle, map, los) {
     return;
   }
   const speed = snapshotSpeed(los.speed);
-  const options = speed === undefined ? {} : { speed };
+  const options = { ...(speed === undefined ? {} : { speed }), ...(los.mode ? { level: los.level } : {}) };
   const overlay = window.BattleLOS.buildLosOverlay(map, los, window.BattleTerrain, apostle, options);
   window.BattleLOS.renderLosOverlay(elements.battleLosLayer, overlay);
 }
@@ -854,7 +863,7 @@ function renderBattleTerrain(apostle, level, battleMap, los) {
     elements.battleTerrainLayer.appendChild(image);
   });
   renderBattleLightCoverage(map);
-  renderBattleStarts(apostle, map);
+  renderBattleStarts(apostle, map, los);
   renderBattleCoordinates(map);
   renderBattleLos(apostle, map, los);
 }

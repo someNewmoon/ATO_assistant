@@ -1,0 +1,106 @@
+[data-board-tactics] {
+  display: grid;
+  gap: 10px;
+  margin-block: 8px;
+  padding: 12px;
+  border: 1px solid rgba(145, 180, 197, .34);
+  border-radius: 10px;
+  background: rgba(25, 37, 48, .84);
+  color: #e9f2f7;
+}
+
+.battle-tactics-modes, .battle-tactics-fields { display: flex; flex-wrap: wrap; gap: 8px; align-items: end; }
+.battle-tactics-modes button { flex: 1 0 max-content; min-height: 36px; }
+.battle-tactics-modes button[aria-pressed="true"], [data-board-place-boss][aria-pressed="true"] {
+  border-color: #82bce4;
+  background: #325574;
+  color: white;
+}
+.battle-tactics-fields label { display: grid; gap: 3px; }
+.battle-tactics-fields [hidden] { display: none; }
+.battle-tactics-fields input { width: 4.5rem; }
+.battle-tactics-info { margin: 0; font-size: .9rem; color: #cddce7; }
+
+.battle-piece {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  transform: translate(-50%, -50%);
+  box-sizing: border-box;
+  border: 2px solid var(--piece-accent, #ef836f);
+  border-radius: 10%;
+  background: #162631c9;
+  padding: 0;
+  color: #fff;
+  box-shadow: 0 2px 5px #000b;
+  isolation: isolate;
+  pointer-events: none;
+}
+.battle-piece-titan { border-radius: 18%; }
+.battle-piece-titan:is(button) { pointer-events: auto; cursor: pointer; min-height: 0; }
+.battle-piece.is-selected { box-shadow: 0 0 0 2px #fff2ca, 0 0 9px #dda95a; }
+.battle-piece svg { width: 100%; height: 100%; position: absolute; inset: 0; pointer-events: none; }
+.battle-piece-label {
+  position: absolute;
+  right: 4%;
+  bottom: 0;
+  font-size: clamp(8px, 1vw, 15px);
+  font-weight: 800;
+  text-shadow: 0 1px 2px black, 0 0 3px black;
+}
+.battle-piece-apostle .battle-piece-label { font-size: clamp(10px, 1.4vw, 18px); }
+.battle-piece-facing {
+  position: absolute;
+  inset: 50% auto auto 50%;
+  width: 100%;
+  height: 100%;
+  text-align: center;
+  line-height: .85;
+  color: #ffe19a;
+  text-shadow: 0 1px 2px black;
+}
+.tactical-attack .battle-map-los-visible { background: #539ce24d; box-shadow: inset 0 0 0 1px #a4d4ff55; }
+.tactical-attack .battle-map-los-in-range { background: transparent; box-shadow: inset 0 0 0 2px #ffd27b; }
+.tactical-attack .battle-map-los-distance.in-range { color: #fff0be; }
+.tactical-boss .battle-map-los-visible { background: #ae83e54d; box-shadow: inset 0 0 0 1px #dcbeff59; }
+.battle-map-titan-move {
+  display: grid;
+  place-items: center;
+  background: #6adeaf50;
+  box-shadow: inset 0 0 0 1px #97f3c092;
+  color: #e3fff1;
+  font-size: clamp(8px, 1vw, 16px);
+  text-shadow: 0 1px 3px #05271a;
+}
+
+.room-tactical-board { margin-block: 12px; }
+.room-tactical-board .battle-map-panel { margin: 0; }
+.room-tactical-read-only [data-board-tactics],
+.room-tactical-read-only .battle-map-head-actions { display: none; }
+.room-tactical-read-only .battle-map-side:has([data-board-tactics]) { display: none; }
+
+@media (max-width: 680px) {
+  .room-tactical-board .battle-map-side { padding: 8px; }
+  .battle-tactics-fields { gap: 6px; }
+}
+
+[data-board-host-only][hidden], .room-tactical-board .battle-map-head-actions[hidden],
+.room-tactical-board > button[hidden], .room-tactical-board[hidden] { display: none; }
+.room-board-load { margin: 0 0 8px; }
+
+.battle-piece img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 22%;
+  pointer-events: none;
+}
+.room-tactical-board .battle-map-head { border-bottom: 1px solid rgba(145, 180, 197, .27); }
+.room-tactical-read-only .battle-map-workspace { grid-template-columns: minmax(0, 1fr); }
+.room-board-terrain > summary { cursor: pointer; padding: 8px 0; }
+.room-board-terrain .battle-map-cards { margin: 0; }
+.battle-room .battle-map-board button.battle-piece-titan { min-height: 0; padding: 0; }
+
+[data-board-tactics] [data-board-mode][hidden] { display: none; }

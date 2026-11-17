@@ -1036,6 +1036,29 @@ const BattleTerrain = (() => {
     };
   }
 
+  function boardCell(value, size = 1) {
+    if (!value || !Number.isFinite(value.column) || !Number.isFinite(value.row)) return null;
+    const half = (size - 1) / 2;
+    const snap = (part, limit) => Math.min(limit - half, Math.max(1 + half, Math.round(part - half) + half));
+    return { column: snap(value.column, columns), row: snap(value.row, rows) };
+  }
+
+  function getBoardPieces(map, apostle, level = map.startLevel) {
+    const starts = getInitialPositions(apostle, map.startLevel, map.setupId, map.startPositionId);
+    const size = getApostleProfile(apostle, level)?.size || 1;
+    const initialFacing = getInitialFacing(apostle, map.apostleFacing, map.setupId, map.startLevel, map.startPositionId) ?? 0;
+    const savedBoss = map.pieces?.apostle;
+    const position = boardCell(savedBoss, size) || boardCell(starts.apostle, size)
+      || boardCell({ column: 10.5, row: 9.5 }, size);
+    const count = Math.max(1, Math.min(4, map.pieces?.titans?.length || 4));
+    const titans = Array.from({ length: count }, (_, index) => {
+      const initial = starts.titans[index] || { column: 8 + index, row: 2 };
+      return boardCell(map.pieces?.titans?.[index]) || boardCell(initial);
+    });
+    return { apostle: { ...position, facing: savedBoss?.facing == null
+      ? initialFacing : (cardinalFacing(savedBoss.facing) ?? initialFacing) }, titans };
+  }
+
   function normalizeBattleMap(value, apostle, level) {
     const setup = getSetup(apostle, level, value?.setupId);
     const expectedKey = getSetupKey(apostle, level, setup?.id);
@@ -1098,6 +1121,9 @@ const BattleTerrain = (() => {
       ...(apostleFacing === null ? {} : { apostleFacing }),
       showStarts: value.showStarts !== false,
       showCoordinates: value.showCoordinates === true,
+      ...(value.pieces ? { pieces: getBoardPieces({
+        ...value, startLevel, startPositionId, apostleFacing, setupId: setup?.id,
+      }, apostle, level) } : {}),
       terrain: ensureTimeFrozenCityBases(terrain),
     };
   }
@@ -1436,6 +1462,8 @@ const BattleTerrain = (() => {
     getAssetSources,
     getBlindspotCells,
     getFacingLabel,
+    boardCell,
+    getBoardPieces,
     getInitialFacing,
     getInitialPositions,
     getLightCoverage,

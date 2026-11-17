@@ -2,6 +2,7 @@
   const root = document.getElementById('battleRoom');
   const toggle = document.getElementById('battleRoomToggle');
   const content = root.querySelector('[data-room-content]');
+  const summary = root.querySelector('[data-room-summary]');
   const status = root.querySelector('[role="status"]');
   const params = new URLSearchParams(location.search);
   const fragment = new URLSearchParams(location.hash.slice(1));
@@ -32,6 +33,8 @@
   const actions = [];
   let connection = '正在连接';
   let message = '';
+  const roomBoard = window.BattleRoomBoard?.create(root.querySelector('[data-room-board]'), action =>
+    send({ id: crypto.randomUUID(), ...action }));
 
   function storageGet(key) {
     try { return localStorage.getItem(key); } catch { return null; }
@@ -90,6 +93,7 @@
     state = data.room;
     actor = data.actor;
     document.body.classList.toggle('aibp-room-only', actor.role !== 'host');
+    roomBoard?.sync(state, actor);
     render();
   }
 
@@ -153,7 +157,7 @@
       + '</select>' : conditionNames[hero.condition];
     const last = state.rolls.find(roll => roll.seat === seat);
     const summary = last ? '<p class="battle-room-result">最近一次掷骰 · ' + rollSummary(last) + '</p>' : '';
-    return '<article class="battle-room-hero"><header><div><h3>' + escape(hero.name) + '</h3><div>' + titan + '</div></div><small>'
+    return '<article class="battle-room-hero" data-hero-seat="' + seat + '"><header><div><h3>' + escape(hero.name) + '</h3><div>' + titan + '</div></div><small>'
       + escape(hero.player || '待认领') + '</small></header><div class="battle-room-stats"><div>凶险 '
       + buttons('stat', 'danger', hero.stats.danger, seat, '凶险', 30, editable) + '</div><div>泰坦状态 ' + condition + '</div></div>' + titanImage
       + '<h4>装备</h4>' + (gear ? '<ul class="battle-room-card-list">' + gear + '</ul>' : '<p>未分配装备</p>')
@@ -198,16 +202,17 @@
       : '<div class="battle-room-grid">' + heroes.join('') + '</div>';
     const rolls = state.rolls.map(roll => '<li><strong>第 ' + roll.round + ' 轮 · ' + escape(roll.hero) + '</strong>　' + rollSummary(roll) + '</li>').join('');
     const active = document.activeElement;
-    const focus = active && content.contains(active) ? [...content.querySelectorAll('button,select,input')].indexOf(active) : -1;
+    const focusRoot = summary.contains(active) ? summary : content;
+    const focus = active && focusRoot.contains(active) ? [...focusRoot.querySelectorAll('button,select,input')].indexOf(active) : -1;
     const selection = focus >= 0 && active.name;
     if (selection && active.form?.matches('[data-roll]')) diceDraft = Object.fromEntries(new FormData(active.form));
-    content.innerHTML = '<div class="battle-room-head"><div><h2>' + escape(state.title) + '</h2><p>第 ' + state.round
-      + ' 轮' + (state.closed ? ' · 已结束' : '') + '</p></div><div>' + controls + '</div></div>' + links + own
-      + '<section class="battle-room-pool"><h3>克拉托斯池</h3><div>' + pool + '</div></section>' + diceForm()
+    summary.innerHTML = '<div class="battle-room-head"><div><h2>' + escape(state.title) + '</h2><p>第 ' + state.round
+      + ' 轮' + (state.closed ? ' · 已结束' : '') + '</p></div><div>' + controls + '</div></div>' + links;
+    content.innerHTML = own + '<section class="battle-room-pool"><h3>克拉托斯池</h3><div>' + pool + '</div></section>' + diceForm()
       + (role !== 'player' ? '<h3 class="battle-room-heading">状态总览</h3>' : '') + overview
       + '<section class="battle-room-rolls"><h3>掷骰记录</h3>' + (rolls ? '<ol>' + rolls + '</ol>' : '<p>还没有掷骰。</p>') + '</section>';
     if (focus >= 0) {
-      const target = content.querySelectorAll('button,select,input')[focus];
+      const target = focusRoot.querySelectorAll('button,select,input')[focus];
       if (target && (!selection || target.name === selection)) target.focus({ preventScroll: true });
     }
     if (failedAction) appendRetry();
@@ -264,7 +269,7 @@
         content.innerHTML += '<p>请先到<a href="../hero/">英雄页</a>添加参战英雄。</p>';
         return;
       }
-      const suggested = document.querySelector('#title')?.textContent?.trim() || '决战';
+      const suggested = document.querySelector('#title')?.innerText?.trim() || '决战';
       content.innerHTML += '<form data-create><label>战斗名称 <input name="title" maxlength="80" value="' + escape(suggested)
         + '"></label><fieldset><legend>选择 1 至 4 位参战英雄</legend>'
         + heroes.map((hero, index) => '<label><input type="checkbox" name="heroIds" value="' + escape(hero.id)
@@ -306,11 +311,13 @@
     }
   });
 
-  document.addEventListener('ato-battle-assets', () => { if (state) render(); });
+  document.addEventListener('ato-battle-assets', () => {
+    if (state) { roomBoard?.render(); render(); }
+  });
 
-  content.addEventListener('click', async event => {
+  root.addEventListener('click', async event => {
     const button = event.target.closest('button');
-    if (!button) return;
+    if (!button || (!summary.contains(button) && !content.contains(button))) return;
     const { roomCopy, action, key, seat, delta } = button.dataset;
     if (button.hasAttribute('data-room-art')) {
       const image = button.querySelector('img');
@@ -350,7 +357,8 @@
     form.querySelector('button[type=submit]').disabled = true;
     try {
       if (form.matches('[data-create]')) {
-        const data = await request('create', { title: fields.get('title'), heroIds: fields.getAll('heroIds') });
+        const board = window.getAibpBoardSetup?.();
+        const data = await request('create', { title: fields.get('title'), heroIds: fields.getAll('heroIds'), board });
         id = data.room.id;
         credentials = { token: data.keys.host, keys: data.keys };
         storageSet(savedRoom, id);
@@ -380,7 +388,10 @@
     if (!isLink) {
       try {
         const response = await fetch(new URL('../api/health', location.href), { cache: 'no-store', signal: AbortSignal.timeout(8000) });
-        if (response.ok && (await response.json()).backend === 'cloudflare') toggle.hidden = false;
+        if (response.ok && (await response.json()).backend === 'cloudflare') {
+        toggle.hidden = false;
+        document.getElementById('cloudBattleProjection').hidden = false;
+      }
       } catch { /* Battle rooms require the Cloudflare build. */ }
       return;
     }

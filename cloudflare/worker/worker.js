@@ -89,7 +89,8 @@ export default {
       }
       verifyOrigin(request, url);
       const action = url.searchParams.get('action');
-      if (action && !authActions.has(action) && !campaignActions.has(action)) {
+      const battleProjection = action === 'second-screen' && url.searchParams.get('preview') === 'aibp';
+      if (action && !battleProjection && !authActions.has(action) && !campaignActions.has(action)) {
         return response({ ok: false, code: 'UNSUPPORTED_CLOUD_API', error: '此功能尚未迁移到 Cloudflare。' }, 501);
       }
       const headers = new Headers(request.headers);
@@ -159,7 +160,16 @@ export class CampaignAccount extends DurableObject {
       if (!authenticated) throw new ApiError(401, 'Please log in first.', { code: 'AUTH_REQUIRED' });
 
       if (url.pathname === '/api/battle-room/create') {
-        return await createBattleRoom(this.roomEnv, this.loadCampaign(), await readPayload(request, 4096));
+        return await createBattleRoom(this.roomEnv, this.loadCampaign(), await readPayload(request, 32768));
+      }
+      if (action === 'second-screen' && url.searchParams.get('preview') === 'aibp') {
+        if (request.method !== 'GET') throw new ApiError(405, '投屏需要 GET。');
+        const state = this.loadCampaign();
+        const aibp = state.sections.aibp;
+        if (!aibp?.apostle) throw new ApiError(404, '请先在 AIBP 打开决战。');
+        return response({ ok: true, screen: {
+          displayMode: 'aibp', cycleId: activeCycle(state), aibp, aibpRevision: state.sectionRevisions.aibp,
+        } });
       }
       if (request.method === 'GET' && !action) return this.readCampaign(url, user);
       if (request.method !== 'POST') throw new ApiError(405, 'This action requires POST.');

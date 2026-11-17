@@ -2419,6 +2419,7 @@
   </style>
   <link rel="stylesheet" href="c45_specials.css?v=20260926-titan-group-layout1">
   <link rel="stylesheet" href="battle_map_control.css?v=20261104-keyword-sibling3">
+  <link rel="stylesheet" href="battle_tactics.css">
   <link rel="stylesheet" href="../api/cycle-theme.css">
   <script src="../assets/theme.js?v=20261114-light-sidebar1" defer></script>
   <link rel="stylesheet" href="editorial.css?v=20261105-pile-row-alignment1">
@@ -2437,7 +2438,7 @@
   <link rel="stylesheet" href="../assets/mobile/play.css?v=20261028-apk-portrait1">
   <script src="../assets/mobile/layout.js?v=20261028-apk-portrait1" defer></script>
   <script src="../assets/mobile/play.js?v=20261114-theatre-return" defer></script>
-  <link rel="stylesheet" href="battle-room.css?v=20261117-inline-art">
+  <link rel="stylesheet" href="battle-room.css?v=20261117-room-board">
   <script src="theatre-battle.js?v=2"></script>
   <script src="../theatre/terms.js?v=2"></script>
 </head>
@@ -2501,6 +2502,7 @@
           </label>
           <span class="second-screen-sync-status" id="secondScreenSyncStatus" role="status" aria-live="polite"></span>
           <a class="return-main-link" href="../index.html">返回主控制台</a>
+          <a class="return-main-link" id="cloudBattleProjection" href="../ss/?preview=aibp" target="_blank" rel="noopener" hidden>版图投屏</a>
           <button type="button" id="battleRoomToggle" aria-controls="battleRoom" aria-expanded="false" hidden>在线战斗室</button>
           <button type="button" id="keywordButton">关键词查询</button>
           <button type="button" id="traitButton">Trait</button>
@@ -2512,6 +2514,8 @@
 
       <section id="battleRoom" class="battle-room" aria-label="在线战斗室" hidden>
         <p role="status" aria-live="polite"></p>
+        <div data-room-summary></div>
+        <section class="room-tactical-board" data-room-board hidden aria-label="房间版图"></section>
         <div data-room-content></div>
         <dialog id="battleRoomImage">
           <form method="dialog"><button type="submit">关闭卡图</button></form>
@@ -2660,18 +2664,47 @@
               </section>
             </div>
             <div class="battle-map-side" role="region" aria-label="地形工具">
-              <div class="battle-map-toolbar">
+              <section data-board-tactics aria-label="战术版图">
+                <div class="battle-tactics-modes" role="group" aria-label="版图模式">
+                  <button type="button" data-board-mode="" data-board-host-only aria-pressed="true">地形布置</button>
+                  <button type="button" data-board-mode="titan-move" aria-pressed="false">泰坦移动</button>
+                  <button type="button" data-board-mode="titan-attack" aria-pressed="false">泰坦攻击</button>
+                  <button type="button" data-board-mode="apostle-sight" aria-pressed="false">骇物视线</button>
+                </div>
+                <div class="battle-tactics-fields">
+                  <label data-board-titan-field hidden>选中泰坦 <select data-board-titan aria-label="选中泰坦"></select></label>
+                  <label data-board-speed-field hidden>移动格数 <input data-board-speed type="number" min="0" max="20" step="1"></label>
+                  <label data-board-weapon-field hidden>武器射程
+                    <select data-board-weapon aria-label="武器射程">
+                      <option value="melee">近战</option>
+                      <option value="reach">远触 N</option>
+                      <option value="ranged">远程 X–Y</option>
+                    </select>
+                  </label>
+                  <label data-board-min-field hidden>最小 X <input data-board-min type="number" min="2" max="32" step="1"></label>
+                  <label data-board-max-field hidden>最大 <input data-board-max type="number" min="1" max="32" step="1"></label>
+                  <label data-board-facing-field hidden>骇物朝向
+                    <select data-board-facing aria-label="骇物朝向">
+                      <option value="0">朝上</option><option value="90">朝右</option>
+                      <option value="180">朝下</option><option value="270">朝左</option>
+                    </select>
+                  </label>
+                  <button type="button" data-board-place-boss aria-pressed="false" hidden>移动骇物</button>
+                </div>
+                <p class="battle-tactics-info" data-board-tactics-info role="status"></p>
+              </section>
+              <div class="battle-map-toolbar" data-board-host-only>
                 <button type="button" data-battle-map-rotate-left disabled aria-label="逆时针旋转" title="逆时针旋转">↶ 左转</button>
                 <button type="button" data-battle-map-rotate-right disabled aria-label="顺时针旋转" title="顺时针旋转">↷ 右转</button>
                 <button type="button" data-battle-map-flip disabled aria-label="地形翻面" title="地形翻面">⇅ 翻面</button>
                 <button type="button" class="danger" data-battle-map-delete disabled aria-label="删除地形" title="删除地形">× 删除</button>
               </div>
-              <div class="battle-map-add">
+              <div class="battle-map-add" data-board-host-only>
                 <select data-battle-map-add-select aria-label="新增地形"></select>
                 <button type="button" data-battle-map-add>+ 新增地形</button>
               </div>
-              <div class="battle-map-selection" data-battle-map-selection>双击地形选中，再次双击取消</div>
-              <div class="battle-map-los" data-battle-map-los-control>
+              <div data-board-host-only class="battle-map-selection" data-battle-map-selection>双击地形选中，再次双击取消</div>
+              <div data-board-host-only class="battle-map-los" data-battle-map-los-control>
                 <div class="battle-map-los-head">
                   <span>视线判断</span>
                   <button type="button" data-battle-map-los-toggle aria-pressed="false">开启</button>
@@ -2901,7 +2934,8 @@
   <script src="../assets/campaign-session.js?v=20260917"></script>
   <script src="../hero/hero-catalog.js"></script>
   <script src="room-assets.js?v=20261117-inline-art" defer></script>
-  <script src="battle-room.js?v=20261117-inline-art" defer></script>
+  <script src="room-board.js" defer></script>
+  <script src="battle-room.js?v=20261117-room-board" defer></script>
   <script src="../technology/gear-inventory.js?v=20261117-titan-types"></script>
   <script src="../assets/campaign-notes.js?v=20261015-aibp-summary1"></script>
   <script src="../assets/cycle-symbols.js?v=20261115-module-logo"></script>
@@ -2912,9 +2946,11 @@
   <!-- Token 名单写在本页脚本里（tokenFileNames），不再加载 ps/other/token/token_manifest.js。 -->
   <!-- Boss 等级属性表先于 ss/terrain-data.js 加载：始徒移速直接取该表当前等级的值。 -->
   <script src="boss-levels-data.js?v=20261012-los-speed1"></script>
-  <script src="../ss/terrain-data.js?v=20261023-hd1"></script>
-  <script src="battle_los.js?v=20261012-los-speed1"></script>
-  <script src="battle_map_control.js?v=20261113-theatre1"></script>
+  <script src="../ss/terrain-data.js?v=20261117-board"></script>
+  <script src="battle_los.js?v=20261117-board"></script>
+  <script src="tactical-sprites.js"></script>
+  <script src="battle_board_pieces.js"></script>
+  <script src="battle_map_control.js?v=20261117-board"></script>
   <script src="b4d7e218.js?v=20260926-hidden-ready2"></script>
   <script src="c9f0a6d3.js?v=20261011-panel-trait1"></script>
   <script src="5158e31a.js?v=20261019-blackbeak-shared-backs2"></script>
@@ -9574,6 +9610,12 @@
       renderPanelTokens();
       battleMapControl?.render();
     });
+    window.getAibpBoardSetup = () => currentApostle ? {
+      apostle: currentApostle, level: window.BattleTerrain.levelNumber(currentApostleLevel()),
+      map: piles[currentApostle]?.battleMap,
+    } : null;
+    window.openAibpBoardImage = (...args) => openImageZoom(...args);
+
     function initializeBattleMap() {
       battleMapControl = window.BattleMapControl.create({
       root: document.getElementById("battleMapControl"),

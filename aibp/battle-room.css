@@ -115,3 +115,24 @@ body.aibp-room-only > .app > main > :not(#battleRoom) { display: none !important
 
 .battle-room button.battle-room-titan-art { max-width: 22rem; }
 .battle-room-titan-art img { aspect-ratio: 3 / 2; }
+
+#cloudBattleProjection[hidden] { display: none; }
+
+.battle-room-head {
+  padding: 4px 0 12px;
+  border-bottom: 1px solid var(--room-border);
+}
+.battle-room-head h2 { font-size: clamp(1.3rem, 2.6vw, 1.8rem); }
+.battle-room-head p { opacity: .76; font-variant-numeric: tabular-nums; }
+.battle-room-hero {
+  border-top: 3px solid var(--room-seat, #79d1ef);
+  background: color-mix(in srgb, var(--room-seat, #79d1ef) 5%, var(--room-surface));
+}
+.battle-room-hero[data-hero-seat="1"] { --room-seat: #e5b76c; }
+.battle-room-hero[data-hero-seat="2"] { --room-seat: #a5cb7c; }
+.battle-room-hero[data-hero-seat="3"] { --room-seat: #c797e8; }
+.battle-room-hero header > small {
+  border: 1px solid var(--room-border);
+  border-radius: 999px;
+  padding: 2px 8px;
+}

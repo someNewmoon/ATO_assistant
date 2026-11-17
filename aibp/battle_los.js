@@ -781,6 +781,67 @@
     return { grid, inRange, limit, distance };
   }
 
+  function normalizeWeapon(weapon = {}) {
+    const kind = ["reach", "ranged"].includes(weapon.kind) ? weapon.kind : "melee";
+    const bound = (number, floor, fallback) => Number.isFinite(number) ? Math.min(32, Math.max(floor, Math.round(number))) : fallback;
+    const min = kind === "ranged" ? bound(weapon.min, 2, 2) : 1;
+    const max = kind === "melee" ? 1 : bound(weapon.max, min, kind === "reach" ? 2 : Math.max(min, 4));
+    return { kind, min, max };
+  }
+
+  function edgeBetween(from, to) {
+    if (from.c === to.c) return edgeKey(from.c - 1, Math.min(from.r, to.r), from.c, Math.min(from.r, to.r));
+    return edgeKey(Math.min(from.c, to.c), from.r - 1, Math.min(from.c, to.c), from.r);
+  }
+
+  function computeTitanWeapon(source, targets, weapon, occ) {
+    const profile = normalizeWeapon(weapon);
+    const distance = computeDistanceMap(source).grid;
+    const grid = {};
+    for (let c = 1; c <= COLUMNS; c++) {
+      for (let r = 1; r <= ROWS; r++) {
+        const key = cellKey(c, r);
+        const steps = distance[key];
+        grid[key] = steps >= profile.min && steps <= profile.max
+          && (profile.kind !== "melee" || source.some(from =>
+            Math.abs(from.c - c) + Math.abs(from.r - r) === 1 && !occ.red.has(edgeBetween(from, { c, r }))));
+      }
+    }
+    const keys = targets.map(({ c, r }) => cellKey(c, r));
+    const nearest = Math.min(...keys.map(key => distance[key]));
+    return { grid, distance, target: keys.length ? {
+      distance: nearest,
+      inRange: profile.kind === "melee" ? keys.some(key => grid[key]) : nearest >= profile.min && nearest <= profile.max,
+    } : null };
+  }
+
+  function computeTitanMoves(source, pieces, selected, speed, tiles, terrainApi, occ, bossSize) {
+    const occupied = new Set(pieces.titans.flatMap((piece, index) =>
+      index === selected ? [] : [cellKey(piece.column, piece.row)]));
+    for (const { c, r } of losSourceCells(pieces.apostle, bossSize)) occupied.add(cellKey(c, r));
+    for (const tile of tiles) {
+      if (!/^(?:Column|City|Time-Frozen City)$/i.test(tile.name)) continue;
+      const def = terrainApi.catalog[tile.name];
+      for (const { c, r } of footprintCells(tile, def.width, def.height, def.los?.cells)) occupied.add(cellKey(c, r));
+    }
+    const visited = new Set([cellKey(source.c, source.r)]);
+    const queue = [{ ...source, steps: 0 }];
+    for (let i = 0; i < queue.length; i++) {
+      const from = queue[i];
+      if (from.steps >= speed) continue;
+      for (const [dc, dr] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const c = from.c + dc;
+        const r = from.r + dr;
+        const key = cellKey(c, r);
+        if (c < 1 || c > COLUMNS || r < 1 || r > ROWS || visited.has(key) || occupied.has(key)
+          || occ.red.has(edgeBetween(from, { c, r }))) continue;
+        visited.add(key);
+        queue.push({ c, r, steps: from.steps + 1 });
+      }
+    }
+    return queue.slice(1);
+  }
+
   // ---- primordial movement paths ---------------------------------------
   // P38 movement uses orthogonal steps, ignores terrain/models for movement,
   // and zigs/zags between the two axes until the target lies on a straight path.
@@ -974,7 +1035,13 @@
     };
     if (!state.active || !map || !terrainApi) return empty;
 
-    const profile = state.source === "apostle"
+    const tactical = ["titan-move", "titan-attack", "apostle-sight"].includes(state.mode);
+    const mode = tactical ? state.mode : "";
+    const pieceState = tactical ? terrainApi.getBoardPieces(map, apostle, settings.level) : null;
+    const selected = Number.isInteger(state.selectedTitan) && state.selectedTitan >= 0 && state.selectedTitan < (pieceState?.titans.length || 4)
+      ? state.selectedTitan : 0;
+    const sourceAnchor = tactical ? (mode === "apostle-sight" ? pieceState.apostle : pieceState.titans[selected]) : state.anchor;
+    const profile = (tactical ? mode === "apostle-sight" : state.source === "apostle")
       ? (terrainApi.getApostleProfile(apostle, settings.level ?? map.startLevel) || null)
       : null;
     // 移速以调用方给的为准（主控台读的是 Boss 等级属性表里的当前等级）；没给才退回
@@ -984,11 +1051,12 @@
       ? { ...profile, speed: speedOverride }
       : profile;
     const size = profileWithSpeed ? profileWithSpeed.size : 1;
-    const occ = buildOccluders(terrainApi.getMapTiles(map), terrainApi);
+    const tiles = terrainApi.getMapTiles(map);
+    const occ = buildOccluders(tiles, terrainApi);
     const mazesense = !!(profileWithSpeed && profileWithSpeed.mazesense
       && occ.labyrinthTiles && occ.labyrinthTiles.size);
 
-    const source = losSourceCells(state.anchor, size);
+    const source = losSourceCells(sourceAnchor, size);
     const sourceKeys = new Set(source.map(({ c, r }) => cellKey(c, r)));
 
     // 高地(循环IV+)：无视遮蔽与红线(云层仍挡)。这是**手动开关**(state.elevated)，
@@ -1010,13 +1078,13 @@
     // 只有使徒有朝向（泰坦是单格、无盲区，也没有面板朝向），所以泰坦来源给 null，
     // 渲染层据此不画箭头。盲区由朝向推出（正后方一排），改朝向盲区自动跟着转。
     const facing = profileWithSpeed
-      ? (state.facing === null || state.facing === undefined
+      ? (tactical ? pieceState.apostle.facing : state.facing === null || state.facing === undefined
         ? (terrainApi.getInitialFacing(apostle, map.apostleFacing, map.setupId, map.startLevel, map.startPositionId) ?? 0)
         : Number(state.facing))
       : null;
 
     const base = {
-      active: true, source, sourceKeys, obscuring, occ, profile: profileWithSpeed, mazesense, facing, elevated,
+      active: true, mode, source, sourceKeys, obscuring, occ, profile: profileWithSpeed, mazesense, facing, elevated,
       walls: occ.walls || { h: [], v: [] },
       wallsIgnored: mazesense,
       dim: state.dim !== false,
@@ -1024,10 +1092,16 @@
     };
     if (!source.length) return base;
 
-    const center = losSourceCenter(state.anchor, size);
+    const bossSize = tactical ? terrainApi.getApostleProfile(apostle, settings.level ?? map.startLevel)?.size || 1 : 1;
+    if (mode === "titan-move") {
+      const speed = Number.isFinite(state.moveSpeed) ? Math.max(0, Math.min(20, state.moveSpeed)) : 5;
+      return { ...base, moveCells: computeTitanMoves(source[0], pieceState, selected, speed, tiles, terrainApi, occ, bossSize) };
+    }
+
+    const center = losSourceCenter(sourceAnchor, size);
     const blindspots = new Set(
       (profileWithSpeed && profileWithSpeed.blindspot
-        ? terrainApi.getBlindspotCells(apostle, map.startLevel, center, facing)
+        ? terrainApi.getBlindspotCells(apostle, tactical ? settings.level ?? map.startLevel : map.startLevel, center, facing)
         : []
       ).map(({ row, column }) => cellKey(column, row))
     );
@@ -1040,14 +1114,15 @@
     });
     // 移速 ∞ 时全图都在射程内，铺满一层反而盖住视线结果，所以不画射程框。
     const reach = Number.isFinite(Number(state.reach)) ? Number(state.reach) : 1;
-    const range = profileWithSpeed && state.showRange && Number.isFinite(profileWithSpeed.speed)
+    const targets = mode === "titan-attack" ? losSourceCells(pieceState.apostle, bossSize) : [];
+    const weapon = mode === "titan-attack" ? computeTitanWeapon(source, targets, state.weapon, occ) : null;
+    const range = !tactical && profileWithSpeed && state.showRange && Number.isFinite(profileWithSpeed.speed)
       ? computeRangeMap(source, profileWithSpeed.speed, reach)
       : null;
     // 距离数字跟着同一个开关但**不**依赖射程层：泰坦与移速 ∞ 的使徒画不出紫框，
     // 数字仍然有用，所以单独算一份。
-    const distance = state.showRange
-      ? (range ? range.distance : computeDistanceMap(source).grid)
-      : null;
+    const distance = weapon ? Object.fromEntries(Object.entries(weapon.distance).filter(([key]) => weapon.grid[key]))
+      : !tactical && state.showRange ? (range ? range.distance : computeDistanceMap(source).grid) : null;
 
     const visible = [];
     const blocked = [];
@@ -1058,7 +1133,7 @@
         if (sourceKeys.has(key)) continue;
         const isVisible = !!grid[key];
         (isVisible ? visible : blocked).push({ c, r });
-        if (range && range.grid[key]) inRange.push({ c, r, hasLos: isVisible });
+        if ((weapon || range)?.grid[key]) inRange.push({ c, r, hasLos: isVisible });
       }
     }
     const movement = profileWithSpeed && state.source === "apostle" && state.moveTarget
@@ -1071,7 +1146,10 @@
         facing,
       })
       : null;
-    return { ...base, facing, blindspots, visible, blocked, inRange, distance, range, movement };
+    const weaponTarget = weapon?.target ? {
+      ...weapon.target, visible: targets.some(({ c, r }) => grid[cellKey(c, r)]),
+    } : null;
+    return { ...base, facing, blindspots, visible, blocked, inRange, distance, range, movement, weaponTarget };
   }
 
   // 把 overlay 描述画进容器。两端共用，保证第二屏与主控台逐格一致。
@@ -1082,7 +1160,9 @@
     if (!layer || !d) return;
     layer.replaceChildren();
     layer.hidden = !overlay.active;
-    layer.classList.toggle("dim-blocked", !!overlay.dim);
+    layer.classList.toggle("dim-blocked", !!overlay.dim && !overlay.mode);
+    layer.classList.toggle("tactical-attack", overlay.mode === "titan-attack");
+    layer.classList.toggle("tactical-boss", overlay.mode === "apostle-sight");
     if (!overlay.active) return;
 
     const cell = (c, r, className) => {
@@ -1154,6 +1234,11 @@
 
     if (!overlay.source.length) return;
 
+    for (const { c, r, steps } of overlay.moveCells || []) {
+      const movementCell = cell(c, r, "battle-map-titan-move");
+      movementCell.textContent = String(steps);
+      layer.appendChild(movementCell);
+    }
     overlay.visible.forEach(({ c, r }) => layer.appendChild(cell(c, r, "battle-map-los-visible")));
     overlay.blocked.forEach(({ c, r }) => layer.appendChild(cell(c, r, "battle-map-los-blocked")));
     overlay.inRange.forEach(({ c, r, hasLos }) => {
@@ -1264,6 +1349,9 @@
     hasLOS,
     computeLOSMap,
     computeRangeMap,
+    normalizeWeapon,
+    computeTitanWeapon,
+    computeTitanMoves,
     computeDistanceMap,
     computeApostleMovePaths,
     elevatedOcc,

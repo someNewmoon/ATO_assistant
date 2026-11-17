@@ -3,6 +3,7 @@ import heroCatalog from '../../hero/hero-catalog.js';
 import inventory from '../../technology/gear-inventory.js';
 import gearProduction from '../../technology/ato_gear_production.json';
 import { ApiError, errorResponse, object, response } from './campaign.js';
+import { applyRoomBoard, setupRoomBoard } from './board.js';
 
 export const roomIdPattern = /^[a-f0-9]{32}$/;
 const secretPattern = /^[a-f0-9]{64}$/;
@@ -82,9 +83,10 @@ export async function createBattleRoom(env, campaign, payload) {
       mnemos, stats: { danger: 0, rage: 0, fate: 0 }, condition: 'standing', player: '',
     };
   });
+  const board = payload.board ? setupRoomBoard(payload.board, heroes.length) : null;
   const id = crypto.randomUUID().replaceAll('-', '');
   return env.BATTLE_ROOMS.getByName(id).fetch('https://battle-room.internal/create', {
-    method: 'POST', body: JSON.stringify({ id, title, heroes }),
+    method: 'POST', body: JSON.stringify({ id, title, heroes, board }),
   });
 }
 
@@ -138,11 +140,11 @@ export class BattleRoom extends DurableObject {
   }
 
   async create(request) {
-    const { id, title, heroes } = await request.json();
+    const { id, title, heroes, board } = await request.json();
     const keys = { host: newSecret(), viewer: newSecret(), invite: newSecret() };
     const [host, viewer, invite] = await Promise.all(Object.values(keys).map(hash));
     const room = {
-      id, title, heroes, round: 1, revision: 0, closed: false,
+      id, title, heroes, board, round: 1, revision: 0, closed: false,
       pool: Object.fromEntries(poolKeys.map(key => [key, 0])), rolls: [],
       secrets: { host, viewer, invite, players: heroes.map(() => null) },
     };
@@ -171,7 +173,7 @@ export class BattleRoom extends DurableObject {
       const expectedMethod = route === 'state' ? 'GET' : 'POST';
       if (request.method !== expectedMethod) reject('请求方法不支持。', 405);
       const secretHash = await hash(request.headers.get('Authorization')?.match(/^Bearer (.+)$/)?.[1]);
-      const body = expectedMethod === 'POST' ? await this.payload(request) : null;
+      const body = expectedMethod === 'POST' ? await this.payload(request, route === 'action' ? 32768 : 4096) : null;
       const newPlayer = route === 'join' ? await hash(body.playerKey) : '';
       const room = this.load();
       if (route === 'join' || route === 'lobby') {
@@ -190,7 +192,7 @@ export class BattleRoom extends DurableObject {
     }
   }
 
-  async payload(request) {
+  async payload(request, limit) {
     const reader = request.body?.getReader();
     if (!reader) reject('缺少请求内容。');
     const decoder = new TextDecoder();
@@ -201,7 +203,7 @@ export class BattleRoom extends DurableObject {
         const { value, done } = await reader.read();
         if (done) break;
         size += value.byteLength;
-        if (size > 4096) {
+        if (size > limit) {
           await reader.cancel();
           reject('战斗操作请求过大。', 413);
         }
@@ -254,6 +256,7 @@ export class BattleRoom extends DurableObject {
   }
 
   apply(room, actor, body) {
+    if (typeof body.type === "string" && body.type.startsWith("board-")) return applyRoomBoard(room, actor, body);
     if (body.type === 'round' || body.type === 'end') {
       if (actor.role !== 'host') reject('只有房主可以执行此操作。', 403);
       if (body.type === 'round') room.round++;

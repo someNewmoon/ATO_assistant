@@ -466,6 +466,17 @@
       min-width: 0;
     }
 
+    .titan-details {
+      grid-column: 1 / -1;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+      gap: 8px;
+    }
+
+    .titan-details input {
+      width: 100%;
+    }
+
     .titan-row input[type="number"],
     .titan-add-row input[type="number"] {
       width: 100%;
@@ -1506,6 +1517,7 @@
       .summon-pickers,
       .titan-row,
       .titan-add-row,
+      .titan-details,
       .notes-grid,
       .adventure-list,
       .track-row,
@@ -1686,6 +1698,10 @@
               <input id="deadTitansInput" type="number" min="0" step="1" value="0" title="已死亡泰坦累计" aria-label="已死亡泰坦累计">
             </label>
             <button id="addTitanButton" type="button">添加泰坦</button>
+            <div class="titan-details">
+              <label class="titan-number-field">种类<input id="titanTypeInput" type="text" maxlength="80" placeholder="如梦行者"></label>
+              <label class="titan-number-field">备注<input id="titanNotesInput" type="text" maxlength="500"></label>
+            </div>
           </div>
         </details>
 
@@ -2532,6 +2548,8 @@
       titanList: document.querySelector("#titanList"),
       titanListCount: document.querySelector("#titanListCount"),
       titanNameInput: document.querySelector("#titanNameInput"),
+      titanTypeInput: document.querySelector("#titanTypeInput"),
+      titanNotesInput: document.querySelector("#titanNotesInput"),
       titanCountInput: document.querySelector("#titanCountInput"),
       titanLimitInput: document.querySelector("#titanLimitInput"),
       deadTitansInput: document.querySelector("#deadTitansInput"),
@@ -3139,6 +3157,8 @@
           .map((item) => ({
             id: String(item.id || `titan-${Date.now()}-${Math.random().toString(16).slice(2)}`),
             name: String(item.name || "泰坦"),
+            type: typeof item.type === "string" ? item.type.trim().slice(0, 80) : "",
+            notes: typeof item.notes === "string" ? item.notes.trim().slice(0, 500) : "",
             count: Math.max(1, Math.floor(Number(item.count || 1))),
             limit: Math.max(1, Math.floor(Number(item.limit || item.count || 1))),
             crippled: Boolean(item.crippled),
@@ -3147,7 +3167,7 @@
 
       const count = Math.max(0, Math.floor(Number(legacyTitanCount || 0)));
       return count > 0
-        ? [{ id: "legacy-titan", name: "泰坦", count, limit: count, crippled: false }]
+        ? [{ id: "legacy-titan", name: "泰坦", type: "", notes: "", count, limit: count, crippled: false }]
         : [];
     }
 
@@ -3701,10 +3721,11 @@
 
     function renderTitans() {
       state.titans = normalizeTitanList(state.titans);
-      const crippledByName = new Map();
+      const crippledByDetails = new Map();
       state.titans = state.titans.filter((titan) => {
         if (!titan.crippled) return true;
-        const existing = crippledByName.get(titan.name);
+        const key = JSON.stringify([titan.name, titan.type, titan.notes]);
+        const existing = crippledByDetails.get(key);
         if (existing) {
           // Scheduled repairs still refer to the removed row's identity.
           state.titanMergedIds = isPlainObject(state.titanMergedIds) ? state.titanMergedIds : {};
@@ -3713,7 +3734,7 @@
           existing.limit += titan.limit;
           return false;
         }
-        crippledByName.set(titan.name, titan);
+        crippledByDetails.set(key, titan);
         return true;
       });
       state.titanLimit = normalizeTitanLimit(state.titanLimit);
@@ -3808,7 +3829,23 @@
           queueSave();
         });
 
-        row.append(nameInput, countField, crippledLabel, removeButton);
+        const details = document.createElement("div");
+        details.className = "titan-details";
+        for (const [key, label, maxLength] of [["type", "种类", 80], ["notes", "备注", 500]]) {
+          const field = document.createElement("label");
+          field.className = "titan-number-field";
+          const input = document.createElement("input");
+          input.type = "text";
+          input.maxLength = maxLength;
+          input.value = titan[key];
+          input.addEventListener("input", () => {
+            state.titans[index][key] = input.value;
+            queueSave();
+          });
+          field.append(label, input);
+          details.appendChild(field);
+        }
+        row.append(nameInput, countField, crippledLabel, removeButton, details);
         elements.titanList.appendChild(row);
       });
     }
@@ -3819,10 +3856,14 @@
       state.titans.push({
         id: `titan-${Date.now()}-${Math.random().toString(16).slice(2)}`,
         name,
+        type: elements.titanTypeInput.value.trim(),
+        notes: elements.titanNotesInput.value.trim(),
         count,
         crippled: elements.titanCrippledInput.checked,
       });
       elements.titanNameInput.value = "";
+      elements.titanTypeInput.value = "";
+      elements.titanNotesInput.value = "";
       elements.titanCountInput.value = "1";
       elements.titanCrippledInput.checked = false;
       renderTitans();

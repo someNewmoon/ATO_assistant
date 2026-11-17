@@ -38,6 +38,39 @@ test('inventory rejects invalid mutations and safely normalizes old or malformed
   assert.throws(() => inventory.adjust({}, 'AJ0160', -1, true));
 });
 
+test('player loadouts reserve gear and Titans without changing stock, and release gear when edited', () => {
+  const record = {
+    arsenal: { AJ0160: { quantity: 1, manufactured: 1 } },
+    titans: [{ id: 'dreamwalker', name: '梦行者', count: 1 }],
+    titanMergedIds: { old: 'middle', middle: 'dreamwalker' },
+    resources: { material: 10 },
+  };
+  const base = inventory.normalizeLoadout();
+  const first = { player: '玩家甲', titanId: 'old', gear: { AJ0160: 1 } };
+  const saved = inventory.saveLoadout(record, '1', base, first);
+  assert.equal(saved.loadouts['1'].titanId, 'dreamwalker');
+  assert.deepEqual(saved.arsenal, record.arsenal);
+  assert.equal(record.loadouts, undefined);
+  assert.throws(() => inventory.saveLoadout(saved, '2', base, first), /泰坦条目/);
+  assert.throws(() => inventory.saveLoadout(saved, '2', base, { ...first, titanId: '' }), /库存不足/);
+  const released = inventory.saveLoadout(saved, '1', saved.loadouts['1'], { ...first, gear: {} });
+  const second = inventory.saveLoadout(released, '2', base, { ...first, titanId: '' });
+  assert.deepEqual(second.loadouts['2'].gear, { AJ0160: 1 });
+  assert.deepEqual(second.resources, record.resources);
+});
+
+test('loadout saves preserve another slot, reject stale edits and recognize a retried save', () => {
+  const base = inventory.normalizeLoadout();
+  const first = { ...base, player: '玩家甲' };
+  const second = { ...base, player: '玩家乙' };
+  const saved = inventory.saveLoadout({}, '1', base, first);
+  const combined = inventory.saveLoadout(saved, '2', base, second);
+  assert.deepEqual(combined.loadouts, { '1': first, '2': second });
+  assert.throws(() => inventory.saveLoadout(combined, '1', base, second), /另一设备修改/);
+  assert.equal(inventory.saveLoadout(combined, '1', base, first), null);
+  assert.equal(inventory.normalizeLoadout({ gear: { 'T:tt_earthshaker': 2 } }).gear['T:tt_earthshaker'], undefined);
+});
+
 function craftContext({ conflict = false, fail = false, remoteMissing = false, loseResponse = false, malformedResponse = false, offlineRecovery = false } = {}) {
   let server = { resources: { material: 10 }, arsenal: {} };
   let revision = 1;

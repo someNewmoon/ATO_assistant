@@ -40,6 +40,24 @@ function harness() {
   return c;
 }
 
+test('Titan types and notes are editable, survive normalization and keep unlike crippled groups separate', () => {
+  const c = harness();
+  const details = c.elements.titanList.children[0].children[4].children;
+  for (const [index, value] of ['梦行者', '待修复'].entries()) {
+    const input = details[index].children[1];
+    input.value = value;
+    input.listeners.input();
+  }
+  c.state.titans.push({ ...c.state.titans[0], id: 'other', count: 1, notes: '本场待命' });
+  c.renderTitans();
+  assert.equal(c.state.titans.length, 3);
+  assert.equal(c.state.titans[0].type, '梦行者');
+  assert.equal(c.state.titans[0].notes, '待修复');
+  assert.equal(c.state.titans[1].type, '');
+  assert.equal(c.state.titans[2].notes, '本场待命');
+  assert.equal(c.saves, 2);
+});
+
 test('each death click loses one Titan and removes only the exhausted row', () => {
   const c = harness();
   const clickDeath = () => c.elements.titanList.children[0].children[3].listeners.click();

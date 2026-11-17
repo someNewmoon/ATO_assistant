@@ -26,8 +26,70 @@ body[data-theme-module="technology"] .arsenal-toolbar .tool-btn:hover:not(:disab
 .arsenal-item-meta { color: var(--muted); font-size: 11px; line-height: 1.6; margin-bottom: 8px; overflow-wrap: anywhere; }
 .arsenal-quantity { display: flex; align-items: center; gap: 10px; margin-top: auto; padding-top: 8px; }
 .arsenal-quantity-value { flex: 1; text-align: center; font-size: 14px; font-weight: 850; color: var(--accent-strong); }
+.arsenal-quantity-value small { display: block; color: var(--muted); font-size: 11px; }
 .arsenal-quantity .gear-resource-btn { width: 30px; height: 30px; border-radius: 0; border-color: var(--line); background: var(--panel); color: var(--accent-strong); }
 .arsenal-quantity .gear-resource-btn:hover:not(:disabled) { background: var(--accent-soft); color: var(--accent-strong); border-color: var(--accent); }
 .arsenal-quantity .gear-resource-btn:disabled { opacity: .45; cursor: not-allowed; }
 .gear-stock { color: var(--accent-strong); font-size: 11px; font-weight: 750; }
 .arsenal-items { padding-top: 10px; }
+.arsenal-loadouts { margin: 0 0 16px; }
+.arsenal-loadouts h2, .arsenal-loadout-dialog h2 { margin: 0 0 10px; color: var(--accent-strong); font-size: 16px; }
+.arsenal-loadout-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(160px, 100%), 1fr));
+  gap: 8px;
+}
+.arsenal-loadout-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: start;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  overflow-wrap: anywhere;
+}
+.arsenal-loadout-card h3 { margin: 0; font-size: 14px; }
+.arsenal-loadout-card .tool-btn { margin-top: auto; }
+.arsenal-loadout-dialog {
+  box-sizing: border-box;
+  width: min(480px, calc(100% - 24px));
+  max-height: calc(100% - 24px);
+  padding: 16px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--ink);
+}
+.arsenal-loadout-dialog::backdrop { background: rgb(0 0 0 / 55%); }
+.arsenal-loadout-dialog fieldset {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.arsenal-loadout-dialog label { display: grid; gap: 4px; }
+.arsenal-loadout-dialog input, .arsenal-loadout-dialog select {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 7px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--ink);
+  font: inherit;
+}
+.arsenal-loadout-gear { margin: 0; padding: 0; list-style: none; }
+.arsenal-loadout-gear:empty, .arsenal-loadout-dialog .arsenal-message:empty { display: none; }
+.arsenal-loadout-gear li, .arsenal-loadout-controls, .arsenal-loadout-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.arsenal-loadout-gear li, .arsenal-loadout-actions { justify-content: space-between; }
+.arsenal-loadout-gear li { padding: 4px 0; border-bottom: 1px solid var(--line); }
+.arsenal-loadout-gear span { overflow-wrap: anywhere; }
+.arsenal-loadout-dialog .tool-btn { flex-shrink: 0; }
+.arsenal-loadout-dialog .arsenal-message { margin: 10px 0 0; }

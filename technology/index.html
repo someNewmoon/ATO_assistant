@@ -1062,7 +1062,7 @@ button.gear-group-name:hover {
 <link rel="stylesheet" href="../assets/theme.css?v=20261001">
 <link rel="stylesheet" href="editorial.css?v=20261001-cycle-menu">
 <link rel="stylesheet" href="tech-tree.css?v=20261002-content-paper">
-<link rel="stylesheet" href="arsenal.css?v=20261002-centered-buttons">
+<link rel="stylesheet" href="arsenal.css?v=20261117-loadouts">
 <link rel="stylesheet" href="../assets/card-art.css?v=20261017-corners1">
 <script src="../assets/card-art.js?v=20261017-corners1" defer></script>
   <script src="../story/data/english-source-data.js?v=20261011-english4"></script>
@@ -1139,7 +1139,7 @@ button.gear-group-name:hover {
   <script src="exploration-tech-rules.js?v=20261017-automation-audit4"></script>
   <script src="structure-tech-rules.js?v=20261019-tech-cache1"></script>
   <script src="structure-tech-client.js?v=20261019-negotiation-rows2"></script>
-<script src="gear-inventory.js?v=20261002"></script>
+<script src="gear-inventory.js?v=20261117-loadouts"></script>
 <script>
 const TECH_DICTIONARY_URL = 'tech_card_dictionary.min.json';
 const fetch = window.ATO_CAMPAIGN_NOTES.createFetch(window.fetch.bind(window), {
@@ -2182,7 +2182,161 @@ function arsenalMessageHtml() {
   return arsenalMessage ? `<div class="arsenal-message ${arsenalMessageError ? 'error' : ''}" role="status">${esc(arsenalMessage)}</div>` : '';
 }
 
+const loadoutSlots = ['1', '2', '3', '4'];
+
+function loadoutTitanLabel(titan) {
+  return [titan.name || '泰坦', titan.type, titan.crippled ? '残废' : ''].filter(Boolean).join(' · ');
+}
+
+function arsenalLoadoutsHtml(disabled) {
+  const inventory = window.ATO_GEAR_INVENTORY;
+  const titans = inventory.loadoutTitans(gearRecordState);
+  const cards = loadoutSlots.map(slot => {
+    const kit = inventory.normalizeLoadout(gearRecordState.loadouts?.[slot]);
+    const titanId = inventory.titanIdFor(gearRecordState, kit.titanId);
+    const titan = titans.find(entry => String(entry.id) === titanId);
+    const gear = Object.entries(kit.gear).map(([id, quantity]) => `${getGearName(id)} × ${quantity}`);
+    const name = kit.player || `玩家 ${slot}`;
+    const titanLabel = titan ? loadoutTitanLabel(titan) : kit.titanId ? '原泰坦已不在列表' : '未选择泰坦';
+    return `<article class="arsenal-loadout-card">
+      <h3>${esc(name)}</h3>
+      <div>${esc(titanLabel)}</div>
+      <div class="arsenal-item-meta">${esc(gear.join('、') || '未分配装备')}</div>
+      <button type="button" class="tool-btn" data-edit-loadout="${slot}" aria-label="${esc(`编辑${name}的配装`)}" ${disabled ? 'disabled' : ''}>编辑配装</button>
+    </article>`;
+  });
+  return `<section class="arsenal-loadouts" aria-labelledby="arsenalLoadoutsTitle">
+    <h2 id="arsenalLoadoutsTitle">玩家配装</h2><div class="arsenal-loadout-grid">${cards.join('')}</div>
+  </section>`;
+}
+
+function editArsenalLoadout(slot, catalog) {
+  const inventory = window.ATO_GEAR_INVENTORY;
+  const record = gearRecordState;
+  const profileId = activeAccountId;
+  const accountId = campaignSession.accountId;
+  const base = inventory.normalizeLoadout(record.loadouts?.[slot]);
+  const draft = inventory.normalizeLoadout(base);
+  draft.titanId = inventory.titanIdFor(record, draft.titanId);
+  const others = loadoutSlots.filter(id => id !== slot).map(id => inventory.normalizeLoadout(record.loadouts?.[id]));
+  const roster = inventory.loadoutTitans(record);
+  const titans = roster.map(titan => {
+    const id = String(titan.id);
+    const available = (Number(titan.count) || 1) - others.filter(kit => inventory.titanIdFor(record, kit.titanId) === id).length;
+    return `<option value="${esc(id)}" ${available <= 0 && id !== draft.titanId ? 'disabled' : ''}>${esc(loadoutTitanLabel(titan))} · 可分配 ${Math.max(0, available)}</option>`;
+  });
+  if (draft.titanId && !roster.some(entry => String(entry.id) === draft.titanId)) {
+    titans.push(`<option value="${esc(draft.titanId)}">原泰坦已不在列表</option>`);
+  }
+  const dialog = document.createElement('dialog');
+  dialog.className = 'arsenal-loadout-dialog';
+  dialog.setAttribute('aria-labelledby', 'arsenalEditLoadoutTitle');
+  dialog.innerHTML = `<h2 id="arsenalEditLoadoutTitle">编辑玩家 ${slot} 的配装</h2>
+    <form>
+      <fieldset>
+        <label>玩家名称<input name="player" maxlength="60" placeholder="玩家 ${slot}"></label>
+        <label>泰坦<select name="titan" aria-label="泰坦"><option value="">未选择泰坦</option>${titans.join('')}</select></label>
+        <ul class="arsenal-loadout-gear" aria-label="已分配装备"></ul>
+        <label>搜索库存<input name="query" type="search" placeholder="装备名称、别名或编号"></label>
+        <div class="arsenal-loadout-controls">
+          <select name="gear" aria-label="可分配装备"></select>
+          <button type="button" class="tool-btn" data-add-loadout-gear>分配一件</button>
+        </div>
+        <div class="arsenal-loadout-actions">
+          <button type="button" class="tool-btn" data-close-loadout>取消</button>
+          <button type="submit" class="tool-btn">保存配装</button>
+        </div>
+      </fieldset>
+      <p class="arsenal-message" role="status"></p>
+    </form>`;
+  const form = dialog.querySelector('form');
+  const fields = dialog.querySelector('fieldset');
+  const list = dialog.querySelector('ul');
+  const message = dialog.querySelector('[role="status"]');
+  const player = form.elements.namedItem('player');
+  const titan = form.elements.namedItem('titan');
+  const query = form.elements.namedItem('query');
+  const gear = form.elements.namedItem('gear');
+  const add = dialog.querySelector('[data-add-loadout-gear]');
+  player.value = draft.player;
+  titan.value = draft.titanId;
+
+  function renderGearChoices() {
+    const selection = gear.value;
+    const needle = query.value.trim().toLowerCase();
+    const options = catalog.filter(item => item.part.key !== 'titan' && item.searchText.includes(needle))
+      .map(item => {
+        const reserved = others.reduce((sum, kit) => sum + (kit.gear[item.gearId] || 0), 0);
+        return [item, item.quantity - reserved - (draft.gear[item.gearId] || 0)];
+      }).filter(([, available]) => available > 0);
+    gear.innerHTML = options.length
+      ? options.map(([item, available]) => `<option value="${esc(item.gearId)}">${esc(item.name)} · ${esc(item.gearId)} · 可分配 ${available}</option>`).join('')
+      : '<option value="">没有可分配的装备</option>';
+    if (options.some(([item]) => item.gearId === selection)) gear.value = selection;
+    add.disabled = !options.length;
+  }
+
+  function renderAssignedGear() {
+    list.innerHTML = Object.entries(draft.gear).map(([id, amount]) => {
+      const name = getGearName(id);
+      return `<li><span>${esc(name)} × ${amount}</span><button type="button" class="tool-btn" data-release-gear="${esc(id)}" aria-label="${esc(`释放一件${name}`)}">移除一件</button></li>`;
+    }).join('');
+    renderGearChoices();
+  }
+
+  query.addEventListener('input', renderGearChoices);
+  add.addEventListener('click', () => {
+    if (!gear.value) return;
+    draft.gear[gear.value] = (draft.gear[gear.value] || 0) + 1;
+    renderAssignedGear();
+  });
+  list.addEventListener('click', event => {
+    const id = event.target.closest('[data-release-gear]')?.dataset.releaseGear;
+    if (!id) return;
+    draft.gear[id] -= 1;
+    if (!draft.gear[id]) delete draft.gear[id];
+    renderAssignedGear();
+  });
+  dialog.querySelector('[data-close-loadout]').addEventListener('click', () => dialog.close());
+  dialog.addEventListener('close', () => dialog.remove());
+  dialog.addEventListener('cancel', event => {
+    if (fields.disabled) event.preventDefault();
+  });
+  form.addEventListener('submit', async event => {
+    event.preventDefault();
+    if (fields.disabled) return;
+    if (activeAccountId !== profileId || campaignSession.accountId !== accountId || campaignSession.changed) {
+      message.textContent = '档案或账号已切换，请重新打开配装。';
+      return;
+    }
+    draft.player = player.value;
+    draft.titanId = titan.value;
+    fields.disabled = true;
+    message.textContent = '正在保存配装…';
+    try {
+      const saved = await mutateCampaignRecordState(latest => inventory.saveLoadout(latest, slot, base, draft));
+      if (!saved) await loadGearRecordState();
+      arsenalMessage = `玩家 ${slot} 的配装已保存。`;
+      arsenalMessageError = false;
+      dialog.close();
+      renderGearInventoryView();
+    } catch (error) {
+      message.textContent = String(error.message || error);
+    } finally {
+      fields.disabled = false;
+    }
+  });
+  renderAssignedGear();
+  document.body.appendChild(dialog);
+  dialog.showModal();
+}
+
 function arsenalItemHtml(item) {
+  const inventory = window.ATO_GEAR_INVENTORY;
+  const assigned = loadoutSlots.reduce((sum, slot) => {
+    const loadout = inventory.normalizeLoadout(gearRecordState.loadouts?.[slot]);
+    return sum + (loadout.gear[item.gearId] || 0);
+  }, 0);
   const image = gearImageSrc(item.gearId);
   const thumbnail = image
     ? `<button type="button" class="gear-card-thumb" data-gear-img="${esc(image)}" data-gear-name="${esc(item.name)}" title="查看 ${esc(item.name)}"><img src="${esc(image)}" alt="${esc(item.name)}" loading="lazy"></button>`
@@ -2192,7 +2346,7 @@ function arsenalItemHtml(item) {
     <div class="arsenal-item-meta">${esc(item.gearId)} · ${esc(item.part.label)}<br>${esc(item.cycles.map(cycle => cycle.replace('c', '循环 ')).join(' / ') || '循环未分类')} · 累计制造 ${item.manufactured} 件</div>
     <div class="arsenal-quantity">
       <button type="button" class="gear-resource-btn" data-arsenal-gear="${esc(item.gearId)}" data-arsenal-delta="-1" aria-label="减少 ${esc(item.name)}" ${gearMutationInFlight || item.quantity === 0 ? 'disabled' : ''}>−</button>
-      <span class="arsenal-quantity-value">现有 ${item.quantity} 件</span>
+      <span class="arsenal-quantity-value">现有 ${item.quantity} 件${assigned ? `<small>已分配 ${assigned} 件${assigned > item.quantity ? ' · 超出库存' : ''}</small>` : ''}</span>
       <button type="button" class="gear-resource-btn" data-arsenal-gear="${esc(item.gearId)}" data-arsenal-delta="1" aria-label="增加 ${esc(item.name)}" ${gearMutationInFlight ? 'disabled' : ''}>+</button>
     </div>
   </article>`;
@@ -2233,6 +2387,7 @@ function renderArsenalPage() {
     </form>
   </div><div class="arsenal-meta"><span>制造自动入库；所有装备均可补录，手动增减仅调整库存。</span><span class="arsenal-summary">显示 ${visible.length}/${recorded.length} 种 · ${visibleQuantity} 件</span></div>`;
   html += gearMutationInFlight ? '<div class="arsenal-message" role="status">正在保存军械库...</div>' : arsenalMessageHtml();
+  if (gearRecordState) html += arsenalLoadoutsHtml(unavailable);
   if (gearRecordError) html += `<div class="gear-empty">军械库读取失败：${esc(gearRecordError)}。请点击刷新重试。</div>`;
   else if (!gearRecordState) html += '<div class="gear-empty">正在读取军械库...</div>';
   else if (!recorded.length) html += '<div class="gear-empty">军械库还没有装备。在“装备制造”中制造，或在上方补录已有装备。</div>';
@@ -2247,6 +2402,9 @@ function renderArsenalPage() {
     html += '</div>';
   }
   mainView.innerHTML = html + '</div>';
+  mainView.querySelectorAll('[data-edit-loadout]').forEach(button => {
+    button.addEventListener('click', () => editArsenalLoadout(button.dataset.editLoadout, catalog));
+  });
   mainView.querySelectorAll('[data-arsenal-filter]').forEach(input => input.addEventListener('change', () => {
     if (input.dataset.arsenalFilter === 'part') arsenalPartFilter = input.value;
     if (input.dataset.arsenalFilter === 'cycle') arsenalCycleFilter = input.value;

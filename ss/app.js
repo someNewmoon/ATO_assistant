@@ -711,7 +711,7 @@ function renderBattleStarts(apostle, map, los) {
     const level = los?.level ?? map.startLevel;
     window.BattleBoardPieces.render(elements.battleStartLayer, window.BattleTerrain.getBoardPieces(map, apostle, level), {
       apostle, size: window.BattleTerrain.getApostleProfile(apostle, level)?.size || 1,
-      selected: los?.selectedTitan, mode: los?.mode,
+      selected: los?.selectedTitan, mode: los?.mode, bossTrail: los?.bossTrail, trail: los?.titanTrail,
     });
     return;
   }
@@ -862,6 +862,7 @@ function renderBattleTerrain(apostle, level, battleMap, los) {
     image.style.transform = `translate(-50%, -50%) rotate(${style.rotation}) ${window.BattleTerrain.getTileFlipTransform(placement)}`;
     elements.battleTerrainLayer.appendChild(image);
   });
+  window.BattleLOS?.renderTerrainEdges(elements.battleTerrainLayer, map, window.BattleTerrain, los?.mode);
   renderBattleLightCoverage(map);
   renderBattleStarts(apostle, map, los);
   renderBattleCoordinates(map);

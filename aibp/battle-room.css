@@ -278,3 +278,7 @@ body.aibp-room-only > .app > main > :not(#battleRoom) { display: none !important
 .room-argo-card[data-card-state="exhausted"] .room-argo-card-window > button { transform: rotate(90deg) scale(.72); }
 .room-argo-card strong { font-size: .8rem; }
 @media (prefers-reduced-motion: reduce) { .room-argo-card-window > button { transition: none; } }
+.room-dice-stepper { display: inline-flex; align-items: center; gap: 4px; }
+.room-dice-stepper input { width: 3.5rem; text-align: center; }
+.battle-room .room-dice-stepper button { min-width: 34px; min-height: 36px; padding: 3px 8px; font-size: 20px; }
+.room-dice-stepper input::-webkit-inner-spin-button { -webkit-appearance: none; }

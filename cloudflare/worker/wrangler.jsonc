@@ -6,12 +6,38 @@
   "preview_urls": false,
   "durable_objects": {
     "bindings": [
-      { "name": "CAMPAIGNS", "class_name": "CampaignAccount" },
-      { "name": "BATTLE_ROOMS", "class_name": "BattleRoom" }
+      {
+        "name": "CAMPAIGNS",
+        "class_name": "CampaignAccount"
+      },
+      {
+        "name": "BATTLE_ROOMS",
+        "class_name": "BattleRoom"
+      },
+      {
+        "name": "ROOM_DIRECTORY",
+        "class_name": "BattleDirectory"
+      }
     ]
   },
   "migrations": [
-    { "tag": "v1", "new_sqlite_classes": ["CampaignAccount"] },
-    { "tag": "v2", "new_sqlite_classes": ["BattleRoom"] }
+    {
+      "tag": "v1",
+      "new_sqlite_classes": [
+        "CampaignAccount"
+      ]
+    },
+    {
+      "tag": "v2",
+      "new_sqlite_classes": [
+        "BattleRoom"
+      ]
+    },
+    {
+      "tag": "v3",
+      "new_sqlite_classes": [
+        "BattleDirectory"
+      ]
+    }
   ]
 }

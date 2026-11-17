@@ -80,3 +80,13 @@ test('boss movement uses whole upper-left grid squares for even and odd footprin
     assert.equal(Math.max(...cells.map(cell => cell.r)), 9);
   }
 });
+
+test('boss trails use unit orthogonal steps without consulting terrain', () => {
+  const from = { column: 3.5, row: 8.5 }, to = { column: 7.5, row: 5.5 };
+  const route = los.apostleMoveRoute(from, to);
+  assert.deepEqual(route[0], from);
+  assert.deepEqual(route.at(-1), to);
+  assert.equal(route.length, 8);
+  for (let i = 1; i < route.length; i++) assert.equal(Math.abs(route[i].column-route[i-1].column)+Math.abs(route[i].row-route[i-1].row), 1);
+  assert.deepEqual(los.apostleMoveRoute(from, {column:4,row:5}), []);
+});

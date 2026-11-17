@@ -107,6 +107,7 @@ export function applyRoomBoard(room, actor, body) {
     const steps = los.apostleDestinationSteps(board.map.pieces, point, size);
     if (steps === null) fail('骇物不能重叠到泰坦所在格。', 409);
     if (steps > (profile?.speed ?? Infinity)) fail('这一位置超出骇物的移动范围。', 409);
+    board.lastApostleMove = { route: los.apostleMoveRoute(current, point) };
     Object.assign(current, point);
     board.layoutRevision++;
     return;
@@ -134,6 +135,7 @@ export function applyRoomBoard(room, actor, body) {
       }
     }
     board.map = map;
+    delete board.lastApostleMove;
     if (!body.keepTitans) delete board.lastTitanMove;
     board.layoutRevision++;
     return;

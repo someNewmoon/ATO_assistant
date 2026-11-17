@@ -70,6 +70,7 @@
 !/assets/exploration-pursuit.js
 !/assets/exploration-card-resources.js
 !/assets/exploration-card-tags.js
+!/assets/quick-battle.js
 !/assets/page-focus-router.js
 !/assets/campaign-session.js
 !/assets/campaign-notes.js

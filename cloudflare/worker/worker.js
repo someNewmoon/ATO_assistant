@@ -1,6 +1,6 @@
 import { DurableObject } from 'cloudflare:workers';
 import { battleRequest, createBattleRoom } from './battle-room.js';
-export { BattleRoom } from './battle-room.js';
+export { BattleRoom, BattleDirectory } from './battle-room.js';
 import {
   ApiError, activeCycle, appendNotes, checkAccount, defaultCampaign, errorResponse,
   importSections, object, response, sections, writeSection,
@@ -81,6 +81,10 @@ export default {
     const url = new URL(request.url);
     try {
       if (url.pathname === '/api/health') return response({ ok: true, backend: 'cloudflare', phase: 'campaign' });
+      if (url.pathname === '/api/battle-room/open') {
+        if (request.method !== 'GET') throw new ApiError(405, '需要 GET。');
+        return env.ROOM_DIRECTORY.getByName('active').fetch('https://directory.internal/list');
+      }
       const createRoom = url.pathname === '/api/battle-room/create';
       if (url.pathname.startsWith('/api/battle-room/') && !createRoom) return await battleRequest(env, request, url);
       if (createRoom && (request.method !== 'POST' || url.search)) throw new ApiError(405, '创建战斗室需要 POST。');

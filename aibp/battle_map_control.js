@@ -97,6 +97,7 @@
     const losPathSummary = root.querySelector("[data-battle-map-los-path-summary]");
     const tactics = root.querySelector("[data-board-tactics]");
     let nativeTitanTrail;
+    let nativeApostleTrail;
     const tacticModes = ["titan-move", "titan-attack", "apostle-sight", "apostle-move"];
     const editBoard = () => options.canEditBoard?.() !== false;
     const hasTactics = (mode) => tacticModes.includes(mode);
@@ -237,6 +238,7 @@
           selected: losState.selectedTitan, mode: losState.mode, names: options.titanNames?.(), roster: options.titanRoster?.(),
           portraits: options.heroPortraits?.(),
           trail: options.getTitanTrail?.() || (nativeTitanTrail?.map === options.getMap() ? nativeTitanTrail.move : null),
+          bossTrail: options.getApostleTrail?.() || (nativeApostleTrail?.map === options.getMap() ? nativeApostleTrail.move : null),
           onSelectBoss: losState.mode !== "apostle-move" && editBoard() && tactics ? () => setTacticalMode("apostle-move") : undefined,
           onSelect: ["titan-attack", "titan-move"].includes(losState.mode) && options.allowTacticalControls !== false ? selectTitan : undefined,
         });
@@ -418,6 +420,7 @@
       }
       lastOverlay = overlay;
       window.BattleLOS.renderLosOverlay(losLayer, overlay);
+      window.BattleLOS.renderTerrainEdges(terrainLayer, map, window.BattleTerrain, state.mode);
     }
 
     function speedLabel(speed) {
@@ -790,8 +793,11 @@
         }
         const position = { column: destination.c, row: destination.r };
         if (options.onApostleMove) return options.onApostleMove(position);
+        const route = window.BattleLOS.apostleMoveRoute(pieces.apostle, position);
         Object.assign(pieces.apostle, position);
-        commit({ ...map, pieces });
+        const next = { ...map, pieces };
+        nativeApostleTrail = { map: next, move: { route } };
+        commit(next);
         options.onLosChange?.();
       }
     }
@@ -1089,7 +1095,10 @@
         renderMap();
       },
       getLosSnapshot() {
-        if (!losState.active) return { active: false };
+        const trailMap = options.getMap();
+        const bossTrail = options.getApostleTrail?.() || (nativeApostleTrail?.map === trailMap ? nativeApostleTrail.move : null);
+        const titanTrail = options.getTitanTrail?.() || (nativeTitanTrail?.map === trailMap ? nativeTitanTrail.move : null);
+        if (!losState.active) return { active: false, ...(bossTrail && { bossTrail }), ...(titanTrail && { titanTrail }) };
         if (hasTactics(losState.mode)) {
           const state = currentTacticalState();
           const map = currentMap();
@@ -1100,6 +1109,8 @@
             facing: state.source === "apostle" ? pieces.apostle.facing : null,
             weapon: state.weapon, weaponControls: { ...losState.weapon },
             moveSpeed: state.moveSpeed, titanSpeeds: state.titanSpeeds.slice(),
+            bossTrail,
+            titanTrail,
             elevated: state.elevated, level: options.getLevel(),
           };
         }

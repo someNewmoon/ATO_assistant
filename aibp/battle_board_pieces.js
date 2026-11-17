@@ -11,31 +11,14 @@
     const svg = document.createElementNS(svgNS, "svg");
     svg.setAttribute("viewBox", sprite.crop.join(" "));
     svg.setAttribute("aria-hidden", "true");
-    if (sprite.vector) {
-      svg.dataset.vectorArtwork = "true";
-      const outline = document.createElementNS(svgNS, "path");
-      outline.setAttribute("d", sprite.path);
-      outline.setAttribute("fill", sprite.vector.fill);
-      outline.setAttribute("stroke", "#291f19");
-      outline.setAttribute("stroke-width", Math.min(sprite.crop[2], sprite.crop[3]) * .022);
-      outline.setAttribute("stroke-linejoin", "round");
-      const details = document.createElementNS(svgNS, "g");
-      details.setAttribute("transform", "translate(" + sprite.crop.slice(0, 2).join(" ")
-        + ") scale(" + sprite.crop.slice(2).map(value => value / 100).join(" ") + ")");
-      details.setAttribute("fill", "none");
-      details.setAttribute("stroke", "#34271f");
-      details.setAttribute("stroke-width", "1.5");
-      details.setAttribute("stroke-linecap", "round");
-      details.setAttribute("stroke-linejoin", "round");
-      for (const shape of sprite.vector.paths) {
-        const path = document.createElementNS(svgNS, "path");
-        path.setAttribute("d", shape.d);
-        if (shape.fill) path.setAttribute("fill", shape.fill);
-        if (shape.stroke) path.setAttribute("stroke", shape.stroke);
-        details.appendChild(path);
-      }
-      svg.append(outline, details);
-      if (sprite.nativeFace != null) svg.style.transform = "rotate(" + (facing - sprite.nativeFace * 90) + "deg)";
+    if (sprite.restored) {
+      svg.setAttribute("viewBox", "0 0 100 100");
+      svg.dataset.restoredArtwork = "true";
+      const image = document.createElementNS(svgNS, "image");
+      image.setAttribute("href", sprite.restored);
+      image.setAttribute("width", "100"); image.setAttribute("height", "100");
+      image.setAttribute("preserveAspectRatio", "xMidYMid meet"); svg.appendChild(image);
+      svg.style.transform = "rotate(" + (facing - sprite.nativeFace * 90) + "deg)";
       return svg;
     }
     const defs = document.createElementNS(svgNS, "defs");
@@ -60,18 +43,18 @@
     return svg;
   }
 
-  function drawTrail(layer, trail) {
+  function drawTrail(layer, trail, boss = false) {
     const route = trail?.route;
     if (!route || route.length < 2) return;
     const document = layer.ownerDocument;
     const svg = document.createElementNS(svgNS, "svg");
     svg.setAttribute("viewBox", "0 0 20 14");
     svg.setAttribute("preserveAspectRatio", "none");
-    svg.setAttribute("class", "battle-piece-trail");
+    svg.setAttribute("class", "battle-piece-trail" + (boss ? " battle-piece-boss-trail" : ""));
     svg.setAttribute("role", "img");
     const square = ({ column, row }) => String.fromCharCode(64 + row) + column;
-    svg.setAttribute("aria-label", "泰坦移动路线 " + route.map(square).join(" → "));
-    svg.style.setProperty("--piece-accent", accents[trail.seat]);
+    svg.setAttribute("aria-label", (boss ? "骇物正交移动路线 " : "泰坦移动路线 ") + route.map(square).join(" → "));
+    svg.style.setProperty("--piece-accent", boss ? "#f4a284" : accents[trail.seat]);
     const line = document.createElementNS(svgNS, "polyline");
     line.setAttribute("points", route.map(({ column, row }) => (column - 0.5) + "," + (14.5 - row)).join(" "));
     line.setAttribute("vector-effect", "non-scaling-stroke");
@@ -83,16 +66,23 @@
       dot.setAttribute("r", index === 0 ? 0.32 : 0.12);
       dot.setAttribute("class", index === 0 ? "trail-origin" : "trail-step");
       svg.appendChild(dot);
+      if (boss && index > 0) {
+        const label = document.createElementNS(svgNS, "text");
+        label.setAttribute("x", column - .5); label.setAttribute("y", 14.4 - row);
+        label.setAttribute("class", "trail-step-number"); label.setAttribute("text-anchor", "middle");
+        label.textContent = String(index); svg.appendChild(label);
+      }
     }
     layer.appendChild(svg);
   }
 
   function render(layer, pieces, {
-    apostle, size = 1, selected = 0, mode, names = [], roster, portraits = [], trail, onSelect, onSelectBoss,
+    apostle, size = 1, selected = 0, mode, names = [], roster, portraits = [], trail, bossTrail, onSelect, onSelectBoss,
   } = {}) {
     layer.replaceChildren();
     layer.hidden = false;
     drawTrail(layer, trail);
+    drawTrail(layer, bossTrail, true);
     const document = layer.ownerDocument;
     const sprites = window.BattleBoardSprites || {};
     function token(piece, span, name, index, sprite, fallback) {

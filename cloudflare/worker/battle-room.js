@@ -94,7 +94,7 @@ export async function createBattleRoom(env, campaign, payload) {
   catch (error) { reject(error.message); }
   const id = crypto.randomUUID().replaceAll('-', '');
   return env.BATTLE_ROOMS.getByName(id).fetch('https://battle-room.internal/create', {
-    method: 'POST', body: JSON.stringify({ id, title, heroes, board, configuration, projection: roomProjection(payload.projection, board?.apostle) }),
+    method: 'POST', body: JSON.stringify({ id, title, heroes, board, configuration, publicLobby: payload.publicLobby === true, projection: roomProjection(payload.projection, board?.apostle) }),
   });
 }
 
@@ -112,9 +112,18 @@ export async function battleRequest(env, request, url) {
 export class BattleRoom extends DurableObject {
   constructor(ctx, env) {
     super(ctx, env);
+    this.directory = env.ROOM_DIRECTORY?.getByName("active");
     this.sql = ctx.storage.sql;
     this.sql.exec('CREATE TABLE IF NOT EXISTS room (singleton INTEGER PRIMARY KEY CHECK(singleton = 1), data TEXT NOT NULL)');
     this.sql.exec('CREATE TABLE IF NOT EXISTS actions (id TEXT PRIMARY KEY, revision INTEGER NOT NULL)');
+  }
+
+  async syncDirectory(room) {
+    if (!this.directory) return;
+    const entry = { id: room.id, title: room.title, round: room.round,
+      seats: room.heroes.length, available: room.heroes.filter(hero => !hero.player).length,
+      open: room.publicLobby === true && !room.closed };
+    await this.directory.fetch('https://directory.internal/put', { method: 'POST', body: JSON.stringify(entry) });
   }
 
   load() {
@@ -148,15 +157,16 @@ export class BattleRoom extends DurableObject {
   }
 
   async create(request) {
-    const { id, title, heroes, board, projection, configuration } = await request.json();
+    const { id, title, heroes, board, projection, configuration, publicLobby } = await request.json();
     const keys = { host: newSecret(), viewer: newSecret(), invite: newSecret() };
     const [host, viewer, invite] = await Promise.all(Object.values(keys).map(hash));
     const room = {
-      id, title, heroes, board, projection, configuration, round: 1, revision: 0, closed: false,
+      id, title, heroes, board, projection, configuration, publicLobby: publicLobby === true, round: 1, revision: 0, closed: false,
       pool: Object.fromEntries(poolKeys.map(key => [key, 0])), rolls: [],
       secrets: { host, viewer, invite, players: heroes.map(() => null) },
     };
     this.save(room);
+    await this.syncDirectory(room);
     return response({ ...this.view(room, { role: 'host' }), keys }, 201);
   }
 
@@ -185,16 +195,20 @@ export class BattleRoom extends DurableObject {
       const newPlayer = route === 'join' ? await hash(body.playerKey) : '';
       const room = this.load();
       if (route === 'join' || route === 'lobby') {
-        if (!secretHash || secretHash !== room.secrets.invite) reject('邀请链接无效。', 403);
+        if (!(body.quick === true && room.publicLobby === true) && (!secretHash || secretHash !== room.secrets.invite)) reject('邀请链接无效，或房主尚未开放快速参战。', 403);
         if (room.closed) reject('本场战斗已结束。', 409);
         if (route === 'lobby') return response({ ok: true, title: room.title, heroes: room.heroes.map(hero => ({
           name: hero.name, taken: Boolean(hero.player),
         })) });
-        return this.join(room, body, newPlayer);
+        const result = this.join(room, body, newPlayer);
+        await this.syncDirectory(room);
+        return result;
       }
       const actor = this.actor(room, secretHash);
       if (route === 'state') return response(this.view(room, actor));
-      return this.action(room, actor, body);
+      const result = this.action(room, actor, body);
+      if (["public-lobby", "end", "round"].includes(body.type)) await this.syncDirectory(room);
+      return result;
     } catch (error) {
       return errorResponse(error);
     }
@@ -270,6 +284,11 @@ export class BattleRoom extends DurableObject {
       const projection = roomProjection(body.projection, room.board?.apostle);
       if (!projection) reject('战况与房间骇物不一致。', 409);
       room.projection = projection;
+      return;
+    }
+    if (body.type === 'public-lobby') {
+      if (actor.role !== 'host') reject('只有房主可以开放快速参战。', 403);
+      room.publicLobby = body.value === true;
       return;
     }
     if (body.type === 'round' || body.type === 'end') {
@@ -415,5 +434,23 @@ export class BattleRoom extends DurableObject {
     const [field, index] = conversions[body.symbol];
     if (!result[index]) reject('该骰已没有可转换的符号。', 409);
     die[field] = (die[field] || 0) + 1;
+  }
+}
+
+
+export class BattleDirectory extends DurableObject {
+  constructor(ctx, env) {
+    super(ctx, env); this.sql = ctx.storage.sql;
+    this.sql.exec('CREATE TABLE IF NOT EXISTS entries (id TEXT PRIMARY KEY, data TEXT NOT NULL, updated INTEGER NOT NULL)');
+  }
+  async fetch(request) {
+    if (request.method === 'GET') {
+      return response({ ok: true, rooms: this.sql.exec('SELECT data FROM entries ORDER BY updated DESC LIMIT 100').toArray().map(row => JSON.parse(row.data)) });
+    }
+    const entry = await request.json();
+    if (!roomIdPattern.test(entry.id || '')) return response({ error: 'Invalid room' }, 400);
+    if (!entry.open) this.sql.exec('DELETE FROM entries WHERE id = ?', entry.id);
+    else this.sql.exec('INSERT OR REPLACE INTO entries VALUES (?, ?, ?)', entry.id, JSON.stringify(entry), Date.now());
+    return response({ ok: true });
   }
 }

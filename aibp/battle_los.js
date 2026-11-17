@@ -875,6 +875,53 @@
   // Movement choices are board squares at the footprint's upper-left corner.
   // Even-sized figures still store half-integer centers, but never paint or
   // click a half-square as a destination.
+  function apostleMoveRoute(from, to) {
+    if (!from || !to || !Number.isInteger(to.column - from.column) || !Number.isInteger(to.row - from.row)) return [];
+    const route = [{ column: from.column, row: from.row }];
+    let column = from.column, row = from.row, horizontal = true;
+    while (column !== to.column || row !== to.row) {
+      if (column !== to.column && (horizontal || row === to.row)) column += Math.sign(to.column - column);
+      else row += Math.sign(to.row - row);
+      route.push({ column, row });
+      horizontal = !horizontal;
+    }
+    return route;
+  }
+
+  function renderTerrainEdges(layer, map, api, mode) {
+    layer.querySelector?.('.battle-terrain-edges')?.remove();
+    const d = layer.ownerDocument || (typeof document !== 'undefined' ? document : null), ns = 'http://www.w3.org/2000/svg';
+    if (!d?.createElementNS) return;
+    const svg = d.createElementNS(ns, 'svg');
+    svg.setAttribute('viewBox', '0 0 20 14');
+    svg.setAttribute('preserveAspectRatio', 'none');
+    svg.setAttribute('class', 'battle-terrain-edges' + (mode === 'titan-move' ? ' is-moving' : ''));
+    svg.setAttribute('aria-hidden', 'true');
+    const draw = (a, b, color, type) => {
+      const line = d.createElementNS(ns, 'line');
+      for (const [key, value] of Object.entries({ x1: a.i, y1: 14-a.j, x2: b.i, y2: 14-b.j, stroke: color, 'data-terrain-edge': type })) line.setAttribute(key, value);
+      svg.appendChild(line);
+    };
+    for (const tile of api.getMapTiles(map)) {
+      const def = api.catalog[tile.name], los = api.getTileLosData(tile);
+      if (!def || def.special) continue;
+      const red = new Set();
+      for (const [x,y,a,b] of los.redLines || []) {
+        const p = localPointToLattice(x,y,def.width,def.height,tile), q = localPointToLattice(a,b,def.width,def.height,tile);
+        const n = Math.abs(q.i-p.i)+Math.abs(q.j-p.j);
+        for (let k=0;k<n;k++) red.add(edgeKey(p.i+k*Math.sign(q.i-p.i),p.j+k*Math.sign(q.j-p.j),p.i+(k+1)*Math.sign(q.i-p.i),p.j+(k+1)*Math.sign(q.j-p.j)));
+        draw(p,q,'#f28070','wall');
+      }
+      const cells = footprintCells(tile,def.width,def.height,los.cells), occupied = new Set(cells.map(({c,r})=>cellKey(c,r)));
+      const solid = tile.name === 'Column' || (tile.name === 'City' && los.obscuring) || tile.name === 'Time-Frozen City';
+      const color = solid ? '#f28070' : los.labyrinth ? '#8bd1a9' : los.obscuring ? '#e6c56f' : los.elevated ? '#8ac9df' : '#a9b9ab';
+      for (const {c,r} of cells) for (const [dc,dr,x,y,a,b] of [[-1,0,c-1,r-1,c-1,r],[1,0,c,r-1,c,r],[0,-1,c-1,r-1,c,r-1],[0,1,c-1,r,c,r]]) {
+        if (!occupied.has(cellKey(c+dc,r+dr)) && !red.has(edgeKey(x,y,a,b))) draw({i:x,j:y},{i:a,j:b},color,solid?'blocked':los.labyrinth?'passage':los.obscuring?'obscuring':los.elevated?'elevated':'outline');
+      }
+    }
+    layer.appendChild(svg);
+  }
+
   function apostleMoveAnchor(point, size) {
     const half = (size - 1) / 2;
     return { c: point.c - half, r: point.r + half };
@@ -1412,6 +1459,8 @@
     computeRangeMap,
     apostleDestinationSteps,
     apostleMoveAnchor,
+    apostleMoveRoute,
+    renderTerrainEdges,
     apostleMoveDestination,
     titanMoveRoute,
     normalizeWeapon,

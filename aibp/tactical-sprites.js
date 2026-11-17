@@ -1,5 +1,5 @@
 // Paths run in the coordinates of the original board-art illustrations.
-// Titans retain clipped card art. Bosses use the vector redraws below;
+// Titans retain clipped card art. Bosses use restored panel illustrations;
 // card labels and text are excluded from both.
 window.BattleBoardSprites = {
 tt_mazerunner:{url:'../technology/images/titans/tt_mazerunner.png',size:[450,600],crop:[0,23,450,551],
@@ -22,61 +22,8 @@ pursuer:{url:'../aibp/images/board-pieces/pursuer-top.png',offset:[1052.878,136.
 path:'M1059 141Q1066 134 1073 142L1078 147 1083 145 1090 148 1096 155 1099 162 1099 171 1096 178 1090 184 1083 188 1070 187 1063 184 1058 179 1054 172 1055 167 1060 164 1065 166 1065 160 1061 155 1059 153 1060 149 1058 146Z'}
 };
 
-// Vector redraws of the panel's overhead figures. Detail coordinates use a
-// normalized 100×100 frame inside the original crop. These are paths, not
-// enlarged scans; retain nativeFace so the art and white facing arrow agree.
-window.BattleBoardSprites.hekaton.vector = {
-  fill: '#c38b50', paths: [
-    {d:'M30 46Q27 67 37 82L48 94 68 87Q83 74 80 52L68 38 40 39Z',fill:'#91613b'},
-    {d:'M36 8L43 7 44 14 62 14 65 9 70 12 69 30 62 38 47 37 39 30Z',fill:'#241f1c'},
-    {d:'M18 39L22 63 31 67 34 55M79 44L75 66 66 69 65 57'},
-    {d:'M10 19L14 28 20 25M26 12L29 20 36 14M73 11L76 23 83 26M89 16L85 24 92 26'},
-    {d:'M23 47L30 49 36 45M25 56L33 57M69 46L76 49 81 43M68 58L75 59'},
-    {d:'M35 47Q41 41 47 48L49 57 45 64 38 62 33 54Z'},
-    {d:'M55 48Q62 42 67 48L70 58 64 65 56 61 52 54Z'},
-    {d:'M37 51L40 52M60 52L63 51M41 58L45 58M59 59L63 58',stroke:'#f0ce8e'},
-    {d:'M44 69L53 65 60 70 60 79 52 84 43 79Z',fill:'#29221d'},
-    {d:'M32 70L38 75M66 73L72 69M37 83L42 85M60 87L64 83M18 44L17 33M81 38L85 29'},
-    {d:'M48 88L49 96M57 88L58 93',stroke:'#e7b672'},
-  ],
-};
-window.BattleBoardSprites.labyrinthauros.vector = {
-  fill: '#b58c65', paths: [
-    {d:'M72 17A42 42 0 1 0 79 76L74 72A35 35 0 1 1 68 23Z',fill:'#493225'},
-    {d:'M45 22L49 34 41 47 30 51 33 65 47 70 50 85 67 81 78 69 83 52 70 34 56 25Z',fill:'#99704d'},
-    {d:'M67 37L79 37 89 33 94 27 91 39 79 47M73 46L86 48 95 44 89 54 79 57',fill:'#d4b58b'},
-    {d:'M57 35L69 39 77 51 74 66 62 73 49 66 45 53 50 41Z',fill:'#c9a279'},
-    {d:'M51 44L57 49 66 47 72 51M54 51L58 52M67 53L71 54M56 58L53 64 64 68 72 63M57 64L64 65'},
-    {d:'M47 37L42 44 40 55M49 72L43 80 36 81M58 76L55 87 64 88M27 24L32 31M16 42L25 45M17 65L28 61M30 80L36 72'},
-    {d:'M52 27L59 31 64 36M37 52L34 56 40 61M75 69L73 76'},
-  ],
-};
-window.BattleBoardSprites.temenos.vector = {
-  fill: '#ba8d55', paths: [
-    {d:'M29 37L18 64 24 80Q34 91 51 84L66 64 61 43 43 35Z',fill:'#745238'},
-    {d:'M6 4L36 29 24 50Z',fill:'#d5ad70'},
-    {d:'M57 4L53 36 63 30 68 9 65 0Z',fill:'#d5ad70'},
-    {d:'M44 35L48 24 55 27 62 39 57 50 42 53 34 47Z',fill:'#d5ad70'},
-    {d:'M39 34L35 27 30 30 30 35 23 35 21 41 30 45M36 37L41 39 43 45M46 33L50 38'},
-    {d:'M28 51L35 59 40 72 36 84M23 58L28 65 32 80M40 56L48 62 48 74M52 52L57 56 58 65'},
-    {d:'M65 38L78 34 87 25 89 15 94 24 92 37 84 46 68 51Z',fill:'#d5ad70'},
-    {d:'M72 53L85 66 69 69 76 84 62 78 57 67Z',fill:'#a27647'},
-    {d:'M42 89L61 77 68 82 48 96 43 95Z',fill:'#c9a36c'},
-    {d:'M9 47L4 57 13 54 17 48M49 90L52 94M78 36L83 38M57 12L61 18 57 25'},
-    {d:'M28 31L32 34M33 43L37 44M26 69L28 73M55 58L54 62',stroke:'#f1cf96'},
-  ],
-};
-window.BattleBoardSprites.pursuer.vector = {
-  fill: '#cbd2dc', paths: [
-    {d:'M43 32L54 43 63 64 78 68 89 56 86 77 74 89 54 94 34 88 17 80 7 65 22 61 37 67 43 62Z',fill:'#a8b2c1'},
-    {d:'M50 27L59 21 73 26 87 39 94 57 83 67 73 55 63 45Z',fill:'#dce1e8'},
-    {d:'M27 3Q41 0 47 13L47 23 54 30 49 36 45 42 35 40 25 32 18 20 19 10Z',fill:'#e5e7ed'},
-    {d:'M26 32L29 46 35 62 29 59 24 46 20 35M37 39L44 58 46 70M32 40L37 57 36 68'},
-    {d:'M29 21Q33 16 37 23L35 28 30 26ZM40 25L44 28 42 32 38 30Z',fill:'#616a79'},
-    {d:'M36 28L34 33 39 34M40 35L44 36M34 35L37 38M44 33L47 34'},
-    {d:'M56 27L69 31 82 42M58 35L67 39 77 48M71 25L77 31M84 40L79 43M86 48L89 56'},
-    {d:'M55 47L62 60 68 70 81 73M51 55L57 72 65 80 78 80M48 65L48 78 58 88M21 68L32 72 39 76M14 75L26 77 36 83M40 85L46 91'},
-    {d:'M9 62L20 62 27 65 31 62 25 56 17 56ZM36 68L42 65 44 72 40 78 35 76Z',fill:'#dce1e8'},
-    {d:'M58 86L63 88M81 62L85 66M24 13L26 11',stroke:'#f9fafc'},
-  ],
-};
+// Faithful panel-image restorations, generated with imagegen; see restored/README.md.
+window.BattleBoardSprites.hekaton.restored = '../aibp/images/board-pieces/restored/hekaton-hd.webp';
+window.BattleBoardSprites.labyrinthauros.restored = '../aibp/images/board-pieces/restored/labyrinthauros-hd.webp';
+window.BattleBoardSprites.temenos.restored = '../aibp/images/board-pieces/restored/temenos-hd.webp';
+window.BattleBoardSprites.pursuer.restored = '../aibp/images/board-pieces/restored/pursuer-hd.webp';

@@ -8,6 +8,7 @@
   const fragment = new URLSearchParams(location.hash.slice(1));
   const routeId = params.get('battle');
   const invite = fragment.get('invite') || '';
+  const quickJoin = params.get('quick') === '1';
   const viewKey = fragment.get('view') || '';
   const isLink = /^[a-f0-9]{32}$/.test(routeId || '');
   const base = new URL('../api/battle-room/', location.href);
@@ -289,6 +290,15 @@
       + '</li>';
   }
 
+  function diceCountField(kind, label, min, max, value) {
+    const button = (delta, text) => '<button type="button" data-dice-step="' + kind + '" data-delta="' + delta
+      + '" aria-label="' + (delta < 0 ? '减少' : '增加') + escape(label) + '"'
+      + ((delta < 0 ? Number(value) <= min : Number(value) >= max) ? ' disabled' : '') + '>' + text + '</button>';
+    return '<label>' + escape(label) + '<small>上限 ' + max + ' 枚</small><span class="room-dice-stepper">' + button(-1, '−')
+      + '<input type="number" min="' + min + '" max="' + max + '" name="' + kind + '" value="' + escape(value)
+      + '" required aria-label="' + escape(label) + '">' + button(1, '+') + '</span></label>';
+  }
+
   function diceForm() {
     if (state.closed || actor.role === 'viewer') return '';
     const seat = actor.role === 'host' ? rollSeat : actor.seat;
@@ -298,11 +308,9 @@
     const fields = dice.modes[rollMode].kinds.map(kind => {
       const label = kind === 'd10' ? '总数量（含 1 枚白色关键骰）' : dice.names[kind];
       const minimum = kind === 'd10' || kind === 'armor' || rollMode === 'defense' ? 1 : 0;
-      return '<label>' + label + '<input type="number" min="' + minimum + '" max="' + dice.limits[kind]
-        + '" name="' + kind + '" value="' + escape(drafts[kind] ?? minimum) + '" required></label>';
+      return diceCountField(kind, label, minimum, dice.limits[kind], drafts[kind] ?? minimum);
     }).join('');
-    const followup = rollMode === 'dodge' ? '<label>预计防御红骰<input name="defenseCount" type="number" min="0" max="6" value="'
-      + escape(drafts.defenseCount ?? 0) + '" required></label>' : '';
+    const followup = rollMode === 'dodge' ? diceCountField('defenseCount', '预计防御红骰', 0, 6, drafts.defenseCount ?? 0) : '';
     const notes = {
       attack: '按精准、伺机和卡文结算命中，再确认威力骰数量。',
       dodge: '先结算闪避，根据结果决定是否投掷防御红骰。',
@@ -455,7 +463,7 @@
       + (!state.closed ? '<button type="button" data-room-copy="invite">复制玩家邀请</button>' : '')
       + '<a href="' + escape(roomLink('view', credentials.keys.viewer)) + '" target="_blank" rel="noopener">打开只读投屏</a>'
       + (state.closed ? '<a href="./">返回 AIBP 开新战斗</a>' : '') + '</div>' : '';
-    const controls = host && !state.closed ? '<button type="button" data-action="round">下一轮</button><button type="button" data-action="end">结束战斗</button>' : '';
+    const controls = host && !state.closed ? '<button type="button" data-action="public-lobby" data-value="' + !state.publicLobby + '">' + (state.publicLobby ? '关闭快速参战' : '开放快速参战') + '</button><button type="button" data-action="round">下一轮</button><button type="button" data-action="end">结束战斗</button>' : '';
     const pool = Object.entries(poolNames).map(([key, label]) => '<div>' + marker('images/battle-markers/' + key + '.webp', label)
       + buttons('pool', key, state.pool[key], undefined, label, 99, edit) + '</div>').join('');
     const clearPool = edit ? '<button type="button" data-action="pool-clear"'
@@ -556,7 +564,7 @@
         + '"></label><fieldset><legend>选择 1 至 4 位参战英雄</legend>'
         + heroes.map((hero, index) => '<label><input type="checkbox" name="heroIds" value="' + escape(hero.id)
           + '"' + (index < 4 ? ' checked' : '') + '> ' + escape(window.ATO_HERO_CATALOG.heroDisplayName(hero)) + '</label>').join('')
-        + '</fieldset>' + configFields(available) + '<button type="submit">创建战斗室</button></form>';
+        + '</fieldset>' + configFields(available) + '<label><input name="publicLobby" type="checkbox" checked>允许从登录页快速参战（无需邀请链接）</label><button type="submit">创建战斗室</button></form>';
     } catch (error) {
       content.innerHTML += '<p>' + escape(error.message) + ' <a href="../index.html">打开主控台</a></p>';
     } finally {
@@ -565,7 +573,7 @@
   }
 
   async function openJoinLobby() {
-    const lobby = await request(id + '/lobby', {}, invite);
+    const lobby = await request(id + '/lobby', { quick: quickJoin }, invite);
     const options = lobby.heroes.map((hero, index) => '<option value="' + index + '"' + (hero.taken ? ' disabled' : '') + '>'
       + escape(hero.name) + (hero.taken ? '（已认领）' : '') + '</option>').join('');
     const full = lobby.heroes.every(hero => hero.taken);
@@ -585,6 +593,10 @@
 
   content.addEventListener('input', event => {
     if (event.target.form?.matches('[data-roll]')) {
+      const input = event.target;
+      for (const button of input.parentElement.querySelectorAll('[data-dice-step]')) {
+        button.disabled = Number(button.dataset.delta) < 0 ? Number(input.value) <= Number(input.min) : Number(input.value) >= Number(input.max);
+      }
       const seat = actor.role === 'host' ? rollSeat : actor.seat;
       saveDiceDraft(seat, rollMode, Object.fromEntries(new FormData(event.target.form)));
     }
@@ -628,6 +640,12 @@
     }
     const { roomCopy, action, key, seat, delta, armCard, slot, value,
       rollMode: mode, rollFollowup, rollId, dieId, symbol } = button.dataset;
+    if (button.dataset.diceStep) {
+      const input = button.form.elements.namedItem(button.dataset.diceStep);
+      input.value = Math.max(Number(input.min), Math.min(Number(input.max), (Number(input.value) || 0) + Number(delta)));
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      return;
+    }
     if (mode || rollFollowup) {
       rollMode = mode || rollFollowup;
       parentRoll = rollFollowup ? rollId : '';
@@ -680,6 +698,8 @@
       if (value === 'discarded') armedCard = '';
       void send({ id: crypto.randomUUID(), type: action, key, seat: Number(seat), slot: Number(slot), value });
       render();
+    } else if (action === 'public-lobby') {
+      send({ id: crypto.randomUUID(), type: action, value: value === 'true' });
     } else if (action === 'pool-clear') {
       send({ id: crypto.randomUUID(), type: action });
     } else if (action) {
@@ -711,7 +731,7 @@
         const projection = window.getAibpRoomProjection?.();
         const configuration = readConfig(form);
         battleConfig.prepare(configuration, battleConfig.availability(lobbyCampaign, abilityDictionary));
-        const data = await request('create', { title: fields.get('title'), heroIds: fields.getAll('heroIds'), board, projection, battleConfig: configuration });
+        const data = await request('create', { title: fields.get('title'), heroIds: fields.getAll('heroIds'), board, projection, battleConfig: configuration, publicLobby: fields.get('publicLobby') === 'on' });
         lastProjectionSent = JSON.stringify(projection);
         id = data.room.id;
         credentials = { token: data.keys.host, keys: data.keys };
@@ -723,7 +743,7 @@
         const token = credentials?.token || crypto.randomUUID().replaceAll('-', '') + crypto.randomUUID().replaceAll('-', '');
         credentials = { token };
         storageSet(tokenKey(id), JSON.stringify(credentials));
-        const data = await request(id + '/join', { seat: Number(fields.get('seat')), player: fields.get('player'), playerKey: token }, invite);
+        const data = await request(id + '/join', { seat: Number(fields.get('seat')), player: fields.get('player'), playerKey: token, quick: quickJoin }, invite);
         history.replaceState(null, '', roomLink());
         accept(data);
       }
@@ -761,10 +781,10 @@
           connect();
           return;
         } catch (error) {
-          if (!invite) throw error;
+          if (!invite && !quickJoin) throw error;
         }
       }
-      if (invite) await openJoinLobby();
+      if (invite || quickJoin) await openJoinLobby();
       else throw new Error('请使用房主发给你的邀请或投屏链接。');
     } catch (error) {
       say(error.message);

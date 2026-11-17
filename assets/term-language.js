@@ -213,6 +213,10 @@
     document.head.appendChild(englishStyle);
     try { state.chinese = localStorage.getItem("ato-term-chinese-language-v1") === "official" ? "official" : "fan"; } catch {}
     adopt(resolveInitial());
+    if (state.language === "en") window.ATO_LOAD_ENGLISH?.();
+    // Preserve an explicit profile choice before a module is opened. Do not
+    // persist the temporary fan fallback while the account is still loading.
+    if (!readStored() && state.language !== "fan") writeStored(state.language);
     // The console owns the language picker in its 杂项设置 panel: one button
     // showing the active language, and a popup holding the other two choices.
     // The fixed fallback only exists for a console build that lost that markup.
@@ -296,6 +300,7 @@
     const setLanguage = (language, persist = true) => {
       if (!normalizeLanguage(language)) return;
       adopt(language);
+      if (state.language === "en") window.ATO_LOAD_ENGLISH?.();
       if (persist) {
         writeStored(state.language);
         if (typeof window.ATOSetTermLanguage === "function") {
@@ -356,7 +361,13 @@
     });
     window.addEventListener("ato-term-language-changed", (event) => {
       const language = messageLanguage(event.detail);
-      if (language) setLanguage(language, false);
+      if (language) {
+        // A loaded campaign seeds this browser once; later profile refreshes
+        // still cannot override a choice already stored by the user.
+        const preferred = readStored() || language;
+        setLanguage(preferred, false);
+        if (!readStored()) writeStored(preferred);
+      }
     });
     channel?.addEventListener("message", (event) => {
       const language = messageLanguage(event.data);

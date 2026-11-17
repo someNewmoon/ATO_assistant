@@ -10,6 +10,7 @@ const scripts = [
   'aibp/tactical-sprites.js', 'aibp/battle_board_pieces.js', 'aibp/battle_map_control.js',
   'aibp/room-assets.js', 'aibp/room-card-state.js', 'aibp/room-dice.js',
   'aibp/room-board.js', 'aibp/battle-room.js',
+  'assets/ato-terms.js', 'assets/term-language.js',
 ];
 const styles = ['battle_map_control.css', 'battle_tactics.css', 'battle-room.css'];
 
@@ -33,7 +34,19 @@ export async function buildBattleRoom(staging, repo) {
   const room = markup(findById(document, 'battleRoom'));
   const board = markup(findById(document, 'battleMapControl'));
   const art = await readFile(join(staging, 'aibp/room-card-art.json'), 'utf8');
-  const code = 'window.ATO_LIGHT_ROOM=true;window.ATO_ROOM_ART=' + art + ';\n'
+  // Keep the large English catalog off the Chinese room's initial connection.
+  const englishSources = ['assets/english-terms.js', 'assets/english-ui.js', 'assets/english-language.js'];
+  const english = await transform((await Promise.all(englishSources.map(path => readFile(join(repo, path), 'utf8')))).join('\n;\n'),
+    { minify: true, target: 'es2022', legalComments: 'none' });
+  const englishFilename = 'room-language-' + createHash('sha256').update(english.code).digest('hex').slice(0, 16) + '.js';
+  await writeFile(join(staging, 'aibp', englishFilename), english.code);
+  const loadEnglish = `(()=>{let pending=false;window.ATO_LOAD_ENGLISH=()=>{
+    if(pending)return;pending=true;const script=document.createElement('script');
+    script.src=${JSON.stringify(englishFilename)};
+    script.onload=()=>window.ATO_LANGUAGE?.refresh();
+    script.onerror=()=>{pending=false;script.remove()};document.head.appendChild(script);
+  }})();\n`;
+  const code = loadEnglish + 'window.ATO_LIGHT_ROOM=true;window.ATO_ROOM_ART=' + art + ';\n'
     + (await Promise.all(scripts.map(path => readFile(join(repo, path), 'utf8')))).join('\n;\n');
   const runtime = await transform(code, { minify: true, target: 'es2022', legalComments: 'none' });
   const version = createHash('sha256').update(runtime.code).digest('hex').slice(0, 16);
@@ -84,7 +97,7 @@ const t=new URL("room",u);t.search=u.search;t.hash=u.hash;location.replace(t.hre
     if (error.code === 'ENOENT') return '';
     throw error;
   });
-  await writeFile(headerPath, headers + '\n/aibp/room-runtime-*\n  Cache-Control: public, max-age=31536000, immutable\n');
+  await writeFile(headerPath, headers + '\n/aibp/room-runtime-*\n  Cache-Control: public, max-age=31536000, immutable\n/aibp/room-language-*\n  Cache-Control: public, max-age=31536000, immutable\n');
   console.log(`Battle room: ${scripts.length} scripts → one runtime (${runtime.code.length} bytes), HTML ${Buffer.byteLength(html)} bytes`);
 }
 

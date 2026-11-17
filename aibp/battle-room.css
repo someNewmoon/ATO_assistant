@@ -1,0 +1,84 @@
+#battleRoom[hidden], #battleRoomToggle[hidden] { display: none; }
+
+.battle-room {
+  --room-border: var(--line, #3d555b);
+  --room-surface: var(--panel, #203137);
+  --room-text: var(--text, #e8f0ee);
+  margin: 0 0 18px;
+  padding: clamp(12px, 2vw, 22px);
+  border: 1px solid var(--room-border);
+  border-radius: 12px;
+  background: var(--room-surface);
+  color: var(--room-text);
+}
+.battle-room :is(h2, h3, h4, p) { margin: 0; }
+.battle-room :is(h2, h3) { font-weight: 700; }
+.battle-room :is(p, small) { overflow-wrap: anywhere; }
+.battle-room > [role="status"] { margin: 0 0 10px; }
+.battle-room > [role="status"]:empty { display: none; }
+.battle-room :is(button, a, select, input:not([type="checkbox"])) { font: inherit; }
+.battle-room :is(button, select, input:not([type="checkbox"])) { min-height: 36px; padding: 5px 9px; }
+.battle-room input[type="number"] { width: 5rem; }
+.battle-room fieldset { display: flex; flex-wrap: wrap; gap: 8px 16px; border: 1px solid var(--room-border); border-radius: 8px; }
+.battle-room form { display: grid; gap: 10px; max-width: 36rem; }
+.battle-room form > button { justify-self: start; }
+.battle-room form label { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+
+.battle-room-head,
+.battle-room-hero header,
+.battle-room-hero li {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 6px 12px;
+  flex-wrap: wrap;
+}
+.battle-room-head > div:last-child, .battle-room-links { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.battle-room-links { margin: 12px 0; }
+.battle-room a { color: inherit; text-decoration: underline; text-underline-offset: .18em; }
+.battle-room .battle-room-heading { margin: 12px 0 8px; }
+.battle-room-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr));
+  gap: 10px;
+}
+.battle-room-hero {
+  display: grid;
+  align-content: start;
+  gap: 9px;
+  border: 1px solid var(--room-border);
+  border-radius: 10px;
+  padding: 12px;
+}
+.battle-room-hero h4 { border-top: 1px solid var(--room-border); padding-top: 8px; }
+.battle-room-hero ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 5px; }
+.battle-room-hero small { font-size: .82em; }
+.battle-room-counter { display: inline-flex; align-items: baseline; justify-content: center; gap: 5px; }
+.battle-room-counter button { width: 34px; padding: 0; }
+.battle-room-counter strong { min-width: 1.3em; text-align: center; font-variant-numeric: tabular-nums; }
+.battle-room-pool, .battle-room form.battle-room-dice, .battle-room-rolls, .battle-room-team { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--room-border); max-width: none; }
+.battle-room :is(.battle-room-stats, .battle-room-pool > div, .battle-room-dice > div) { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; }
+.battle-room-pool h3 { margin-bottom: 8px; }
+.battle-room-pool > div > div { display: inline-flex; align-items: center; gap: 5px; }
+.battle-room-rolls ol { max-height: 12rem; overflow-y: auto; margin: 7px 0 0; padding-inline-start: 1.6em; }
+.battle-room-team > summary { cursor: pointer; margin-bottom: 8px; }
+.battle-room-result { font-size: .92em; }
+.battle-room [data-room-retry] { margin-top: 10px; }
+
+body.aibp-room-only { overflow: auto; }
+body.aibp-room-only > .app {
+  display: block;
+  height: auto;
+  min-height: 100vh;
+  max-width: 1180px;
+  margin: 0 auto;
+}
+body.aibp-room-only > .app > main { display: block; height: auto; padding: clamp(8px, 2vw, 20px); }
+body.aibp-room-only > #sidebarToggle,
+body.aibp-room-only > .app > aside,
+body.aibp-room-only > .app > main > :not(#battleRoom) { display: none !important; }
+.battle-room-assets { margin-top: 12px; }
+.battle-room-assets > summary { cursor: pointer; }
+.battle-room-assets > :is(label, output) { display: block; margin-top: 7px; }
+#battleRoomImage { max-width: min(95vw, 640px); max-height: 94vh; }
+#battleRoomImage img { display: block; max-width: 100%; max-height: 75vh; object-fit: contain; margin-top: 8px; }

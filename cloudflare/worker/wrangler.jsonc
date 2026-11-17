@@ -5,7 +5,13 @@
   "workers_dev": false,
   "preview_urls": false,
   "durable_objects": {
-    "bindings": [{ "name": "CAMPAIGNS", "class_name": "CampaignAccount" }]
+    "bindings": [
+      { "name": "CAMPAIGNS", "class_name": "CampaignAccount" },
+      { "name": "BATTLE_ROOMS", "class_name": "BattleRoom" }
+    ]
   },
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["CampaignAccount"] }]
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["CampaignAccount"] },
+    { "tag": "v2", "new_sqlite_classes": ["BattleRoom"] }
+  ]
 }

@@ -1,4 +1,6 @@
 import { DurableObject } from 'cloudflare:workers';
+import { battleRequest, createBattleRoom } from './battle-room.js';
+export { BattleRoom } from './battle-room.js';
 import {
   ApiError, activeCycle, appendNotes, checkAccount, defaultCampaign, errorResponse,
   importSections, object, response, sections, writeSection,
@@ -79,7 +81,10 @@ export default {
     const url = new URL(request.url);
     try {
       if (url.pathname === '/api/health') return response({ ok: true, backend: 'cloudflare', phase: 'campaign' });
-      if (url.pathname !== '/api/campaign-state.php') {
+      const createRoom = url.pathname === '/api/battle-room/create';
+      if (url.pathname.startsWith('/api/battle-room/') && !createRoom) return await battleRequest(env, request, url);
+      if (createRoom && (request.method !== 'POST' || url.search)) throw new ApiError(405, '创建战斗室需要 POST。');
+      if (!createRoom && url.pathname !== '/api/campaign-state.php') {
         return response({ ok: false, code: 'UNSUPPORTED_CLOUD_API', error: '此接口尚未迁移到 Cloudflare。' }, 501);
       }
       verifyOrigin(request, url);
@@ -122,6 +127,7 @@ export default {
 export class CampaignAccount extends DurableObject {
   constructor(ctx, env) {
     super(ctx, env);
+    this.roomEnv = env;
     this.storage = ctx.storage;
     this.sql = ctx.storage.sql;
     this.sql.exec(`
@@ -152,6 +158,9 @@ export class CampaignAccount extends DurableObject {
       if (action === 'me') return response({ ok: true, authenticated: Boolean(authenticated), user: authenticated ? user : null });
       if (!authenticated) throw new ApiError(401, 'Please log in first.', { code: 'AUTH_REQUIRED' });
 
+      if (url.pathname === '/api/battle-room/create') {
+        return await createBattleRoom(this.roomEnv, this.loadCampaign(), await readPayload(request, 4096));
+      }
       if (request.method === 'GET' && !action) return this.readCampaign(url, user);
       if (request.method !== 'POST') throw new ApiError(405, 'This action requires POST.');
       const payload = await readPayload(request);

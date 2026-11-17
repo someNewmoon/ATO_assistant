@@ -33,7 +33,7 @@ try {
   }).trim().replace(/^v/, '');
   await writeFile(join(staging, 'assets/update/app-version.js'), `window.ATO_APP_VERSION = ${JSON.stringify(gitVersion)};\n`);
   await writeFile(join(staging, '_routes.json'), JSON.stringify({
-    version: 1, include: ['/api/health', '/api/campaign-state.php', '/api/app-update.php', '/briefing/api.php'], exclude: [],
+    version: 1, include: ['/api/health', '/api/campaign-state.php', '/api/battle-room/*', '/api/app-update.php', '/briefing/api.php'], exclude: [],
   }));
   // Pages uses 404.html to distinguish multi-page sites from SPA fallback.
   await writeFile(join(staging, '404.html'), '<!doctype html><meta charset=utf-8><title>找不到页面</title><p>找不到页面</p><a href="/">返回主控台</a>');

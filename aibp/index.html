@@ -2437,12 +2437,17 @@
   <link rel="stylesheet" href="../assets/mobile/play.css?v=20261028-apk-portrait1">
   <script src="../assets/mobile/layout.js?v=20261028-apk-portrait1" defer></script>
   <script src="../assets/mobile/play.js?v=20261114-theatre-return" defer></script>
+  <link rel="stylesheet" href="battle-room.css">
   <script src="theatre-battle.js?v=2"></script>
   <script src="../theatre/terms.js?v=2"></script>
 </head>
 <body>
   <script>
-    if (new URLSearchParams(window.location.search).has("theatreBattle")) {
+    const aibpPageParams = new URLSearchParams(window.location.search);
+    if (/^[a-f0-9]{32}$/.test(aibpPageParams.get("battle") || "") && !aibpPageParams.has("theatreBattle")) {
+      document.body.classList.add("aibp-room-only");
+    }
+    if (aibpPageParams.has("theatreBattle")) {
       document.body.dataset.theatreBattle = "pending";
     }
   </script>
@@ -2496,6 +2501,7 @@
           </label>
           <span class="second-screen-sync-status" id="secondScreenSyncStatus" role="status" aria-live="polite"></span>
           <a class="return-main-link" href="../index.html">返回主控制台</a>
+          <button type="button" id="battleRoomToggle" aria-controls="battleRoom" aria-expanded="false" hidden>在线战斗室</button>
           <button type="button" id="keywordButton">关键词查询</button>
           <button type="button" id="traitButton">Trait</button>
           <button type="button" id="tokenButton">Token</button>
@@ -2504,6 +2510,20 @@
         </div>
       </div>
 
+      <section id="battleRoom" class="battle-room" aria-label="在线战斗室" hidden>
+        <p role="status" aria-live="polite"></p>
+        <div data-room-content></div>
+        <details id="battleRoomAssets" class="battle-room-assets" hidden>
+          <summary>导入本机卡图</summary>
+          <label>图片文件夹 <input type="file" webkitdirectory multiple></label>
+          <output aria-live="polite"></output>
+          <button type="button" hidden>移除本机卡图</button>
+        </details>
+        <dialog id="battleRoomImage">
+          <form method="dialog"><button type="submit">关闭卡图</button></form>
+          <img alt="">
+        </dialog>
+      </section>
       <details id="heroBattleRoster" class="hero-battle-roster">
         <summary>参战英雄与旧忆</summary>
         <div id="heroBattleRosterContent" class="hero-battle-roster-grid"></div>
@@ -2885,6 +2905,8 @@
 
   <script src="../assets/campaign-session.js?v=20260917"></script>
   <script src="../hero/hero-catalog.js"></script>
+  <script src="room-assets.js" defer></script>
+  <script src="battle-room.js" defer></script>
   <script src="../technology/gear-inventory.js?v=20261117-hero-loadouts"></script>
   <script src="../assets/campaign-notes.js?v=20261015-aibp-summary1"></script>
   <script src="../assets/cycle-symbols.js?v=20261115-module-logo"></script>
@@ -8989,7 +9011,13 @@
       const base = `ps/${name}`;
       renderApostleTitle();
       traitButton.hidden = false;
-      if (window.location.hash !== `#${name}`) {
+      const nextUrl = new URL(window.location.href);
+      if (nextUrl.searchParams.has("battle")) {
+        if (!document.body.classList.contains("aibp-room-only")) {
+          nextUrl.searchParams.set("apostle", name);
+          history.replaceState(null, "", nextUrl);
+        }
+      } else if (nextUrl.hash !== `#${name}`) {
         history.replaceState(null, "", `#${name}`);
       }
 

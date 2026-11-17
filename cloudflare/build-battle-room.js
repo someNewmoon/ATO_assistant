@@ -68,7 +68,7 @@ ${compact.code}
   const redirect = `<script>
 (()=>{const u=new URL(location.href),q=u.searchParams,h=new URLSearchParams(u.hash.slice(1));
 if(/^[a-f0-9]{32}$/.test(q.get("battle")||"")&&!q.has("theatreBattle")&&(h.has("invite")||h.has("view"))){
-const t=new URL("room.html",u);t.search=u.search;t.hash=u.hash;location.replace(t.href);}})();
+const t=new URL("room",u);t.search=u.search;t.hash=u.hash;location.replace(t.href);}})();
 </script>`;
   const inventory = await readFile(join(staging, 'api/aibp-image-index.php'), 'utf8').catch(error => {
     if (error.code === 'ENOENT') return '';

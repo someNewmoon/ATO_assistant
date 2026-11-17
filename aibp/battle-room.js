@@ -62,7 +62,7 @@
 
   function roomLink(mode, token) {
     const shareOrigin = location.hostname === 'ato-moon-assistant.pages.dev' ? 'https://moon.xuzizi.cn' : location.origin;
-    const url = new URL(mode && window.ATO_LIGHT_ROOM ? '/aibp/room.html' : location.pathname, mode ? shareOrigin : location.origin);
+    const url = new URL(mode && window.ATO_LIGHT_ROOM ? '/aibp/room' : location.pathname, mode ? shareOrigin : location.origin);
     url.searchParams.set('battle', id);
     if (mode) url.hash = new URLSearchParams({ [mode]: token }).toString();
     else if (actor?.role === 'host' || credentials?.keys) {

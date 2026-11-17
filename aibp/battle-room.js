@@ -21,7 +21,7 @@
   const statNames = { danger: '凶险', fate: '命运', rage: '怒气' };
   const poolNames = { opening: '伺机', break: '破势', diversion: '分神', rouse: '激励', black: '破坏', fire: '火焰', hope: '希望' };
   const conditionNames = { standing: '站立', down: '倒地', rising: '起身', dead: '死亡' };
-  const diceNames = { d10: '攻击骰', crit: '暴击骰', armor: '护甲骰', red: '红色威力骰', black: '黑色威力骰', white: '白色威力骰' };
+  const dice = window.ATO_ROOM_DICE;
   let id = isLink ? routeId : '';
   let credentials = null;
   let state = null;
@@ -30,7 +30,10 @@
   let reconnectTimer;
   let connectionTimer;
   let reconnectDelay = 1000;
-  let diceDraft = {};
+  const selectedDice = new Map();
+  let rollMode = 'attack';
+  let rollSeat = 0;
+  let parentRoll = '';
   let armedCard = '';
   let pending = false;
   let writing = false;
@@ -211,22 +214,101 @@
       + summary + '</article>';
   }
 
+  function diceDraftKey(seat, mode) {
+    return 'ato-room-dice-' + id + '-' + seat + '-' + mode;
+  }
+
+  function readDiceDraft(seat, mode) {
+    try { return JSON.parse(storageGet(diceDraftKey(seat, mode))) || {}; } catch { return {}; }
+  }
+
+  function saveDiceDraft(seat, mode, fields) {
+    storageSet(diceDraftKey(seat, mode), JSON.stringify(fields));
+  }
+
+  function faceLabel([power, potential, dot]) {
+    return power + ' 威力 · ' + potential + ' 潜力 · ' + dot + ' ●';
+  }
+
+  function faceArt(die) {
+    const natural = dice.naturalFace(die);
+    if (natural) {
+      const index = dice.faceIndex(die);
+      if (index >= 0) return '<span class="room-die-face is-' + die.kind + '" role="img" aria-label="' + faceLabel(natural)
+        + '" style="background-position:' + index % 3 * 50 + '% ' + (index < 3 ? 50 : 100) + '%"></span>';
+    }
+    const name = dice.names[die.kind];
+    if (die.kind === 'd10' || die.kind === 'crit') {
+      return '<img class="room-die-face" src="room-dice-art/' + die.kind + '-' + die.value + '.svg" alt="' + name + ' ' + die.value + '">';
+    }
+    return '<span class="room-die-face room-die-number">' + escape(die.value) + '</span>';
+  }
+
   function rollSummary(roll) {
-    const symbols = roll.dice.filter(die => die.symbols).reduce((totals, die) => totals.map((value, index) => value + die.symbols[index]), [0, 0, 0]);
-    return roll.dice.map(({ kind, value, symbols: face }) => diceNames[kind] + ' ' + (face ? face.join('/') : value)).join('、')
-      + (roll.dice.some(die => die.symbols) ? '（共 ' + symbols[0] + ' 威力、' + symbols[1] + ' 潜能、' + symbols[2] + ' ●）' : '');
+    const strengths = roll.dice.map(dice.remainingFace).filter(Boolean);
+    if (!strengths.length) return roll.dice.map(die => dice.names[die.kind] + ' ' + die.value).join('、');
+    return faceLabel(strengths.reduce((sum, face) => sum.map((value, index) => value + face[index]), [0, 0, 0]));
+  }
+
+  function rollCard(roll) {
+    const editable = Boolean(roll.id) && !state.closed && (actor.role === 'host' || (actor.role === 'player' && actor.seat === roll.seat));
+    const selection = selectedDice.get(roll.id);
+    const attrs = ' data-roll-id="' + escape(roll.id) + '" data-seat="' + roll.seat + '"';
+    const mode = dice.modes[roll.mode]?.name;
+    const faces = roll.dice.map(die => {
+      const result = dice.remainingFace(die);
+      const canSelect = editable && dice.canReroll(die);
+      const dieAttrs = attrs + ' data-die-id="' + escape(die.id) + '"';
+      const original = result ? dice.faces[die.kind]?.[die.original] : die.original;
+      const originalLabel = Array.isArray(original) ? faceLabel(original) : original;
+      const art = faceArt(die);
+      return '<div class="room-die"><small>' + dice.names[die.kind] + '</small>'
+        + (canSelect ? '<button type="button" data-select-die' + dieAttrs + ' aria-pressed="' + Boolean(selection?.has(die.id))
+          + '" aria-label="选中' + dice.names[die.kind] + '重掷">' + art + '</button>' : art)
+        + '<span>' + (result ? result.map((n, i) => n + ['ϟ', '△', '●'][i]).join(' ') : die.value) + '</span>'
+        + (die.rerolled ? '<small>已重掷 · 原掷 ' + escape(originalLabel) + '</small>' : '')
+        + (editable && result ? '<div class="room-die-conversions">'
+          + (result[1] ? '<button type="button" data-action="convert" data-symbol="potential"' + dieAttrs + ' title="将一枚潜力转为威力">△ → ϟ</button>' : '')
+          + (result[2] ? '<button type="button" data-action="convert" data-symbol="dot"' + dieAttrs + ' title="将一枚●转为威力">● → ϟ</button>' : '') + '</div>' : '')
+        + '</div>';
+    }).join('');
+    const followup = roll.defenseCount && !roll.defenseRoll;
+    return '<li class="room-roll"><h4>' + escape(roll.hero) + (mode ? ' · ' + mode : '') + ' <small>第 ' + roll.round + ' 轮</small></h4>'
+      + '<div class="room-dice-results">' + faces + '</div><p>' + rollSummary(roll) + '</p>'
+      + (followup ? '<p class="room-dice-help">已配置 ' + roll.defenseCount + ' 枚防御红骰，请按闪避结果确认是否投掷。</p>' : '')
+      + (editable && (roll.mode === 'attack' || followup) ? '<button type="button" data-roll-followup="'
+        + (followup ? 'defense' : 'power') + '"' + attrs + '>' + (followup ? '准备投掷防御红骰' : '准备投掷威力骰') + '</button>' : '')
+      + (editable && roll.dice.some(dice.canReroll) ? '<button type="button" data-action="reroll"' + attrs
+        + (selection?.size ? '' : ' disabled') + '>重掷所选骰子' + (selection?.size ? '（' + selection.size + '）' : '') + '</button>' : '')
+      + '</li>';
   }
 
   function diceForm() {
     if (state.closed || actor.role === 'viewer') return '';
+    const seat = actor.role === 'host' ? rollSeat : actor.seat;
+    const drafts = readDiceDraft(seat, rollMode);
     const options = actor.role === 'host' ? state.heroes.map((hero, index) =>
-      '<option value="' + index + '"' + (String(index) === diceDraft.seat ? ' selected' : '') + '>' + escape(hero.name) + '</option>').join('') : '';
-    const limits = { d10: 6, armor: 6, red: 6, black: 4, white: 4 };
-    return '<form data-roll class="battle-room-dice"><h3>掷骰</h3><div>'
-      + (options ? '<label>英雄 <select name="seat">' + options + '</select></label>' : '')
-      + Object.entries(limits).map(([die, max]) => '<label>' + diceNames[die] + '<input type="number" min="0" max="' + max + '" name="' + die
-        + '" value="' + escape(diceDraft[die] ?? (die === 'd10' ? 1 : 0)) + '" required></label>').join('')
-      + '<button type="submit">掷骰</button></div></form>';
+      '<option value="' + index + '"' + (seat === index ? ' selected' : '') + '>' + escape(hero.name) + '</option>').join('') : '';
+    const fields = dice.modes[rollMode].kinds.map(kind => {
+      const label = kind === 'd10' ? '总数量（含 1 枚白色关键骰）' : dice.names[kind];
+      const minimum = kind === 'd10' || kind === 'armor' || rollMode === 'defense' ? 1 : 0;
+      return '<label>' + label + '<input type="number" min="' + minimum + '" max="' + dice.limits[kind]
+        + '" name="' + kind + '" value="' + escape(drafts[kind] ?? minimum) + '" required></label>';
+    }).join('');
+    const followup = rollMode === 'dodge' ? '<label>预计防御红骰<input name="defenseCount" type="number" min="0" max="6" value="'
+      + escape(drafts.defenseCount ?? 0) + '" required></label>' : '';
+    const notes = {
+      attack: '按精准、伺机和卡文结算命中，再确认威力骰数量。',
+      dodge: '先结算闪避，根据结果决定是否投掷防御红骰。',
+      power: '依命中与卡文确认威力骰数量。重掷费用和符号转换来源由玩家结算。',
+    };
+    return '<section class="room-dice-panel"><h3>掷骰</h3>' + (options ? '<label>英雄 <select data-roll-seat>' + options + '</select></label>' : '')
+      + '<div class="room-dice-modes" role="group" aria-label="投掷用途">' + Object.entries(dice.modes)
+        .map(([key, entry]) => '<button type="button" data-roll-mode="' + key + '" aria-pressed="' + (key === rollMode) + '">'
+          + (key === 'dodge' ? '<img src="room-dice-art/dodge.webp" alt="">' : '') + entry.name + '</button>').join('') + '</div>'
+      + '<form data-roll class="battle-room-dice"><div>' + fields + followup
+      + '<button type="submit">投掷' + dice.modes[rollMode].name + '</button></div></form>'
+      + (notes[rollMode] ? '<p class="room-dice-help">' + notes[rollMode] + '</p>' : '') + '</section>';
   }
 
   function render() {
@@ -246,17 +328,23 @@
       ? '<details class="battle-room-team"' + (content.querySelector('.battle-room-team')?.open ? ' open' : '')
         + '><summary>队伍状态</summary><div class="battle-room-grid">' + heroes.filter((_, index) => index !== seat).join('') + '</div></details>'
       : '<div class="battle-room-grid">' + heroes.join('') + '</div>';
-    const rolls = state.rolls.map(roll => '<li><strong>第 ' + roll.round + ' 轮 · ' + escape(roll.hero) + '</strong>　' + rollSummary(roll) + '</li>').join('');
+    for (const [id, choices] of selectedDice) {
+      const roll = state.rolls.find(entry => entry.id === id);
+      for (const dieId of choices) if (!roll?.dice.some(die => die.id === dieId && dice.canReroll(die))) choices.delete(dieId);
+      if (!choices.size) selectedDice.delete(id);
+    }
+    const rolls = state.rolls.map(rollCard).join('');
+    const rollLog = '<section class="battle-room-rolls"><h3>掷骰记录</h3>'
+      + (rolls ? '<ol>' + rolls + '</ol>' : '<p>还没有掷骰。</p>') + '</section>';
     const active = document.activeElement;
     const focusRoot = summary.contains(active) ? summary : content;
     const focus = active && focusRoot.contains(active) ? [...focusRoot.querySelectorAll('button,select,input')].indexOf(active) : -1;
     const selection = focus >= 0 && active.name;
-    if (selection && active.form?.matches('[data-roll]')) diceDraft = Object.fromEntries(new FormData(active.form));
     summary.innerHTML = '<div class="battle-room-head"><div><h2>' + escape(state.title) + '</h2><p>第 ' + state.round
       + ' 轮' + (state.closed ? ' · 已结束' : '') + '</p></div><div>' + controls + '</div></div>' + links;
     content.innerHTML = own + '<section class="battle-room-pool"><h3>克拉托斯池</h3><div>' + pool + '</div></section>' + diceForm()
-      + (role !== 'player' ? '<h3 class="battle-room-heading">状态总览</h3>' : '') + overview
-      + '<section class="battle-room-rolls"><h3>掷骰记录</h3>' + (rolls ? '<ol>' + rolls + '</ol>' : '<p>还没有掷骰。</p>') + '</section>';
+      + (edit ? rollLog : '') + (role !== 'player' ? '<h3 class="battle-room-heading">状态总览</h3>' : '') + overview
+      + (edit ? '' : rollLog);
     if (focus >= 0) {
       const target = focusRoot.querySelectorAll('button,select,input')[focus];
       if (target && (!selection || target.name === selection)) target.focus({ preventScroll: true });
@@ -348,10 +436,19 @@
   });
 
   content.addEventListener('input', event => {
-    if (event.target.form?.matches('[data-roll]')) diceDraft = Object.fromEntries(new FormData(event.target.form));
+    if (event.target.form?.matches('[data-roll]')) {
+      const seat = actor.role === 'host' ? rollSeat : actor.seat;
+      saveDiceDraft(seat, rollMode, Object.fromEntries(new FormData(event.target.form)));
+    }
   });
 
   content.addEventListener('change', event => {
+    if (event.target.matches('[data-roll-seat]')) {
+      rollSeat = Number(event.target.value);
+      parentRoll = '';
+      render();
+      return;
+    }
     if (event.target.matches('[data-condition]')) {
       void send({ id: crypto.randomUUID(), type: 'condition', seat: Number(event.target.dataset.condition), value: event.target.value });
     }
@@ -364,7 +461,37 @@
   root.addEventListener('click', async event => {
     const button = event.target.closest('button');
     if (!button || (!summary.contains(button) && !content.contains(button))) return;
-    const { roomCopy, action, key, seat, delta, armCard, slot, value } = button.dataset;
+    const { roomCopy, action, key, seat, delta, armCard, slot, value,
+      rollMode: mode, rollFollowup, rollId, dieId, symbol } = button.dataset;
+    if (mode || rollFollowup) {
+      rollMode = mode || rollFollowup;
+      parentRoll = rollFollowup ? rollId : '';
+      if (rollFollowup) {
+        rollSeat = Number(seat);
+        const source = state.rolls.find(roll => roll.id === rollId);
+        if (rollMode === 'defense' && source) saveDiceDraft(rollSeat, 'defense', { red: source.defenseCount });
+      }
+      render();
+      content.querySelector('[data-roll] input')?.focus();
+      return;
+    }
+    if (button.hasAttribute('data-select-die')) {
+      const choice = selectedDice.get(rollId) || new Set();
+      if (choice.has(dieId)) choice.delete(dieId);
+      else choice.add(dieId);
+      selectedDice.set(rollId, choice);
+      render();
+      return;
+    }
+    if (action === 'reroll' || action === 'convert') {
+      const selection = [...(selectedDice.get(rollId) || [])];
+      if (action === 'reroll') selectedDice.delete(rollId);
+      else selectedDice.get(rollId)?.delete(dieId);
+      send({ id: crypto.randomUUID(), type: action, seat: Number(seat), roll: rollId,
+        ...(action === 'reroll' ? { ids: selection } : { die: dieId, symbol }) });
+      render();
+      return;
+    }
     if (button.hasAttribute('data-room-art')) {
       const image = button.querySelector('img');
       window.ATO_BATTLE_ASSETS?.zoom(button.dataset.roomArt, image.alt);
@@ -399,10 +526,13 @@
     const form = event.target;
     const fields = new FormData(form);
     if (form.matches('[data-roll]')) {
-      diceDraft = Object.fromEntries(fields);
-      const seat = actor.role === 'host' ? Number(fields.get('seat')) : actor.seat;
-      const counts = Object.fromEntries(Object.keys(diceNames).filter(kind => kind !== 'crit').map(kind => [kind, Number(fields.get(kind))]));
-      void send({ id: crypto.randomUUID(), type: 'roll', seat, counts });
+      const seat = actor.role === 'host' ? rollSeat : actor.seat;
+      saveDiceDraft(seat, rollMode, Object.fromEntries(fields));
+      const counts = Object.fromEntries(dice.modes[rollMode].kinds.map(kind => [kind, Number(fields.get(kind))]));
+      send({ id: crypto.randomUUID(), type: 'roll', mode: rollMode, seat, counts,
+        defenseCount: Number(fields.get('defenseCount')), ...(parentRoll && { parentRoll }) });
+      parentRoll = '';
+
       return;
     }
     if (pending) return;

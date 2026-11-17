@@ -8,7 +8,7 @@
   // 梦行者 follows the Chinese rulebook. Named scans keep the names printed on their panels.
   const TITAN_MODELS = [
     ['tt_earthshaker', '撼地者', 'Earthshaker'],
-    ['tt_mazerunner', '迷宫穿梭者', 'Mazerunner', '迷宫疾行者', '迷宫行者'],
+    ['tt_mazerunner', '迷宫穿梭者', 'Mazerunner', '迷宫疾行者', '迷宫行者', '迷阵穿梭者'],
     ['tt_plogicbreaker', '', 'Prototype Logicbreaker', '破逻辑者'],
     ['tt_warkeeper', '历战者', 'Warkeeper', '守战者'],
     ['tt_firestarter', '纵火者', 'Firestarter', '燃火者'],

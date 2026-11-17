@@ -89,7 +89,8 @@
     pieces.titans.forEach((piece, index) => {
       const titan = roster?.[index];
       const panel = window.ATO_GEAR_INVENTORY?.dreamwalkerPanel(titan);
-      const sprite = sprites[roster ? panel?.sprite : "t" + (index + 1)];
+      const type = window.ATO_GEAR_INVENTORY?.titanType(titan);
+      const sprite = sprites[roster ? (panel?.sprite || type?.id) : "t" + (index + 1)];
       const portrait = titan && !sprite ? window.ATO_BATTLE_ASSETS?.titanArt(titan) : null;
       token(piece, 1, names[index] || "泰坦 " + (index + 1), index, sprite,
         portrait?.label === "查看泰坦插图" ? portrait.src : null);

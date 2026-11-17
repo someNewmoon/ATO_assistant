@@ -2,6 +2,7 @@ import { DurableObject } from 'cloudflare:workers';
 import heroCatalog from '../../hero/hero-catalog.js';
 import inventory from '../../technology/gear-inventory.js';
 import cardState from '../../aibp/room-card-state.js';
+import roomDice from '../../aibp/room-dice.js';
 import gearProduction from '../../technology/ato_gear_production.json';
 import { ApiError, errorResponse, object, response } from './campaign.js';
 import { applyRoomBoard, setupRoomBoard } from './board.js';
@@ -11,12 +12,6 @@ const secretPattern = /^[a-f0-9]{64}$/;
 const protocol = 'ato-battle-v1';
 const poolKeys = ['opening', 'break', 'diversion', 'rouse', 'black', 'fire', 'hope'];
 const stats = ['danger', 'rage', 'fate'];
-const faces = {
-  red: [[1,1,0], [1,0,0], [0,1,0], [2,0,1], [1,1,0], [0,0,1]],
-  black: [[2,2,1], [2,1,0], [0,1,1], [1,1,0], [2,0,1], [1,1,0]],
-  white: [[1,2,1], [2,1,1], [1,1,1], [1,3,0], [2,3,0], [3,2,1]],
-};
-const diceLimits = { d10: 6, armor: 6, red: 6, black: 4, white: 4 };
 const conditions = ['standing', 'down', 'rising', 'dead'];
 const encoder = new TextEncoder();
 
@@ -311,25 +306,76 @@ export class BattleRoom extends DurableObject {
         break;
       }
       case 'roll':
-        this.roll(room, hero, seat, body.counts);
+        this.roll(room, hero, seat, body);
+        break;
+      case 'reroll':
+      case 'convert':
+        this.changeRoll(room, seat, body);
         break;
       default:
         reject('未知战斗操作。');
     }
   }
 
-  roll(room, hero, seat, counts) {
-    if (!object(counts) || !Object.keys(counts).every(kind => Object.hasOwn(diceLimits, kind))) reject('骰子类型无效。');
+  roll(room, hero, seat, body) {
+    const { counts, mode, parentRoll, defenseCount = 0 } = body;
+    const { limits, modes } = roomDice;
+    const modeRule = Object.hasOwn(modes, mode) && modes[mode];
+    if (mode !== undefined && !modeRule) reject('投掷用途无效。');
+    if (!object(counts) || !Object.keys(counts).every(kind => Object.hasOwn(limits, kind)
+        && (!modeRule || modeRule.kinds.includes(kind)))) reject('骰子类型无效。');
+    if (!Number.isInteger(defenseCount) || defenseCount < 0 || defenseCount > limits.red
+        || (defenseCount && mode !== 'dodge')) reject('防御红骰数量无效。');
     const dice = [];
     for (const [kind, count] of Object.entries(counts)) {
-      if (!Number.isInteger(count) || count < 0 || count > diceLimits[kind]) reject('骰子数量无效。');
+      if (!Number.isInteger(count) || count < 0 || count > limits[kind]) reject('骰子数量无效。');
       for (let i = 0; i < count; i++) {
-        if (Object.hasOwn(faces, kind)) dice.push({ kind, symbols: faces[kind][randomInt(6)] });
-        else dice.push({ kind: kind === 'd10' && i === 0 ? 'crit' : kind, value: 1 + randomInt(kind === 'd10' ? 10 : 6) });
+        const dieKind = kind === 'd10' && i === 0 ? 'crit' : kind;
+        const result = this.diceResult(dieKind);
+        dice.push({ id: crypto.randomUUID(), kind: dieKind, ...result, original: result.face ?? result.value });
       }
     }
     if (!dice.length) reject('请选择至少一枚骰子。');
-    room.rolls.unshift({ seat, hero: hero.name, round: room.round, dice });
-    room.rolls = room.rolls.slice(0, 12);
+    const parent = parentRoll && room.rolls.find(roll => roll.id === parentRoll && roll.seat === seat);
+    if (parentRoll && (!parent || !modeRule?.parentMode || parent.mode !== modeRule.parentMode
+        || (mode === 'defense' && (!parent.defenseCount || parent.defenseRoll)))) {
+      reject('关联投掷已结算或不存在。', 409);
+    }
+    const roll = { id: body.id, seat, hero: hero.name, round: room.round, mode, dice };
+    if (parent) {
+      roll.parentRoll = parent.id;
+      if (mode === 'defense') parent.defenseRoll = roll.id;
+    }
+    if (defenseCount) roll.defenseCount = defenseCount;
+    room.rolls.unshift(roll);
+    room.rolls = room.rolls.slice(0, 30);
+  }
+
+  diceResult(kind) {
+    if (Object.hasOwn(roomDice.faces, kind)) {
+      const face = randomInt(6);
+      return { face, symbols: roomDice.faces[kind][face] };
+    }
+    return { value: 1 + randomInt(kind === 'armor' ? 6 : 10) };
+  }
+
+  changeRoll(room, seat, body) {
+    const roll = room.rolls.find(entry => entry.id && entry.id === body.roll && entry.seat === seat);
+    if (!roll) reject('找不到该英雄的这次投掷。', 409);
+    if (body.type === 'reroll') {
+      if (!Array.isArray(body.ids) || !body.ids.length || body.ids.length > roll.dice.length) reject('请先选齐要重掷的骰子。');
+      const dice = [...new Set(body.ids)].map(id => roll.dice.find(die => die.id === id));
+      if (!dice.every(roomDice.canReroll)) reject('所选骰子已经重掷、转换或不存在。', 409);
+      for (const die of dice) Object.assign(die, this.diceResult(die.kind), { rerolled: true });
+      return;
+    }
+    const die = roll.dice.find(entry => entry.id === body.die);
+    const result = die && roomDice.remainingFace(die);
+    if (!result) reject('只能转换威力骰。');
+    const conversions = { potential: ['converted', 1], dot: ['dotConverted', 2] };
+    if (!Object.hasOwn(conversions, body.symbol)) reject('未知骰面符号。');
+    const [field, index] = conversions[body.symbol];
+    if (!result[index]) reject('该骰已没有可转换的符号。', 409);
+    die[field] = (die[field] || 0) + 1;
   }
 }

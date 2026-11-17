@@ -132,14 +132,17 @@
   function heroCard(hero, seat) {
     const editable = !state.closed && (actor.role === 'host' || (actor.role === 'player' && actor.seat === seat));
     const titan = hero.titan ? [hero.titan.name, hero.titan.type, hero.titan.crippled ? '残废' : ''].filter(Boolean).map(escape).join(' · ') : '未分配泰坦';
-    const titanPreview = hero.titan && window.ATO_BATTLE_ASSETS?.hasTitan(hero.titan.type)
-      ? ' <button type="button" data-titan-preview="' + escape(hero.titan.type) + '">查看泰坦卡图</button>' : '';
+    const titanArt = hero.titan && window.ATO_BATTLE_ASSETS?.titanArt(hero.titan);
+    const titanPreview = titanArt ? ' <button type="button" data-titan-preview="' + seat + '">' + titanArt.label + '</button>' : '';
     const gear = hero.gear.map(item => '<li><span>' + escape(item.name) + ' <small>' + escape(item.id) + '</small>'
       + (window.ATO_BATTLE_ASSETS?.hasGear(item.id) ? ' <button type="button" data-gear-preview="' + escape(item.id) + '" data-gear-name="'
         + escape(item.name) + '">查看卡图</button>' : '') + '</span>'
       + '<span>已用 ' + buttons('gear', item.id, item.used, seat, item.name + '使用数', item.count, editable) + ' / ' + item.count + '</span></li>').join('');
-    const mnemos = hero.mnemos.map(card => '<li><span>' + escape(card.name) + '</span><small>' + escape(card.id) + ' · '
-      + (card.fated ? '命业旧忆' : escape(card.progress) + '/' + escape(card.limit)) + '</small></li>').join('');
+    const mnemos = hero.mnemos.map(card => '<li><span>' + escape(card.name)
+      + (window.ATO_BATTLE_ASSETS?.hasMnemos(card.id) ? ' <button type="button" data-mnemos-preview="' + escape(card.id)
+        + '" data-card-name="' + escape(card.name) + '">查看卡图</button>' : '')
+      + '</span><small>' + escape(card.id) + ' · ' + (card.fated ? '命业旧忆' : escape(card.progress) + '/' + escape(card.limit))
+      + '</small></li>').join('');
     const condition = editable ? '<select data-condition="' + seat + '" aria-label="' + escape(hero.name) + '的泰坦状态">'
       + Object.entries(conditionNames).map(([key, label]) => '<option value="' + key + '"' + (key === hero.condition ? ' selected' : '') + '>' + label + '</option>').join('')
       + '</select>' : conditionNames[hero.condition];
@@ -307,7 +310,9 @@
     if (button.dataset.gearPreview) {
       await window.ATO_BATTLE_ASSETS?.showGear(button.dataset.gearPreview, button.dataset.gearName);
     } else if (button.dataset.titanPreview) {
-      window.ATO_BATTLE_ASSETS?.showTitan(button.dataset.titanPreview);
+      window.ATO_BATTLE_ASSETS?.showTitan(state.heroes[Number(button.dataset.titanPreview)].titan);
+    } else if (button.dataset.mnemosPreview) {
+      window.ATO_BATTLE_ASSETS?.showMnemos(button.dataset.mnemosPreview, button.dataset.cardName);
     } else if (roomCopy) {
       const url = roomLink(roomCopy, credentials.keys[roomCopy]);
       try {

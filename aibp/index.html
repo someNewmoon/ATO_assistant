@@ -2906,8 +2906,8 @@
 
   <script src="../assets/campaign-session.js?v=20260917"></script>
   <script src="../hero/hero-catalog.js"></script>
-  <script src="room-assets.js?v=20261117-hosted" defer></script>
-  <script src="battle-room.js?v=20261117-hosted" defer></script>
+  <script src="room-assets.js?v=20261117-hosted-titans" defer></script>
+  <script src="battle-room.js?v=20261117-hosted-titans" defer></script>
   <script src="../technology/gear-inventory.js?v=20261117-titan-art"></script>
   <script src="../assets/campaign-notes.js?v=20261015-aibp-summary1"></script>
   <script src="../assets/cycle-symbols.js?v=20261115-module-logo"></script>
@@ -4151,7 +4151,8 @@
         }
         // Encrypted configuration assets are already decoded to in-memory URLs.
         const resolved = window.HeliosAssets.resolve(src);
-        const exists = !!aibpImageIndex?.has(src) || /^(?:blob:|data:image\/)/.test(resolved);
+        const exists = !!aibpImageIndex?.has(src) || !!window.ATO_BATTLE_ASSETS?.hasLocalAibp(src)
+          || /^(?:blob:|data:image\/)/.test(resolved);
         const cached = optionalImageChecks.get(src);
         cached.expiresAt = exists ? Infinity : Date.now() + 30000;
         cached.needs = null;

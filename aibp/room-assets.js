@@ -11,7 +11,7 @@
   const box = document.getElementById('battleRoomImage');
   let assets = null;
   let working = false;
-  let hosted = { equipment: {}, titans: [] };
+  let hosted = { equipment: {}, titans: [], titanScans: {}, mnemos: {} };
   const imageElement = box.querySelector('img');
   const imageError = box.querySelector('[data-art-error]');
   const canImport = window.isSecureContext && 'serviceWorker' in navigator && 'caches' in window && 'webkitdirectory' in picker;
@@ -153,13 +153,29 @@
     else if (Object.hasOwn(hosted.equipment, id)) display(new URL(hosted.equipment[id], origin), name);
   }
 
+  function titanArt(titan) {
+    const scans = hosted.titanScans || {};
+    for (const name of [titan.name, titan.type]) {
+      if (name && Object.hasOwn(scans, name)) return { path: scans[name], label: '查看泰坦卡图', name };
+    }
+    if (Object.hasOwn(titanPaths, titan.type) && hosted.titans.includes(titanPaths[titan.type])) {
+      return { path: titanPaths[titan.type], label: '查看泰坦插图', name: titan.type };
+    }
+    return null;
+  }
+
   window.ATO_BATTLE_ASSETS = {
     showGear,
     hasGear: id => hasLocal(localGearPath(id)) || Object.hasOwn(hosted.equipment, id),
     hasLocalAibp: path => hasLocal('aibp/' + path),
-    hasTitan: type => Object.hasOwn(titanPaths, type) && hosted.titans.includes(titanPaths[type]),
-    showTitan(type) {
-      if (this.hasTitan(type)) display(new URL(titanPaths[type], origin), type);
+    titanArt,
+    showTitan(titan) {
+      const art = titanArt(titan);
+      if (art) display(new URL(art.path, origin), art.name);
+    },
+    hasMnemos: id => Object.hasOwn(hosted.mnemos || {}, id),
+    showMnemos(id, name) {
+      if (this.hasMnemos(id)) display(new URL(hosted.mnemos[id], origin), name);
     },
   };
 

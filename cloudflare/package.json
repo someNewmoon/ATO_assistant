@@ -1,0 +1,15 @@
+{
+  "name": "ato-assistant-cloudflare",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build:pages": "node build-pages.js",
+    "dev:worker": "wrangler dev --config worker/wrangler.jsonc --port 8797",
+    "dev:pages": "wrangler pages dev public --port 8798 --service ATO_API=ato-assistant-api",
+    "deploy:worker": "wrangler deploy --config worker/wrangler.jsonc",
+    "deploy:pages": "wrangler pages deploy public --project-name ato-moon-assistant --branch main"
+  },
+  "devDependencies": {
+    "wrangler": "4.163.0"
+  }
+}

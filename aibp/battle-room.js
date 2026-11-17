@@ -131,7 +131,7 @@
 
   function heroCard(hero, seat) {
     const editable = !state.closed && (actor.role === 'host' || (actor.role === 'player' && actor.seat === seat));
-    const titan = hero.titan ? [hero.titan.name, hero.titan.type, hero.titan.crippled ? '残废' : ''].filter(Boolean).map(escape).join(' · ') : '未分配泰坦';
+    const titan = hero.titan ? escape(window.ATO_GEAR_INVENTORY.titanLabel(hero.titan)) : '未分配泰坦';
     const titanArt = hero.titan && window.ATO_BATTLE_ASSETS?.titanArt(hero.titan);
     const titanPreview = titanArt ? ' <button type="button" data-titan-preview="' + seat + '">' + titanArt.label + '</button>' : '';
     const gear = hero.gear.map(item => '<li><span>' + escape(item.name) + ' <small>' + escape(item.id) + '</small>'

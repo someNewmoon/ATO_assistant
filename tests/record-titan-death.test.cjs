@@ -31,11 +31,13 @@ function harness() {
       titanLimit: '5', deadTitans: '',
     },
     saves: 0,
+    window: { ATO_GEAR_INVENTORY: require('../technology/gear-inventory.js') },
+    newTitanTypeField: null,
     queueSave() { c.saves++; },
     document: { createElement: element },
     elements: Object.fromEntries(['titanList', 'titanListCount', 'titanLimitInput', 'deadTitansInput'].map(key => [key, element()])),
   });
-  vm.runInContext(['isPlainObject', 'normalizeTitanList', 'normalizeTitanLimit', 'titanTotals', 'updateTitanListCount', 'renderTitans'].map(extract).join('\n'), c);
+  vm.runInContext(['isPlainObject', 'normalizeTitanList', 'normalizeTitanLimit', 'titanTotals', 'updateTitanListCount', 'createTitanTypeField', 'renderTitans'].map(extract).join('\n'), c);
   c.renderTitans();
   return c;
 }
@@ -43,15 +45,18 @@ function harness() {
 test('Titan types and notes are editable, survive normalization and keep unlike crippled groups separate', () => {
   const c = harness();
   const details = c.elements.titanList.children[0].children[4].children;
-  for (const [index, value] of ['梦行者', '待修复'].entries()) {
-    const input = details[index].children[1];
-    input.value = value;
-    input.listeners.input();
-  }
+  const select = details[0].children[0].children[1];
+  assert.ok(select.children.some(option => option.value === 'dreamwalker'));
+  select.value = 'dreamwalker';
+  select.listeners.change();
+  const notes = details[1].children[1];
+  notes.value = '待修复';
+  notes.listeners.input();
   c.state.titans.push({ ...c.state.titans[0], id: 'other', count: 1, notes: '本场待命' });
   c.renderTitans();
   assert.equal(c.state.titans.length, 3);
-  assert.equal(c.state.titans[0].type, '梦行者');
+  assert.equal(c.state.titans[0].typeId, 'dreamwalker');
+  assert.equal(c.state.titans[0].type, '睡梦行者');
   assert.equal(c.state.titans[0].notes, '待修复');
   assert.equal(c.state.titans[1].type, '');
   assert.equal(c.state.titans[2].notes, '本场待命');
@@ -198,4 +203,19 @@ test('a scheduled repair follows its target through row merging and a record rel
   assert.equal(completed.record.titans.filter(titan => !titan.crippled).reduce((sum, titan) => sum + titan.count, 0), 1);
   const again = rules.completeOperation({ ...ctx, day: 12, record: completed.record, automation: completed.automation });
   assert.deepEqual(again.record.titans, completed.record.titans, 'retry cannot heal twice');
+});
+
+test('legacy type aliases and custom names keep their row identities and art is matched by name or type', () => {
+  const c = harness();
+  const previous = c.normalizeTitanList([
+    { id: 'walker', name: '希罗多德', type: '梦行者' },
+    { id: 'unknown', name: '定制模型', type: '本桌专用' },
+  ]);
+  assert.equal(previous[0].id, 'walker');
+  assert.equal(previous[0].typeId, 'dreamwalker');
+  assert.equal(previous[1].type, '本桌专用');
+  assert.equal(previous[1].typeId, '');
+  const inventory = c.window.ATO_GEAR_INVENTORY;
+  assert.equal(inventory.titanArtwork(previous[0]).path, 'aibp/images/titan-cards/希罗多德.webp');
+  assert.equal(inventory.titanArtwork({ typeId: 'dreamwalker', name: '先锋' }), null);
 });

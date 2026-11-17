@@ -76,7 +76,7 @@ export async function createBattleRoom(env, campaign, payload) {
     }));
     return {
       id, name: clean(heroCatalog.heroDisplayName(hero)), titan: titan ? {
-        name: clean(titan.name), type: clean(titan.type), crippled: Boolean(titan.crippled),
+        name: clean(titan.name), ...inventory.titanTypeFields(titan), crippled: Boolean(titan.crippled),
       } : null,
       gear: Object.entries(kit.gear).map(([id, count]) => ({ id, name: equipmentName(id), count, used: 0 })),
       mnemos, stats: { danger: 0, rage: 0, fate: 0 }, condition: 'standing', player: '',

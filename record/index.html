@@ -473,6 +473,7 @@
       gap: 8px;
     }
 
+    .titan-details select,
     .titan-details input {
       width: 100%;
     }
@@ -1699,7 +1700,7 @@
             </label>
             <button id="addTitanButton" type="button">添加泰坦</button>
             <div class="titan-details">
-              <label class="titan-number-field">种类<input id="titanTypeInput" type="text" maxlength="80" placeholder="如梦行者"></label>
+              <div id="titanTypeInput"></div>
               <label class="titan-number-field">备注<input id="titanNotesInput" type="text" maxlength="500"></label>
             </div>
           </div>
@@ -1891,6 +1892,7 @@
   <script src="./matrix-data.js?v=20261106-c123-fixes2"></script>
   <script src="../assets/cycle-symbols.js?v=20261115-module-logo"></script>
   <script src="../assets/campaign-session.js?v=20260917"></script>
+  <script src="../technology/gear-inventory.js?v=20261117-titan-types"></script>
   <script src="../assets/campaign-notes.js?v=20261015"></script>
   <script src="../assets/record-attachments.js?v=20261009"></script>
   <script src="./note-attachments.js?v=20261009-rename3"></script>
@@ -3157,7 +3159,7 @@
           .map((item) => ({
             id: String(item.id || `titan-${Date.now()}-${Math.random().toString(16).slice(2)}`),
             name: String(item.name || "泰坦"),
-            type: typeof item.type === "string" ? item.type.trim().slice(0, 80) : "",
+            ...window.ATO_GEAR_INVENTORY.titanTypeFields(item),
             notes: typeof item.notes === "string" ? item.notes.trim().slice(0, 500) : "",
             count: Math.max(1, Math.floor(Number(item.count || 1))),
             limit: Math.max(1, Math.floor(Number(item.limit || item.count || 1))),
@@ -3167,7 +3169,7 @@
 
       const count = Math.max(0, Math.floor(Number(legacyTitanCount || 0)));
       return count > 0
-        ? [{ id: "legacy-titan", name: "泰坦", type: "", notes: "", count, limit: count, crippled: false }]
+        ? [{ id: "legacy-titan", name: "泰坦", typeId: "", type: "", notes: "", count, limit: count, crippled: false }]
         : [];
     }
 
@@ -3720,11 +3722,12 @@
     }
 
     function renderTitans() {
+      if (!newTitanTypeField && elements.titanTypeInput) resetNewTitanType();
       state.titans = normalizeTitanList(state.titans);
       const crippledByDetails = new Map();
       state.titans = state.titans.filter((titan) => {
         if (!titan.crippled) return true;
-        const key = JSON.stringify([titan.name, titan.type, titan.notes]);
+        const key = JSON.stringify([titan.name, titan.typeId || titan.type, titan.notes]);
         const existing = crippledByDetails.get(key);
         if (existing) {
           // Scheduled repairs still refer to the removed row's identity.
@@ -3761,6 +3764,7 @@
         nameInput.placeholder = "泰坦名称";
         nameInput.addEventListener("input", () => {
           state.titans[index].name = nameInput.value;
+          refreshPreview();
           queueSave();
         });
         nameInput.addEventListener("change", () => {
@@ -3831,23 +3835,80 @@
 
         const details = document.createElement("div");
         details.className = "titan-details";
-        for (const [key, label, maxLength] of [["type", "种类", 80], ["notes", "备注", 500]]) {
-          const field = document.createElement("label");
-          field.className = "titan-number-field";
-          const input = document.createElement("input");
-          input.type = "text";
-          input.maxLength = maxLength;
-          input.value = titan[key];
-          input.addEventListener("input", () => {
-            state.titans[index][key] = input.value;
-            queueSave();
-          });
-          field.append(label, input);
-          details.appendChild(field);
-        }
+        const type = createTitanTypeField(titan, (fields) => {
+          Object.assign(state.titans[index], fields);
+          queueSave();
+        });
+        const preview = document.createElement("a");
+        preview.target = "_blank";
+        preview.rel = "noopener";
+        const refreshPreview = () => {
+          const art = window.ATO_GEAR_INVENTORY.titanArtwork(state.titans[index]);
+          preview.hidden = !art;
+          if (art) {
+            preview.href = "../" + art.path;
+            preview.textContent = art.label;
+          }
+        };
+        type.element.addEventListener("change", refreshPreview);
+        refreshPreview();
+        const notes = document.createElement("label");
+        notes.className = "titan-number-field";
+        const notesInput = document.createElement("input");
+        notesInput.type = "text";
+        notesInput.maxLength = 500;
+        notesInput.value = titan.notes;
+        notesInput.addEventListener("input", () => {
+          state.titans[index].notes = notesInput.value;
+          queueSave();
+        });
+        notes.append("备注", notesInput);
+        details.append(type.element, notes, preview);
         row.append(nameInput, countField, crippledLabel, removeButton, details);
         elements.titanList.appendChild(row);
       });
+    }
+
+    function createTitanTypeField(titan = {}, onChange = () => {}) {
+      const catalog = window.ATO_GEAR_INVENTORY;
+      const fields = catalog.titanTypeFields(titan);
+      const element = document.createElement("div");
+      const label = document.createElement("label");
+      label.className = "titan-number-field";
+      const select = document.createElement("select");
+      select.setAttribute("aria-label", "泰坦种类");
+      for (const { id, name } of [
+        { id: "", name: "未指定种类" }, ...catalog.TITAN_TYPES, { id: "custom", name: "自定义种类" },
+      ]) {
+        const option = document.createElement("option");
+        option.value = id;
+        option.textContent = name;
+        select.appendChild(option);
+      }
+      select.value = fields.typeId || (fields.type ? "custom" : "");
+      const custom = document.createElement("input");
+      custom.type = "text";
+      custom.maxLength = 80;
+      custom.placeholder = "输入种类";
+      custom.setAttribute("aria-label", "自定义泰坦种类");
+      custom.value = fields.typeId ? "" : fields.type;
+      custom.hidden = select.value !== "custom";
+      const read = () => catalog.titanTypeFields(select.value === "custom"
+        ? { type: custom.value } : { typeId: select.value });
+      select.addEventListener("change", () => {
+        custom.hidden = select.value !== "custom";
+        onChange(read());
+      });
+      custom.addEventListener("input", () => onChange(read()));
+      label.append("泰坦种类", select);
+      element.append(label, custom);
+      return { element, read };
+    }
+
+    let newTitanTypeField;
+    function resetNewTitanType() {
+      newTitanTypeField = createTitanTypeField();
+      elements.titanTypeInput.replaceChildren(newTitanTypeField.element);
     }
 
     function addTitan() {
@@ -3856,13 +3917,13 @@
       state.titans.push({
         id: `titan-${Date.now()}-${Math.random().toString(16).slice(2)}`,
         name,
-        type: elements.titanTypeInput.value.trim(),
+        ...newTitanTypeField.read(),
         notes: elements.titanNotesInput.value.trim(),
         count,
         crippled: elements.titanCrippledInput.checked,
       });
       elements.titanNameInput.value = "";
-      elements.titanTypeInput.value = "";
+      resetNewTitanType();
       elements.titanNotesInput.value = "";
       elements.titanCountInput.value = "1";
       elements.titanCrippledInput.checked = false;

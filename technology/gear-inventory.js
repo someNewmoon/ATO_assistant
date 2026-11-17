@@ -26,6 +26,61 @@
     'tt_messianic': '弥赛亚',
   };
 
+  const TITAN_TYPES = [
+    { id: 'dreamwalker', name: '睡梦行者', aliases: ['梦行者', 'Dreamwalker'] },
+    { id: 'spartan-dreamwalker', name: '斯巴达梦行者', aliases: ['Spartan Dreamwalker'], scan: '斯巴达梦行者' },
+    { id: 'gamechanger', name: '回天者', aliases: ['Gamechanger'], scan: '回天者' },
+    { id: 'logicbreaker', name: '逻辑破坏者', aliases: ['Logicbreaker'], scan: '逻辑破坏者' },
+    ...[['tt_returner', 'Returner'], ['tt_ascender', 'Ascender'], ['tt_pdawnburner', 'Dawnburner']]
+      .map(([id, name]) => ({ id, name, aliases: [id.slice(3)], portrait: id })),
+    ...Object.entries(TITAN_NAMES_ZH).map(([id, name]) => ({ id, name, aliases: [id.slice(3)], portrait: id })),
+  ];
+  const listedPortraits = new Set([
+    'tt_earthshaker', 'tt_mazerunner', 'tt_plogicbreaker', 'tt_warkeeper', 'tt_firestarter',
+    'tt_pabysswatcher', 'tt_cloudsoarer', 'tt_wishender', 'tt_plunarlander', 'tt_shadowdancer',
+    'tt_helldiver', 'tt_trespasser', 'tt_executioner', 'tt_feareater',
+    'tt_returner', 'tt_ascender', 'tt_pdawnburner',
+  ]);
+  const titanTypes = new Map(TITAN_TYPES.map(type => [type.id, type]));
+  const titanAliases = new Map(TITAN_TYPES.flatMap(type =>
+    [type.id, type.name, ...type.aliases].map(alias => [alias.toLowerCase(), type])));
+  const titanScans = new Map([
+    ['tt_earthshaker', '撼地者'], ['tt_mazerunner', '迷宫穿梭者'],
+  ]);
+  titanAliases.set('迷宫穿梭者', titanTypes.get('tt_mazerunner'));
+  const namedDreamwalkers = new Set(['希罗多德', '尤利西娅', '梭伦', '费洛克泰拉']);
+
+  function titanType(titan) {
+    return titanTypes.get(titan?.typeId)
+      || titanAliases.get(String(titan?.type || '').trim().toLowerCase()) || null;
+  }
+
+  function titanTypeFields(titan) {
+    const entry = titanType(titan);
+    return { typeId: entry?.id || '', type: entry?.name || String(titan?.type || '').trim().slice(0, 80) };
+  }
+
+  function titanLabel(titan) {
+    const name = titan?.name || '泰坦';
+    const { type } = titanTypeFields(titan);
+    return [name, type !== name && type, titan?.crippled ? '残废' : ''].filter(Boolean).join(' · ');
+  }
+
+  function titanArtwork(titan, manifest) {
+    if (!titan) return null;
+    const entry = titanType(titan);
+    const scan = ((!entry || entry.id === 'dreamwalker') && namedDreamwalkers.has(titan.name) && titan.name)
+      || entry?.scan || (entry && titanScans.get(entry.id));
+    if (scan) {
+      const path = manifest ? manifest.titanScans?.[scan] : 'aibp/images/titan-cards/' + scan + '.webp';
+      if (path) return { path, name: scan, label: '查看泰坦卡图' };
+    }
+    if (!entry?.portrait || (!manifest && !listedPortraits.has(entry.portrait))) return null;
+    const path = 'technology/images/titans/' + entry.portrait + '.png';
+    if (manifest && !manifest.titans?.includes(path)) return null;
+    return { path, name: entry.name, label: '查看泰坦插图' };
+  }
+
   function gearKey(value) {
     const id = String(value || '').trim().replace(/^1x/i, '');
     if (/^[A-Z]J\d+$/i.test(id)) return id.toUpperCase();
@@ -142,5 +197,5 @@
     return { ...record, loadouts };
   }
 
-  return { TITAN_NAMES_ZH, gearKey, normalize, adjust, normalizeLoadout, loadoutTitans, titanIdFor, assignedLoadouts, saveLoadout };
+  return { TITAN_NAMES_ZH, TITAN_TYPES, titanType, titanTypeFields, titanLabel, titanArtwork, gearKey, normalize, adjust, normalizeLoadout, loadoutTitans, titanIdFor, assignedLoadouts, saveLoadout };
 });

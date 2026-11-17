@@ -2906,9 +2906,9 @@
 
   <script src="../assets/campaign-session.js?v=20260917"></script>
   <script src="../hero/hero-catalog.js"></script>
-  <script src="room-assets.js?v=20261117-hosted-titans" defer></script>
-  <script src="battle-room.js?v=20261117-hosted-titans" defer></script>
-  <script src="../technology/gear-inventory.js?v=20261117-titan-art"></script>
+  <script src="room-assets.js?v=20261117-titan-types" defer></script>
+  <script src="battle-room.js?v=20261117-titan-types" defer></script>
+  <script src="../technology/gear-inventory.js?v=20261117-titan-types"></script>
   <script src="../assets/campaign-notes.js?v=20261015-aibp-summary1"></script>
   <script src="../assets/cycle-symbols.js?v=20261115-module-logo"></script>
   <script src="cycle-theme.js?v=20261001"></script>
@@ -4779,7 +4779,7 @@
         const kit = inventory.normalizeLoadout(record.loadouts?.[hero.id]);
         const titanId = inventory.titanIdFor(record, kit.titanId);
         const titan = roster.find(item => String(item.id) === titanId);
-        const titanLabel = titan ? [titan.name, titan.type, titan.crippled ? "残废" : ""].filter(Boolean).join(" · ")
+        const titanLabel = titan ? inventory.titanLabel(titan)
           : kit.titanId ? "原泰坦已不在列表" : "未选择泰坦";
         return `<article><h3>${catalog.escape(catalog.heroDisplayName(hero))}</h3>
           <div>${catalog.escape(titanLabel)}</div>${catalog.mnemosHtml(hero)}</article>`;

@@ -121,9 +121,6 @@
   });
 
   const localGearPath = id => 'technology/images/gear_cards/' + id.toLowerCase() + '.jpg';
-  const titanPaths = Object.fromEntries(Object.entries(window.ATO_GEAR_INVENTORY.TITAN_NAMES_ZH || {})
-    .map(([id, type]) => [type, 'technology/images/titans/' + id + '.png']));
-
   function hasLocal(path) {
     return Boolean(path && (assets?.entries?.[path] || assets?.paths?.includes(path)));
   }
@@ -153,16 +150,7 @@
     else if (Object.hasOwn(hosted.equipment, id)) display(new URL(hosted.equipment[id], origin), name);
   }
 
-  function titanArt(titan) {
-    const scans = hosted.titanScans || {};
-    for (const name of [titan.name, titan.type]) {
-      if (name && Object.hasOwn(scans, name)) return { path: scans[name], label: '查看泰坦卡图', name };
-    }
-    if (Object.hasOwn(titanPaths, titan.type) && hosted.titans.includes(titanPaths[titan.type])) {
-      return { path: titanPaths[titan.type], label: '查看泰坦插图', name: titan.type };
-    }
-    return null;
-  }
+  const titanArt = titan => window.ATO_GEAR_INVENTORY.titanArtwork(titan, hosted);
 
   window.ATO_BATTLE_ASSETS = {
     showGear,

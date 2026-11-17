@@ -132,6 +132,8 @@
   function heroCard(hero, seat) {
     const editable = !state.closed && (actor.role === 'host' || (actor.role === 'player' && actor.seat === seat));
     const titan = hero.titan ? [hero.titan.name, hero.titan.type, hero.titan.crippled ? '残废' : ''].filter(Boolean).map(escape).join(' · ') : '未分配泰坦';
+    const titanPreview = hero.titan && window.ATO_BATTLE_ASSETS?.hasTitan(hero.titan.type)
+      ? ' <button type="button" data-titan-preview="' + escape(hero.titan.type) + '">查看泰坦卡图</button>' : '';
     const gear = hero.gear.map(item => '<li><span>' + escape(item.name) + ' <small>' + escape(item.id) + '</small>'
       + (window.ATO_BATTLE_ASSETS?.hasGear(item.id) ? ' <button type="button" data-gear-preview="' + escape(item.id) + '" data-gear-name="'
         + escape(item.name) + '">查看卡图</button>' : '') + '</span>'
@@ -143,7 +145,7 @@
       + '</select>' : conditionNames[hero.condition];
     const last = state.rolls.find(roll => roll.seat === seat);
     const summary = last ? '<p class="battle-room-result">最近一次掷骰 · ' + rollSummary(last) + '</p>' : '';
-    return '<article class="battle-room-hero"><header><div><h3>' + escape(hero.name) + '</h3><div>' + titan + '</div></div><small>'
+    return '<article class="battle-room-hero"><header><div><h3>' + escape(hero.name) + '</h3><div>' + titan + titanPreview + '</div></div><small>'
       + escape(hero.player || '待认领') + '</small></header><div class="battle-room-stats"><div>凶险 '
       + buttons('stat', 'danger', hero.stats.danger, seat, '凶险', 30, editable) + '</div><div>泰坦状态 ' + condition + '</div></div>'
       + '<h4>装备</h4>' + (gear ? '<ul>' + gear + '</ul>' : '<p>未分配装备</p>')
@@ -304,6 +306,8 @@
     const { roomCopy, action, key, seat, delta } = button.dataset;
     if (button.dataset.gearPreview) {
       await window.ATO_BATTLE_ASSETS?.showGear(button.dataset.gearPreview, button.dataset.gearName);
+    } else if (button.dataset.titanPreview) {
+      window.ATO_BATTLE_ASSETS?.showTitan(button.dataset.titanPreview);
     } else if (roomCopy) {
       const url = roomLink(roomCopy, credentials.keys[roomCopy]);
       try {

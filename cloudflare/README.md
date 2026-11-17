@@ -4,7 +4,7 @@ Pages 发布静态页面。Pages Functions 通过同域 Service Binding 把登�
 
 当前支持注册、登录、退出、读取战役、按分区保存、原子导入和战役日志。英雄、泰坦资料和配装沿用本地版数据格式。预览期账号使用至少 8 个字符的密码，和便携版账号各自注册。第二屏、记录表图片附件、历史备份与回滚、战役简报和本机一键更新仍需迁移。
 
-静态构建仅取 Git 已跟踪的运行时文件。个人存档、未跟踪的素材包以及 PHP 文件都排除在 Pages 产物之外。素材需要取得发布权限后再单独接入。
+默认静态构建读取 Git 已跟踪的运行时文件。卡图通过构建时指定的图片目录单独接入。个人存档、资料包及 PHP 源文件排除在 Pages 产物之外。
 
 ## AIBP 在线战斗室
 
@@ -12,7 +12,7 @@ Pages 发布静态页面。Pages Functions 通过同域 Service Binding 把登�
 
 玩家可更新自己英雄的凶险、泰坦状态和装备使用数、掷骰，并和队友一起更新克拉托斯池。房主可以推进轮次或结束战斗。房间由独立的 SQLite Durable Object 保存，使用 WebSocket 推送，各设备上的 AIBP 敌方牌堆仍由房主的本机 AIBP 操作，房间结果暂不回写战役。
 
-素材可以通过 AIBP 战斗室的「导入本机卡图」选择保留项目路径的「图片」文件夹（如 `aibp/ps/...`、`technology/images/gear_cards/...`）。网页在本机缓存 JPEG、PNG 和 WebP，不会向服务端上传。刷新后 AIBP 重新读取图片，已有装备可以在战斗室点开卡面。每个需要卡图的浏览器需单独导入。桌面素材库或安卓继续使用标准 `.atopack`。
+发布了卡图的站点可直接显示卡面。AIBP 战斗室也保留「导入本机卡图」，可选择保留项目路径的「图片」文件夹（如 `aibp/ps/...`、`technology/images/gear_cards/...`）。浏览器在本机缓存所选 JPEG、PNG 和 WebP。刷新后 AIBP 重新读取图片，已有装备可以在战斗室点开卡面。桌面素材库或安卓使用标准 `.atopack`。
 
 ## 本地运行
 
@@ -35,6 +35,15 @@ npm run deploy:worker
 npx wrangler pages project create ato-moon-assistant --production-branch main
 npm run deploy:pages
 ```
+
+发布或更新已经提供卡图的站点时，在构建命令上显式指定原目录，避免下次部署漏掉图片：
+
+```sh
+ATO_CARD_ART_DIR="/path/to/图片" npm run build:pages
+npm run deploy:pages
+```
+
+图片按项目相对路径发布。构建为 AIBP 和战斗室生成卡图索引，并检查单个文件和总文件数。故事书整页扫描留在本地图片目录。
 
 首次发布创建 Pages 项目，更新时跳过创建命令。先通过 `*.pages.dev` 地址验证页面和 `/api/health`、注册、登录及配装保存。确认准备切换域名后，在 Pages 添加 `moon.xuzizi.cn`，再在新网将 `moon` 的 CNAME 改到该 Pages 项目的默认地址。
 

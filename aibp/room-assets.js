@@ -11,8 +11,10 @@
   const box = document.getElementById('battleRoomImage');
   let assets = null;
   let working = false;
-
-  if (!window.isSecureContext || !('serviceWorker' in navigator) || !('caches' in window) || !('webkitdirectory' in picker)) return;
+  let hosted = { equipment: {}, titans: [] };
+  const imageElement = box.querySelector('img');
+  const imageError = box.querySelector('[data-art-error]');
+  const canImport = window.isSecureContext && 'serviceWorker' in navigator && 'caches' in window && 'webkitdirectory' in picker;
 
   function target(file) {
     const parts = file.webkitRelativePath.split('/');
@@ -32,7 +34,8 @@
   }
 
   function showCurrent() {
-    notice.textContent = assets ? '本机已导入 ' + assets.count + ' 张图片' : '选择分离出来的「图片」文件夹';
+    notice.textContent = assets ? '本机已导入 ' + assets.count + ' 张图片'
+      : Object.keys(hosted.equipment).length ? '网页已提供卡图，也可以选用自己的图片文件夹。' : '选择分离出来的「图片」文件夹';
     clear.hidden = !assets;
   }
 
@@ -117,36 +120,62 @@
     document.dispatchEvent(new Event('ato-battle-assets'));
   });
 
-  const gearPath = id => 'technology/images/gear_cards/' + id.toLowerCase() + '.jpg';
+  const localGearPath = id => 'technology/images/gear_cards/' + id.toLowerCase() + '.jpg';
+  const titanPaths = Object.fromEntries(Object.entries(window.ATO_GEAR_INVENTORY.TITAN_NAMES_ZH || {})
+    .map(([id, type]) => [type, 'technology/images/titans/' + id + '.png']));
+
+  function hasLocal(path) {
+    return Boolean(path && (assets?.entries?.[path] || assets?.paths?.includes(path)));
+  }
+
+  async function localBlob(path) {
+    if (!hasLocal(path)) return null;
+    const pack = await caches.open(assets.cacheName);
+    const entry = assets.entries?.[path];
+    const reply = await pack.match(entry ? new URL(entry.member, marker) : new URL(path, origin));
+    if (!reply) return null;
+    const source = await reply.blob();
+    return entry ? source.slice(entry.start, entry.end, entry.type) : source;
+  }
+
+  function display(src, name) {
+    if (imageElement.src.startsWith('blob:')) URL.revokeObjectURL(imageElement.src);
+    imageError.hidden = true;
+    imageElement.alt = name;
+    imageElement.src = src;
+    if (!box.open) box.showModal();
+  }
+
+  async function showGear(id, name) {
+    const path = localGearPath(id);
+    const image = await localBlob(path).catch(() => null);
+    if (image) display(URL.createObjectURL(image), name);
+    else if (Object.hasOwn(hosted.equipment, id)) display(new URL(hosted.equipment[id], origin), name);
+  }
+
   window.ATO_BATTLE_ASSETS = {
-    async showGear(id, name) {
-      const path = gearPath(id);
-      if (!this.hasGear(id)) return;
-      const pack = await caches.open(assets.cacheName);
-      const entry = assets.entries?.[path];
-      const reply = await pack.match(entry ? new URL(entry.member, marker) : new URL(path, origin));
-      if (!reply) return;
-      const source = await reply.blob();
-      const image = entry ? source.slice(entry.start, entry.end, entry.type) : source;
-      const imageElement = box.querySelector('img');
-      if (imageElement.src.startsWith('blob:')) URL.revokeObjectURL(imageElement.src);
-      imageElement.src = URL.createObjectURL(image);
-      imageElement.alt = name;
-      if (!box.open) box.showModal();
-    },
-    hasGear(id) {
-      const path = gearPath(id);
-      return Boolean(assets?.entries?.[path] || assets?.paths?.includes(path));
+    showGear,
+    hasGear: id => hasLocal(localGearPath(id)) || Object.hasOwn(hosted.equipment, id),
+    hasLocalAibp: path => hasLocal('aibp/' + path),
+    hasTitan: type => Object.hasOwn(titanPaths, type) && hosted.titans.includes(titanPaths[type]),
+    showTitan(type) {
+      if (this.hasTitan(type)) display(new URL(titanPaths[type], origin), type);
     },
   };
 
+  imageElement.addEventListener('error', () => { imageError.hidden = false; });
   box.addEventListener('close', () => {
-    const image = box.querySelector('img');
-    URL.revokeObjectURL(image.src);
-    image.removeAttribute('src');
+    if (imageElement.src.startsWith('blob:')) URL.revokeObjectURL(imageElement.src);
+    imageElement.removeAttribute('src');
   });
-  void restore().then(() => {
+  if (canImport) void restore().then(() => {
     controls.hidden = false;
+    document.dispatchEvent(new Event('ato-battle-assets'));
+  }).catch(() => {});
+  void fetch(new URL('room-card-art.json', location.href)).then(async response => {
+    if (!response.ok) return;
+    hosted = await response.json();
+    if (canImport) showCurrent();
     document.dispatchEvent(new Event('ato-battle-assets'));
   }).catch(() => {});
 })();

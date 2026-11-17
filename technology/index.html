@@ -1141,7 +1141,7 @@ button.gear-group-name:hover {
   <script src="structure-tech-rules.js?v=20261019-tech-cache1"></script>
   <script src="structure-tech-client.js?v=20261019-negotiation-rows2"></script>
 <script src="../hero/hero-catalog.js"></script>
-<script src="gear-inventory.js?v=20261117-hero-loadouts"></script>
+<script src="gear-inventory.js?v=20261117-titan-art"></script>
 <script>
 const TECH_DICTIONARY_URL = 'tech_card_dictionary.min.json';
 const fetch = window.ATO_CAMPAIGN_NOTES.createFetch(window.fetch.bind(window), {
@@ -1200,26 +1200,7 @@ const RESOURCE_NAMES_ZH = {
   OXIDIZED_AMBROSIA: '氧化神浆', UNDEAD_SILVER: '亡灵银',
 };
 
-const TITAN_NAMES_ZH = {
-  'tt_earthshaker': '撼地者',
-  'tt_mazerunner': '迷宫疾行者',
-  'tt_plogicbreaker': '破逻辑者',
-  'tt_warkeeper': '守战者',
-  'tt_firestarter': '燃火者',
-  'tt_pabysswatcher': '深渊凝望者',
-  'tt_cloudsoarer': '翔云者',
-  'tt_wishender': '终愿者',
-  'tt_plunarlander': '登月者',
-  'tt_shadowdancer': '影舞者',
-  'tt_fatebound': '命运束缚者',
-  'tt_chronoking': '时光之王',
-  'tt_helldiver': '潜渊者',
-  'tt_trespasser': '越界者',
-  'tt_executioner': '行刑者',
-  'tt_feareater': '无惧者',
-  'tt_lunarlander': '原型登月者',
-  'tt_messianic': '弥赛亚',
-};
+const { TITAN_NAMES_ZH } = window.ATO_GEAR_INVENTORY;
 
 let gearProductionData = null;
 let gearCardImages = {};

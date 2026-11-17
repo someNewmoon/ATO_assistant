@@ -5,6 +5,27 @@
 })(typeof window === 'object' ? window : this, function () {
   'use strict';
 
+  const TITAN_NAMES_ZH = {
+    'tt_earthshaker': '撼地者',
+    'tt_mazerunner': '迷宫疾行者',
+    'tt_plogicbreaker': '破逻辑者',
+    'tt_warkeeper': '守战者',
+    'tt_firestarter': '燃火者',
+    'tt_pabysswatcher': '深渊凝望者',
+    'tt_cloudsoarer': '翔云者',
+    'tt_wishender': '终愿者',
+    'tt_plunarlander': '登月者',
+    'tt_shadowdancer': '影舞者',
+    'tt_fatebound': '命运束缚者',
+    'tt_chronoking': '时光之王',
+    'tt_helldiver': '潜渊者',
+    'tt_trespasser': '越界者',
+    'tt_executioner': '行刑者',
+    'tt_feareater': '无惧者',
+    'tt_lunarlander': '原型登月者',
+    'tt_messianic': '弥赛亚',
+  };
+
   function gearKey(value) {
     const id = String(value || '').trim().replace(/^1x/i, '');
     if (/^[A-Z]J\d+$/i.test(id)) return id.toUpperCase();
@@ -121,5 +142,5 @@
     return { ...record, loadouts };
   }
 
-  return { gearKey, normalize, adjust, normalizeLoadout, loadoutTitans, titanIdFor, assignedLoadouts, saveLoadout };
+  return { TITAN_NAMES_ZH, gearKey, normalize, adjust, normalizeLoadout, loadoutTitans, titanIdFor, assignedLoadouts, saveLoadout };
 });

@@ -9611,7 +9611,7 @@
       battleMapControl?.render();
     });
     window.getAibpBoardSetup = () => currentApostle ? {
-      apostle: currentApostle, level: window.BattleTerrain.levelNumber(currentApostleLevel()),
+      apostle: currentApostle, level: currentApostleLevel() === 0 ? 0 : window.BattleTerrain.levelNumber(currentApostleLevel()),
       map: piles[currentApostle]?.battleMap,
     } : null;
     window.openAibpBoardImage = (...args) => openImageZoom(...args);

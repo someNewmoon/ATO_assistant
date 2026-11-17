@@ -1,7 +1,8 @@
 (function () {
   function create(mount, send) {
     let room, actor, control, map, stamp = "", overlayStamp = "";
-    const reference = document.getElementById("battleMapControl");
+    const reference = document.getElementById("battleMapControl")
+      || document.getElementById("battleRoomBoardTemplate")?.content.querySelector("#battleMapControl");
     const open = document.createElement("button");
     open.type = "button";
     open.className = "room-board-load";
@@ -36,7 +37,7 @@
       cards.querySelector("h4").hidden = true;
       control = window.BattleMapControl.create({
         root: panel, assetBase: "../ss/terrain", cardAssetBase: "../ss/terrain-cards",
-        openImageZoom: window.openAibpBoardImage,
+        openImageZoom: window.openAibpBoardImage || ((src, label) => window.ATO_BATTLE_ASSETS?.zoom(src, label)),
         getMap: () => map,
         getApostle: () => room.board.apostle,
         getLevel: () => room.board.level,

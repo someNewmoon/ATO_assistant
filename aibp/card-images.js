@@ -28,10 +28,11 @@
   }
 
   try {
+    if (root.ATO_HOST_IMAGE_INDEX) inventory = normalize(root.ATO_HOST_IMAGE_INDEX);
     const cached = JSON.parse(root.localStorage.getItem(cacheKey) || "null");
     // A stale inventory is still useful for the first paint; refresh it in the
     // background and let missing previews fall back to their originals.
-    if (cached) inventory = normalize(cached.payload);
+    if (cached && !inventory) inventory = normalize(cached.payload);
   } catch { /* Storage may be unavailable or contain an older format. */ }
 
   let releaseInventory;
@@ -169,7 +170,7 @@
           img.src = src;
         } else img._cardImageError?.call(img);
       };
-      if (display !== src) {
+      if (display !== src && !root.ATO_DEFER_FULL_CARD_IMAGES) {
         previewLoaded = () => {
           img.removeEventListener?.("load", previewLoaded);
           // Let the preview paint before starting any background transfers.

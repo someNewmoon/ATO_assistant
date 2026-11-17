@@ -3,7 +3,7 @@
   const box = document.getElementById('battleRoomImage');
   const image = box.querySelector('img');
   const error = box.querySelector('[data-art-error]');
-  let hosted = { equipment: {}, titans: [], titanScans: {}, mnemos: {}, thumbs: {} };
+  let hosted = { equipment: {}, titans: [], titanScans: {}, mnemos: {}, thumbs: {}, ...window.ATO_ROOM_ART };
 
   function display(path, name) {
     if (!path) return;
@@ -30,7 +30,7 @@
 
   image.addEventListener('error', () => { error.hidden = false; });
   box.addEventListener('close', () => image.removeAttribute('src'));
-  void fetch(new URL('room-card-art.json', location.href)).then(async response => {
+  if (!window.ATO_ROOM_ART) void fetch(new URL('room-card-art.json', location.href)).then(async response => {
     if (!response.ok) return;
     hosted = { ...hosted, ...await response.json() };
     document.dispatchEvent(new Event('ato-battle-assets'));

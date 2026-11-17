@@ -3,6 +3,7 @@ import { copyFile, lstat, mkdir, mkdtemp, readFile, rename, rm, writeFile } from
 import { basename, dirname, extname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { aibpImageIndex, collectHostedArt, roomCardArt } from './hosted-card-art.js';
+import { buildBattleRoom } from './build-battle-room.js';
 
 const directory = fileURLToPath(new URL('.', import.meta.url));
 const repo = join(directory, '..');
@@ -49,6 +50,7 @@ try {
       '',
     ].join('\n'));
   }
+  await buildBattleRoom(staging, repo);
   const gitVersion = execFileSync('git', ['describe', '--abbrev=0', '--match', 'v[0-9]*'], {
     cwd: repo, encoding: 'utf8',
   }).trim().replace(/^v/, '');

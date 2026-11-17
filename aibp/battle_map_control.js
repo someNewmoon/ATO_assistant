@@ -234,7 +234,9 @@
         window.BattleBoardPieces.render(startLayer, window.BattleTerrain.getBoardPieces(map, apostle, level), {
           apostle, size: window.BattleTerrain.getApostleProfile(apostle, level)?.size || 1,
           selected: losState.selectedTitan, mode: losState.mode, names: options.titanNames?.(), roster: options.titanRoster?.(),
-          onSelect: hasTactics(losState.mode) && options.allowTacticalControls !== false ? selectTitan : undefined,
+          portraits: options.heroPortraits?.(),
+          onSelectBoss: !placeBoss && editBoard() && tactics ? toggleBossMove : undefined,
+          onSelect: !placeBoss && hasTactics(losState.mode) && options.allowTacticalControls !== false ? selectTitan : undefined,
         });
         return;
       }
@@ -683,7 +685,7 @@
       for (const [name, visible] of [
         ["titan", moving || attacking], ["speed", moving], ["weapon", attacking],
         ["min", attacking && losState.weapon.kind === "ranged"], ["max", attacking && losState.weapon.kind !== "melee"],
-        ["facing", boss],
+        ["facing", editBoard() || boss],
       ]) control(`${name}-field`).hidden = !visible;
       const select = control("titan");
       select.replaceChildren(...pieces.titans.map((piece, index) => {
@@ -699,7 +701,8 @@
       control("max").value = losState.weapon.kind === "reach" ? losState.weapon.reach : losState.weapon.max;
       control("facing").value = String(pieces.apostle.facing);
       control("facing").disabled = !editBoard();
-      control("place-boss").hidden = !boss || !editBoard();
+      control("place-boss").hidden = !editBoard();
+      control("place-boss").textContent = placeBoss ? "取消移动骇物" : "移动骇物";
       control("place-boss").setAttribute("aria-pressed", String(placeBoss));
       const target = lastOverlay?.weaponTarget;
       control("tactics-info").textContent = moving ? "绿格显示可达格和所需步数。"
@@ -717,17 +720,22 @@
       renderLosAndNotify();
     }
 
+    function toggleBossMove() {
+      if (!editBoard()) return;
+      if (losState.mode !== "apostle-sight") setTacticalMode("apostle-sight");
+      placeBoss = !placeBoss;
+      const map = ensureMap();
+      renderStarts(map);
+      renderTactics(map);
+    }
+
     if (tactics) {
       for (const mode of ["", ...tacticModes]) {
         tactics.querySelector(`[data-board-mode="${mode}"]`).addEventListener("click", () => {
           setTacticalMode(losState.mode === mode && !options.tacticalOnly ? "" : mode);
         });
       }
-      tactics.querySelector("[data-board-place-boss]").addEventListener("click", () => {
-        if (!editBoard()) return;
-        placeBoss = !placeBoss;
-        renderTactics(ensureMap());
-      });
+      tactics.querySelector("[data-board-place-boss]").addEventListener("click", toggleBossMove);
       tactics.addEventListener("change", event => {
         const field = event.target;
         if (field.matches("[data-board-titan]")) return selectTitan(Number(field.value));

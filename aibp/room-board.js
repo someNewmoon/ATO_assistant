@@ -40,8 +40,13 @@
         getMap: () => map,
         getApostle: () => room.board.apostle,
         getLevel: () => room.board.level,
-        titanNames: () => room.heroes.map(hero => hero.titan?.name || hero.name),
+        titanNames: () => room.heroes.map(({ titan, name }) =>
+          window.ATO_GEAR_INVENTORY.dreamwalkerPanel(titan)?.name || titan?.name || name),
         titanRoster: () => room.heroes.map(hero => hero.titan),
+        heroPortraits: () => room.heroes.map(hero => {
+          const path = window.ATO_HERO_CATALOG.heroPortrait(hero);
+          return path && '../hero/assets/' + path;
+        }),
         canEditBoard: canEdit, canMoveTitan: canMove,
         allowTacticalControls: actor.role !== "viewer",
         tacticalOnly: actor.role !== "host",

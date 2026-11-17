@@ -3,7 +3,6 @@
     HEKATON: "hekaton", LABYRINTHAUROS: "labyrinthauros",
     ALPHA_TEMENOS: "temenos", HERMESIAN_PURSUER: "pursuer",
   };
-  const namedTitans = new Map([["希罗多德", "t1"], ["尤利西娅", "t2"], ["梭伦", "t3"], ["费洛克泰拉", "t4"]]);
   const svgNS = "http://www.w3.org/2000/svg";
   const accents = ["#79d1ef", "#f1c57d", "#b8df97", "#d8a8f9"];
   let nextClip = 0;
@@ -31,23 +30,24 @@
   }
 
   function render(layer, pieces, {
-    apostle, size = 1, selected = 0, mode, names = [], roster, onSelect,
+    apostle, size = 1, selected = 0, mode, names = [], roster, portraits = [], onSelect, onSelectBoss,
   } = {}) {
     layer.replaceChildren();
     layer.hidden = false;
     const document = layer.ownerDocument;
     const sprites = window.BattleBoardSprites || {};
     function token(piece, span, name, index, sprite, fallback) {
-      const interactive = Boolean(onSelect) && index !== null;
+      const boss = index === null;
+      const select = boss ? onSelectBoss : onSelect && (() => onSelect(index));
+      const interactive = Boolean(select);
       const marker = document.createElement(interactive ? "button" : "div");
       if (interactive) {
         marker.type = "button";
         marker.addEventListener("click", event => {
           event.stopPropagation();
-          onSelect(index);
+          select();
         });
       }
-      const boss = index === null;
       marker.className = "battle-piece " + (boss ? "battle-piece-apostle" : "battle-piece-titan");
       marker.classList.toggle("is-selected", boss ? mode === "apostle-sight" : selected === index && mode !== "apostle-sight");
       if (!boss) marker.style.setProperty("--piece-accent", accents[index]);
@@ -69,6 +69,13 @@
       label.className = "battle-piece-label";
       label.textContent = boss ? "骇" : String(index + 1);
       marker.appendChild(label);
+      if (!boss && portraits[index]) {
+        const avatar = document.createElement("img");
+        avatar.className = "battle-piece-hero";
+        avatar.alt = "";
+        avatar.src = portraits[index];
+        marker.appendChild(avatar);
+      }
       if (boss) {
         const facing = document.createElement("span");
         facing.className = "battle-piece-facing";
@@ -81,7 +88,8 @@
     token(pieces.apostle, size, "骇物", null, sprites[spriteKeys[apostle]]);
     pieces.titans.forEach((piece, index) => {
       const titan = roster?.[index];
-      const sprite = sprites[roster ? namedTitans.get(titan?.name) : "t" + (index + 1)];
+      const panel = window.ATO_GEAR_INVENTORY?.dreamwalkerPanel(titan);
+      const sprite = sprites[roster ? panel?.sprite : "t" + (index + 1)];
       const portrait = titan && !sprite ? window.ATO_BATTLE_ASSETS?.titanArt(titan) : null;
       token(piece, 1, names[index] || "泰坦 " + (index + 1), index, sprite,
         portrait?.label === "查看泰坦插图" ? portrait.src : null);

@@ -6,33 +6,33 @@
   'use strict';
 
     const ARGONAUTS = [
-      { id: "odys", en: "Odys Zero", zh: "奥德修斯·零" },
-      { id: "circe", en: "Circegard", zh: "喀耳刻卫" },
-      { id: "phenelope", en: "Phenelope", zh: "珀涅罗珀" },
-      { id: "telebac", en: "Telebacchus", zh: "忒勒巴科斯" },
-      { id: "herakleides", en: "Herakleides", zh: "赫拉克莱德斯" },
-      { id: "olympia", en: "Olympia", zh: "奥林匹亚" },
-      { id: "leocules", en: "Leocules", zh: "莱奥库勒斯" },
-      { id: "raz", en: "Raz", zh: "拉兹" },
-      { id: "fisher", en: "Fisher", zh: "费舍尔" },
-      { id: "hypatia", en: "Hypatia", zh: "希帕提亚" },
-      { id: "anakreon", en: "Anakreon", zh: "阿纳克里翁" },
-      { id: "anathea", en: "Anathea", zh: "安纳忒亚" },
-      { id: "orphan", en: "Orphan", zh: "DMT的孤儿" },
-      { id: "aster", en: "Aster", zh: "阿斯特" },
-      { id: "dastan", en: "Dastan", zh: "达斯坦" },
-      { id: "aktisaeos", en: "Aktisaeos", zh: "阿克提赛俄斯" },
-      { id: "oleander", en: "Oleander", zh: "欧利安德" },
-      { id: "omorfos", en: "Omorfos", zh: "欧莫弗斯" },
+      { id: "odys", portrait: 1, en: "Odys Zero", zh: "奥德修斯·零" },
+      { id: "circe", portrait: 2, en: "Circegard", zh: "喀耳刻卫" },
+      { id: "phenelope", portrait: 3, en: "Phenelope", zh: "珀涅罗珀" },
+      { id: "telebac", portrait: 4, en: "Telebacchus", zh: "忒勒巴科斯" },
+      { id: "herakleides", portrait: 5, en: "Herakleides", zh: "赫拉克莱德斯" },
+      { id: "olympia", portrait: 6, en: "Olympia", zh: "奥林匹亚" },
+      { id: "leocules", portrait: 7, en: "Leocules", zh: "莱奥库勒斯" },
+      { id: "raz", portrait: 8, en: "Raz", zh: "拉兹" },
+      { id: "fisher", portrait: 9, en: "Fisher", zh: "费舍尔" },
+      { id: "hypatia", portrait: 17, en: "Hypatia", zh: "希帕提亚" },
+      { id: "anakreon", portrait: 18, en: "Anakreon", zh: "阿纳克里翁" },
+      { id: "anathea", portrait: 19, en: "Anathea", zh: "安纳忒亚" },
+      { id: "orphan", portrait: 20, en: "Orphan", zh: "DMT的孤儿" },
+      { id: "aster", portrait: 21, en: "Aster", zh: "阿斯特" },
+      { id: "dastan", portrait: 22, en: "Dastan", zh: "达斯坦" },
+      { id: "aktisaeos", portrait: 23, en: "Aktisaeos", zh: "阿克提赛俄斯" },
+      { id: "oleander", portrait: 24, en: "Oleander", zh: "欧利安德" },
+      { id: "omorfos", portrait: 25, en: "Omorfos", zh: "欧莫弗斯" },
       // 以下 7 项对应素材 hero/assets/argonaut_10..16_blank.png：原版素材里没有英雄名的占位头像槽位。
       // 仅在英雄记录表中提供选择，名字固定标注为「未命名」，选中后双击英雄标题即可改成实际名称。
-      { id: "blank10", en: "Unnamed Slot 10", zh: "未命名 10", unnamed: true },
-      { id: "blank11", en: "Unnamed Slot 11", zh: "未命名 11", unnamed: true },
-      { id: "blank12", en: "Unnamed Slot 12", zh: "未命名 12", unnamed: true },
-      { id: "blank13", en: "Unnamed Slot 13", zh: "未命名 13", unnamed: true },
-      { id: "blank14", en: "Unnamed Slot 14", zh: "未命名 14", unnamed: true },
-      { id: "blank15", en: "Unnamed Slot 15", zh: "未命名 15", unnamed: true },
-      { id: "blank16", en: "Unnamed Slot 16", zh: "未命名 16", unnamed: true },
+      { id: "blank10", portrait: 10, en: "Unnamed Slot 10", zh: "未命名 10", unnamed: true },
+      { id: "blank11", portrait: 11, en: "Unnamed Slot 11", zh: "未命名 11", unnamed: true },
+      { id: "blank12", portrait: 12, en: "Unnamed Slot 12", zh: "未命名 12", unnamed: true },
+      { id: "blank13", portrait: 13, en: "Unnamed Slot 13", zh: "未命名 13", unnamed: true },
+      { id: "blank14", portrait: 14, en: "Unnamed Slot 14", zh: "未命名 14", unnamed: true },
+      { id: "blank15", portrait: 15, en: "Unnamed Slot 15", zh: "未命名 15", unnamed: true },
+      { id: "blank16", portrait: 16, en: "Unnamed Slot 16", zh: "未命名 16", unnamed: true },
     ];
 
     const MNEMOS = {
@@ -164,6 +164,14 @@
     return hero.customName || ARGONAUTS.find(argonaut => argonaut.id === hero.argonaut)?.zh || hero.playerName || '新英雄';
   }
 
+  function heroPortrait(hero) {
+    const argonaut = ARGONAUTS.find(entry => hero?.argonaut
+      ? entry.id === hero.argonaut : entry.zh === hero?.name);
+    if (!argonaut) return '';
+    const number = String(argonaut.portrait).padStart(2, '0');
+    return 'argonaut_' + number + '_' + (argonaut.unnamed ? 'blank' : argonaut.id) + '.png';
+  }
+
   function activeHeroes(campaign, profileId = campaign?.sections?.dashboard?.activeProfileId || 'default') {
     const section = campaign?.sections?.heroes;
     const records = section?.users || section?.accounts;
@@ -197,5 +205,5 @@
     }).join('') + '</ul>';
   }
 
-  return { ARGONAUTS, MNEMOS, FATED_MNEMOS, heroDisplayName, activeHeroes, mnemosCards, mnemosHtml, escape };
+  return { ARGONAUTS, MNEMOS, FATED_MNEMOS, heroDisplayName, heroPortrait, activeHeroes, mnemosCards, mnemosHtml, escape };
 });

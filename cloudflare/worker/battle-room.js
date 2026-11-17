@@ -1,6 +1,7 @@
 import { DurableObject } from 'cloudflare:workers';
 import heroCatalog from '../../hero/hero-catalog.js';
 import inventory from '../../technology/gear-inventory.js';
+import cardState from '../../aibp/room-card-state.js';
 import gearProduction from '../../technology/ato_gear_production.json';
 import { ApiError, errorResponse, object, response } from './campaign.js';
 import { applyRoomBoard, setupRoomBoard } from './board.js';
@@ -71,13 +72,16 @@ export async function createBattleRoom(env, campaign, payload) {
   const heroes = selected.map(id => {
     const hero = available.find(entry => entry.id === id);
     const kit = inventory.normalizeLoadout(Object.hasOwn(record.loadouts || {}, id) ? record.loadouts[id] : null);
-    const titan = titans.find(entry => String(entry.id) === inventory.titanIdFor(record, kit.titanId));
+    const titan = inventory.loadoutTitan(titans.find(entry => String(entry.id) === inventory.titanIdFor(record, kit.titanId)), kit.titanPanelId);
     const mnemos = heroCatalog.mnemosCards(hero).map(card => ({
       id: card.card, name: card.zh, progress: card.progress, limit: card.limit, fated: Boolean(card.fated),
     }));
     return {
-      id, name: clean(heroCatalog.heroDisplayName(hero)), titan: titan ? {
-        name: clean(titan.name), ...inventory.titanTypeFields(titan), crippled: Boolean(titan.crippled),
+      id, name: clean(heroCatalog.heroDisplayName(hero)),
+      argonaut: heroCatalog.ARGONAUTS.find(argonaut => argonaut.id === hero.argonaut)?.id,
+      titan: titan ? {
+        name: clean(titan.name), ...inventory.titanTypeFields(titan),
+        panelId: titan.panelId, crippled: Boolean(titan.crippled),
       } : null,
       gear: Object.entries(kit.gear).map(([id, count]) => ({ id, name: equipmentName(id), count, used: 0 })),
       mnemos, stats: { danger: 0, rage: 0, fate: 0 }, condition: 'standing', player: '',
@@ -283,7 +287,27 @@ export class BattleRoom extends DurableObject {
       case 'gear': {
         const item = hero.gear.find(entry => entry.id === body.key);
         if (!item) reject('该英雄没有这件装备。');
-        item.used = counter(item.used, body.delta, item.count);
+        counter(item.used, body.delta, item.count);
+        const slot = cardState.findGearSlot(item, body.delta === 1 ? 'ready' : 'exhausted');
+        if (slot < 0) reject('没有可更改状态的装备。', 409);
+        cardState.setGearState(item, slot, body.delta === 1 ? 'exhausted' : 'ready');
+        break;
+      }
+      case 'gear-card': {
+        const item = hero.gear.find(entry => entry.id === body.key);
+        const { slot, value } = body;
+        if (!item || !Number.isSafeInteger(slot) || slot < 0 || slot >= item.count || !cardState.states.includes(value)) {
+          reject('装备卡操作无效。');
+        }
+        if (cardState.gearState(item, slot) === 'discarded' && value !== 'discarded') reject('该卡牌已弃除。', 409);
+        cardState.setGearState(item, slot, value);
+        break;
+      }
+      case 'mnemos-card': {
+        const card = hero.mnemos.find(entry => entry.id === body.key);
+        if (!card || !cardState.states.includes(body.value)) reject('旧忆卡操作无效。');
+        if (card.state === 'discarded' && body.value !== 'discarded') reject('该卡牌已弃除。', 409);
+        card.state = body.value;
         break;
       }
       case 'roll':

@@ -14,7 +14,11 @@
   const campaignUrl = new URL('../api/campaign-state.php', location.href);
   const savedRoom = 'ato-aibp-last-room';
   const tokenKey = id => 'ato-aibp-room-' + id;
-  const escape = window.ATO_HERO_CATALOG.escape;
+  const { escape, heroPortrait, MNEMOS, FATED_MNEMOS } = window.ATO_HERO_CATALOG;
+  const { gearState } = window.ATO_ROOM_CARD_STATE;
+  const memoryCatalog = new Map([...Object.values(MNEMOS).flat(), ...Object.values(FATED_MNEMOS).flat()]
+    .map(card => [card.card, card]));
+  const statNames = { danger: '凶险', fate: '命运', rage: '怒气' };
   const poolNames = { opening: '伺机', break: '破势', diversion: '分神', rouse: '激励', black: '破坏', fire: '火焰', hope: '希望' };
   const conditionNames = { standing: '站立', down: '倒地', rising: '起身', dead: '死亡' };
   const diceNames = { d10: '攻击骰', crit: '暴击骰', armor: '护甲骰', red: '红色威力骰', black: '黑色威力骰', white: '白色威力骰' };
@@ -27,6 +31,7 @@
   let connectionTimer;
   let reconnectDelay = 1000;
   let diceDraft = {};
+  let armedCard = '';
   let pending = false;
   let writing = false;
   let failedAction = null;
@@ -133,11 +138,44 @@
       + '<strong>' + count + '</strong>' + (enabled ? button(1, '+', count >= limit) : '') + '</span>';
   }
 
-  function cardImage(src, name, className = '') {
+  function cardImage(src, name, className = '', thumb = '') {
     if (!src) return '';
     return '<button type="button" class="battle-room-card-art ' + className
-      + '" data-room-art aria-label="放大' + escape(name) + '">'
-      + '<img src="' + escape(src) + '" alt="' + escape(name) + '" loading="lazy" decoding="async"></button>';
+      + '" data-room-art="' + escape(src) + '" aria-label="放大' + escape(name) + '">'
+      + '<img src="' + escape(thumb || src) + '" alt="' + escape(name) + '" loading="lazy" decoding="async"></button>';
+  }
+
+  function marker(src, label) {
+    return '<span class="battle-room-marker"><img src="' + src + '" alt="" decoding="async">' + label + '</span>';
+  }
+
+  function referenceCard(name, id, detail, memory) {
+    const icons = [memory?.skill1, memory?.skill2].filter(Boolean)
+      .map(skill => '<img alt="" src="../hero/assets/skill_' + escape(skill) + '.png">').join('');
+    const thresholds = memory?.thresholds?.length ? '<span>' + memory.thresholds.join(' · ') + '</span>' : '';
+    const passages = memory?.nodes?.length ? '<span>' + memory.nodes.map(escape).join(' · ') + '</span>' : '';
+    return '<div class="battle-room-reference"><small>' + escape(id) + '</small><strong>' + escape(name)
+      + '</strong><span class="battle-room-reference-icons">' + icons + '</span><span>' + escape(detail)
+      + '</span>' + thresholds + passages + '</div>';
+  }
+
+  function playableCard({ item, type, seat, slot = 0, value, detail, src, memory, editable }) {
+    const id = [type, seat, item.id, slot].join(':');
+    const armed = armedCard === id;
+    const discarded = value === 'discarded';
+    const text = discarded ? '已弃除' : armed ? '横置并弃除' : value === 'exhausted' ? '恢复' : '横置';
+    const next = armed ? 'discarded' : value === 'exhausted' ? 'ready' : 'exhausted';
+    const attrs = ' data-key="' + escape(item.id) + '" data-seat="' + seat + '" data-slot="' + slot + '"';
+    return '<li class="battle-room-playable" data-card-state="' + value + '" data-card-id="' + escape(id)
+      + '"><div class="battle-room-card-window">' + (src ? cardImage(src, item.name, '', window.ATO_BATTLE_ASSETS?.thumbSrc(item.id))
+        : referenceCard(item.name, item.id, memory ? '旧忆资料卡' : '装备资料卡', memory)) + '</div>'
+      + '<span class="battle-room-card-name">' + escape(item.name) + '</span>'
+      + (detail ? '<small>' + escape(detail) + '</small>' : '')
+      + (editable && !discarded ? '<div class="battle-room-card-controls"><button type="button" data-action="' + type
+        + '"' + attrs + ' data-value="' + next + '">' + text + '</button><button type="button" data-arm-card="' + escape(id)
+        + '" aria-pressed="' + armed + '" aria-label="' + (armed ? '取消弃除' : '准备弃除') + escape(item.name) + '" title="'
+        + (armed ? '取消弃除' : '准备弃除') + '">' + (armed ? '取消' : '弃除') + '</button></div>'
+        : value !== 'ready' ? '<small class="battle-room-card-status">' + (discarded ? '已弃除' : '已横置') + '</small>' : '') + '</li>';
   }
 
   function heroCard(hero, seat) {
@@ -145,21 +183,29 @@
     const art = window.ATO_BATTLE_ASSETS;
     const titan = hero.titan ? escape(window.ATO_GEAR_INVENTORY.titanLabel(hero.titan)) : '未分配泰坦';
     const titanArt = hero.titan && art?.titanArt(hero.titan);
-    const titanImage = titanArt ? cardImage(titanArt.src, titanArt.name, 'battle-room-titan-art') : '';
-    const gear = hero.gear.map(item => '<li>' + cardImage(art?.gearSrc(item.id), item.name)
-      + '<span>' + escape(item.name) + ' <small>' + escape(item.id) + '</small></span>'
-      + '<span>已用 ' + buttons('gear', item.id, item.used, seat, item.name + '使用数', item.count, editable) + ' / ' + item.count + '</span></li>').join('');
-    const mnemos = hero.mnemos.map(card => '<li>' + cardImage(art?.mnemosSrc(card.id), card.name)
-      + '<span>' + escape(card.name) + '</span><small>' + escape(card.id) + ' · '
-      + (card.fated ? '命业旧忆' : escape(card.progress) + '/' + escape(card.limit)) + '</small></li>').join('');
+    const titanImage = titanArt ? cardImage(titanArt.src, titanArt.name, 'battle-room-titan-art', art.thumbSrc(titanArt.name)) : '';
+    const portrait = heroPortrait(hero);
+    const avatar = portrait ? '<img class="battle-room-avatar" src="../hero/assets/' + portrait + '" alt="">' : '';
+    const gear = hero.gear.map(item => Array.from({ length: Math.min(item.count, 48) }, (_, slot) => playableCard({
+      item, type: 'gear-card', seat, slot, value: gearState(item, slot),
+      src: art?.gearSrc(item.id), editable, detail: item.count > 1 ? String(slot + 1) + '/' + item.count : '',
+    })).join('') + (item.count > 48 ? '<li>' + escape(item.name) + ' 另有 ' + (item.count - 48) + ' 件</li>' : '')).join('');
+    const mnemos = hero.mnemos.map(item => playableCard({
+      item, type: 'mnemos-card', seat, value: item.state || 'ready', src: art?.mnemosSrc(item.id),
+      memory: memoryCatalog.get(item.id), editable, detail: item.fated ? '命业旧忆' : item.progress + '/' + item.limit,
+    })).join('');
+    const stats = Object.entries(statNames).map(([key, label]) => '<div>'
+      + marker('../hero/assets/tri_' + key + '.png', label)
+      + buttons('stat', key, hero.stats[key], seat, label, 30, editable) + '</div>').join('');
     const condition = editable ? '<select data-condition="' + seat + '" aria-label="' + escape(hero.name) + '的泰坦状态">'
       + Object.entries(conditionNames).map(([key, label]) => '<option value="' + key + '"' + (key === hero.condition ? ' selected' : '') + '>' + label + '</option>').join('')
-      + '</select>' : conditionNames[hero.condition];
+      + '</select>' : '<small>' + conditionNames[hero.condition] + '</small>';
     const last = state.rolls.find(roll => roll.seat === seat);
     const summary = last ? '<p class="battle-room-result">最近一次掷骰 · ' + rollSummary(last) + '</p>' : '';
-    return '<article class="battle-room-hero" data-hero-seat="' + seat + '"><header><div><h3>' + escape(hero.name) + '</h3><div>' + titan + '</div></div><small>'
-      + escape(hero.player || '待认领') + '</small></header><div class="battle-room-stats"><div>凶险 '
-      + buttons('stat', 'danger', hero.stats.danger, seat, '凶险', 30, editable) + '</div><div>泰坦状态 ' + condition + '</div></div>' + titanImage
+    return '<article class="battle-room-hero" data-hero-seat="' + seat + '"><header><div class="battle-room-identity">'
+      + avatar + '<div><h3>' + escape(hero.name) + '</h3><small>' + escape(hero.player || '待认领') + '</small></div></div>'
+      + titanImage + '<div class="battle-room-titan-status"><span>' + titan + '</span>' + condition + '</div></header>'
+      + '<div class="battle-room-stats" role="group" aria-label="三曲盘">' + stats + '</div>'
       + '<h4>装备</h4>' + (gear ? '<ul class="battle-room-card-list">' + gear + '</ul>' : '<p>未分配装备</p>')
       + '<h4>旧忆</h4>' + (mnemos ? '<ul class="battle-room-card-list">' + mnemos + '</ul>' : '<p>暂无旧忆卡牌</p>')
       + summary + '</article>';
@@ -192,7 +238,7 @@
       + '<a href="' + escape(roomLink('view', credentials.keys.viewer)) + '" target="_blank" rel="noopener">打开只读投屏</a>'
       + (state.closed ? '<a href="./">返回 AIBP 开新战斗</a>' : '') + '</div>' : '';
     const controls = host && !state.closed ? '<button type="button" data-action="round">下一轮</button><button type="button" data-action="end">结束战斗</button>' : '';
-    const pool = Object.entries(poolNames).map(([key, label]) => '<div>' + label
+    const pool = Object.entries(poolNames).map(([key, label]) => '<div>' + marker('images/battle-markers/' + key + '.webp', label)
       + buttons('pool', key, state.pool[key], undefined, label, 99, edit) + '</div>').join('');
     const heroes = state.heroes.map(heroCard);
     const own = role === 'player' ? '<h3 class="battle-room-heading">我的英雄</h3>' + heroes[seat] : '';
@@ -318,10 +364,10 @@
   root.addEventListener('click', async event => {
     const button = event.target.closest('button');
     if (!button || (!summary.contains(button) && !content.contains(button))) return;
-    const { roomCopy, action, key, seat, delta } = button.dataset;
+    const { roomCopy, action, key, seat, delta, armCard, slot, value } = button.dataset;
     if (button.hasAttribute('data-room-art')) {
       const image = button.querySelector('img');
-      window.ATO_BATTLE_ASSETS?.zoom(image.src, image.alt);
+      window.ATO_BATTLE_ASSETS?.zoom(button.dataset.roomArt, image.alt);
     } else if (roomCopy) {
       const url = roomLink(roomCopy, credentials.keys[roomCopy]);
       try {
@@ -335,6 +381,13 @@
       failedAction = null;
       button.remove();
       void writeActions();
+    } else if (armCard) {
+      armedCard = armedCard === armCard ? '' : armCard;
+      render();
+    } else if (action === 'gear-card' || action === 'mnemos-card') {
+      if (value === 'discarded') armedCard = '';
+      void send({ id: crypto.randomUUID(), type: action, key, seat: Number(seat), slot: Number(slot), value });
+      render();
     } else if (action) {
       if (action === 'end' && !window.confirm('确认结束本场战斗？结束后，房间将转为只读。')) return;
       void send({ id: crypto.randomUUID(), type: action, key, seat: Number(seat), delta: Number(delta) });

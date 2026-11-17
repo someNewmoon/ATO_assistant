@@ -37,7 +37,7 @@
   pointer-events: none;
 }
 .battle-piece-titan { border-radius: 18%; }
-.battle-piece-titan:is(button) { pointer-events: auto; cursor: pointer; min-height: 0; }
+button.battle-piece { pointer-events: auto; cursor: pointer; min-height: 0; }
 .battle-piece.is-selected { box-shadow: 0 0 0 2px #fff2ca, 0 0 9px #dda95a; }
 .battle-piece svg { width: 100%; height: 100%; position: absolute; inset: 0; pointer-events: none; }
 .battle-piece-label {
@@ -101,6 +101,18 @@
 .room-tactical-read-only .battle-map-workspace { grid-template-columns: minmax(0, 1fr); }
 .room-board-terrain > summary { cursor: pointer; padding: 8px 0; }
 .room-board-terrain .battle-map-cards { margin: 0; }
-.battle-room .battle-map-board button.battle-piece-titan { min-height: 0; padding: 0; }
+.battle-room .battle-map-board :is(button.battle-piece, button.battle-map-terrain) {
+  min-height: 0;
+  padding: 0;
+}
+.battle-piece img.battle-piece-hero {
+  inset: 2% auto auto 2%;
+  width: 47%;
+  height: 47%;
+  border-radius: 50%;
+  border: 1px solid var(--piece-accent);
+  box-shadow: 0 0 2px #000;
+  z-index: 1;
+}
 
 [data-board-tactics] [data-board-mode][hidden] { display: none; }

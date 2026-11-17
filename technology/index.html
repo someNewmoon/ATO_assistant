@@ -1057,6 +1057,11 @@ button.gear-group-name:hover {
   .card-previews.side-by-side { grid-template-columns: 1fr; }
   .gear-items { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
 }
+  .arsenal-loadout-dialog [data-titan-panel-field][hidden],
+  .arsenal-loadout-dialog [data-loadout-titan-art][hidden] { display: none; }
+  .arsenal-loadout-dialog [data-loadout-titan-art] img {
+    display: block; width: min(100%, 17rem); max-height: 8rem; object-fit: contain;
+  }
 </style>
 <link rel="stylesheet" href="../api/cycle-theme.css">
 <link rel="stylesheet" href="../assets/theme.css?v=20261001">
@@ -1138,10 +1143,10 @@ button.gear-group-name:hover {
   <script src="negotiation-rules.js?v=20261019-negotiation-split1"></script>
   <script src="voyage-action-rules.js?v=20261110-chronosail"></script>
   <script src="exploration-tech-rules.js?v=20261017-automation-audit4"></script>
-  <script src="structure-tech-rules.js?v=20261019-tech-cache1"></script>
+  <script src="structure-tech-rules.js?v=20261117-battle-polish"></script>
   <script src="structure-tech-client.js?v=20261019-negotiation-rows2"></script>
-<script src="../hero/hero-catalog.js"></script>
-<script src="gear-inventory.js?v=20261117-titan-types"></script>
+<script src="../hero/hero-catalog.js?v=20261117-battle-polish"></script>
+<script src="gear-inventory.js?v=20261117-battle-polish"></script>
 <script>
 const TECH_DICTIONARY_URL = 'tech_card_dictionary.min.json';
 const fetch = window.ATO_CAMPAIGN_NOTES.createFetch(window.fetch.bind(window), {
@@ -2176,7 +2181,7 @@ function arsenalLoadoutsHtml(disabled) {
   const cards = gearRecordHeroes.map(hero => {
     const kit = inventory.normalizeLoadout(gearRecordState.loadouts?.[hero.id]);
     const titanId = inventory.titanIdFor(gearRecordState, kit.titanId);
-    const titan = titans.find(entry => String(entry.id) === titanId);
+    const titan = inventory.loadoutTitan(titans.find(entry => String(entry.id) === titanId), kit.titanPanelId);
     const gear = Object.entries(kit.gear).map(([id, quantity]) => `${getGearName(id)} × ${quantity}`);
     const name = heroes.heroDisplayName(hero);
     const titanArt = window.ATO_GEAR_INVENTORY.titanArtwork(titan);
@@ -2222,7 +2227,10 @@ function editArsenalLoadout(heroId, catalog) {
       <fieldset>
         ${legacy?.length ? `<label>沿用旧配装<select name="legacy" aria-label="沿用旧配装"><option value="">新配装</option>${legacy.map(([id, loadout]) => `<option value="${id}">${esc(loadout.player || `席位 ${id}`)}</option>`).join('')}</select></label>` : ''}
         <label>泰坦<select name="titan" aria-label="泰坦"></select></label>
-        <a data-loadout-titan-art target="_blank" rel="noopener" hidden></a>
+        <label data-titan-panel-field hidden>梦行者面板
+          <select name="titanPanel" aria-label="梦行者面板"></select>
+        </label>
+        <a data-loadout-titan-art target="_blank" rel="noopener" hidden><img alt=""></a>
         ${heroes.mnemosHtml(hero)}
         <ul class="arsenal-loadout-gear" aria-label="已分配装备"></ul>
         <label>搜索库存<input name="query" type="search" placeholder="装备名称、别名或编号"></label>
@@ -2242,6 +2250,7 @@ function editArsenalLoadout(heroId, catalog) {
   const list = dialog.querySelector('ul');
   const message = dialog.querySelector('[role="status"]');
   const titan = form.elements.namedItem('titan');
+  const panel = form.elements.namedItem('titanPanel');
   const query = form.elements.namedItem('query');
   const gear = form.elements.namedItem('gear');
   const add = dialog.querySelector('[data-add-loadout-gear]');
@@ -2261,12 +2270,21 @@ function editArsenalLoadout(heroId, catalog) {
     }
     titan.innerHTML = '<option value="">未选择泰坦</option>' + options.join('');
     titan.value = draft.titanId;
+    const entry = roster.find(item => String(item.id) === draft.titanId);
+    const isDreamwalker = inventory.titanType(entry)?.id === 'dreamwalker';
+    panel.closest('label').hidden = !isDreamwalker;
+    panel.innerHTML = '<option value="">通用面板</option>' + inventory.DREAMWALKER_PANELS
+      .map(({ id, name }) => `<option value="${id}">${esc(name)}</option>`).join('');
+    panel.value = isDreamwalker ? (inventory.dreamwalkerPanel(entry, draft.titanPanelId)?.id || '') : '';
     const link = dialog.querySelector('[data-loadout-titan-art]');
-    const art = inventory.titanArtwork(roster.find(entry => String(entry.id) === draft.titanId));
+    const art = inventory.titanArtwork(inventory.loadoutTitan(entry, draft.titanPanelId));
     link.hidden = !art;
     if (art) {
       link.href = '../' + art.path;
-      link.textContent = art.label;
+      link.setAttribute('aria-label', art.label + ' · ' + art.name);
+      const image = link.querySelector('img');
+      image.src = link.href;
+      image.alt = art.name + '面板';
     }
   }
 
@@ -2297,6 +2315,11 @@ function editArsenalLoadout(heroId, catalog) {
   query.addEventListener('input', renderGearChoices);
   titan.addEventListener('change', () => {
     draft.titanId = titan.value;
+    draft.titanPanelId = '';
+    renderTitans();
+  });
+  panel.addEventListener('change', () => {
+    draft.titanPanelId = panel.value;
     renderTitans();
   });
   form.elements.namedItem('legacy')?.addEventListener('change', event => {
@@ -2304,6 +2327,7 @@ function editArsenalLoadout(heroId, catalog) {
     migration = slot ? { slot, base: inventory.normalizeLoadout(record.loadouts[slot]) } : undefined;
     const source = inventory.normalizeLoadout(migration?.base || base);
     draft.titanId = inventory.titanIdFor(record, source.titanId);
+    draft.titanPanelId = source.titanPanelId;
     draft.gear = source.gear;
     renderTitans();
     renderAssignedGear();
@@ -2333,6 +2357,7 @@ function editArsenalLoadout(heroId, catalog) {
       return;
     }
     draft.titanId = titan.value;
+    draft.titanPanelId = panel.value;
     fields.disabled = true;
     message.textContent = '正在保存配装…';
     try {

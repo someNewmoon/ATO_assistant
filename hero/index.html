@@ -1036,7 +1036,7 @@
 <!-- PLACEHOLDER_SCRIPT -->
   <script src="../assets/cycle-symbols.js?v=20261115-module-logo"></script>
   <script src="../assets/campaign-notes.js?v=20261015"></script>
-  <script src="hero-catalog.js"></script>
+  <script src="hero-catalog.js?v=20261117-battle-polish"></script>
   <script>
     const fetch = window.ATO_CAMPAIGN_NOTES.createFetch(window.fetch.bind(window), {
       source: "英雄",
@@ -1054,34 +1054,6 @@
       + '<circle cx="5.5" cy="4" r="1.5"/><circle cx="10.5" cy="4" r="1.5"/>'
       + '<circle cx="5.5" cy="8" r="1.5"/><circle cx="10.5" cy="8" r="1.5"/>'
       + '<circle cx="5.5" cy="12" r="1.5"/><circle cx="10.5" cy="12" r="1.5"/></svg>';
-
-    const ARGONAUT_PORTRAITS = {
-      odys: "argonaut_01_odys.png",
-      circe: "argonaut_02_circe.png",
-      phenelope: "argonaut_03_phenelope.png",
-      telebac: "argonaut_04_telebac.png",
-      herakleides: "argonaut_05_herakleides.png",
-      olympia: "argonaut_06_olympia.png",
-      leocules: "argonaut_07_leocules.png",
-      raz: "argonaut_08_raz.png",
-      fisher: "argonaut_09_fisher.png",
-      hypatia: "argonaut_17_hypatia.png",
-      anakreon: "argonaut_18_anakreon.png",
-      anathea: "argonaut_19_anathea.png",
-      orphan: "argonaut_20_orphan.png",
-      aster: "argonaut_21_aster.png",
-      dastan: "argonaut_22_dastan.png",
-      aktisaeos: "argonaut_23_aktisaeos.png",
-      oleander: "argonaut_24_oleander.png",
-      omorfos: "argonaut_25_omorfos.png",
-      blank10: "argonaut_10_blank.png",
-      blank11: "argonaut_11_blank.png",
-      blank12: "argonaut_12_blank.png",
-      blank13: "argonaut_13_blank.png",
-      blank14: "argonaut_14_blank.png",
-      blank15: "argonaut_15_blank.png",
-      blank16: "argonaut_16_blank.png",
-    };
 
     const SKILLS = [
       { id: "courage", en: "Courage", zh: "勇气", abbr: "勇" },
@@ -2004,7 +1976,7 @@
     }
 
     function argonautPortraitSrc(argId) {
-      const fileName = ARGONAUT_PORTRAITS[argId];
+      const fileName = window.ATO_HERO_CATALOG.heroPortrait({ argonaut: argId });
       return fileName ? assetSrc(fileName) : "";
     }
 

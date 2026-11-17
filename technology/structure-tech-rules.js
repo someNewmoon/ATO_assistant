@@ -11,7 +11,7 @@
   const FATE_MAX = 9;
   const CYCLES = ["c1", "c2", "c3", "c4", "c5"];
   const TITANS = {
-    tt_earthshaker: "撼地者", tt_mazerunner: "迷宫行者", tt_plogicbreaker: "逻辑破坏者",
+    tt_earthshaker: "撼地者", tt_mazerunner: "迷宫穿梭者", tt_plogicbreaker: "逻辑破坏者",
     tt_warkeeper: "历战者", tt_firestarter: "纵火者", tt_pabysswatcher: "深渊凝望者",
     tt_returner: "归来者", tt_ascender: "升腾者", tt_pdawnburner: "黎明燃烧者",
     tt_cloudsoarer: "翔云者", tt_wishender: "终愿者", tt_plunarlander: "登月者", tt_shadowdancer: "影舞者",

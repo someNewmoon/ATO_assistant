@@ -5,35 +5,39 @@
 })(typeof window === 'object' ? window : this, function () {
   'use strict';
 
-  const TITAN_NAMES_ZH = {
-    'tt_earthshaker': '撼地者',
-    'tt_mazerunner': '迷宫疾行者',
-    'tt_plogicbreaker': '破逻辑者',
-    'tt_warkeeper': '守战者',
-    'tt_firestarter': '燃火者',
-    'tt_pabysswatcher': '深渊凝望者',
-    'tt_cloudsoarer': '翔云者',
-    'tt_wishender': '终愿者',
-    'tt_plunarlander': '登月者',
-    'tt_shadowdancer': '影舞者',
-    'tt_fatebound': '命运束缚者',
-    'tt_chronoking': '时光之王',
-    'tt_helldiver': '潜渊者',
-    'tt_trespasser': '越界者',
-    'tt_executioner': '行刑者',
-    'tt_feareater': '无惧者',
-    'tt_lunarlander': '原型登月者',
-    'tt_messianic': '弥赛亚',
-  };
-
+  // 梦行者 follows the Chinese rulebook. Named scans keep the names printed on their panels.
+  const TITAN_MODELS = [
+    ['tt_earthshaker', '撼地者', 'Earthshaker'],
+    ['tt_mazerunner', '迷宫穿梭者', 'Mazerunner', '迷宫疾行者', '迷宫行者'],
+    ['tt_plogicbreaker', '', 'Prototype Logicbreaker', '破逻辑者'],
+    ['tt_warkeeper', '历战者', 'Warkeeper', '守战者'],
+    ['tt_firestarter', '纵火者', 'Firestarter', '燃火者'],
+    ['tt_pabysswatcher', '深渊凝望者', 'Prototype Abysswatcher'],
+    ['tt_returner', '归来者', 'Returner'],
+    ['tt_ascender', '升腾者', 'Ascender'],
+    ['tt_pdawnburner', '黎明燃烧者', 'Prototype Dawnburner', 'Dawnburner'],
+    ['tt_cloudsoarer', '翔云者', 'Cloudsoarer'],
+    ['tt_wishender', '终愿者', 'Wishender'],
+    ['tt_plunarlander', '登月者', 'Prototype Lunarlander'],
+    ['tt_shadowdancer', '影舞者', 'Shadowdancer'],
+    ['tt_fatebound', '', 'Fatebound', '命运束缚者'],
+    ['tt_chronoking', '', 'Chronoking', '时光之王'],
+    ['tt_helldiver', '', 'Helldiver', '潜渊者'],
+    ['tt_trespasser', '', 'Trespasser', '越界者'],
+    ['tt_executioner', '', 'Executioner', '行刑者'],
+    ['tt_feareater', '', 'Feareater', '无惧者'],
+    ['tt_lunarlander', '', 'Lunarlander', '原型登月者'],
+    ['tt_messianic', '', 'Messianic', '弥赛亚'],
+  ];
+  const TITAN_NAMES_ZH = Object.fromEntries(TITAN_MODELS.filter(([, zh]) => zh));
   const TITAN_TYPES = [
-    { id: 'dreamwalker', name: '睡梦行者', aliases: ['梦行者', 'Dreamwalker'] },
+    { id: 'dreamwalker', name: '梦行者', aliases: ['睡梦行者', 'Dreamwalker'] },
     { id: 'spartan-dreamwalker', name: '斯巴达梦行者', aliases: ['Spartan Dreamwalker'], scan: '斯巴达梦行者' },
     { id: 'gamechanger', name: '回天者', aliases: ['Gamechanger'], scan: '回天者' },
     { id: 'logicbreaker', name: '逻辑破坏者', aliases: ['Logicbreaker'], scan: '逻辑破坏者' },
-    ...[['tt_returner', 'Returner'], ['tt_ascender', 'Ascender'], ['tt_pdawnburner', 'Dawnburner']]
-      .map(([id, name]) => ({ id, name, aliases: [id.slice(3)], portrait: id })),
-    ...Object.entries(TITAN_NAMES_ZH).map(([id, name]) => ({ id, name, aliases: [id.slice(3)], portrait: id })),
+    ...TITAN_MODELS.map(([id, zh, en, ...aliases]) => ({
+      id, name: zh || en, aliases: [id.slice(3), en, ...aliases], portrait: id,
+    })),
   ];
   const listedPortraits = new Set([
     'tt_earthshaker', 'tt_mazerunner', 'tt_plogicbreaker', 'tt_warkeeper', 'tt_firestarter',
@@ -47,8 +51,25 @@
   const titanScans = new Map([
     ['tt_earthshaker', '撼地者'], ['tt_mazerunner', '迷宫穿梭者'],
   ]);
-  titanAliases.set('迷宫穿梭者', titanTypes.get('tt_mazerunner'));
-  const namedDreamwalkers = new Set(['希罗多德', '尤利西娅', '梭伦', '费洛克泰拉']);
+  const DREAMWALKER_PANELS = [
+    { id: 'herodotus', name: '希罗多德', sprite: 't1' },
+    { id: 'ulyssia', name: '尤利西娅', sprite: 't2' },
+    { id: 'solon', name: '梭伦', sprite: 't3' },
+    { id: 'philoctetra', name: '费洛克泰拉', sprite: 't4' },
+  ];
+
+  function dreamwalkerPanel(titan, choice) {
+    const type = titanType(titan);
+    if (!titan || (type && type.id !== 'dreamwalker')) return null;
+    return DREAMWALKER_PANELS.find(panel => panel.id === choice)
+      || DREAMWALKER_PANELS.find(panel => panel.id === titan.panelId)
+      || DREAMWALKER_PANELS.find(panel => panel.name === titan.name) || null;
+  }
+
+  function loadoutTitan(titan, choice) {
+    const panel = dreamwalkerPanel(titan, choice);
+    return panel ? { ...titan, typeId: 'dreamwalker', panelId: panel.id } : titan;
+  }
 
   function titanType(titan) {
     return titanTypes.get(titan?.typeId)
@@ -61,15 +82,16 @@
   }
 
   function titanLabel(titan) {
-    const name = titan?.name || '泰坦';
-    const { type } = titanTypeFields(titan);
+    const panel = dreamwalkerPanel(titan);
+    const name = panel?.name || titan?.name || '泰坦';
+    const { type } = titanTypeFields(panel ? loadoutTitan(titan) : titan);
     return [name, type !== name && type, titan?.crippled ? '残废' : ''].filter(Boolean).join(' · ');
   }
 
   function titanArtwork(titan, manifest) {
     if (!titan) return null;
     const entry = titanType(titan);
-    const scan = ((!entry || entry.id === 'dreamwalker') && namedDreamwalkers.has(titan.name) && titan.name)
+    const scan = dreamwalkerPanel(titan)?.name
       || entry?.scan || (entry && titanScans.get(entry.id));
     if (scan) {
       const path = manifest ? manifest.titanScans?.[scan] : 'aibp/images/titan-cards/' + scan + '.webp';
@@ -134,6 +156,7 @@
     return {
       player: String(value?.player || '').trim().slice(0, 60),
       titanId: String(value?.titanId || ''),
+      ...(DREAMWALKER_PANELS.some(panel => panel.id === value?.titanPanelId) && { titanPanelId: value.titanPanelId }),
       gear,
     };
   }
@@ -167,6 +190,8 @@
     const saved = normalizeLoadout(record.loadouts?.[heroId]);
     const next = normalizeLoadout(draft);
     next.titanId = titanIdFor(record, next.titanId);
+    const assignedTitan = loadoutTitans(record).find(titan => String(titan.id) === next.titanId);
+    if (next.titanPanelId && titanType(assignedTitan)?.id !== 'dreamwalker') delete next.titanPanelId;
     if (JSON.stringify(saved) === JSON.stringify(next) && (!migration || !record.loadouts?.[migration.slot])) return null;
     if (JSON.stringify(saved) !== JSON.stringify(normalizeLoadout(base))) {
       throw new Error('该英雄的配装已在另一设备修改，请重新打开配装');
@@ -197,5 +222,5 @@
     return { ...record, loadouts };
   }
 
-  return { TITAN_NAMES_ZH, TITAN_TYPES, titanType, titanTypeFields, titanLabel, titanArtwork, gearKey, normalize, adjust, normalizeLoadout, loadoutTitans, titanIdFor, assignedLoadouts, saveLoadout };
+  return { TITAN_NAMES_ZH, TITAN_TYPES, DREAMWALKER_PANELS, dreamwalkerPanel, loadoutTitan, titanType, titanTypeFields, titanLabel, titanArtwork, gearKey, normalize, adjust, normalizeLoadout, loadoutTitans, titanIdFor, assignedLoadouts, saveLoadout };
 });

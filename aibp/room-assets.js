@@ -3,7 +3,7 @@
   const box = document.getElementById('battleRoomImage');
   const image = box.querySelector('img');
   const error = box.querySelector('[data-art-error]');
-  let hosted = { equipment: {}, titans: [], titanScans: {}, mnemos: {} };
+  let hosted = { equipment: {}, titans: [], titanScans: {}, mnemos: {}, thumbs: {} };
 
   function display(path, name) {
     if (!path) return;
@@ -20,6 +20,7 @@
   window.ATO_BATTLE_ASSETS = {
     gearSrc: id => imageURL(Object.hasOwn(hosted.equipment, id) && hosted.equipment[id]),
     mnemosSrc: id => imageURL(Object.hasOwn(hosted.mnemos, id) && hosted.mnemos[id]),
+    thumbSrc: id => imageURL(Object.hasOwn(hosted.thumbs, id) && hosted.thumbs[id]),
     titanArt(titan) {
       const art = window.ATO_GEAR_INVENTORY.titanArtwork(titan, hosted);
       return art && { ...art, src: imageURL(art.path) };

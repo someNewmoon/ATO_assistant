@@ -25,8 +25,7 @@
 .battle-room form label { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
 
 .battle-room-head,
-.battle-room-hero header,
-.battle-room-hero li {
+.battle-room-hero header {
   display: flex;
   justify-content: space-between;
   align-items: baseline;
@@ -39,27 +38,28 @@
 .battle-room .battle-room-heading { margin: 12px 0 8px; }
 .battle-room-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 215px), 1fr));
   gap: 10px;
 }
 .battle-room-hero {
   display: grid;
   align-content: start;
-  gap: 9px;
+  gap: 7px;
   border: 1px solid var(--room-border);
+  border-top: 3px solid var(--room-seat, #79d1ef);
   border-radius: 10px;
-  padding: 12px;
+  padding: 9px;
+  background: color-mix(in srgb, var(--room-seat, #79d1ef) 5%, var(--room-surface));
 }
-.battle-room-hero h4 { border-top: 1px solid var(--room-border); padding-top: 8px; }
+.battle-room-hero h4 { border-top: 1px solid var(--room-border); padding-top: 5px; font-size: .85rem; }
 .battle-room-hero ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 5px; }
 .battle-room-hero small { font-size: .82em; }
-.battle-room-counter { display: inline-flex; align-items: baseline; justify-content: center; gap: 5px; }
-.battle-room-counter button { width: 34px; padding: 0; }
+.battle-room-counter { display: inline-flex; align-items: center; justify-content: center; gap: 2px; }
+.battle-room .battle-room-counter button { width: 26px; min-height: 29px; padding: 0; }
 .battle-room-counter strong { min-width: 1.3em; text-align: center; font-variant-numeric: tabular-nums; }
 .battle-room-pool, .battle-room form.battle-room-dice, .battle-room-rolls, .battle-room-team { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--room-border); max-width: none; }
 .battle-room :is(.battle-room-stats, .battle-room-pool > div, .battle-room-dice > div) { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; }
 .battle-room-pool h3 { margin-bottom: 8px; }
-.battle-room-pool > div > div { display: inline-flex; align-items: center; gap: 5px; }
 .battle-room-rolls ol { max-height: 12rem; overflow-y: auto; margin: 7px 0 0; padding-inline-start: 1.6em; }
 .battle-room-team > summary { cursor: pointer; margin-bottom: 8px; }
 .battle-room-result { font-size: .92em; }
@@ -79,11 +79,6 @@ body.aibp-room-only > .app > aside,
 body.aibp-room-only > .app > main > :not(#battleRoom) { display: none !important; }
 #battleRoomImage { max-width: min(95vw, 640px); max-height: 94vh; }
 #battleRoomImage img { display: block; max-width: 100%; max-height: 75vh; object-fit: contain; margin-top: 8px; }
-
-.battle-room-hero .battle-room-card-list {
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 118px), 1fr));
-  gap: 8px;
-}
 
 .battle-room-card-list li {
   display: grid;
@@ -124,15 +119,84 @@ body.aibp-room-only > .app > main > :not(#battleRoom) { display: none !important
 }
 .battle-room-head h2 { font-size: clamp(1.3rem, 2.6vw, 1.8rem); }
 .battle-room-head p { opacity: .76; font-variant-numeric: tabular-nums; }
-.battle-room-hero {
-  border-top: 3px solid var(--room-seat, #79d1ef);
-  background: color-mix(in srgb, var(--room-seat, #79d1ef) 5%, var(--room-surface));
-}
 .battle-room-hero[data-hero-seat="1"] { --room-seat: #e5b76c; }
 .battle-room-hero[data-hero-seat="2"] { --room-seat: #a5cb7c; }
 .battle-room-hero[data-hero-seat="3"] { --room-seat: #c797e8; }
-.battle-room-hero header > small {
-  border: 1px solid var(--room-border);
-  border-radius: 999px;
-  padding: 2px 8px;
+.battle-room-hero h3 { font-size: 1rem; }
+.battle-room-hero p { font-size: .82rem; }
+.battle-room-hero header { align-items: center; justify-content: flex-start; gap: 6px; }
+.battle-room-identity, .battle-room-titan-status, .battle-room-marker {
+  display: flex;
+  align-items: center;
+  gap: 5px;
 }
+.battle-room-avatar {
+  width: 31px;
+  height: 31px;
+  object-fit: cover;
+  object-position: center 24%;
+  border: 1px solid var(--room-seat, #79d1ef);
+  border-radius: 50%;
+}
+.battle-room-titan-status { flex-wrap: wrap; font-size: .8rem; }
+.battle-room-titan-status select { min-height: 28px; padding: 1px 4px; }
+.battle-room button.battle-room-titan-art { width: 54px; min-height: 0; }
+.battle-room-titan-art img { height: 40px; }
+.battle-room-marker { gap: 3px; font-size: .8rem; white-space: nowrap; }
+.battle-room-marker img { width: 20px; height: 20px; object-fit: contain; }
+.battle-room :is(.battle-room-stats, .battle-room-pool > div) { gap: 4px 7px; }
+.battle-room :is(.battle-room-stats, .battle-room-pool > div) > div {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 5px;
+  border: 1px solid var(--room-border);
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--room-text) 10%, var(--room-surface));
+}
+
+.battle-room-hero .battle-room-card-list {
+  grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+  gap: 5px;
+}
+.battle-room-card-list .battle-room-playable {
+  gap: 2px;
+  align-items: start;
+  text-align: center;
+  font-size: .75rem;
+}
+.battle-room-card-window {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 90px;
+}
+.battle-room .battle-room-card-window > :is(button, .battle-room-reference) {
+  grid-area: 1 / 1;
+  width: min(60px, 100%);
+}
+.battle-room-card-window .battle-room-card-art img { aspect-ratio: 2 / 3; object-fit: contain; }
+.battle-room-playable:is([data-card-state="exhausted"], [data-card-state="discarded"]) .battle-room-card-window > * {
+  transform: rotate(90deg) scale(.8);
+}
+.battle-room-playable[data-card-state="discarded"] .battle-room-card-window > * { filter: grayscale(.8); opacity: .56; }
+.battle-room-reference {
+  display: grid;
+  align-content: center;
+  box-sizing: border-box;
+  height: 88px;
+  padding: 3px;
+  gap: 2px;
+  border: 1px solid #b19b66;
+  border-radius: 4px;
+  background: linear-gradient(145deg, #423864, #202b3e);
+  color: #f8edcd;
+  font-size: 8px;
+  line-height: 1.2;
+}
+.battle-room-reference-icons img { width: 12px; height: 12px; object-fit: contain; }
+.battle-room-card-name { font-weight: 650; }
+.battle-room-card-status { color: inherit; font-weight: 650; }
+.battle-room-card-controls { display: flex; flex-wrap: wrap; justify-content: center; gap: 2px; }
+.battle-room .battle-room-card-controls button { min-height: 30px; padding: 2px 4px; line-height: 1.1; }
+.battle-room .battle-room-card-controls [aria-pressed="true"] { border-color: #eba892; color: #ffd5c6; }

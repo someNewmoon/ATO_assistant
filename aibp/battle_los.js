@@ -872,6 +872,22 @@
     return moves;
   }
 
+  // Movement choices are board squares at the footprint's upper-left corner.
+  // Even-sized figures still store half-integer centers, but never paint or
+  // click a half-square as a destination.
+  function apostleMoveAnchor(point, size) {
+    const half = (size - 1) / 2;
+    return { c: point.c - half, r: point.r + half };
+  }
+
+  function apostleMoveDestination(overlay, point) {
+    const size = overlay?.profile?.size || 1;
+    return overlay?.moveCells?.find(move => {
+      const anchor = apostleMoveAnchor(move, size);
+      return anchor.c === point.column && anchor.r === point.row;
+    }) || null;
+  }
+
   // ---- primordial movement paths ---------------------------------------
   // P38 movement uses orthogonal steps, ignores terrain/models for movement,
   // and zigs/zags between the two axes until the target lies on a straight path.
@@ -1269,8 +1285,15 @@
     if (!overlay.source.length) return;
 
     for (const { c, r, steps } of overlay.moveCells || []) {
-      const movementCell = cell(c, r, overlay.mode === "apostle-move" ? "battle-map-apostle-move" : "battle-map-titan-move");
+      const boss = overlay.mode === "apostle-move";
+      const size = overlay.profile?.size || 1;
+      const anchor = boss ? apostleMoveAnchor({ c, r }, size) : { c, r };
+      const movementCell = cell(anchor.c, anchor.r, boss ? "battle-map-apostle-move" : "battle-map-titan-move");
       movementCell.textContent = String(steps);
+      if (boss) {
+        movementCell.style.setProperty("--boss-size", size);
+        movementCell.title = `移动 ${steps} 格；此格对应骇物左上占格`;
+      }
       layer.appendChild(movementCell);
     }
     if (showSight) {
@@ -1388,6 +1411,8 @@
     computeLOSMap,
     computeRangeMap,
     apostleDestinationSteps,
+    apostleMoveAnchor,
+    apostleMoveDestination,
     titanMoveRoute,
     normalizeWeapon,
     computeTitanWeapon,

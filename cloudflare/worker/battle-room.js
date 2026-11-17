@@ -282,6 +282,24 @@ export class BattleRoom extends DurableObject {
       for (const key of poolKeys) room.pool[key] = 0;
       return;
     }
+    if (body.type === 'argo-use' || body.type === 'argo-undo') {
+      const card = room.configuration?.abilities?.find(card => card.id === body.key);
+      if (!card) reject('只能使用本场已准备的阿尔戈能力。');
+      const states = room.argoAbilities ||= {};
+      const current = states[card.id] || { used: 0, lastRound: null };
+      const limit = battleConfig.abilityCapacity(card.id);
+      const by = actor.role === 'player' ? actor.seat : 'host';
+      if (body.type === 'argo-use') {
+        if (current.lastRound === room.round) reject('这项能力本轮已经使用过。', 409);
+        if (limit !== null && current.used >= limit) reject('这项能力的使用次数已用尽。', 409);
+        states[card.id] = { used: current.used + 1, lastRound: room.round, by };
+      } else {
+        if (current.lastRound !== room.round || current.used < 1) reject('只能撤销本轮的使用。', 409);
+        if (actor.role !== 'host' && current.by !== by) reject('只能撤销自己本轮的使用。', 403);
+        states[card.id] = { used: current.used - 1, lastRound: null };
+      }
+      return;
+    }
     if (body.type === 'pool') {
       if (!poolKeys.includes(body.key)) reject('未知克拉托斯标记。');
       room.pool[body.key] = counter(room.pool[body.key], body.delta, 99);

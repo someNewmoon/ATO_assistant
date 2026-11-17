@@ -270,3 +270,11 @@ body.aibp-room-only > .app > main > :not(#battleRoom) { display: none !important
 .room-config-choices img { display: block; width: 100%; height: 135px; object-fit: contain; }
 .room-config-choices span { font-size: .82rem; }
 .battle-room [data-create]:has(.room-configuration) { max-width: 55rem; }
+
+.room-argo-abilities > header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.room-argo-card-window { display: grid; place-items: center; height: 150px; }
+.room-argo-card-window > button { width: 100%; transition: transform .18s; }
+.room-argo-card-window img { height: 145px; object-fit: contain; }
+.room-argo-card[data-card-state="exhausted"] .room-argo-card-window > button { transform: rotate(90deg) scale(.72); }
+.room-argo-card strong { font-size: .8rem; }
+@media (prefers-reduced-motion: reduce) { .room-argo-card-window > button { transition: none; } }

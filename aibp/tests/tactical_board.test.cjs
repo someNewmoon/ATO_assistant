@@ -64,3 +64,19 @@ test("a current Primordial footprint and facing survive normalization and rotate
   assert.ok(after.blindspots.has("5,9"));
   assert.notDeepEqual(before.blindspots, after.blindspots);
 });
+
+test('boss movement uses whole upper-left grid squares for even and odd footprints', () => {
+  for (const size of [1, 2, 3, 4]) {
+    const half = (size - 1) / 2;
+    const move = { c: 4 + half, r: 9 - half, steps: 1 };
+    const overlay = { profile: { size }, moveCells: [move] };
+    assert.deepEqual(los.apostleMoveAnchor(move, size), { c: 4, r: 9 });
+    assert.equal(los.apostleMoveDestination(overlay, { column: 4, row: 9 }), move);
+    assert.equal(los.apostleMoveDestination(overlay, { column: 5, row: 9 }), null);
+    const cells = los.losSourceCells({ column: move.c, row: move.r }, size);
+    assert.equal(cells.length, size * size);
+    assert.ok(cells.every(({ c, r }) => Number.isInteger(c) && Number.isInteger(r)));
+    assert.equal(Math.min(...cells.map(cell => cell.c)), 4);
+    assert.equal(Math.max(...cells.map(cell => cell.r)), 9);
+  }
+});

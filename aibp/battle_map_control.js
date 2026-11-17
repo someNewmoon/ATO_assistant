@@ -713,7 +713,7 @@
       control("tactics-info").textContent = moving ? "绿格显示可达格和所需步数。"
         : attacking ? "金框显示武器射程。"
           + (target ? `距骇物 ${target.distance} 格 · ${target.inRange ? "射程内" : "射程外"}` : "")
-          : bossMove ? `骇物移速 ${speedLabel(speed)} · 数字为步数，点击高亮位置移动骇物。`
+          : bossMove ? `骇物移速 ${speedLabel(speed)} · 数字为步数；点击高亮格，将骇物左上占格移到此处。`
             : bossSight ? "紫底表示骇物视线，斜纹表示盲区。" : "选择模式开始操作棋子。";
     }
 
@@ -782,12 +782,13 @@
           options.onLosChange?.();
         }
       } else if (mode === "apostle-move" && editBoard()) {
-        const size = lastOverlay?.profile?.size || 1;
-        const position = window.BattleTerrain.boardCell({ column, row }, size);
-        if (!lastOverlay?.moveCells?.some(cell => cell.c === position.column && cell.r === position.row)) {
+        const clicked = window.BattleTerrain.boardCell({ column, row });
+        const destination = window.BattleLOS.apostleMoveDestination(lastOverlay, clicked);
+        if (!destination) {
           tactics.querySelector("[data-board-tactics-info]").textContent = "请选择骇物移动范围内的空位。";
           return;
         }
+        const position = { column: destination.c, row: destination.r };
         if (options.onApostleMove) return options.onApostleMove(position);
         Object.assign(pieces.apostle, position);
         commit({ ...map, pieces });

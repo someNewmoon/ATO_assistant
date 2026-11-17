@@ -352,11 +352,29 @@
   function argoAbilities() {
     const config = state.configuration;
     if (!config?.abilities?.length && !config?.reserve?.length) return '';
+    const editable = actor?.role !== 'viewer' && !state.closed;
     const cards = [...config.abilities, ...config.reserve];
-    return '<section class="room-argo-abilities"><h3>阿尔戈能力</h3><small>' + escape(config.name) + ' · 已准备 '
-      + config.abilities.length + '/' + config.limit + '</small><div class="room-argo-cards">'
-      + cards.map(card => '<div>' + cardImage('../' + card.path, card.name)
-        + '<span>' + escape(card.name) + (config.reserve.includes(card) ? ' · 备用' : '') + '</span></div>').join('') + '</div></section>';
+    const ready = editable && actor.role === 'host'
+      ? '<button type="button" data-action="round" title="推进到下一轮并回正能力卡；不补充剩余次数">下一轮 · 一键回正</button>' : '';
+    return '<section class="room-argo-abilities"><header><h3>阿尔戈能力</h3>' + ready + '</header><small>' + escape(config.name) + ' · 已准备 '
+      + config.abilities.length + '/' + config.limit + ' · 每项每轮限用一次</small><div class="room-argo-cards">'
+      + cards.map(card => {
+        const reserve = config.reserve.includes(card);
+        const used = state.argoAbilities?.[card.id] || { used: 0, lastRound: null };
+        const exhausted = used.lastRound === state.round;
+        const limit = battleConfig.abilityCapacity(card.id);
+        const depleted = limit !== null && used.used >= limit;
+        const label = limit === null ? '已用 ' + used.used + ' 次 · 次数按卡面'
+          : '剩余 ' + Math.max(0, limit - used.used) + ' / ' + limit + ' 次';
+        const canUndo = exhausted && (actor.role === 'host' || used.by === actor.seat);
+        const controls = editable && !reserve ? '<div class="battle-room-card-controls"><button type="button" data-action="argo-use" data-key="'
+          + escape(card.id) + '"' + (exhausted || depleted ? ' disabled' : '') + '>使用并横置</button>'
+          + (canUndo ? '<button type="button" data-action="argo-undo" data-key="' + escape(card.id) + '">撤销本次</button>' : '') + '</div>' : '';
+        return '<div class="room-argo-card" data-argo-id="' + escape(card.id) + '" data-card-state="' + (exhausted ? 'exhausted' : 'ready')
+          + '"><div class="room-argo-card-window">' + cardImage('../' + card.path, card.name) + '</div><span>' + escape(card.name)
+          + (reserve ? ' · 备用' : '') + '</span><strong>' + label + '</strong><small>'
+          + (exhausted ? '本轮已用 · 已横置' : depleted ? '次数已用尽' : reserve ? '备用能力' : '可使用') + '</small>' + controls + '</div>';
+      }).join('') + '</div></section>';
   }
 
   function configFields(available) {

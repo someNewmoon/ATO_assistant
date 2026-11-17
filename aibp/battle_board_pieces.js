@@ -11,6 +11,33 @@
     const svg = document.createElementNS(svgNS, "svg");
     svg.setAttribute("viewBox", sprite.crop.join(" "));
     svg.setAttribute("aria-hidden", "true");
+    if (sprite.vector) {
+      svg.dataset.vectorArtwork = "true";
+      const outline = document.createElementNS(svgNS, "path");
+      outline.setAttribute("d", sprite.path);
+      outline.setAttribute("fill", sprite.vector.fill);
+      outline.setAttribute("stroke", "#291f19");
+      outline.setAttribute("stroke-width", Math.min(sprite.crop[2], sprite.crop[3]) * .022);
+      outline.setAttribute("stroke-linejoin", "round");
+      const details = document.createElementNS(svgNS, "g");
+      details.setAttribute("transform", "translate(" + sprite.crop.slice(0, 2).join(" ")
+        + ") scale(" + sprite.crop.slice(2).map(value => value / 100).join(" ") + ")");
+      details.setAttribute("fill", "none");
+      details.setAttribute("stroke", "#34271f");
+      details.setAttribute("stroke-width", "1.5");
+      details.setAttribute("stroke-linecap", "round");
+      details.setAttribute("stroke-linejoin", "round");
+      for (const shape of sprite.vector.paths) {
+        const path = document.createElementNS(svgNS, "path");
+        path.setAttribute("d", shape.d);
+        if (shape.fill) path.setAttribute("fill", shape.fill);
+        if (shape.stroke) path.setAttribute("stroke", shape.stroke);
+        details.appendChild(path);
+      }
+      svg.append(outline, details);
+      if (sprite.nativeFace != null) svg.style.transform = "rotate(" + (facing - sprite.nativeFace * 90) + "deg)";
+      return svg;
+    }
     const defs = document.createElementNS(svgNS, "defs");
     const clip = document.createElementNS(svgNS, "clipPath");
     const path = document.createElementNS(svgNS, "path");

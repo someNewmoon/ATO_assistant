@@ -3,6 +3,9 @@ import heroCatalog from '../../hero/hero-catalog.js';
 import inventory from '../../technology/gear-inventory.js';
 import cardState from '../../aibp/room-card-state.js';
 import roomDice from '../../aibp/room-dice.js';
+import { roomProjection } from './room-projection.js';
+import battleConfig from '../../technology/battle-config.js';
+import techDictionary from '../../technology/tech_card_dictionary.min.json';
 import gearProduction from '../../technology/ato_gear_production.json';
 import { ApiError, errorResponse, object, response } from './campaign.js';
 import { applyRoomBoard, setupRoomBoard } from './board.js';
@@ -83,9 +86,15 @@ export async function createBattleRoom(env, campaign, payload) {
     };
   });
   const board = payload.board ? setupRoomBoard(payload.board, heroes.length) : null;
+  const availableAbilities = battleConfig.availability(campaign, techDictionary);
+  const selectedConfig = payload.battleConfig || availableAbilities.record.battleConfigurations
+    ?.find(config => config.id === availableAbilities.record.activeBattleConfiguration);
+  let configuration;
+  try { configuration = battleConfig.prepare(selectedConfig, availableAbilities); }
+  catch (error) { reject(error.message); }
   const id = crypto.randomUUID().replaceAll('-', '');
   return env.BATTLE_ROOMS.getByName(id).fetch('https://battle-room.internal/create', {
-    method: 'POST', body: JSON.stringify({ id, title, heroes, board }),
+    method: 'POST', body: JSON.stringify({ id, title, heroes, board, configuration, projection: roomProjection(payload.projection, board?.apostle) }),
   });
 }
 
@@ -139,11 +148,11 @@ export class BattleRoom extends DurableObject {
   }
 
   async create(request) {
-    const { id, title, heroes, board } = await request.json();
+    const { id, title, heroes, board, projection, configuration } = await request.json();
     const keys = { host: newSecret(), viewer: newSecret(), invite: newSecret() };
     const [host, viewer, invite] = await Promise.all(Object.values(keys).map(hash));
     const room = {
-      id, title, heroes, board, round: 1, revision: 0, closed: false,
+      id, title, heroes, board, projection, configuration, round: 1, revision: 0, closed: false,
       pool: Object.fromEntries(poolKeys.map(key => [key, 0])), rolls: [],
       secrets: { host, viewer, invite, players: heroes.map(() => null) },
     };
@@ -256,6 +265,13 @@ export class BattleRoom extends DurableObject {
 
   apply(room, actor, body) {
     if (typeof body.type === "string" && body.type.startsWith("board-")) return applyRoomBoard(room, actor, body);
+    if (body.type === 'room-projection') {
+      if (actor.role !== 'host') reject('战况由房主同步。', 403);
+      const projection = roomProjection(body.projection, room.board?.apostle);
+      if (!projection) reject('战况与房间骇物不一致。', 409);
+      room.projection = projection;
+      return;
+    }
     if (body.type === 'round' || body.type === 'end') {
       if (actor.role !== 'host') reject('只有房主可以执行此操作。', 403);
       if (body.type === 'round') room.round++;

@@ -40,6 +40,7 @@
         getMap: () => map,
         getApostle: () => room.board.apostle,
         getLevel: () => room.board.level,
+        getTitanTrail: () => room.board.lastTitanMove,
         titanNames: () => room.heroes.map(({ titan, name }) =>
           window.ATO_GEAR_INVENTORY.dreamwalkerPanel(titan)?.name || titan?.name || name),
         titanRoster: () => room.heroes.map(hero => hero.titan),

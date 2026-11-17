@@ -824,7 +824,8 @@
       const def = terrainApi.catalog[tile.name];
       for (const { c, r } of footprintCells(tile, def.width, def.height, def.los?.cells)) occupied.add(cellKey(c, r));
     }
-    const visited = new Set([cellKey(source.c, source.r)]);
+    const origin = cellKey(source.c, source.r);
+    const parents = new Map([[origin, null]]);
     const queue = [{ ...source, steps: 0 }];
     for (let i = 0; i < queue.length; i++) {
       const from = queue[i];
@@ -833,13 +834,24 @@
         const c = from.c + dc;
         const r = from.r + dr;
         const key = cellKey(c, r);
-        if (c < 1 || c > COLUMNS || r < 1 || r > ROWS || visited.has(key) || occupied.has(key)
+        if (c < 1 || c > COLUMNS || r < 1 || r > ROWS || parents.has(key) || occupied.has(key)
           || occ.red.has(edgeBetween(from, { c, r }))) continue;
-        visited.add(key);
+        parents.set(key, cellKey(from.c, from.r));
         queue.push({ c, r, steps: from.steps + 1 });
       }
     }
-    return queue.slice(1);
+    return { moveCells: queue.slice(1), moveParents: parents };
+  }
+
+  function titanMoveRoute(overlay, point) {
+    const final = cellKey(point.column, point.row);
+    if (!overlay?.moveParents?.get(final)) return null;
+    const route = [];
+    for (let key = final; key != null; key = overlay.moveParents.get(key)) {
+      const [column, row] = key.split(",").map(Number);
+      route.push({ column, row });
+    }
+    return route.reverse();
   }
 
   function apostleDestinationSteps(pieces, point, size) {
@@ -1114,7 +1126,7 @@
     const bossSize = tactical ? terrainApi.getApostleProfile(apostle, settings.level ?? map.startLevel)?.size || 1 : 1;
     if (mode === "titan-move") {
       const speed = Number.isFinite(state.moveSpeed) ? Math.max(0, Math.min(20, state.moveSpeed)) : 5;
-      return { ...base, moveCells: computeTitanMoves(source[0], pieceState, selected, speed, tiles, terrainApi, occ, bossSize) };
+      return { ...base, ...computeTitanMoves(source[0], pieceState, selected, speed, tiles, terrainApi, occ, bossSize) };
     }
 
     if (mode === "apostle-move") return { ...base, moveCells: computeApostleMoves(pieceState, size, profileWithSpeed?.speed ?? Infinity) };
@@ -1376,6 +1388,7 @@
     computeLOSMap,
     computeRangeMap,
     apostleDestinationSteps,
+    titanMoveRoute,
     normalizeWeapon,
     computeTitanWeapon,
     computeTitanMoves,

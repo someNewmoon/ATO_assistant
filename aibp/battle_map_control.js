@@ -96,6 +96,7 @@
     const losPathClearButton = root.querySelector("[data-battle-map-los-path-clear]");
     const losPathSummary = root.querySelector("[data-battle-map-los-path-summary]");
     const tactics = root.querySelector("[data-board-tactics]");
+    let nativeTitanTrail;
     const tacticModes = ["titan-move", "titan-attack", "apostle-sight", "apostle-move"];
     const editBoard = () => options.canEditBoard?.() !== false;
     const hasTactics = (mode) => tacticModes.includes(mode);
@@ -235,6 +236,7 @@
           apostle, size: window.BattleTerrain.getApostleProfile(apostle, level)?.size || 1,
           selected: losState.selectedTitan, mode: losState.mode, names: options.titanNames?.(), roster: options.titanRoster?.(),
           portraits: options.heroPortraits?.(),
+          trail: options.getTitanTrail?.() || (nativeTitanTrail?.map === options.getMap() ? nativeTitanTrail.move : null),
           onSelectBoss: losState.mode !== "apostle-move" && editBoard() && tactics ? () => setTacticalMode("apostle-move") : undefined,
           onSelect: ["titan-attack", "titan-move"].includes(losState.mode) && options.allowTacticalControls !== false ? selectTitan : undefined,
         });
@@ -769,11 +771,14 @@
         const seat = losState.selectedTitan;
         if (options.canMoveTitan?.(seat) === false) return;
         const point = window.BattleTerrain.boardCell({ column, row });
-        if (!lastOverlay?.moveCells?.some(cell => cell.c === point.column && cell.r === point.row)) return;
+        const route = window.BattleLOS.titanMoveRoute(lastOverlay, point);
+        if (!route) return;
         if (options.onTitanMove) options.onTitanMove(seat, point, losState.titanSpeeds[seat]);
         else {
           pieces.titans[seat] = point;
-          commit({ ...map, pieces });
+          const next = { ...map, pieces };
+          nativeTitanTrail = { map: next, move: { seat, route } };
+          commit(next);
           options.onLosChange?.();
         }
       } else if (mode === "apostle-move" && editBoard()) {

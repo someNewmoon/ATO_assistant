@@ -25,6 +25,10 @@
   let id = isLink ? routeId : '';
   let credentials = null;
   let state = null;
+  let lastProjectionSent = '';
+  let lobbyCampaign;
+  let abilityDictionary;
+  const battleConfig = window.ATO_BATTLE_CONFIG;
   let actor = null;
   let socket = null;
   let reconnectTimer;
@@ -57,7 +61,8 @@
   }
 
   function roomLink(mode, token) {
-    const url = new URL(location.pathname, location.origin);
+    const shareOrigin = location.hostname === 'ato-moon-assistant.pages.dev' ? 'https://moon.xuzizi.cn' : location.origin;
+    const url = new URL(location.pathname, mode ? shareOrigin : location.origin);
     url.searchParams.set('battle', id);
     if (mode) url.hash = new URLSearchParams({ [mode]: token }).toString();
     else if (actor?.role === 'host' || credentials?.keys) {
@@ -103,6 +108,7 @@
     document.body.classList.toggle('aibp-room-only', actor.role !== 'host');
     roomBoard?.sync(state, actor);
     render();
+    if (actor.role === 'host') syncProjection();
   }
 
   function connect() {
@@ -311,6 +317,118 @@
       + (notes[rollMode] ? '<p class="room-dice-help">' + notes[rollMode] + '</p>' : '') + '</section>';
   }
 
+  function syncProjection() {
+    if (actor?.role !== 'host' || state.closed || !state.board) return;
+    const projection = window.getAibpRoomProjection?.();
+    if (!projection || projection.apostle !== state.board.apostle) return;
+    const key = JSON.stringify(projection);
+    if (key === lastProjectionSent) return;
+    lastProjectionSent = key;
+    send({ id: crypto.randomUUID(), type: 'room-projection', projection });
+  }
+
+  function roomProjection() {
+    const projection = state.projection;
+    if (actor.role !== 'viewer') return '';
+    if (!projection) return state.board ? '<section class="room-projection"><h3>骇物战况</h3><p>等待房主同步 AIBP 战况。</p></section>' : '';
+    const { title, level, panel, ai, bp, aiDeck, bpDeck, damage } = projection;
+    function preview(label, card, empty) {
+      return '<div><h4>' + label + '</h4>' + (card?.src
+        ? cardImage(card.src, card.label || label) : '<p>' + empty + '</p>') + '</div>';
+    }
+    function deckCounts(label, deck) {
+      return '<div><dt>' + label + '</dt><dd>牌背 ' + deck.count + ' 张 · 弃牌 ' + deck.discard + ' 张</dd>'
+        + (deck.backs ? '<dd class="room-projection-deck">' + escape(deck.backs) + '</dd>' : '') + '</div>';
+    }
+    const damageText = damage.total + (damage.wounds ? ' / ' + damage.wounds : '')
+      + (damage.damage1 == null ? '' : '（' + damage.damage1 + ' + ' + damage.damage2 + '）');
+    return '<section class="room-projection"><h3>骇物战况</h3><p>' + escape([title, level].filter(Boolean).join(' · ')) + '</p>'
+      + '<div class="room-projection-cards">' + preview('骇物面板', { src: panel, label: title }, '暂无面板图')
+      + preview('已揭示 AI', ai, '未揭示 AI') + preview('已揭示 BP', bp, '未揭示 BP') + '</div>'
+      + '<dl class="room-projection-counts"><div><dt>损伤</dt><dd>' + damageText + '</dd></div>'
+      + deckCounts('AI 牌堆', aiDeck) + deckCounts('BP 牌堆', bpDeck) + '</dl></section>';
+  }
+
+  function argoAbilities() {
+    const config = state.configuration;
+    if (!config?.abilities?.length && !config?.reserve?.length) return '';
+    const cards = [...config.abilities, ...config.reserve];
+    return '<section class="room-argo-abilities"><h3>阿尔戈能力</h3><small>' + escape(config.name) + ' · 已准备 '
+      + config.abilities.length + '/' + config.limit + '</small><div class="room-argo-cards">'
+      + cards.map(card => '<div>' + cardImage('../' + card.path, card.name)
+        + '<span>' + escape(card.name) + (config.reserve.includes(card) ? ' · 备用' : '') + '</span></div>').join('') + '</div></section>';
+  }
+
+  function configFields(available) {
+    const configs = available.record.battleConfigurations || [];
+    const active = configs.find(config => config.id === available.record.activeBattleConfiguration) || {};
+    const options = configs.map(config => '<option value="' + escape(config.id) + '"' + (config.id === active.id ? ' selected' : '') + '>' + escape(config.name) + '</option>').join('');
+    return '<fieldset class="room-configuration"><legend>阿尔戈能力 · 战斗配置</legend>'
+      + '<label>已保存配置<select name="configuration"><option value="">新配置</option>' + options + '</select></label>'
+      + '<label>配置名称<input name="configName" maxlength="60" value="' + escape(active.name || '战斗配置') + '" required></label>'
+      + '<p data-config-limit>可准备 ' + available.limit + ' 项' + (available.reserveLimit ? ' · 可另选 1 项备用' : '') + '</p>'
+      + '<div class="room-config-choices">' + available.cards.map(card => '<label><img src="../' + escape(card.path) + '" alt="' + escape(card.name)
+        + '" loading="lazy"><span>' + escape(card.name) + '<input name="ability" type="checkbox" value="' + escape(card.id)
+        + '"' + (active.abilities?.includes(card.id) ? ' checked' : '') + '>准备'
+        + (available.reserveLimit ? '<input name="reserve" type="checkbox" value="' + escape(card.id) + '"' + (active.reserve?.includes(card.id) ? ' checked' : '') + '>备用' : '')
+        + '</span></label>').join('') + '</div>'
+      + (available.cards.length ? '' : '<p>尚无已学会的阿尔戈能力，可在科技页解锁。</p>')
+      + '<button type="button" data-save-config>保存战斗配置</button><p data-config-status role="status"></p></fieldset>';
+  }
+
+  function readConfig(form) {
+    const fields = new FormData(form);
+    return { name: fields.get('configName'), abilities: fields.getAll('ability'), reserve: fields.getAll('reserve') };
+  }
+
+  async function saveConfig(form) {
+    const status = form.querySelector('[data-config-status]');
+    const button = form.querySelector('[data-save-config]');
+    const chosen = form.elements.configuration.value;
+    const configId = chosen || (form.dataset.configDraftId ||= crypto.randomUUID());
+    const draft = { id: configId, ...readConfig(form) };
+    const profile = battleConfig.profileId(lobbyCampaign);
+    const accountId = lobbyCampaign.accountId;
+    const base = (battleConfig.availability(lobbyCampaign, abilityDictionary).record.battleConfigurations || []).find(entry => entry.id === configId);
+    button.disabled = true;
+    status.textContent = '正在保存配置';
+    try {
+      for (let attempt = 0; attempt < 4; attempt++) {
+        const response = await fetch(campaignUrl, { cache: 'no-store' });
+        if (!response.ok) throw new Error('请先登录后保存配置。');
+        const data = await response.json();
+        const campaign = data.campaign;
+        if (battleConfig.profileId(campaign) !== profile || data.user?.id !== accountId) throw new Error('账号或档案已切换，请重新打开战斗配置。');
+        const available = battleConfig.availability(campaign, abilityDictionary);
+        battleConfig.prepare(draft, available);
+        const configs = available.record.battleConfigurations || [];
+        const current = configs.find(entry => entry.id === configId);
+        const alreadySaved = JSON.stringify(current) === JSON.stringify(draft);
+        if (!alreadySaved && JSON.stringify(current) !== JSON.stringify(base)) throw new Error('该配置已在其他页面修改，请重新载入。');
+        const record = { ...available.record, activeBattleConfiguration: configId,
+          battleConfigurations: [...configs.filter(entry => entry.id !== configId), draft] };
+        if (!alreadySaved || available.record.activeBattleConfiguration !== configId) {
+          const saved = await fetch(campaignUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ section: 'record', userId: profile, state: record,
+              expectedRevision: campaign.sectionRevisions.record, expectedAccountId: accountId }) });
+          if (saved.status === 409) continue;
+          if (!saved.ok) throw new Error((await saved.json()).error || '保存失败');
+        }
+        lobbyCampaign = { ...campaign, accountId };
+        if (campaign.sections.record?.users || campaign.sections.record?.accounts) {
+          const key = campaign.sections.record.users ? 'users' : 'accounts';
+          campaign.sections.record[key][profile] = record;
+        } else campaign.sections.record = record;
+        const fields = form.querySelector('.room-configuration');
+        fields.outerHTML = configFields({ ...available, record });
+        form.querySelector('[data-config-status]').textContent = '已保存，下次可直接选择这套配置。';
+        return;
+      }
+      throw new Error('保存时发生并发修改，请重试。');
+    } catch (error) { status.textContent = error.message; }
+    finally { button.disabled = false; }
+  }
+
   function render() {
     const { role, seat } = actor;
     const host = role === 'host';
@@ -344,7 +462,7 @@
     const selection = focus >= 0 && active.name;
     summary.innerHTML = '<div class="battle-room-head"><div><h2>' + escape(state.title) + '</h2><p>第 ' + state.round
       + ' 轮' + (state.closed ? ' · 已结束' : '') + '</p></div><div>' + controls + '</div></div>' + links;
-    content.innerHTML = own + '<section class="battle-room-pool"><header><h3>克拉托斯池</h3>' + clearPool + '</header><div>' + pool + '</div></section>' + diceForm()
+    content.innerHTML = roomProjection() + argoAbilities() + own + '<section class="battle-room-pool"><header><h3>克拉托斯池</h3>' + clearPool + '</header><div>' + pool + '</div></section>' + diceForm()
       + (edit ? rollLog : '') + (role !== 'player' ? '<h3 class="battle-room-heading">状态总览</h3>' : '') + overview
       + (edit ? '' : rollLog);
     if (focus >= 0) {
@@ -378,7 +496,10 @@
         say('');
       } catch (error) {
         say(error.message);
-        if (error instanceof RejectedAction) render();
+        if (error instanceof RejectedAction) {
+          if (action.type === 'room-projection') lastProjectionSent = '';
+          render();
+        }
         else {
           failedAction = action;
           appendRetry();
@@ -400,6 +521,13 @@
       const response = await fetch(campaignUrl, { cache: 'no-store', signal: AbortSignal.timeout(12000) });
       if (!response.ok) throw new Error('请先在主控台登录，再创建在线战斗室。');
       const data = await response.json();
+      lobbyCampaign = { ...data.campaign, accountId: data.user?.id };
+      if (!abilityDictionary) {
+        const dictionary = await fetch('../technology/tech_card_dictionary.min.json');
+        if (!dictionary.ok) throw new Error('无法读取科技卡牌目录，请刷新重试。');
+        abilityDictionary = await dictionary.json();
+      }
+      const available = battleConfig.availability(lobbyCampaign, abilityDictionary);
       const heroes = window.ATO_HERO_CATALOG.activeHeroes(data.campaign);
       if (!heroes.length) {
         content.innerHTML += '<p>请先到<a href="../hero/">英雄页</a>添加参战英雄。</p>';
@@ -410,7 +538,7 @@
         + '"></label><fieldset><legend>选择 1 至 4 位参战英雄</legend>'
         + heroes.map((hero, index) => '<label><input type="checkbox" name="heroIds" value="' + escape(hero.id)
           + '"' + (index < 4 ? ' checked' : '') + '> ' + escape(window.ATO_HERO_CATALOG.heroDisplayName(hero)) + '</label>').join('')
-        + '</fieldset><button type="submit">创建战斗室</button></form>';
+        + '</fieldset>' + configFields(available) + '<button type="submit">创建战斗室</button></form>';
     } catch (error) {
       content.innerHTML += '<p>' + escape(error.message) + ' <a href="../index.html">打开主控台</a></p>';
     } finally {
@@ -445,6 +573,17 @@
   });
 
   content.addEventListener('change', event => {
+    if (event.target.name === 'configuration') {
+      const form = event.target.form;
+      delete form.dataset.configDraftId;
+      const available = battleConfig.availability(lobbyCampaign, abilityDictionary);
+      const config = available.record.battleConfigurations?.find(entry => entry.id === event.target.value) || {};
+      form.elements.configName.value = config.name || '战斗配置';
+      for (const input of form.querySelectorAll('[name="ability"],[name="reserve"]')) {
+        input.checked = (input.name === 'ability' ? config.abilities : config.reserve)?.includes(input.value) || false;
+      }
+      return;
+    }
     if (event.target.matches('[data-roll-seat]')) {
       rollSeat = Number(event.target.value);
       parentRoll = '';
@@ -456,6 +595,8 @@
     }
   });
 
+  window.addEventListener('aibp-room-projection', syncProjection);
+
   document.addEventListener('ato-battle-assets', () => {
     if (state) { roomBoard?.render(); render(); }
   });
@@ -463,6 +604,10 @@
   root.addEventListener('click', async event => {
     const button = event.target.closest('button');
     if (!button || (!summary.contains(button) && !content.contains(button))) return;
+    if (button.hasAttribute('data-save-config')) {
+      void saveConfig(button.form);
+      return;
+    }
     const { roomCopy, action, key, seat, delta, armCard, slot, value,
       rollMode: mode, rollFollowup, rollId, dieId, symbol } = button.dataset;
     if (mode || rollFollowup) {
@@ -545,7 +690,11 @@
     try {
       if (form.matches('[data-create]')) {
         const board = window.getAibpBoardSetup?.();
-        const data = await request('create', { title: fields.get('title'), heroIds: fields.getAll('heroIds'), board });
+        const projection = window.getAibpRoomProjection?.();
+        const configuration = readConfig(form);
+        battleConfig.prepare(configuration, battleConfig.availability(lobbyCampaign, abilityDictionary));
+        const data = await request('create', { title: fields.get('title'), heroIds: fields.getAll('heroIds'), board, projection, battleConfig: configuration });
+        lastProjectionSent = JSON.stringify(projection);
         id = data.room.id;
         credentials = { token: data.keys.host, keys: data.keys };
         storageSet(savedRoom, id);

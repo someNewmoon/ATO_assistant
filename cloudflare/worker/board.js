@@ -82,7 +82,9 @@ export function applyRoomBoard(room, actor, body) {
     const overlay = los.buildLosOverlay(board.map, {
       active: true, mode: 'titan-move', selectedTitan: seat, moveSpeed: speed,
     }, terrain, board.apostle, { level: board.level });
-    if (!overlay.moveCells.some(({ c, r }) => c === point.column && r === point.row)) fail('这一格当前不可达。', 409);
+    const route = los.titanMoveRoute(overlay, point);
+    if (!route) fail('这一格当前不可达。', 409);
+    board.lastTitanMove = { seat, route };
     board.map.pieces.titans[seat] = { column: point.column, row: point.row };
     return;
   }
@@ -90,6 +92,7 @@ export function applyRoomBoard(room, actor, body) {
   if (body.type === 'board-setup') {
     if (board && board.layoutRevision !== body.layoutRevision) fail('版图布局已更新。', 409);
     room.board = setupRoomBoard(body, seats);
+    if (room.projection?.apostle !== room.board.apostle) room.projection = null;
     room.board.layoutRevision = (board?.layoutRevision ?? -1) + 1;
     return;
   }
@@ -131,6 +134,7 @@ export function applyRoomBoard(room, actor, body) {
       }
     }
     board.map = map;
+    if (!body.keepTitans) delete board.lastTitanMove;
     board.layoutRevision++;
     return;
   }

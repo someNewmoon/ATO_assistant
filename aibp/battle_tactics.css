@@ -58,8 +58,9 @@ button.battle-piece { pointer-events: auto; cursor: pointer; min-height: 0; }
   height: 100%;
   text-align: center;
   line-height: .85;
-  color: #ffe19a;
-  text-shadow: 0 1px 2px black;
+  color: #fff;
+  font-size: clamp(7px, 1vw, 14px);
+  text-shadow: 0 1px 2px #000, 0 0 3px #000;
 }
 .tactical-attack .battle-map-los-in-range { background: transparent; box-shadow: inset 0 0 0 2px #ffd27b; }
 .tactical-attack .battle-map-los-distance.in-range { color: #fff0be; }
@@ -129,3 +130,8 @@ button.battle-piece { pointer-events: auto; cursor: pointer; min-height: 0; }
   font-size: clamp(8px, 1vw, 16px);
   text-shadow: 0 1px 3px #132d46;
 }
+
+.battle-piece-trail { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.battle-piece-trail polyline { fill: none; stroke: var(--piece-accent); stroke-width: 3px; stroke-linecap: round; stroke-linejoin: round; }
+.battle-piece-trail .trail-step { fill: var(--piece-accent); }
+.battle-piece-trail .trail-origin { fill: #18272e; stroke: var(--piece-accent); stroke-width: .12; }

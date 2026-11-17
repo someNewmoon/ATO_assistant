@@ -1063,6 +1063,7 @@ button.gear-group-name:hover {
 <link rel="stylesheet" href="editorial.css?v=20261001-cycle-menu">
 <link rel="stylesheet" href="tech-tree.css?v=20261002-content-paper">
 <link rel="stylesheet" href="arsenal.css?v=20261117-loadouts">
+<link rel="stylesheet" href="../hero/battle-roster.css">
 <link rel="stylesheet" href="../assets/card-art.css?v=20261017-corners1">
 <script src="../assets/card-art.js?v=20261017-corners1" defer></script>
   <script src="../story/data/english-source-data.js?v=20261011-english4"></script>
@@ -1139,7 +1140,8 @@ button.gear-group-name:hover {
   <script src="exploration-tech-rules.js?v=20261017-automation-audit4"></script>
   <script src="structure-tech-rules.js?v=20261019-tech-cache1"></script>
   <script src="structure-tech-client.js?v=20261019-negotiation-rows2"></script>
-<script src="gear-inventory.js?v=20261117-loadouts"></script>
+<script src="../hero/hero-catalog.js"></script>
+<script src="gear-inventory.js?v=20261117-hero-loadouts"></script>
 <script>
 const TECH_DICTIONARY_URL = 'tech_card_dictionary.min.json';
 const fetch = window.ATO_CAMPAIGN_NOTES.createFetch(window.fetch.bind(window), {
@@ -1572,6 +1574,7 @@ function recordStateFromCampaign(campaign) {
   return {
     userId,
     state,
+    heroes: window.ATO_HERO_CATALOG?.activeHeroes(campaign, userId) || [],
     revision: Math.max(0, Number(campaign?.sectionRevisions?.record || 0)),
   };
 }
@@ -1592,6 +1595,7 @@ async function loadGearRecordState() {
     if (activeAccountId !== profileId || latest.userId !== profileId) return;
     gearRecordUserId = latest.userId;
     gearRecordState = latest.state;
+    gearRecordHeroes = latest.heroes;
     gearRecordRevision = latest.revision;
     if (campaignTechLoaded && campaignStorageAvailable && !campaignSession.changed) {
       void writeSnapshotToMainArchive(unlockedTechSnapshot()).catch(error => console.warn('科技临时禁用同步：', error));
@@ -1628,7 +1632,7 @@ async function mutateCampaignRecordState(mutator, operation = null) {
     assertTarget();
     if (latest.userId !== userId) throw new Error('当前档案已切换，请重新操作');
     if (operation && latest.state._gearCraftReceipts?.[operation.id]) return adopt(latest.state, latest.revision);
-    const next = mutator(JSON.parse(JSON.stringify(latest.state)));
+    const next = mutator(JSON.parse(JSON.stringify(latest.state)), latest.heroes);
     if (next == null) return null;
     if (operation) {
       next._gearCraftReceipts ||= {};
@@ -2182,60 +2186,63 @@ function arsenalMessageHtml() {
   return arsenalMessage ? `<div class="arsenal-message ${arsenalMessageError ? 'error' : ''}" role="status">${esc(arsenalMessage)}</div>` : '';
 }
 
-const loadoutSlots = ['1', '2', '3', '4'];
-
 function loadoutTitanLabel(titan) {
   return [titan.name || '泰坦', titan.type, titan.crippled ? '残废' : ''].filter(Boolean).join(' · ');
 }
 
 function arsenalLoadoutsHtml(disabled) {
   const inventory = window.ATO_GEAR_INVENTORY;
+  const heroes = window.ATO_HERO_CATALOG;
   const titans = inventory.loadoutTitans(gearRecordState);
-  const cards = loadoutSlots.map(slot => {
-    const kit = inventory.normalizeLoadout(gearRecordState.loadouts?.[slot]);
+  const cards = gearRecordHeroes.map(hero => {
+    const kit = inventory.normalizeLoadout(gearRecordState.loadouts?.[hero.id]);
     const titanId = inventory.titanIdFor(gearRecordState, kit.titanId);
     const titan = titans.find(entry => String(entry.id) === titanId);
     const gear = Object.entries(kit.gear).map(([id, quantity]) => `${getGearName(id)} × ${quantity}`);
-    const name = kit.player || `玩家 ${slot}`;
+    const name = heroes.heroDisplayName(hero);
     const titanLabel = titan ? loadoutTitanLabel(titan) : kit.titanId ? '原泰坦已不在列表' : '未选择泰坦';
     return `<article class="arsenal-loadout-card">
       <h3>${esc(name)}</h3>
       <div>${esc(titanLabel)}</div>
       <div class="arsenal-item-meta">${esc(gear.join('、') || '未分配装备')}</div>
-      <button type="button" class="tool-btn" data-edit-loadout="${slot}" aria-label="${esc(`编辑${name}的配装`)}" ${disabled ? 'disabled' : ''}>编辑配装</button>
+      ${heroes.mnemosHtml(hero)}
+      <button type="button" class="tool-btn" data-edit-loadout="${esc(hero.id)}" aria-label="${esc(`编辑${name}的配装`)}" ${disabled ? 'disabled' : ''}>编辑配装</button>
     </article>`;
   });
   return `<section class="arsenal-loadouts" aria-labelledby="arsenalLoadoutsTitle">
-    <h2 id="arsenalLoadoutsTitle">玩家配装</h2><div class="arsenal-loadout-grid">${cards.join('')}</div>
+    <h2 id="arsenalLoadoutsTitle">英雄配装</h2>
+    ${cards.length ? `<div class="arsenal-loadout-grid">${cards.join('')}</div>` : '<p>请先到<a href="../hero/">英雄页</a>添加英雄，再回来配装。</p>'}
   </section>`;
 }
 
-function editArsenalLoadout(slot, catalog) {
+function editArsenalLoadout(heroId, catalog) {
   const inventory = window.ATO_GEAR_INVENTORY;
+  const heroes = window.ATO_HERO_CATALOG;
+  const hero = gearRecordHeroes.find(entry => entry.id === heroId);
   const record = gearRecordState;
+  if (!hero || !record) return;
   const profileId = activeAccountId;
   const accountId = campaignSession.accountId;
-  const base = inventory.normalizeLoadout(record.loadouts?.[slot]);
+  const base = inventory.normalizeLoadout(record.loadouts?.[heroId]);
   const draft = inventory.normalizeLoadout(base);
   draft.titanId = inventory.titanIdFor(record, draft.titanId);
-  const others = loadoutSlots.filter(id => id !== slot).map(id => inventory.normalizeLoadout(record.loadouts?.[id]));
-  const roster = inventory.loadoutTitans(record);
-  const titans = roster.map(titan => {
-    const id = String(titan.id);
-    const available = (Number(titan.count) || 1) - others.filter(kit => inventory.titanIdFor(record, kit.titanId) === id).length;
-    return `<option value="${esc(id)}" ${available <= 0 && id !== draft.titanId ? 'disabled' : ''}>${esc(loadoutTitanLabel(titan))} · 可分配 ${Math.max(0, available)}</option>`;
-  });
-  if (draft.titanId && !roster.some(entry => String(entry.id) === draft.titanId)) {
-    titans.push(`<option value="${esc(draft.titanId)}">原泰坦已不在列表</option>`);
+  const assignments = inventory.assignedLoadouts(record, gearRecordHeroes);
+  const legacy = !record.loadouts?.[heroId] && Object.entries(record.loadouts || {}).filter(([id]) => /^[1-4]$/.test(id));
+  let migration;
+  function otherLoadouts() {
+    return assignments.filter(([id]) => id !== heroId)
+      .map(([, loadout]) => inventory.normalizeLoadout(loadout));
   }
+  const roster = inventory.loadoutTitans(record);
   const dialog = document.createElement('dialog');
   dialog.className = 'arsenal-loadout-dialog';
   dialog.setAttribute('aria-labelledby', 'arsenalEditLoadoutTitle');
-  dialog.innerHTML = `<h2 id="arsenalEditLoadoutTitle">编辑玩家 ${slot} 的配装</h2>
+  dialog.innerHTML = `<h2 id="arsenalEditLoadoutTitle">${esc(heroes.heroDisplayName(hero))}的配装</h2>
     <form>
       <fieldset>
-        <label>玩家名称<input name="player" maxlength="60" placeholder="玩家 ${slot}"></label>
-        <label>泰坦<select name="titan" aria-label="泰坦"><option value="">未选择泰坦</option>${titans.join('')}</select></label>
+        ${legacy?.length ? `<label>沿用旧配装<select name="legacy" aria-label="沿用旧配装"><option value="">新配装</option>${legacy.map(([id, loadout]) => `<option value="${id}">${esc(loadout.player || `席位 ${id}`)}</option>`).join('')}</select></label>` : ''}
+        <label>泰坦<select name="titan" aria-label="泰坦"></select></label>
+        ${heroes.mnemosHtml(hero)}
         <ul class="arsenal-loadout-gear" aria-label="已分配装备"></ul>
         <label>搜索库存<input name="query" type="search" placeholder="装备名称、别名或编号"></label>
         <div class="arsenal-loadout-controls">
@@ -2253,17 +2260,28 @@ function editArsenalLoadout(slot, catalog) {
   const fields = dialog.querySelector('fieldset');
   const list = dialog.querySelector('ul');
   const message = dialog.querySelector('[role="status"]');
-  const player = form.elements.namedItem('player');
   const titan = form.elements.namedItem('titan');
   const query = form.elements.namedItem('query');
   const gear = form.elements.namedItem('gear');
   const add = dialog.querySelector('[data-add-loadout-gear]');
-  player.value = draft.player;
-  titan.value = draft.titanId;
+  function renderTitans() {
+    const others = otherLoadouts();
+    const options = roster.map(entry => {
+      const id = String(entry.id);
+      const available = (Number(entry.count) || 1) - others.filter(kit => inventory.titanIdFor(record, kit.titanId) === id).length;
+      return `<option value="${esc(id)}" ${available <= 0 && id !== draft.titanId ? 'disabled' : ''}>${esc(loadoutTitanLabel(entry))} · 可分配 ${Math.max(0, available)}</option>`;
+    });
+    if (draft.titanId && !roster.some(entry => String(entry.id) === draft.titanId)) {
+      options.push(`<option value="${esc(draft.titanId)}">原泰坦已不在列表</option>`);
+    }
+    titan.innerHTML = '<option value="">未选择泰坦</option>' + options.join('');
+    titan.value = draft.titanId;
+  }
 
   function renderGearChoices() {
     const selection = gear.value;
     const needle = query.value.trim().toLowerCase();
+    const others = otherLoadouts();
     const options = catalog.filter(item => item.part.key !== 'titan' && item.searchText.includes(needle))
       .map(item => {
         const reserved = others.reduce((sum, kit) => sum + (kit.gear[item.gearId] || 0), 0);
@@ -2285,6 +2303,15 @@ function editArsenalLoadout(slot, catalog) {
   }
 
   query.addEventListener('input', renderGearChoices);
+  form.elements.namedItem('legacy')?.addEventListener('change', event => {
+    const slot = event.target.value;
+    migration = slot ? { slot, base: inventory.normalizeLoadout(record.loadouts[slot]) } : undefined;
+    const source = inventory.normalizeLoadout(migration?.base || base);
+    draft.titanId = inventory.titanIdFor(record, source.titanId);
+    draft.gear = source.gear;
+    renderTitans();
+    renderAssignedGear();
+  });
   add.addEventListener('click', () => {
     if (!gear.value) return;
     draft.gear[gear.value] = (draft.gear[gear.value] || 0) + 1;
@@ -2309,14 +2336,15 @@ function editArsenalLoadout(slot, catalog) {
       message.textContent = '档案或账号已切换，请重新打开配装。';
       return;
     }
-    draft.player = player.value;
     draft.titanId = titan.value;
     fields.disabled = true;
     message.textContent = '正在保存配装…';
     try {
-      const saved = await mutateCampaignRecordState(latest => inventory.saveLoadout(latest, slot, base, draft));
+      const saved = await mutateCampaignRecordState((latest, latestHeroes) => (
+        inventory.saveLoadout(latest, latestHeroes, heroId, base, draft, migration)
+      ));
       if (!saved) await loadGearRecordState();
-      arsenalMessage = `玩家 ${slot} 的配装已保存。`;
+      arsenalMessage = `${heroes.heroDisplayName(hero)}的配装已保存。`;
       arsenalMessageError = false;
       dialog.close();
       renderGearInventoryView();
@@ -2326,6 +2354,7 @@ function editArsenalLoadout(slot, catalog) {
       fields.disabled = false;
     }
   });
+  renderTitans();
   renderAssignedGear();
   document.body.appendChild(dialog);
   dialog.showModal();
@@ -2333,8 +2362,8 @@ function editArsenalLoadout(slot, catalog) {
 
 function arsenalItemHtml(item) {
   const inventory = window.ATO_GEAR_INVENTORY;
-  const assigned = loadoutSlots.reduce((sum, slot) => {
-    const loadout = inventory.normalizeLoadout(gearRecordState.loadouts?.[slot]);
+  const assigned = inventory.assignedLoadouts(gearRecordState, gearRecordHeroes).reduce((sum, [, saved]) => {
+    const loadout = inventory.normalizeLoadout(saved);
     return sum + (loadout.gear[item.gearId] || 0);
   }, 0);
   const image = gearImageSrc(item.gearId);
@@ -3188,6 +3217,7 @@ let campaignTechRevision = 0;
 // State this page last loaded/saved for the active account; used as the merge base.
 let campaignTechBaseState = null;
 let gearRecordState = null;
+let gearRecordHeroes = [];
 let gearRecordRevision = 0;
 let gearRecordUserId = 'default';
 let gearRecordLoadInFlight = false;

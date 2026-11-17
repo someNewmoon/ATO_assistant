@@ -2423,6 +2423,7 @@
   <script src="../assets/theme.js?v=20261114-light-sidebar1" defer></script>
   <link rel="stylesheet" href="editorial.css?v=20261105-pile-row-alignment1">
   <link rel="stylesheet" href="../assets/card-art.css?v=20261017-fan-fringe5">
+  <link rel="stylesheet" href="../hero/battle-roster.css">
   <script src="../assets/fan-card-trims-data.js?v=20261020-fan-scan3" defer></script>
   <script src="../assets/fan-card-trims.js?v=20261020-title-guard1" defer></script>
   <script src="../assets/card-art.js?v=20261020-title-guard1" defer></script>
@@ -2503,6 +2504,10 @@
         </div>
       </div>
 
+      <details id="heroBattleRoster" class="hero-battle-roster">
+        <summary>参战英雄与旧忆</summary>
+        <div id="heroBattleRosterContent" class="hero-battle-roster-grid"></div>
+      </details>
       <div class="viewer" id="viewer" tabindex="0" aria-label="卡牌展示区，可横向滚动">
         <section class="section">
           <div class="image-wrap" id="panelWrap"></div>
@@ -2879,6 +2884,8 @@
   </div>
 
   <script src="../assets/campaign-session.js?v=20260917"></script>
+  <script src="../hero/hero-catalog.js"></script>
+  <script src="../technology/gear-inventory.js?v=20261117-hero-loadouts"></script>
   <script src="../assets/campaign-notes.js?v=20261015-aibp-summary1"></script>
   <script src="../assets/cycle-symbols.js?v=20261115-module-logo"></script>
   <script src="cycle-theme.js?v=20261001"></script>
@@ -4724,6 +4731,7 @@
     }
 
     function applyCampaignMapFactionState(campaign, user) {
+      if (window.ATO_HERO_CATALOG && window.ATO_GEAR_INVENTORY) renderHeroBattleRoster(campaign);
       heliosAccountId = String(user?.id || "");
       const dashboardCycle = activeDashboardCycleFromCampaign(campaign);
       window.AIBP_CYCLE_THEME?.setCycle(dashboardCycle?.cycleId);
@@ -4735,6 +4743,41 @@
       };
       renderMapFactionStatus();
     }
+
+    function renderHeroBattleRoster(campaign) {
+      const panel = document.getElementById("heroBattleRosterContent");
+      const catalog = window.ATO_HERO_CATALOG;
+      const inventory = window.ATO_GEAR_INVENTORY;
+      const record = recordStateFromCampaign(campaign) || {};
+      const roster = inventory.loadoutTitans(record);
+      const heroes = catalog.activeHeroes(campaign);
+      panel.innerHTML = heroes.length ? heroes.map(hero => {
+        const kit = inventory.normalizeLoadout(record.loadouts?.[hero.id]);
+        const titanId = inventory.titanIdFor(record, kit.titanId);
+        const titan = roster.find(item => String(item.id) === titanId);
+        const titanLabel = titan ? [titan.name, titan.type, titan.crippled ? "残废" : ""].filter(Boolean).join(" · ")
+          : kit.titanId ? "原泰坦已不在列表" : "未选择泰坦";
+        return `<article><h3>${catalog.escape(catalog.heroDisplayName(hero))}</h3>
+          <div>${catalog.escape(titanLabel)}</div>${catalog.mnemosHtml(hero)}</article>`;
+      }).join("") : '<p>当前战役还没有英雄。<a href="../hero/">打开英雄页</a></p>';
+    }
+
+    const heroBattleRoster = document.getElementById("heroBattleRoster");
+    async function refreshHeroBattleRoster() {
+      if (!heroBattleRoster.open) return;
+      try {
+        const response = await fetch(recordStorageUrl, { cache: "no-store" });
+        if (!response.ok) throw new Error();
+        const payload = await response.json();
+        renderHeroBattleRoster(payload.campaign);
+      } catch {
+        document.getElementById("heroBattleRosterContent").textContent = "无法读取战役英雄，请登录并重试。";
+      }
+    }
+    heroBattleRoster.addEventListener("toggle", refreshHeroBattleRoster);
+    window.addEventListener("focus", () => {
+      if (theatreRequest) void refreshHeroBattleRoster();
+    });
 
     async function refreshCampaignMapFactionState() {
       if (theatreRequest || campaignMapFactionRefreshInFlight) return;

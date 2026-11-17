@@ -56,7 +56,7 @@ const CYCLES = vm.runInNewContext(`(${extractLiteral('CYCLES')})`, {});
 // 归在「隐藏」组）。判据函数遍历的就是这个列表，沙箱必须跟着建一份。
 const EXTRA_CYCLES = vm.runInNewContext(`(${extractLiteral('EXTRA_CYCLES')})`, {});
 const MNEMOS_GROUPS = CYCLES.concat(EXTRA_CYCLES);
-const MNEMOS = vm.runInNewContext(`(${extractLiteral('MNEMOS')})`, {});
+const { MNEMOS, FATED_MNEMOS } = require('../hero/hero-catalog.js');
 const TRACK_LENGTH = 10;   // 轨道固定 1–10 格
 
 // 判据还会引用模块级常量（轨道长度上限），一并按名字取出来。
@@ -370,7 +370,7 @@ test('hero 页的卡组列表 = CYCLES + EXTRA_CYCLES，且例外组里那张宿
   );
   assert.deepEqual([...EXTRA_CYCLES], ['count'], 'EXTRA_CYCLES 目前只应有「count」组');
 
-  const fated = vm.runInNewContext(`(${extractLiteral('FATED_MNEMOS')})`, {});
+  const fated = FATED_MNEMOS;
   const sowed = (fated.count || []).find(card => card.id === 'fm_sowed');
   assert.ok(sowed, 'FATED_MNEMOS.count 里缺 fm_sowed');
   assert.equal(sowed.card, 'CF1269', 'fm_sowed 的卡号应为官方表里的 CF1269');
@@ -390,7 +390,7 @@ test('宿命回忆技能：单项 skill 与多项 skills 都归一成数组', ()
   assert.deepEqual([...env.fatedSkills({ skills: ['will', 'wisdom'] })], ['will', 'wisdom'], '多项写法');
   assert.deepEqual([...env.fatedSkills({})], [], '两项都没有时返回空数组');
 
-  const fated = vm.runInNewContext(`(${extractLiteral('FATED_MNEMOS')})`, {});
+  const fated = FATED_MNEMOS;
   const multi = [];
   for (const [cycle, cards] of Object.entries(fated)) {
     for (const card of cards) {

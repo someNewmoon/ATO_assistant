@@ -79,17 +79,29 @@
     return id;
   }
 
-  function saveLoadout(record, slot, base, draft) {
-    if (!['1', '2', '3', '4'].includes(slot)) throw new Error('玩家席位无效');
-    const saved = normalizeLoadout(record.loadouts?.[slot]);
+  function assignedLoadouts(record, heroes) {
+    const active = new Set(heroes.map(hero => hero.id));
+    return Object.entries(record.loadouts || {}).filter(([id]) => active.has(id));
+  }
+
+  function saveLoadout(record, heroes, heroId, base, draft, migration) {
+    if (!heroId || /^[1-4]$/.test(heroId) || !heroes.some(hero => hero.id === heroId)) {
+      throw new Error('该英雄已不在当前战役，请重新打开配装');
+    }
+    const saved = normalizeLoadout(record.loadouts?.[heroId]);
     const next = normalizeLoadout(draft);
     next.titanId = titanIdFor(record, next.titanId);
-    if (JSON.stringify(saved) === JSON.stringify(next)) return null;
+    if (JSON.stringify(saved) === JSON.stringify(next) && (!migration || !record.loadouts?.[migration.slot])) return null;
     if (JSON.stringify(saved) !== JSON.stringify(normalizeLoadout(base))) {
-      throw new Error('这个席位已在另一设备修改，请关闭后重新打开配装');
+      throw new Error('该英雄的配装已在另一设备修改，请重新打开配装');
     }
-    const others = Object.entries(record.loadouts || {})
-      .filter(([id]) => id !== slot && ['1', '2', '3', '4'].includes(id))
+    const legacy = migration ? normalizeLoadout(record.loadouts?.[migration.slot]) : null;
+    if (migration && (!/^[1-4]$/.test(migration.slot) || !record.loadouts?.[migration.slot]
+        || JSON.stringify(legacy) !== JSON.stringify(migration.base))) {
+      throw new Error('旧配装已更改，请重新打开配装');
+    }
+    const others = assignedLoadouts(record, heroes)
+      .filter(([id]) => id !== heroId)
       .map(([, loadout]) => normalizeLoadout(loadout));
     const titanId = next.titanId;
     if (titanId && titanId !== titanIdFor(record, saved.titanId)) {
@@ -101,14 +113,13 @@
     for (const [id, quantity] of Object.entries(next.gear)) {
       const used = others.reduce((sum, item) => sum + (item.gear[id] || 0), 0);
       if (quantity > (saved.gear[id] || 0) && quantity + used > (stock[id]?.quantity || 0)) {
-        throw new Error(`${id} 库存不足，可能已分配给其他席位`);
+        throw new Error(`${id} 库存不足，可能已分配给其他英雄`);
       }
     }
-    return {
-      ...record,
-      loadouts: { ...record.loadouts, [slot]: next },
-    };
+    const loadouts = { ...record.loadouts, [heroId]: next };
+    if (migration) delete loadouts[migration.slot];
+    return { ...record, loadouts };
   }
 
-  return { gearKey, normalize, adjust, normalizeLoadout, loadoutTitans, titanIdFor, saveLoadout };
+  return { gearKey, normalize, adjust, normalizeLoadout, loadoutTitans, titanIdFor, assignedLoadouts, saveLoadout };
 });

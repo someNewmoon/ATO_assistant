@@ -38,7 +38,9 @@ test('inventory rejects invalid mutations and safely normalizes old or malformed
   assert.throws(() => inventory.adjust({}, 'AJ0160', -1, true));
 });
 
-test('player loadouts reserve gear and Titans without changing stock, and release gear when edited', () => {
+const heroes = [{ id: 'hero-a' }, { id: 'hero-b' }];
+
+test('hero loadouts reserve gear and Titans without changing stock, and release gear when edited', () => {
   const record = {
     arsenal: { AJ0160: { quantity: 1, manufactured: 1 } },
     titans: [{ id: 'dreamwalker', name: '梦行者', count: 1 }],
@@ -47,28 +49,40 @@ test('player loadouts reserve gear and Titans without changing stock, and releas
   };
   const base = inventory.normalizeLoadout();
   const first = { player: '玩家甲', titanId: 'old', gear: { AJ0160: 1 } };
-  const saved = inventory.saveLoadout(record, '1', base, first);
-  assert.equal(saved.loadouts['1'].titanId, 'dreamwalker');
+  const saved = inventory.saveLoadout(record, heroes, 'hero-a', base, first);
+  assert.equal(saved.loadouts['hero-a'].titanId, 'dreamwalker');
   assert.deepEqual(saved.arsenal, record.arsenal);
   assert.equal(record.loadouts, undefined);
-  assert.throws(() => inventory.saveLoadout(saved, '2', base, first), /泰坦条目/);
-  assert.throws(() => inventory.saveLoadout(saved, '2', base, { ...first, titanId: '' }), /库存不足/);
-  const released = inventory.saveLoadout(saved, '1', saved.loadouts['1'], { ...first, gear: {} });
-  const second = inventory.saveLoadout(released, '2', base, { ...first, titanId: '' });
-  assert.deepEqual(second.loadouts['2'].gear, { AJ0160: 1 });
+  assert.throws(() => inventory.saveLoadout(saved, heroes, 'hero-b', base, first), /泰坦条目/);
+  assert.throws(() => inventory.saveLoadout(saved, heroes, 'hero-b', base, { ...first, titanId: '' }), /库存不足/);
+  const released = inventory.saveLoadout(saved, heroes, 'hero-a', saved.loadouts['hero-a'], { ...first, gear: {} });
+  const second = inventory.saveLoadout(released, heroes, 'hero-b', base, { ...first, titanId: '' });
+  assert.deepEqual(second.loadouts['hero-b'].gear, { AJ0160: 1 });
   assert.deepEqual(second.resources, record.resources);
 });
 
-test('loadout saves preserve another slot, reject stale edits and recognize a retried save', () => {
+test('loadout saves preserve another hero, reject stale edits and recognize a retried save', () => {
   const base = inventory.normalizeLoadout();
   const first = { ...base, player: '玩家甲' };
   const second = { ...base, player: '玩家乙' };
-  const saved = inventory.saveLoadout({}, '1', base, first);
-  const combined = inventory.saveLoadout(saved, '2', base, second);
-  assert.deepEqual(combined.loadouts, { '1': first, '2': second });
-  assert.throws(() => inventory.saveLoadout(combined, '1', base, second), /另一设备修改/);
-  assert.equal(inventory.saveLoadout(combined, '1', base, first), null);
+  const saved = inventory.saveLoadout({}, heroes, 'hero-a', base, first);
+  const combined = inventory.saveLoadout(saved, heroes, 'hero-b', base, second);
+  assert.deepEqual(combined.loadouts, { 'hero-a': first, 'hero-b': second });
+  assert.throws(() => inventory.saveLoadout(combined, heroes, 'hero-a', base, second), /另一设备修改/);
+  assert.equal(inventory.saveLoadout(combined, heroes, 'hero-a', base, first), null);
   assert.equal(inventory.normalizeLoadout({ gear: { 'T:tt_earthshaker': 2 } }).gear['T:tt_earthshaker'], undefined);
+});
+
+test('legacy seats migrate to the chosen hero once and keep the rest of the campaign', () => {
+  const kit = { player: '旧席位', titanId: 'a', gear: { AJ0160: 1 } };
+  const base = inventory.normalizeLoadout();
+  const migration = { slot: '1', base: kit };
+  const record = { loadouts: { '1': kit, '2': base }, titans: [{ id: 'a', count: 1 }], arsenal: { AJ0160: { quantity: 1 } } };
+  const saved = inventory.saveLoadout(record, heroes, 'hero-a', base, kit, migration);
+  assert.deepEqual(saved.loadouts, { '2': base, 'hero-a': kit });
+  assert.deepEqual(saved.titans, record.titans);
+  assert.equal(inventory.saveLoadout(saved, heroes, 'hero-a', base, kit, migration), null);
+  assert.throws(() => inventory.saveLoadout(record, [], 'hero-a', base, kit, migration), /英雄已不在/);
 });
 
 function craftContext({ conflict = false, fail = false, remoteMissing = false, loseResponse = false, malformedResponse = false, offlineRecovery = false } = {}) {

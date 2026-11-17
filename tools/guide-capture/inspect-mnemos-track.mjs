@@ -1,23 +1,8 @@
 // Inspect the MNEMOS track data: for every 回忆卡, where do its memory nodes sit
 // on the track (标准 10 格；c5_07 官方给 5/9/14，是 14 格), and are all of them M-prefixed?
-import fs from 'node:fs';
-import vm from 'node:vm';
+import catalog from '../../hero/hero-catalog.js';
 
-const src = fs.readFileSync('hero/index.html', 'utf8').replace(/\r\n/g, '\n');
-const start = src.indexOf('const MNEMOS = ');
-const open = src.slice(start).search(/[[{]/);
-const from = start + open;
-let depth = 0;
-let literal = null;
-for (let i = from; i < src.length; i += 1) {
-  const ch = src[i];
-  if (ch === '{' || ch === '[') depth += 1;
-  else if (ch === '}' || ch === ']') {
-    depth -= 1;
-    if (!depth) { literal = src.slice(from, i + 1); break; }
-  }
-}
-const MNEMOS = vm.runInNewContext(`(${literal})`, {});
+const { MNEMOS } = catalog;
 
 const mPrefixed = [];   // nodes not starting with M
 const thresholdShapes = new Map();

@@ -1,0 +1,37 @@
+.hero-battle-roster {
+  margin: 0 0 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+}
+.hero-battle-roster summary { cursor: pointer; font-weight: 700; }
+.hero-battle-roster-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(155px, 100%), 1fr));
+  gap: 8px;
+  margin-top: 8px;
+}
+.hero-battle-roster-grid article {
+  padding: 8px;
+  border: 1px solid var(--line);
+  overflow-wrap: anywhere;
+}
+.hero-battle-roster-grid h3 { margin: 0 0 4px; font-size: 14px; }
+.hero-mnemos-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(110px, 100%), 1fr));
+  gap: 4px;
+  width: 100%;
+  list-style: none;
+  padding: 0;
+  margin: 4px 0;
+}
+.hero-mnemos-cards li {
+  display: grid;
+  padding: 4px 6px;
+  border: 1px solid var(--line);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.hero-mnemos-cards small, .hero-mnemos-empty { color: var(--muted); font-size: 11px; }
+.hero-mnemos-empty { margin: 3px 0; }

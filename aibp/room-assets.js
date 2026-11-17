@@ -9,28 +9,22 @@
     if (!path) return;
     error.hidden = true;
     image.alt = name;
-    image.src = new URL(path, origin);
+    image.src = path;
     if (!box.open) box.showModal();
   }
 
-  const titanArt = titan => window.ATO_GEAR_INVENTORY.titanArtwork(titan, hosted);
-  const hasGear = id => Object.hasOwn(hosted.equipment, id);
-  const hasMnemos = id => Object.hasOwn(hosted.mnemos, id);
+  function imageURL(path) {
+    return path ? new URL(path, origin).href : '';
+  }
 
   window.ATO_BATTLE_ASSETS = {
-    hasGear,
-    showGear(id, name) {
-      if (hasGear(id)) display(hosted.equipment[id], name);
+    gearSrc: id => imageURL(Object.hasOwn(hosted.equipment, id) && hosted.equipment[id]),
+    mnemosSrc: id => imageURL(Object.hasOwn(hosted.mnemos, id) && hosted.mnemos[id]),
+    titanArt(titan) {
+      const art = window.ATO_GEAR_INVENTORY.titanArtwork(titan, hosted);
+      return art && { ...art, src: imageURL(art.path) };
     },
-    titanArt,
-    showTitan(titan) {
-      const art = titanArt(titan);
-      if (art) display(art.path, art.name);
-    },
-    hasMnemos,
-    showMnemos(id, name) {
-      if (hasMnemos(id)) display(hosted.mnemos[id], name);
-    },
+    zoom: display,
   };
 
   image.addEventListener('error', () => { error.hidden = false; });

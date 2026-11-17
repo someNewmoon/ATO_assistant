@@ -129,30 +129,35 @@
       + '<strong>' + count + '</strong>' + (enabled ? button(1, '+', count >= limit) : '') + '</span>';
   }
 
+  function cardImage(src, name, className = '') {
+    if (!src) return '';
+    return '<button type="button" class="battle-room-card-art ' + className
+      + '" data-room-art aria-label="放大' + escape(name) + '">'
+      + '<img src="' + escape(src) + '" alt="' + escape(name) + '" loading="lazy" decoding="async"></button>';
+  }
+
   function heroCard(hero, seat) {
     const editable = !state.closed && (actor.role === 'host' || (actor.role === 'player' && actor.seat === seat));
+    const art = window.ATO_BATTLE_ASSETS;
     const titan = hero.titan ? escape(window.ATO_GEAR_INVENTORY.titanLabel(hero.titan)) : '未分配泰坦';
-    const titanArt = hero.titan && window.ATO_BATTLE_ASSETS?.titanArt(hero.titan);
-    const titanPreview = titanArt ? ' <button type="button" data-titan-preview="' + seat + '">' + titanArt.label + '</button>' : '';
-    const gear = hero.gear.map(item => '<li><span>' + escape(item.name) + ' <small>' + escape(item.id) + '</small>'
-      + (window.ATO_BATTLE_ASSETS?.hasGear(item.id) ? ' <button type="button" data-gear-preview="' + escape(item.id) + '" data-gear-name="'
-        + escape(item.name) + '">查看卡图</button>' : '') + '</span>'
+    const titanArt = hero.titan && art?.titanArt(hero.titan);
+    const titanImage = titanArt ? cardImage(titanArt.src, titanArt.name, 'battle-room-titan-art') : '';
+    const gear = hero.gear.map(item => '<li>' + cardImage(art?.gearSrc(item.id), item.name)
+      + '<span>' + escape(item.name) + ' <small>' + escape(item.id) + '</small></span>'
       + '<span>已用 ' + buttons('gear', item.id, item.used, seat, item.name + '使用数', item.count, editable) + ' / ' + item.count + '</span></li>').join('');
-    const mnemos = hero.mnemos.map(card => '<li><span>' + escape(card.name)
-      + (window.ATO_BATTLE_ASSETS?.hasMnemos(card.id) ? ' <button type="button" data-mnemos-preview="' + escape(card.id)
-        + '" data-card-name="' + escape(card.name) + '">查看卡图</button>' : '')
-      + '</span><small>' + escape(card.id) + ' · ' + (card.fated ? '命业旧忆' : escape(card.progress) + '/' + escape(card.limit))
-      + '</small></li>').join('');
+    const mnemos = hero.mnemos.map(card => '<li>' + cardImage(art?.mnemosSrc(card.id), card.name)
+      + '<span>' + escape(card.name) + '</span><small>' + escape(card.id) + ' · '
+      + (card.fated ? '命业旧忆' : escape(card.progress) + '/' + escape(card.limit)) + '</small></li>').join('');
     const condition = editable ? '<select data-condition="' + seat + '" aria-label="' + escape(hero.name) + '的泰坦状态">'
       + Object.entries(conditionNames).map(([key, label]) => '<option value="' + key + '"' + (key === hero.condition ? ' selected' : '') + '>' + label + '</option>').join('')
       + '</select>' : conditionNames[hero.condition];
     const last = state.rolls.find(roll => roll.seat === seat);
     const summary = last ? '<p class="battle-room-result">最近一次掷骰 · ' + rollSummary(last) + '</p>' : '';
-    return '<article class="battle-room-hero"><header><div><h3>' + escape(hero.name) + '</h3><div>' + titan + titanPreview + '</div></div><small>'
+    return '<article class="battle-room-hero"><header><div><h3>' + escape(hero.name) + '</h3><div>' + titan + '</div></div><small>'
       + escape(hero.player || '待认领') + '</small></header><div class="battle-room-stats"><div>凶险 '
-      + buttons('stat', 'danger', hero.stats.danger, seat, '凶险', 30, editable) + '</div><div>泰坦状态 ' + condition + '</div></div>'
-      + '<h4>装备</h4>' + (gear ? '<ul>' + gear + '</ul>' : '<p>未分配装备</p>')
-      + '<h4>旧忆</h4>' + (mnemos ? '<ul>' + mnemos + '</ul>' : '<p>暂无旧忆卡牌</p>')
+      + buttons('stat', 'danger', hero.stats.danger, seat, '凶险', 30, editable) + '</div><div>泰坦状态 ' + condition + '</div></div>' + titanImage
+      + '<h4>装备</h4>' + (gear ? '<ul class="battle-room-card-list">' + gear + '</ul>' : '<p>未分配装备</p>')
+      + '<h4>旧忆</h4>' + (mnemos ? '<ul class="battle-room-card-list">' + mnemos + '</ul>' : '<p>暂无旧忆卡牌</p>')
       + summary + '</article>';
   }
 
@@ -307,12 +312,9 @@
     const button = event.target.closest('button');
     if (!button) return;
     const { roomCopy, action, key, seat, delta } = button.dataset;
-    if (button.dataset.gearPreview) {
-      await window.ATO_BATTLE_ASSETS?.showGear(button.dataset.gearPreview, button.dataset.gearName);
-    } else if (button.dataset.titanPreview) {
-      window.ATO_BATTLE_ASSETS?.showTitan(state.heroes[Number(button.dataset.titanPreview)].titan);
-    } else if (button.dataset.mnemosPreview) {
-      window.ATO_BATTLE_ASSETS?.showMnemos(button.dataset.mnemosPreview, button.dataset.cardName);
+    if (button.hasAttribute('data-room-art')) {
+      const image = button.querySelector('img');
+      window.ATO_BATTLE_ASSETS?.zoom(image.src, image.alt);
     } else if (roomCopy) {
       const url = roomLink(roomCopy, credentials.keys[roomCopy]);
       try {

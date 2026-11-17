@@ -79,3 +79,39 @@ body.aibp-room-only > .app > aside,
 body.aibp-room-only > .app > main > :not(#battleRoom) { display: none !important; }
 #battleRoomImage { max-width: min(95vw, 640px); max-height: 94vh; }
 #battleRoomImage img { display: block; max-width: 100%; max-height: 75vh; object-fit: contain; margin-top: 8px; }
+
+.battle-room-hero .battle-room-card-list {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 118px), 1fr));
+  gap: 8px;
+}
+
+.battle-room-card-list li {
+  display: grid;
+  align-content: start;
+  justify-content: stretch;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.battle-room button.battle-room-card-art {
+  display: block;
+  width: 100%;
+  max-width: 13rem;
+  padding: 0;
+  overflow: hidden;
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  cursor: zoom-in;
+}
+
+.battle-room-card-art img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 2 / 3;
+  max-height: 13rem;
+  object-fit: contain;
+}
+
+.battle-room button.battle-room-titan-art { max-width: 22rem; }
+.battle-room-titan-art img { aspect-ratio: 3 / 2; }

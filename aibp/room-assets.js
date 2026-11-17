@@ -49,25 +49,37 @@
     const cacheName = 'ato-aibp-assets-' + crypto.randomUUID();
     const index = await caches.open(indexName);
     const images = await caches.open(cacheName);
-    const paths = [];
+    const entries = Object.create(null);
     try {
-      await navigator.serviceWorker.register(new URL('room-assets-worker.js', location.href));
-      for (let offset = 0; offset < available.length; offset += 16) {
-        await Promise.all(available.slice(offset, offset + 16).map(async ([path, file]) => {
-          const type = mediaType(new Uint8Array(await file.slice(0, 12).arrayBuffer()));
-          if (!type || file.size > 25 * 1024 * 1024) return;
-          await images.put(new URL(path, origin), new Response(file, {
-            headers: { 'Content-Type': type, 'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': 'sandbox' },
-          }));
-          paths.push(path);
+      const registration = await navigator.serviceWorker.register(new URL('room-assets-worker.js', location.href));
+      if (registration.active) void registration.update().catch(() => {});
+      for (let offset = 0; offset < available.length; offset += 24) {
+        const candidates = await Promise.all(available.slice(offset, offset + 24).map(async ([path, file]) => {
+          if (file.size > 25 * 1024 * 1024) return null;
+          const data = await file.arrayBuffer();
+          const type = mediaType(new Uint8Array(data, 0, Math.min(12, data.byteLength)));
+          return type ? { path, data, type } : null;
         }));
-        notice.textContent = '已读取 ' + Math.min(offset + 16, available.length) + ' / ' + available.length + ' 张';
+        const group = candidates.filter(Boolean);
+        if (group.length) {
+          const member = 'local-assets-group-' + offset;
+          const parts = [];
+          let start = 0;
+          for (const { path, data, type } of group) {
+            entries[path] = { member, start, end: start + data.byteLength, type };
+            parts.push(data);
+            start += data.byteLength;
+          }
+          await images.put(new URL(member, marker), new Response(new Blob(parts)));
+        }
+        notice.textContent = '已读取 ' + Math.min(offset + 24, available.length) + ' / ' + available.length + ' 张';
       }
-      if (!paths.length) throw new Error('没有通过格式校验的图片。');
+      const count = Object.keys(entries).length;
+      if (!count) throw new Error('没有通过格式校验的图片。');
       const previous = await index.match(marker);
       const old = previous && await previous.json();
-      const next = { cacheName, count: paths.length, paths };
-      await index.put(marker, new Response(JSON.stringify(next)));
+      const next = { cacheName, count, entries };
+      await index.put(marker, new Response(JSON.stringify(next), { headers: { 'X-ATO-Asset-Index': cacheName } }));
       assets = next;
       if (old?.cacheName && old.cacheName !== assets.cacheName) await caches.delete(old.cacheName).catch(() => {});
     } catch (error) {
@@ -80,6 +92,7 @@
     if (!picker.files.length || working) return;
     working = true;
     picker.disabled = clear.disabled = true;
+    notice.textContent = '正在读取图片目录…';
     try {
       await importFolder([...picker.files]);
       showCurrent();
@@ -104,21 +117,26 @@
     document.dispatchEvent(new Event('ato-battle-assets'));
   });
 
+  const gearPath = id => 'technology/images/gear_cards/' + id.toLowerCase() + '.jpg';
   window.ATO_BATTLE_ASSETS = {
     async showGear(id, name) {
-      const path = 'technology/images/gear_cards/' + id.toLowerCase() + '.jpg';
-      if (!assets?.paths.includes(path)) return;
+      const path = gearPath(id);
+      if (!this.hasGear(id)) return;
       const pack = await caches.open(assets.cacheName);
-      const image = await pack.match(new URL(path, origin));
-      if (!image) return;
+      const entry = assets.entries?.[path];
+      const reply = await pack.match(entry ? new URL(entry.member, marker) : new URL(path, origin));
+      if (!reply) return;
+      const source = await reply.blob();
+      const image = entry ? source.slice(entry.start, entry.end, entry.type) : source;
       const imageElement = box.querySelector('img');
       if (imageElement.src.startsWith('blob:')) URL.revokeObjectURL(imageElement.src);
-      imageElement.src = URL.createObjectURL(await image.blob());
+      imageElement.src = URL.createObjectURL(image);
       imageElement.alt = name;
       if (!box.open) box.showModal();
     },
     hasGear(id) {
-      return assets?.paths.includes('technology/images/gear_cards/' + id.toLowerCase() + '.jpg');
+      const path = gearPath(id);
+      return Boolean(assets?.entries?.[path] || assets?.paths?.includes(path));
     },
   };
 

@@ -4,6 +4,7 @@ import { basename, dirname, extname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { aibpImageIndex, collectHostedArt, roomCardArt } from './hosted-card-art.js';
 import { buildBattleRoom } from './build-battle-room.js';
+import { buildHostedStory } from './build-hosted-story.js';
 
 const directory = fileURLToPath(new URL('.', import.meta.url));
 const repo = join(directory, '..');
@@ -22,7 +23,7 @@ const hosted = imageRoot ? await collectHostedArt(imageRoot) : [];
 if (imageRoot && hosted.length === 0) throw new Error('ATO_CARD_ART_DIR 中没有可发布卡图。');
 const sourceFiles = new Map(files.map(file => [file, join(repo, file)]));
 for (const path of hosted) if (!sourceFiles.has(path)) sourceFiles.set(path, join(imageRoot, path));
-if (sourceFiles.size + 7 > 20000) throw new Error('Pages 免费版文件数上限为 20,000。');
+if (sourceFiles.size + 9 > 20000) throw new Error('Pages 免费版文件数上限为 20,000。');
 
 const staging = await mkdtemp(join(directory, '.pages-'));
 try {
@@ -60,6 +61,7 @@ try {
     })).trim();
     if (version) {
       if (!/^[a-f0-9]{20}$/.test(version)) throw new Error('Invalid story library version.');
+      await buildHostedStory(staging);
       const dest = join(staging, 'story/library', version);
       await mkdir(dest, { recursive: true });
       for (const cycle of ['c1', 'c2', 'c3', 'c4', 'c5']) {

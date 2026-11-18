@@ -4,7 +4,7 @@
     const books = new Map();
 
     async function authorize() {
-      const result = await api.request(id, 'library', token);
+      const result = await api.request(id, 'library', token, undefined, { timeout: 22000 });
       if (!/^[a-f0-9]{20}$/.test(result.version) || !/^[A-Za-z0-9+/]{43}=$/.test(result.key)) {
         throw new Error('线上故事库配置无效。');
       }

@@ -352,3 +352,5 @@ body.aibp-room-only > .app > main > :not(#battleRoom) { display: none !important
 .room-roll-head { display: flex; align-items: center; justify-content: space-between; gap: .4rem; flex-wrap: wrap; }
 .room-roll-head .room-roll-reactions { margin: 0; }
 .room-roll-head .room-roll-reactions:empty { display: none; }
+
+.room-projection-cards .room-projection-back { width: 42%; margin-top: .35rem; }

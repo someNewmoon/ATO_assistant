@@ -1156,7 +1156,9 @@
     // 引擎只如实读取。「泰坦踩上高地自动勾选、移下自动取消」由控制层做边沿触发
     // (battle_map_control.js 的 syncAutoElevated)，改的也是这个 state.elevated，
     // 所以第二屏拿到快照里的 elevated 后画出来与主屏一致，无需在引擎里按位置重算。
-    const elevated = !!state.elevated;
+    const elevated = settings.targetCell
+      ? source.some(({ c, r }) => occ.elevated?.has(cellKey(c, r)))
+      : !!state.elevated;
 
     const obscuring = [];
     occ.obscuring.forEach((key) => {
@@ -1201,12 +1203,14 @@
       ).map(({ row, column }) => cellKey(column, row))
     );
 
-    const { grid } = computeLOSMap(source, occ, {
+    const sight = {
       elevated,
       blindspots,
       alwaysLos: profileWithSpeed ? profileWithSpeed.alwaysLos : false,
       mazesense,
-    });
+    };
+    if (settings.targetCell) return { ...base, targetVisible: hasLOS(source, settings.targetCell, occ, sight) };
+    const { grid } = computeLOSMap(source, occ, sight);
     // 移速 ∞ 时全图都在射程内，铺满一层反而盖住视线结果，所以不画射程框。
     const reach = Number.isFinite(Number(state.reach)) ? Number(state.reach) : 1;
     const targets = mode === "titan-attack" ? losSourceCells(pieceState.apostle, bossSize) : [];

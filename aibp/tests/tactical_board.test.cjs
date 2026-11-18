@@ -90,3 +90,14 @@ test('boss trails use unit orthogonal steps without consulting terrain', () => {
   for (let i = 1; i < route.length; i++) assert.equal(Math.abs(route[i].column-route[i-1].column)+Math.abs(route[i].row-route[i-1].row), 1);
   assert.deepEqual(los.apostleMoveRoute(from, {column:4,row:5}), []);
 });
+
+test("single-target priority sight uses the Primordial footprint and current blindspot", () => {
+  const map = pursuitBoard();
+  const state = { active: true, mode: "apostle-sight" };
+  const targetCell = { c: 5, r: 9 };
+  map.pieces.apostle = { column: 6.5, row: 9.5, facing: 90 };
+  const sight = () => los.buildLosOverlay(map, state, terrain, "HERMESIAN_PURSUER", { level: 1, targetCell }).targetVisible;
+  assert.equal(sight(), false);
+  map.pieces.apostle.facing = 270;
+  assert.equal(sight(), true);
+});

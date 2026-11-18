@@ -234,10 +234,16 @@
       if (window.BattleBoardPieces && (hasTactics(losState.mode) || (map.pieces && (options.alwaysRenderPieces || map.showStarts !== false)))) {
         const apostle = options.getApostle();
         const level = options.getLevel();
-        window.BattleBoardPieces.render(startLayer, window.BattleTerrain.getBoardPieces(map, apostle, level), {
+        const terrain = window.BattleTerrain;
+        const pieces = terrain.getBoardPieces(map, apostle, level);
+        const priorityTarget = options.priorityTarget?.();
+        const target = pieces.titans[priorityTarget];
+        const priorityVisible = target && window.BattleLOS?.buildLosOverlay(map, { active: true, mode: "apostle-sight" },
+          terrain, apostle, { level, targetCell: { c: target.column, r: target.row } }).targetVisible;
+        window.BattleBoardPieces.render(startLayer, pieces, {
           apostle, size: window.BattleTerrain.getApostleProfile(apostle, level)?.size || 1,
           selected: losState.selectedTitan, mode: losState.mode, names: options.titanNames?.(), roster: options.titanRoster?.(),
-          portraits: options.heroPortraits?.(), priorityTarget: options.priorityTarget?.(),
+          portraits: options.heroPortraits?.(), priorityTarget, priorityVisible,
           trail: options.getTitanTrail?.() || (nativeTitanTrail?.map === options.getMap() ? nativeTitanTrail.move : null),
           bossTrail: options.getApostleTrail?.() || (nativeApostleTrail?.map === options.getMap() ? nativeApostleTrail.move : null),
           onSelectBoss: losState.mode !== "apostle-move" && editBoard() && tactics ? () => setTacticalMode("apostle-move") : undefined,

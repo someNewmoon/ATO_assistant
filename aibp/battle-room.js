@@ -557,9 +557,10 @@
     const projection = state.projection;
     if (!projection) return state.board ? '<section class="room-projection"><h3>骇物战况</h3><p>等待房主同步 AIBP 战况。</p></section>' : '';
     const { title, level, panel, ai, bp, aiDeck, bpDeck, damage } = projection;
-    function preview(label, card, empty) {
-      return '<div><h4>' + label + '</h4>' + (card?.src
-        ? cardImage(card.src, card.label || label) : '<p>' + empty + '</p>') + '</div>';
+    function preview(label, card, empty, back) {
+      const face = card?.src ? cardImage(card.src, card.label || label) : '';
+      const reverse = back?.src ? cardImage(back.src, back.label || '牌背', face ? 'room-projection-back' : '') : '';
+      return '<div><h4>' + label + '</h4>' + (face + reverse || '<p>' + empty + '</p>') + '</div>';
     }
     function deckCounts(label, deck) {
       return '<div><dt>' + label + '</dt><dd>牌背 ' + deck.count + ' 张 · 弃牌 ' + deck.discard + ' 张</dd>'
@@ -569,7 +570,7 @@
       + (damage.damage1 == null ? '' : '（' + damage.damage1 + ' + ' + damage.damage2 + '）');
     return '<section class="room-projection"><h3>骇物战况</h3><p>' + escape([title, level].filter(Boolean).join(' · ')) + '</p>'
       + '<div class="room-projection-cards">' + preview('骇物面板', { src: panel, label: title }, '暂无面板图')
-      + preview('已揭示 AI', ai, '未揭示 AI') + preview('已揭示 BP', bp, '未揭示 BP') + '</div>'
+      + preview('AI', ai, '未揭示 AI', aiDeck.back) + preview('BP', bp, '未揭示 BP', bpDeck.back) + '</div>'
       + '<dl class="room-projection-counts"><div><dt>损伤</dt><dd>' + damageText + '</dd></div>'
       + deckCounts('AI 牌堆', aiDeck) + deckCounts('BP 牌堆', bpDeck) + '</dl></section>';
   }

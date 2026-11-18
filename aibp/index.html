@@ -2419,7 +2419,7 @@
   </style>
   <link rel="stylesheet" href="c45_specials.css?v=20260926-titan-group-layout1">
   <link rel="stylesheet" href="battle_map_control.css?v=20261117-battle-polish">
-  <link rel="stylesheet" href="battle_tactics.css?v=20261118-target-link">
+  <link rel="stylesheet" href="battle_tactics.css?v=20261118-priority-sight">
   <link rel="stylesheet" href="../api/cycle-theme.css">
   <script src="../assets/theme.js?v=20261114-light-sidebar1" defer></script>
   <link rel="stylesheet" href="editorial.css?v=20261105-pile-row-alignment1">
@@ -2438,7 +2438,7 @@
   <link rel="stylesheet" href="../assets/mobile/play.css?v=20261028-apk-portrait1">
   <script src="../assets/mobile/layout.js?v=20261028-apk-portrait1" defer></script>
   <script src="../assets/mobile/play.js?v=20261114-theatre-return" defer></script>
-  <link rel="stylesheet" href="battle-room.css?v=20261118-host-dock">
+  <link rel="stylesheet" href="battle-room.css?v=20261118-room-revealed">
   <script src="theatre-battle.js?v=2"></script>
   <script src="../theatre/terms.js?v=2"></script>
 </head>
@@ -2938,12 +2938,12 @@
   <script src="../assets/campaign-session.js?v=20260917"></script>
   <script src="../hero/hero-catalog.js?v=20261117-battle-polish"></script>
   <script src="room-assets.js?v=20261118-official" defer></script>
-  <script src="room-board.js?v=20261118-host-dock" defer></script>
+  <script src="room-board.js?v=20261118-room-revealed" defer></script>
   <script src="room-card-state.js" defer></script>
   <script src="../technology/battle-config.js" defer></script>
   <script src="room-dice.js?v=5" defer></script>
   <script src="squad-link.js?v=6" defer></script>
-  <script src="battle-room.js?v=20261118-host-dock" defer></script>
+  <script src="battle-room.js?v=20261118-room-revealed" defer></script>
   <script src="../technology/gear-inventory.js?v=20261118-trauma"></script>
   <script src="../assets/campaign-notes.js?v=20261015-aibp-summary1"></script>
   <script src="../assets/cycle-symbols.js?v=20261115-module-logo"></script>
@@ -2955,10 +2955,10 @@
   <!-- Boss 等级属性表先于 ss/terrain-data.js 加载：始徒移速直接取该表当前等级的值。 -->
   <script src="boss-levels-data.js?v=20261012-los-speed1"></script>
   <script src="../ss/terrain-data.js?v=20261117-board"></script>
-  <script src="battle_los.js?v=20261118-segmented"></script>
+  <script src="battle_los.js?v=20261118-priority-sight"></script>
   <script src="tactical-sprites.js?v=20261117-projection"></script>
-  <script src="battle_board_pieces.js?v=20261118-target-link"></script>
-  <script src="battle_map_control.js?v=20261118-host-dock"></script>
+  <script src="battle_board_pieces.js?v=20261118-priority-sight"></script>
+  <script src="battle_map_control.js?v=20261118-room-revealed"></script>
   <script src="b4d7e218.js?v=20260926-hidden-ready2"></script>
   <script src="c9f0a6d3.js?v=20261011-panel-trait1"></script>
   <script src="5158e31a.js?v=20261019-blackbeak-shared-backs2"></script>
@@ -3685,6 +3685,43 @@
       };
     }
 
+    function rememberRevealedCard(type, card) {
+      if (!card) return;
+      const state = piles[currentApostle];
+      (state.lastRevealed ||= {})[type] = { ...card };
+    }
+
+    function publicDeckSnapshot(state, type) {
+      const pile = state[type];
+      const deck = (pile.deck || []).filter(card => !sameCard(card, pile.pending));
+      const fromBottom = (currentApostle === "BLACKBEAK" && type === "AI") || (currentApostle === "TITAN_X" && type === "BP");
+      if (fromBottom) deck.reverse();
+      const top = deck[0];
+      const front = top ? cardSrc(top) : "";
+      const mapping = top ? cardBackMappingSrc(top, front) : "";
+      const back = top && (mapping ? window.AibpCardBacks?.backFor(mapping) : cardBackImageSrc(top, front));
+      return {
+        count: deck.length,
+        discard: (state[type].discard || []).length,
+        backs: deckBackCompositionText(deck),
+        back: back ? { src: back, label: `未揭示的 ${type} 牌背` } : null,
+      };
+    }
+
+    function currentPublicBoss() {
+      const special = currentApostle === "HELIOS";
+      return {
+        title: special ? window.HeliosConfig.modes[heliosMode()].label
+          : currentApostle === "TITAN_X" && piles[currentApostle].special?.titanX?.group
+            ? `万事皆休 · 泰坦 X ${piles[currentApostle].special.titanX.group.target}` : currentApostle.replaceAll("_", " "),
+        level: special && heliosMode() !== "normal" ? heliosMode().toUpperCase()
+          : levelRoman[currentApostleLevel()] || String(currentApostleLevel()),
+        panel: special ? window.HeliosConfig.panelFor(heliosMode())
+          : currentApostle === "BLACKBEAK" ? window.BlackbeakCardList.panel
+          : apostlePanelSrc(currentApostle, apostlePanelIndex(currentApostle)),
+      };
+    }
+
     function buildSecondScreenSnapshot() {
       ensurePiles(currentApostle);
       const state = piles[currentApostle];
@@ -3699,6 +3736,7 @@
           ? state.BP.damage.filter((card) => card.titanXOwner === state.special.titanX.group.target)
           : (state.BP.damage || []);
       const damageSummary = currentBpDamageSummary();
+      const boss = currentPublicBoss();
       const renderedExtraCards = Array.from(extraGrid.querySelectorAll("img"))
         .filter((image) => image.complete && image.naturalWidth > 0)
         .map((image) => {
@@ -3715,18 +3753,9 @@
       return {
         version: 1,
         apostle: currentApostle,
-        title: currentApostle === "HELIOS"
-          ? window.HeliosConfig.modes[heliosMode()].label
-          : currentApostle === "TITAN_X" && state.special?.titanX?.group
-            ? `万事皆休 · 泰坦 X ${state.special.titanX.group.target}`
-          : currentApostle.replaceAll("_", " "),
-        level: currentApostle === "HELIOS" && heliosMode() !== "normal"
-          ? heliosMode().toUpperCase()
-          : levelRoman[currentApostleLevel()] || String(currentApostleLevel()),
-        panelSrc: currentApostle === "HELIOS"
-          ? window.HeliosConfig.panelFor(heliosMode())
-          : currentApostle === "BLACKBEAK" ? window.BlackbeakCardList.panel
-          : apostlePanelSrc(currentApostle, apostlePanelIndex(currentApostle)),
+        title: boss.title,
+        level: boss.level,
+        panelSrc: boss.panel,
         routineSrc: currentApostle === "HELIOS"
           ? window.HeliosConfig.common.routine
           : currentApostle === "BLACKBEAK" ? window.BlackbeakCardList.routine.src
@@ -3795,23 +3824,28 @@
 
     window.getAibpRoomProjection = () => {
       if (!currentApostle || !piles[currentApostle]) return null;
-      const publicState = buildSecondScreenSnapshot();
       const state = piles[currentApostle];
+      const boss = currentPublicBoss();
+      const revealed = type => (state.aibp && state[type] === state.aibp && state.aibp.pendingMode !== type
+        ? null : state[type].pending) || state.lastRevealed?.[type];
       return {
+        ...boss,
         apostle: currentApostle,
-        title: currentApostle === "HELIOS" || currentApostle === "TITAN_X" ? publicState.title
-          : window.AIBP_BOSS_SEARCH?.entries.find(entry => entry.id === currentApostle)?.names.official || publicState.title,
-        level: publicState.level,
-        panel: publicState.panelSrc,
-        ai: publicState.aiPending,
-        bp: publicState.bpPending,
-        aiDeck: { count: publicState.aiDeckCount, discard: publicState.aiDiscardCount,
-          backs: deckBackCompositionText(state.AI.deck || []) },
-        bpDeck: { count: publicState.bpDeckCount, discard: publicState.bpDiscardCount,
-          backs: deckBackCompositionText(state.BP.deck || []) },
-        damage: publicState.damageSummary,
+        title: currentApostle === "HELIOS" || currentApostle === "TITAN_X" ? boss.title
+          : window.AIBP_BOSS_SEARCH?.entries.find(entry => entry.id === currentApostle)?.names.official || boss.title,
+        ai: publicCardSnapshot(revealed("AI")),
+        bp: publicCardSnapshot(revealed("BP")),
+        aiDeck: publicDeckSnapshot(state, "AI"),
+        bpDeck: publicDeckSnapshot(state, "BP"),
+        damage: { ...currentBpDamageSummary(), wounds: currentBossWounds() },
       };
     };
+
+    if (new URLSearchParams(location.search).has("battle") || new URLSearchParams(location.search).has("squad")) {
+      window.AibpCardBacks?.ready().then(() => {
+        window.dispatchEvent(new Event("aibp-room-projection"));
+      }, () => {});
+    }
 
     async function readAibpSection() {
       const response = await fetch(secondScreenSnapshotUrl, { cache: "no-store" });
@@ -9124,6 +9158,7 @@
         return;
       }
       ai.pending = currentApostle === "BLACKBEAK" ? ai.deck.at(-1) : ai.deck[0];
+      rememberRevealedCard("AI", ai.pending);
       if (hasAiCombo()) ai.comboFollowup = Boolean(comboFollowup);
       piles[currentApostle].lastPendingType = "AI";
       savePiles();
@@ -9163,6 +9198,7 @@
         return;
       }
       bp.pending = bp.deck[0];
+      rememberRevealedCard("BP", bp.pending);
       if (bp.combinedAttack && !sameCard(bp.combinedAttack.card, bp.pending)) {
         delete bp.combinedAttack;
       }
@@ -9205,6 +9241,7 @@
 
       rememberUndo(currentApostle, "BP");
       const card = removePendingFromDeck("BP");
+      rememberRevealedCard("BP", bp.pending);
       bp.pending = null;
 
       if (mode === "return-top") {
@@ -9254,6 +9291,7 @@
       if (remember) {
         rememberUndo(currentApostle, "AI");
       }
+      rememberRevealedCard("AI", ai.pending);
       ai.discard.push(removePendingFromDeck("AI"));
       ai.pending = null;
       delete ai.comboFollowup;
@@ -9267,6 +9305,7 @@
       if (!hasAiCombo() || !ai.pending || ai.comboFollowup || !["break", "continue"].includes(mode)) return;
       if (mode === "break" && !currentAiComboBreakInfo()?.canBreak) return;
       rememberUndo(currentApostle, "AI");
+      rememberRevealedCard("AI", ai.pending);
       ai.discard.push(removePendingFromDeck("AI"));
       ai.pending = null;
       delete ai.comboFollowup;
@@ -9877,7 +9916,7 @@
   <script src="ps/other/resouce/bp_resource_map.js?v=20261017a" defer></script>
   <script src="ps/other/resouce/bp_resource_map_c1_c3.js?v=20261017a" defer></script>
   <script src="ps/other/resouce/bp_resource_map_c4_c5.js?v=20261018a" defer></script>
-  <script src="c45_specials.js?v=20261113-theatre1" defer></script>
+  <script src="c45_specials.js?v=20261118-room-revealed" defer></script>
   <script src="bp_loot_calculator_addon.js?v=20261113-theatre1" defer></script>
   <script src="../story/data/english-source-data.js?v=20261011-english4" defer></script>
   <script src="../assets/ato-terms.js?v=20261110-loop-terms" defer></script>

@@ -97,13 +97,13 @@
   }
 
   function render(layer, pieces, {
-    apostle, size = 1, selected = 0, mode, names = [], roster, portraits = [], priorityTarget, trail, bossTrail, onSelect, onSelectBoss,
+    apostle, size = 1, selected = 0, mode, names = [], roster, portraits = [], priorityTarget, priorityVisible, trail, bossTrail, onSelect, onSelectBoss,
   } = {}) {
     layer.replaceChildren();
     layer.hidden = false;
     drawTrail(layer, trail);
     drawTrail(layer, bossTrail, true);
-    drawPriorityLink(layer, pieces.apostle, pieces.titans[priorityTarget]);
+    if (priorityVisible) drawPriorityLink(layer, pieces.apostle, pieces.titans[priorityTarget]);
     const document = layer.ownerDocument;
     const sprites = window.BattleBoardSprites || {};
     function token(piece, span, name, index, sprite, fallback) {

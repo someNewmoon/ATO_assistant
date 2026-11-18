@@ -21,7 +21,7 @@ function card(value) {
 }
 
 function deck(value) {
-  return { count: count(value?.count), discard: count(value?.discard), backs: text(value?.backs, 240) };
+  return { count: count(value?.count), discard: count(value?.discard), backs: text(value?.backs, 240), back: card(value?.back) };
 }
 
 export function roomProjection(value, apostle) {

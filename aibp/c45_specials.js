@@ -963,6 +963,7 @@
     }
     pile.pending = pile.deck[0] || null;
     pile.pendingMode = pile.pending ? mode : "";
+    rememberRevealedCard(mode, pile.pending);
     if (pile.pending) piles.DAHAKA.lastPendingType = mode;
     savePiles();
     renderAibpCards();
@@ -1090,6 +1091,7 @@
     const drawIndex = options.fromBottom ? ai.deck.length - 1 : 0;
     ai.pending = ai.deck[drawIndex] || null;
     const drawn = ai.pending;
+    rememberRevealedCard("AI", drawn);
     const locked = drawn?.specialAi === "demidjinn-o";
     if (locked) {
       reshuffleDemidjinnAfterAiO(ai, drawn);
@@ -1117,6 +1119,7 @@
       bp.discard = [];
     }
     bp.pending = bp.deck.at(-1) || null;
+    rememberRevealedCard("BP", bp.pending);
     if (bp.pending) piles.TITAN_X.lastPendingType = "BP";
     savePiles();
     renderAibpCards();

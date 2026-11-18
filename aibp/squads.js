@@ -22,12 +22,13 @@
         if (recent?.id === home.squad.id) void api.home(recent).catch(() => {});
         return;
       }
-      if (recent) {
+      const listed = await api.listedHost();
+      if (listed) {
         try {
-          await api.home(recent);
+          await api.home(listed);
           return start();
         } catch (error) {
-          if ([401, 404].includes(error.status)) api.forget(recent.id);
+          if ([401, 404].includes(error.status)) api.forget(listed.id);
           else if (error.status !== 409) throw error;
         }
       }
@@ -55,6 +56,9 @@
         }).join('')
         + '</fieldset><label class="squad-row"><span><input name="publicLobby" type="checkbox" checked> 开放从登录页快速加入</span></label>'
         + '<button type="submit">创建小队</button></form></section>';
+      if (recent && recent.id !== listed?.id) {
+        content.insertAdjacentHTML('afterbegin', '<p>' + link(recent.id, '返回这个浏览器上次管理的小队') + '</p>');
+      }
       window.ATO_LANGUAGE?.refresh();
       content.querySelector('form').addEventListener('submit', async event => {
         event.preventDefault();

@@ -5134,7 +5134,7 @@
           ({ id: squadId, credentials: squadCredentials } = home.squad);
           squadLink.save(squadId, squadCredentials);
         } else if (!explicitSquadId) {
-          const legacy = squadLink.recentHost();
+          const legacy = await squadLink.listedHost();
           if (legacy && (!home?.squad || home.squad.id === legacy.id)) {
             if (home) await squadLink.home(legacy, { signal: AbortSignal.timeout(4500) }).catch(() => {});
             ({ id: squadId, credentials: squadCredentials } = legacy);

@@ -13,19 +13,21 @@
       return true;
     } catch { return false; }
   }
+  function localHost(id) {
+    if (!validId(id)) return null;
+    const credentials = read(id);
+    return validKey(credentials?.token) && credentials.keys?.host === credentials.token ? { id, credentials } : null;
+  }
   function recentHost() {
+    try { return localHost(localStorage.getItem('ato-last-squad')); } catch { return null; }
+  }
+  async function listedHost() {
     try {
-      const ids = [localStorage.getItem('ato-last-squad')];
-      for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
-        if (key?.startsWith(prefix)) ids.push(key.slice(prefix.length));
-      }
-      for (const id of ids.filter(validId)) {
-        const credentials = read(id);
-        if (validKey(credentials?.token) && credentials.keys?.host === credentials.token) return { id, credentials };
-      }
-    } catch { /* Storage is optional. */ }
-    return null;
+      const response = await fetch('/api/battle-room/open', { cache: 'no-store', signal: AbortSignal.timeout(4500) });
+      if (!response.ok) return null;
+      const { rooms } = await response.json();
+      return rooms.filter(room => room.squad).map(room => localHost(room.id)).find(Boolean) || null;
+    } catch { return null; }
   }
   function forget(id) {
     try {
@@ -98,5 +100,5 @@
     if (window.ATO_LANGUAGE) apply();
     else document.addEventListener('DOMContentLoaded', apply, { once: true });
   }
-  window.ATO_SQUAD_LINK = { read, save, forget, recentHost, home, link, request, connect, language, validId, validKey, sharedOrigin };
+  window.ATO_SQUAD_LINK = { read, save, forget, recentHost, listedHost, home, link, request, connect, language, validId, validKey, sharedOrigin };
 })();

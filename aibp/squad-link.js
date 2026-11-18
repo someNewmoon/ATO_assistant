@@ -70,13 +70,13 @@
     }
     return data;
   }
-  function connect(id, token, receive, status) {
+  function connect(id, token, receive, status, { timeout: connectTimeout = 12000 } = {}) {
     const url = new URL('/api/battle-room/' + id + '/socket', location.href);
     url.protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
     let socket, timer, stopped = false, delay = 1000;
     function open() {
       socket = new WebSocket(url, ['ato-battle-v1', token]);
-      const timeout = setTimeout(() => socket.close(), 12000);
+      const timeout = setTimeout(() => socket.close(), connectTimeout);
       socket.onopen = () => { clearTimeout(timeout); delay = 1000; status?.(''); };
       socket.onmessage = event => receive(JSON.parse(event.data));
       socket.onclose = event => {

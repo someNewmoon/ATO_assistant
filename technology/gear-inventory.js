@@ -122,11 +122,29 @@
     return { path, name: entry.name, label: '查看泰坦插图' };
   }
 
+  // Shared by the arsenal UI and Moon Worker. Enable when the group unlocks ascension.
+  const ascensionEnabled = false;
+  const CYCLES = ['c1', 'c2', 'c3', 'c4', 'c5'];
+
   function gearKey(value) {
     const id = String(value || '').trim().replace(/^1x/i, '');
-    if (/^[A-Z]J\d+$/i.test(id)) return id.toUpperCase();
+    const gear = /^([A-Z]J\d+)(?:@(c[2-5]))?$/i.exec(id);
+    if (gear) return gear[1].toUpperCase() + (gear[2] ? '@' + gear[2].toLowerCase() : '');
     if (/^T:tt_[a-z0-9_]+$/i.test(id)) return 'T:' + id.slice(2).toLowerCase();
     return '';
+  }
+
+  function baseGearId(id) {
+    return String(id || '').split('@', 1)[0];
+  }
+
+  function ascendedCycle(id) {
+    return gearKey(id).split('@')[1] || '';
+  }
+
+  function nextCycle(cycle) {
+    const index = CYCLES.indexOf(cycle);
+    return index < 0 ? '' : CYCLES[index + 1] || '';
   }
 
   function count(value) {
@@ -163,6 +181,39 @@
     if (!Number.isSafeInteger(quantity) || !Number.isSafeInteger(total)) throw new Error('装备数量过大');
     inventory[id] = { quantity: Math.max(0, quantity), manufactured: total };
     return inventory;
+  }
+
+  function ascend(value, gearId, originCycle, reserved = 0) {
+    const id = gearKey(gearId);
+    const target = nextCycle(ascendedCycle(id) || originCycle);
+    const inventory = normalize(value);
+    if (!id || id.startsWith('T:') || !target) throw new Error('这件装备无法再登升。');
+    const source = inventory[id];
+    if (!source?.quantity) throw new Error('这件装备没有库存。');
+    if (source.quantity <= reserved) throw new Error('库存已分配给主要配装，请先卸下一件。');
+    const destination = baseGearId(id) + '@' + target;
+    const next = adjust(inventory, destination, 1);
+    next[id].quantity -= 1;
+    return next;
+  }
+
+  // Upstream four-slot loadouts are templates, never a second stock reservation.
+  function loadoutTemplates(record) {
+    const source = record?.arsenalLoadouts;
+    const list = [];
+    const add = (value, id, name) => {
+      if (!value || typeof value !== 'object') return;
+      const gear = Object.fromEntries([...new Set((Array.isArray(value.equipment) ? value.equipment : []).map(gearKey).filter(id => id && !id.startsWith('T:')))].map(id => [id, 1]));
+      const kit = normalizeLoadout({ titanId: value.titanId, gear });
+      if (kit.titanId || Object.keys(gear).length) list.push({ id, name, kit });
+    };
+    (Array.isArray(source?.slots) ? source.slots : []).slice(0, 4).forEach((slot, index) => {
+      add(slot, 'slot:' + index, '配装 ' + (index + 1));
+      (Array.isArray(slot?.sides) ? slot.sides : []).forEach((side, i) =>
+        add({ ...side, titanId: slot.titanId }, 'side:' + index + ':' + i, '配装 ' + (index + 1) + ' · ' + (side.name || '针对配装')));
+    });
+    (Array.isArray(source?.presets) ? source.presets : []).forEach((preset, index) => add(preset, 'preset:' + index, preset.name || '方案'));
+    return list;
   }
 
   function normalizeLoadout(value) {
@@ -241,5 +292,10 @@
     return { ...record, loadouts };
   }
 
-  return { TITAN_NAMES_ZH, TITAN_TYPES, DREAMWALKER_PANELS, TRAUMA_DECKS, traumaTrack, defaultTraumaTrack, dreamwalkerPanel, loadoutTitan, titanType, titanTypeFields, titanLabel, titanArtwork, gearKey, normalize, adjust, normalizeLoadout, loadoutTitans, titanIdFor, assignedLoadouts, saveLoadout };
+  return {
+    ascensionEnabled, baseGearId, ascendedCycle, nextCycle, ascend, loadoutTemplates,
+    TITAN_NAMES_ZH, TITAN_TYPES, DREAMWALKER_PANELS, TRAUMA_DECKS, traumaTrack, defaultTraumaTrack,
+    dreamwalkerPanel, loadoutTitan, titanType, titanTypeFields, titanLabel, titanArtwork,
+    gearKey, normalize, adjust, normalizeLoadout, loadoutTitans, titanIdFor, assignedLoadouts, saveLoadout,
+  };
 });

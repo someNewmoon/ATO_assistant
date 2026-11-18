@@ -274,7 +274,7 @@ test('all campaign-eligible Theatre gear uses the same card image in the arsenal
   const terms = require('../theatre/terms.js');
   const rewardImages = require('../theatre/reward-images.json');
   const { images } = require('../technology/gear_card_images.json');
-  const lookup = context(['gearImageSrc'], { gearCardImages: images });
+  const lookup = context(['gearImageSrc'], { gearCardImages: images, window: { ATO_GEAR_INVENTORY: inventory } });
   const arsenal = new Map(c.arsenalCatalog().map(item => [item.gearId, item]));
   const rewards = Object.values(loot).flat();
   const paths = [...rewards.flatMap(reward => rewardImages[rewardKey(reward)]), ...rewardImages.skyseer];

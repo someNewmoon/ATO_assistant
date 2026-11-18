@@ -1140,13 +1140,13 @@ button.gear-group-name:hover {
   <script src="../assets/exploration-card-resources.js?v=20261014-card-face-audit2"></script>
   <script src="../map/map-tile-tags.js?v=20261013-corner-audit"></script>
   <script src="../map/map-data.js?v=20260730-cycle-labels"></script>
-  <script src="negotiation-rules.js?v=20261019-negotiation-split1"></script>
+  <script src="negotiation-rules.js?v=20261117-resource-types1"></script>
   <script src="voyage-action-rules.js?v=20261110-chronosail"></script>
   <script src="exploration-tech-rules.js?v=20261017-automation-audit4"></script>
-  <script src="structure-tech-rules.js?v=20261117-battle-polish"></script>
+  <script src="structure-tech-rules.js?v=20261118-moon-resource-types1"></script>
   <script src="structure-tech-client.js?v=20261019-negotiation-rows2"></script>
 <script src="../hero/hero-catalog.js?v=20261117-battle-polish"></script>
-<script src="gear-inventory.js?v=20261117-dice"></script>
+<script src="gear-inventory.js?v=20261118-ascension-off"></script>
 <script>
 const TECH_DICTIONARY_URL = 'tech_card_dictionary.min.json';
 const fetch = window.ATO_CAMPAIGN_NOTES.createFetch(window.fetch.bind(window), {
@@ -1250,6 +1250,7 @@ function gearImageSrc(gearId) {
     const titanKey = gearId.slice(2);
     return `images/titans/${titanKey}.png?v=20261019-tts-portrait1`;
   }
+  gearId = window.ATO_GEAR_INVENTORY.baseGearId(gearId);
   return gearCardImages[gearId] || gearCardImages[String(gearId).toUpperCase()] || '';
 }
 
@@ -1269,6 +1270,8 @@ function getGearTechNodeKey(techId) {
 
 function getGearName(gearId) {
   gearId = normalizeGearId(gearId);
+  const cycle = window.ATO_GEAR_INVENTORY.ascendedCycle(gearId);
+  if (cycle) return getGearName(window.ATO_GEAR_INVENTORY.baseGearId(gearId)) + ' · 登升至 ' + cycle.toUpperCase();
   if (gearId.startsWith('T:')) {
     const titanKey = gearId.slice(2);
     if (treeLanguage === 'zh') {
@@ -1850,6 +1853,7 @@ function gearResourceSidebarHtml() {
   </aside>`;
 }
 function gearPart(gearId) {
+  gearId = window.ATO_GEAR_INVENTORY.baseGearId(gearId);
   const manualPart = gearPartLabels[normalizeGearId(gearId).toUpperCase()];
   const manualLabel = {
     attachment: '附件', armor: '防具', arm: '武器（手数未标注）', aid: '助具', titan: '泰坦',
@@ -2149,7 +2153,9 @@ function arsenalCatalog() {
   return [...catalog.values()].map(item => {
     const name = getGearName(item.gearId);
     const part = gearPart(item.gearId);
-    const card = gearCardDetails[item.gearId];
+    const card = gearCardDetails[window.ATO_GEAR_INVENTORY.baseGearId(item.gearId)];
+    const ascended = window.ATO_GEAR_INVENTORY.ascendedCycle(item.gearId);
+    if (ascended) item.cycles = [ascended];
     const searchNames = [name, gearProductionData?.gearCards?.[item.gearId], card?.title, ...(card?.aliases || [])];
     return {
       ...item, name, part,
@@ -2218,6 +2224,7 @@ function editArsenalLoadout(heroId, catalog) {
     return assignments.filter(([id]) => id !== heroId)
       .map(([, loadout]) => inventory.normalizeLoadout(loadout));
   }
+  const templates = inventory.loadoutTemplates(record);
   const roster = inventory.loadoutTitans(record);
   const dialog = document.createElement('dialog');
   dialog.className = 'arsenal-loadout-dialog';
@@ -2232,6 +2239,7 @@ function editArsenalLoadout(heroId, catalog) {
         </label>
         <a data-loadout-titan-art target="_blank" rel="noopener" hidden><img alt=""></a>
         ${heroes.mnemosHtml(hero)}
+        ${templates.length ? `<label>导入配装模板<select name="template"><option value="">选择模板</option>${templates.map(item => `<option value="${esc(item.id)}">${esc(item.name)}</option>`).join('')}</select></label><small>模板仅填入当前草稿，保存时检查库存；不会覆盖原模板。</small>` : ''}
         <ul class="arsenal-loadout-gear" aria-label="已分配装备"></ul>
         <label>搜索库存<input name="query" type="search" placeholder="装备名称、别名或编号"></label>
         <div class="arsenal-loadout-controls">
@@ -2322,6 +2330,14 @@ function editArsenalLoadout(heroId, catalog) {
     draft.titanPanelId = panel.value;
     renderTitans();
   });
+  form.elements.namedItem('template')?.addEventListener('change', event => {
+    const template = templates.find(item => item.id === event.target.value);
+    if (!template) return;
+    migration = undefined;
+    Object.assign(draft, inventory.normalizeLoadout({ ...template.kit, player: base.player }));
+    draft.titanId = inventory.titanIdFor(record, draft.titanId);
+    renderTitans(); renderAssignedGear();
+  });
   form.elements.namedItem('legacy')?.addEventListener('change', event => {
     const slot = event.target.value;
     migration = slot ? { slot, base: inventory.normalizeLoadout(record.loadouts[slot]) } : undefined;
@@ -2387,6 +2403,8 @@ function arsenalItemHtml(item) {
     const loadout = inventory.normalizeLoadout(saved);
     return sum + (loadout.gear[item.gearId] || 0);
   }, 0);
+  let pendingAscension = false;
+  if (inventory.ascensionEnabled) try { pendingAscension = Boolean(localStorage.getItem('ato:ascension:' + campaignSession.accountId + ':' + activeAccountId + ':' + item.gearId)); } catch {}
   const image = gearImageSrc(item.gearId);
   const thumbnail = image
     ? `<button type="button" class="gear-card-thumb" data-gear-img="${esc(image)}" data-gear-name="${esc(item.name)}" title="查看 ${esc(item.name)}"><img src="${esc(image)}" alt="${esc(item.name)}" loading="lazy"></button>`
@@ -2399,7 +2417,36 @@ function arsenalItemHtml(item) {
       <span class="arsenal-quantity-value">现有 ${item.quantity} 件${assigned ? `<small>已分配 ${assigned} 件${assigned > item.quantity ? ' · 超出库存' : ''}</small>` : ''}</span>
       <button type="button" class="gear-resource-btn" data-arsenal-gear="${esc(item.gearId)}" data-arsenal-delta="1" aria-label="增加 ${esc(item.name)}" ${gearMutationInFlight ? 'disabled' : ''}>+</button>
     </div>
+    ${inventory.ascensionEnabled && !item.gearId.startsWith('T:') && inventory.nextCycle(inventory.ascendedCycle(item.gearId) || item.cycles[0]) ? `<button type="button" class="tool-btn" data-arsenal-ascend="${esc(item.gearId)}" ${gearMutationInFlight || (!pendingAscension && item.quantity <= assigned) ? 'disabled' : ''}>${pendingAscension ? '核对上次登升' : '登升一件 · 消耗对应升华核心'}</button>` : ''}
   </article>`;
+}
+
+async function ascendArsenalGear(gearId) {
+  if (!window.ATO_GEAR_INVENTORY.ascensionEnabled) return;
+  if (gearMutationInFlight || campaignSession.changed || !gearRecordState) return;
+  const account = campaignSession.accountId, profile = activeAccountId;
+  const key = 'ato:ascension:' + account + ':' + profile + ':' + gearId;
+  gearMutationInFlight = true;
+  try {
+    // Persist before sending: retries and reloads must reuse the same operation ID.
+    let operationId = localStorage.getItem(key);
+    if (!/^[a-f0-9-]{36}$/.test(operationId || '')) {
+      operationId = crypto.randomUUID(); localStorage.setItem(key, operationId);
+    }
+    const response = await fetch(CAMPAIGN_STORAGE_URL + '?action=ascend-gear', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ operationId, gearId, profileId: profile, expectedAccountId: account }),
+    });
+    const result = campaignSession.accept(await response.json());
+    if (!response.ok || !result?.ok) throw new Error(result?.error || '登升未完成，请重试。');
+    localStorage.removeItem(key);
+    arsenalMessage = result.replayed ? '上次登升已完成，未重复扣费。' : '登升完成，已消耗对应故事集的升华核心。';
+    arsenalMessageError = false;
+    await loadGearRecordState();
+  } catch (error) {
+    arsenalMessage = (error.message || String(error)) + ' 重试将核对上次操作，不会重复扣费。';
+    arsenalMessageError = true;
+  } finally { gearMutationInFlight = false; renderGearInventoryView(); }
 }
 
 function renderArsenalPage() {
@@ -2473,6 +2520,9 @@ function renderArsenalPage() {
     const quantity = Number(mainView.querySelector('#arsenalAddQuantity').value);
     void adjustArsenal(gearId, quantity);
   });
+  mainView.querySelectorAll('[data-arsenal-ascend]').forEach(button => button.addEventListener('click', () => {
+    void ascendArsenalGear(button.dataset.arsenalAscend);
+  }));
   mainView.querySelectorAll('[data-arsenal-delta]').forEach(button => button.addEventListener('click', () => {
     void adjustArsenal(button.dataset.arsenalGear, Number(button.dataset.arsenalDelta));
   }));

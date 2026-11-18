@@ -1,4 +1,6 @@
 import { DurableObject } from 'cloudflare:workers';
+import inventory from '../../technology/gear-inventory.js';
+import { ascensionIdentity, ascendCampaignGear } from './gear-ascension.js';
 import { battleRequest, createBattleRoom, squadAbilityOptions, squadHeroStats, squadTitanTrauma } from './battle-room.js';
 export { BattleRoom, BattleDirectory } from './battle-room.js';
 import {
@@ -12,7 +14,7 @@ const sessionLifetime = 60 * 60 * 24 * 14;
 const maximumSave = 6 * 1024 * 1024;
 const encoder = new TextEncoder();
 const authActions = new Set(['login', 'register']);
-const campaignActions = new Set(['me', 'logout', 'import-sections']);
+const campaignActions = new Set(['me', 'logout', 'import-sections', 'ascend-gear']);
 
 function toHex(bytes) {
   return Array.from(new Uint8Array(bytes), byte => byte.toString(16).padStart(2, '0')).join('');
@@ -146,6 +148,7 @@ export class CampaignAccount extends DurableObject {
       CREATE TABLE IF NOT EXISTS saves (name TEXT PRIMARY KEY, state TEXT NOT NULL, revision INTEGER NOT NULL);
       CREATE TABLE IF NOT EXISTS owned_squads (profile TEXT PRIMARY KEY, room TEXT NOT NULL, credentials TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS gear_operations (id TEXT PRIMARY KEY, identity TEXT NOT NULL, result TEXT NOT NULL);
     `);
   }
 
@@ -307,11 +310,25 @@ export class CampaignAccount extends DurableObject {
   }
 
   saveCampaign(url, action, user, payload) {
+    let identity;
+    if (action === 'ascend-gear') {
+      if (!inventory.ascensionEnabled) throw new ApiError(403, '登升功能尚未开启。', { code: 'ASCENSION_DISABLED' });
+      if (payload.expectedAccountId !== user.id) throw new ApiError(409, '账号已切换，请重新打开军械库。');
+      identity = ascensionIdentity(payload);
+      const prior = this.sql.exec('SELECT identity, result FROM gear_operations WHERE id = ?', payload.operationId).toArray()[0];
+      if (prior) {
+        if (prior.identity !== identity) throw new ApiError(409, '该操作编号已用于另一件装备。');
+        return response({ ...JSON.parse(prior.result), replayed: true });
+      }
+    }
     const campaign = this.loadCampaign();
     const updated = new Set();
     const now = new Date().toISOString();
     let section;
-    if (action === 'import-sections') {
+    let ascension;
+    if (action === 'ascend-gear') {
+      ascension = ascendCampaignGear(campaign, payload, updated);
+    } else if (action === 'import-sections') {
       importSections(campaign, payload, updated);
     } else {
       section = payload.section ?? url.searchParams.get('section');
@@ -335,6 +352,8 @@ export class CampaignAccount extends DurableObject {
     const result = section
       ? { section, revision: campaign.sectionRevisions[section] }
       : { sections: Object.fromEntries([...updated].map(name => [name, campaign.sectionRevisions[name]])) };
-    return response({ ok: true, ...result, updatedAt: now, user });
+    const output = { ok: true, ...result, updatedAt: now, user, ...(ascension && { ascension }) };
+    if (identity) this.sql.exec('INSERT INTO gear_operations VALUES (?, ?, ?)', payload.operationId, identity, JSON.stringify(output));
+    return response(output);
   }
 }

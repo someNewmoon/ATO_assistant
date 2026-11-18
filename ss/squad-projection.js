@@ -35,13 +35,15 @@
       try { localStorage.setItem(storageKey, visible ? 'visible' : 'hidden'); } catch { /* Optional preference. */ }
       sync();
     };
-    const update = (roll, content) => {
-      const next = roll && JSON.stringify([roll, content.reactions]);
+    const update = entries => {
+      const next = entries.length ? JSON.stringify(entries) : null;
       if (next !== latest) {
         latest = next;
         panel.replaceChildren();
-        panel.toggleAttribute('data-failed', roll?.success === false);
-        if (roll) {
+        panel.toggleAttribute('data-failed', entries[0]?.roll.success === false);
+        for (const { content } of entries) {
+          const item = document.createElement('div');
+          item.className = 'squad-roll-entry';
           const heading = document.createElement('strong');
           const result = document.createElement('span');
           const path = window.ATO_HERO_CATALOG?.heroPortrait(content.hero);
@@ -57,7 +59,7 @@
           const faces = document.createElement('div');
           faces.className = 'squad-roll-faces';
           faces.innerHTML = content.faces.map(die => dice.faceMarkup(die, '../aibp/room-dice-art/')).join('');
-          panel.append(heading, faces, result);
+          item.append(heading, faces, result);
           const groups = (content.reactions || []).filter(group => group.people.length);
           if (groups.length) {
             const votes = document.createElement('div');
@@ -83,8 +85,9 @@
               }
               votes.append(group);
             }
-            panel.append(votes);
+            item.append(votes);
           }
+          panel.append(item);
         }
       }
       sync();
@@ -135,9 +138,10 @@
       return;
     }
     const latestStory = checks[0];
-    const latestBattle = lastBattleRoll || room.rolls?.[0];
-    cards.story(dice && latestStory, storyRoll(latestStory, room.heroes));
-    cards.battle(dice && latestBattle, battleRoll(latestBattle, room.heroes, hostSeat));
+    const rolls = room.rolls?.length ? room.rolls : phase !== 'battle' && lastBattleRoll ? [lastBattleRoll] : [];
+    const battle = dice?.latestByHero(rolls, room.lastBattleRollId) || [];
+    cards.story(dice && latestStory ? [{ roll: latestStory, content: storyRoll(latestStory, room.heroes) }] : []);
+    cards.battle(battle.map(roll => ({ roll, content: battleRoll(roll, room.heroes, hostSeat) })));
     if (language !== preference) { preference = language; api.language(language); }
     applySecondScreenTheme({ cycleId: cycle });
     if (phase === 'battle') {

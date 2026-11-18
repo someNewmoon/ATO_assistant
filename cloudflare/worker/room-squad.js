@@ -102,7 +102,7 @@ export function applySquad(room, actor, body, randomInt) {
   const squad = room.squad;
   if (!squad) fail('此房间不是常驻小队。', 409);
   const host = actor.role === 'host';
-  if (['squad-phase','squad-start','squad-story','squad-host-seat','squad-disband'].includes(body.type) && !host) fail('只有房主可以操作。', 403);
+  if (['squad-phase','squad-start','squad-story','squad-host-seat','squad-remove-player','squad-disband'].includes(body.type) && !host) fail('只有房主可以操作。', 403);
 
   if (body.type === 'squad-disband') {
     room.closed = true;
@@ -137,6 +137,12 @@ export function applySquad(room, actor, body, randomInt) {
   const seat = body.seat;
   const hero = Number.isInteger(seat) ? room.heroes[seat] : null;
   if (!hero) fail('请选择一个英雄。');
+  if (body.type === 'squad-remove-player') {
+    if (!room.secrets.players[seat] || squad.hostSeat === seat) fail('这个席位没有可移除的队员。', 409);
+    room.secrets.players[seat] = null;
+    hero.player = '';
+    return;
+  }
   if (body.type === 'squad-host-seat') {
     if (squad.phase === 'battle' || (room.secrets.players[seat] && body.reclaim !== true)) {
       fail('该席位已认领，或当前无法认领。', 409);

@@ -74,6 +74,15 @@
     return roll.by || (roll.seat === hostSeat ? 'host' : 'seat:' + roll.seat);
   }
 
+  function latestByHero(rolls, latestId) {
+    const latest = rolls.find(roll => roll.id && roll.id === latestId);
+    const bySeat = new Map();
+    for (const roll of latest ? [latest, ...rolls] : rolls) {
+      if (!bySeat.has(roll.seat)) bySeat.set(roll.seat, roll);
+    }
+    return [...bySeat.values()];
+  }
+
   function reactionGroups(roll, heroes, hostSeat) {
     return [
       { value: 'up', icon: '👍', label: '赞同' },
@@ -89,5 +98,5 @@
     }));
   }
 
-  return { faces, names, limits, modes, naturalFace, remainingFace, canReroll, faceIndex, faceLabel, rollSummary, faceMarkup, storyFaces, rollOwner, reactionGroups };
+  return { faces, names, limits, modes, naturalFace, remainingFace, canReroll, faceIndex, faceLabel, rollSummary, faceMarkup, storyFaces, rollOwner, latestByHero, reactionGroups };
 });

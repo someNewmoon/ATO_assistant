@@ -24,6 +24,18 @@
   if (api.validKey(transfer)) history.replaceState(null, '', api.link('/aibp/squad', id));
   let credentials = api.validKey(transfer) ? { token: transfer } : api.read(id);
   let claimOptions = [];
+  let gearArt;
+  function loadGearArt() {
+    if (gearArt) return;
+    gearArt = {};
+    Promise.all([
+      fetch('./room-card-art.json').then(res => res.ok ? res.json() : {}).catch(() => ({})),
+      fetch('../technology/gear_card_images.json').then(res => res.ok ? res.json() : {}).catch(() => ({})),
+    ]).then(([hosted, fallback]) => {
+      gearArt = { ...hosted, equipment: { ...fallback.images, ...hosted.equipment } };
+      updatePrepStock();
+    });
+  }
   let room, actor, stop, pending = false, language, renderKey;
   const status = document.querySelector('#squadStatus');
   const content = document.querySelector('#squadContent');
@@ -113,20 +125,26 @@
       + '>' + e(inventory.titanLabel(titan)) + ' · 库存 ' + titan.count + (titan.crippled ? ' · 残废' : '') + '</option>').join('');
     const panels = inventory.DREAMWALKER_PANELS.map(panel => '<option value="' + e(panel.id) + '"'
       + (panel.id === kit.titanPanelId ? ' selected' : '') + '>' + e(panel.name) + '</option>').join('');
-    const gear = squad.gear.filter(item => item.count || kit.gear[item.id] || item.holders?.length).map(item =>
-      '<label><span>' + e(item.name) + ' <small class="squad-sub" data-stock="' + e(item.id) + '"></small>'
-      + '<span class="squad-gear-owners" data-owners="' + e(item.id) + '"></span></span>'
-      + '<input name="gear:' + e(item.id) + '" type="number" min="0" value="' + (kit.gear[item.id] || 0) + '"></label>').join('');
+    const gear = squad.gear.filter(item => item.count || kit.gear[item.id] || item.holders?.length).map(item => {
+      const count = kit.gear[item.id] || 0;
+      return '<article class="squad-gear-card"><label><input type="checkbox" name="gear:' + e(item.id)
+        + '"' + (count ? ' checked' : '') + '>'
+        + '<img data-gear-image hidden alt="" loading="lazy"><span>' + e(item.name) + '</span></label>'
+        + '<small class="squad-sub" data-stock="' + e(item.id) + '"></small>'
+        + '<span class="squad-gear-owners"></span><label hidden>数量 <input data-gear-count type="number" min="1"'
+        + ' value="' + (count || 1) + '"></label></article>';
+    }).join('');
     return '<section class="squad-panel"><h2>我的备战</h2><form data-form="kit" class="squad-form" data-base="' + e(JSON.stringify(kit))
       + '"><label>泰坦 <select name="titanId"><option value="">未分配</option>' + options + '</select></label>'
       + '<label data-titan-panel>梦行者面板 <select name="titanPanelId"><option value="">默认</option>' + panels + '</select></label>'
-      + '<details><summary>装备数量</summary><div class="squad-gear">' + (gear || '<p>军械库暂无装备。</p>') + '</div></details>'
+      + '<details open><summary>选择装备</summary><div class="squad-gear">' + (gear || '<p>军械库暂无装备。</p>') + '</div></details>'
       + '<p class="squad-sub">旧忆沿用英雄记录。保存后的配装供本小队下一场战斗使用。</p><button type="submit">保存配装</button></form></section>';
   }
 
   function updatePrepStock() {
     const form = content.querySelector('[data-form="kit"]');
     if (!form) return;
+    loadGearArt();
     const seat = ownSeat();
     const heroId = room.heroes[seat].id;
     const quantity = room.squad.loadouts[seat].gear;
@@ -137,7 +155,20 @@
       const holders = (item.holders || []).filter(holder => holder.id !== heroId);
       const reserved = holders.reduce((sum, holder) => sum + holder.count, 0);
       const cap = Math.min(99, Math.max(item.count - reserved, quantity[item.id] || 0));
-      form.elements.namedItem('gear:' + item.id).max = cap;
+      const card = label.closest('.squad-gear-card');
+      const check = form.elements.namedItem('gear:' + item.id);
+      const count = card.querySelector('[data-gear-count]');
+      const countLabel = count.closest('label');
+      check.disabled = cap === 0 && !check.checked;
+      count.max = Math.max(cap, 1);
+      countLabel.hidden = cap <= 1 && Number(count.value) <= 1;
+      count.disabled = !check.checked || countLabel.hidden;
+      const image = card.querySelector('[data-gear-image]');
+      const base = inventory.baseGearId(item.id);
+      const getArt = key => gearArt[key]?.[item.id] || gearArt[key]?.[base];
+      const path = (room.squad.language === 'fan' && getArt('fanEquipment')) || getArt('equipment');
+      if (path && image.getAttribute('src') !== '../' + path) image.src = '../' + path;
+      image.hidden = !path;
       label.textContent = '库存 ' + item.count + ' · 可给你 ' + Math.max(0, item.count - reserved)
         + (reserved > item.count ? ' · 已超库存' : '');
       const owners = label.nextElementSibling;
@@ -211,7 +242,8 @@
       content.innerHTML = '<div class="squad-stack"><h2>' + e(room.title) + '</h2>'
         + (isHost ? hostControls() : button('transfer', '复制我的席位链接')) + claim + personal + fight
         + (hero && squad.phase !== 'battle' ? rollForm() : '') + (hero && squad.phase === 'prep' ? prepForm(seat) : '')
-        + (isHost && seat !== null ? '<details class="squad-roster"><summary>查看小队席位</summary><ul class="squad-log" data-roster></ul></details>' : '')
+        + (isHost ? '<details class="squad-roster"' + (content.querySelector('.squad-roster')?.open ? ' open' : '')
+          + '><summary>管理小队席位</summary><ul class="squad-log" data-roster></ul></details>' : '')
         + '<section class="squad-panel"><h2>队伍记录</h2><ol class="squad-log" data-team-log></ol></section></div>';
       syncFields();
     }
@@ -227,7 +259,14 @@
       }
     }
     const roster = content.querySelector('[data-roster]');
-    if (roster) roster.innerHTML = room.heroes.map((hero, index) => '<li>' + heroMarkup(hero, kitSummary(index)) + '</li>').join('');
+    if (roster) {
+      const markup = room.heroes.map((hero, index) => '<li>' + heroMarkup(hero, kitSummary(index))
+        + (hero.player && index !== squad.hostSeat ? button('remove-player', '移除队员', index) : '') + '</li>').join('');
+      if (roster.dataset.state !== markup) {
+        roster.innerHTML = markup;
+        roster.dataset.state = markup;
+      }
+    }
     const log = content.querySelector('[data-team-log]');
     const latest = squad.checks.find(roll => roll.seat === seat);
     log.innerHTML = squad.checks.map(roll => '<li>' + storyRollArt(roll) + rollLine(roll)
@@ -278,10 +317,21 @@
 
   function startSocket() {
     stop?.();
-    stop = api.connect(id, credentials.token, accept, show);
+    stop = api.connect(id, credentials.token, accept, (message, code) => {
+      show(message);
+      if (code !== 4001) return;
+      api.forget(id);
+      credentials = null;
+      phaseLabel.textContent = '';
+      content.innerHTML = anchor(room.publicLobby ? api.link('/aibp/squad', id) + '&quick=1' : '/aibp/squads',
+        room.publicLobby ? '重新加入小队' : '返回联机小队');
+    });
   }
 
-  content.addEventListener('change', syncFields);
+  content.addEventListener('change', () => {
+    syncFields();
+    updatePrepStock();
+  });
   content.addEventListener('click', event => {
     const node = event.target.closest('button[data-action]');
     if (!node) return;
@@ -291,6 +341,14 @@
       if (name === 'reroll') return action('squad-reroll', { seat: ownSeat(), roll: value });
       if (name === 'disband') {
         if (window.confirm('解散这个小队？所有成员和当前投屏都会退出，战役存档仍会保留。')) await action('squad-disband');
+        return;
+      }
+      if (name === 'remove-player') {
+        const seat = Number(value);
+        const player = room.heroes[seat]?.player;
+        if (player && window.confirm('移除「' + player + '」并释放其英雄席位？对方可用小队邀请重新认领。')) {
+          await action('squad-remove-player', { seat });
+        }
         return;
       }
       if (name === 'phase') return action('squad-phase', { phase: value });
@@ -333,8 +391,11 @@
       }
       const seat = ownSeat();
       if (form.dataset.form === 'kit') {
-        const gear = Object.fromEntries([...fields].filter(([key, value]) => key.startsWith('gear:') && Number(value) > 0)
-          .map(([key, value]) => [key.slice(5), Number(value)]));
+        const gear = Object.fromEntries([...form.querySelectorAll('.squad-gear-card input[type="checkbox"]:checked:not(:disabled)')]
+          .map(check => {
+            const count = check.closest('.squad-gear-card').querySelector('[data-gear-count]');
+            return [check.name.slice(5), count.disabled ? 1 : Number(count.value)];
+          }));
         return action('squad-kit', { seat, base: JSON.parse(form.dataset.base), kit: {
           titanId: fields.get('titanId'), titanPanelId: fields.get('titanPanelId'), gear,
         } });
@@ -361,11 +422,11 @@
         if (actor.role === 'host') void api.home({ id, credentials }).catch(() => {});
         return;
       } catch (error) {
-        if (!invite && !quick) throw error;
         if (error.status === 401) {
           credentials = null;
           api.forget(id);
         }
+        if (!invite && !quick) throw error;
       }
     }
     if (!invite && !quick) throw new Error('请打开小队邀请，或使用之前认领席位的浏览器。');

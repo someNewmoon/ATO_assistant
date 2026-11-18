@@ -356,7 +356,7 @@ export class BattleRoom extends DurableObject {
       }
       const previousPlayers = room.secrets.players.slice();
       const result = this.action(room, actor, body, previousPlayers);
-      if (["public-lobby", "end", "round", "squad-phase", "squad-start", "squad-host-seat", "squad-disband"].includes(body.type)) await this.syncDirectory(room);
+      if (["public-lobby", "end", "round", "squad-phase", "squad-start", "squad-host-seat", "squad-remove-player", "squad-disband"].includes(body.type)) await this.syncDirectory(room);
       return result;
     } catch (error) {
       return errorResponse(error);
@@ -614,7 +614,11 @@ export class BattleRoom extends DurableObject {
     if (defenseCount) roll.defenseCount = defenseCount;
     room.lastBattleRollId = roll.id;
     room.rolls.unshift(roll);
-    room.rolls = room.rolls.slice(0, 30);
+    if (room.rolls.length > 30) {
+      const keep = new Set(roomDice.latestByHero(room.rolls, room.lastBattleRollId));
+      const oldest = room.rolls.findLastIndex(entry => !keep.has(entry));
+      room.rolls.splice(oldest, 1);
+    }
   }
 
   diceResult(kind) {
@@ -633,7 +637,7 @@ export class BattleRoom extends DurableObject {
       const dice = [...new Set(body.ids)].map(id => roll.dice.find(die => die.id === id));
       if (!dice.every(roomDice.canReroll)) reject('所选骰子已经重掷、转换或不存在。', 409);
       for (const die of dice) Object.assign(die, this.diceResult(die.kind), { rerolled: true });
-      room.lastBattleRollId = roll.id;
+      this.promoteRoll(room, roll);
       return;
     }
     const die = roll.dice.find(entry => entry.id === body.die);
@@ -644,6 +648,13 @@ export class BattleRoom extends DurableObject {
     const [field, index] = conversions[body.symbol];
     if (!result[index]) reject('该骰已没有可转换的符号。', 409);
     die[field] = (die[field] || 0) + 1;
+    this.promoteRoll(room, roll);
+  }
+
+  promoteRoll(room, roll) {
+    room.lastBattleRollId = roll.id;
+    room.rolls.splice(room.rolls.indexOf(roll), 1);
+    room.rolls.unshift(roll);
   }
 }
 

@@ -139,10 +139,17 @@
       updateStatus();
     };
     current.onmessage = event => accept(JSON.parse(event.data));
-    current.onclose = () => {
+    current.onclose = event => {
       if (current !== socket) return;
       clearTimeout(connectionTimer);
       socket = null;
+      if (event.code === 4001 && actor?.role === 'player' && state?.squad) {
+        squadLink.forget(id);
+        const url = new URL(squadLink.link('/aibp/squad', id));
+        if (state.publicLobby) url.searchParams.set('quick', '1');
+        location.replace(url.href);
+        return;
+      }
       connection = '连接已断开，正在重连';
       updateStatus();
       clearTimeout(reconnectTimer);
@@ -206,7 +213,7 @@
   traumaDialog.className = 'room-trauma-dialog';
   root.appendChild(traumaDialog);
 
-  const toolNames = { argo: '阿尔戈能力', trauma: '创伤牌库' };
+  const toolNames = { rolls: '战斗掷骰记录', apostle: '骇物面板', argo: '阿尔戈能力', trauma: '创伤牌库' };
   const dock = document.createElement('div');
   dock.className = 'room-tool-dock';
   dock.hidden = true;
@@ -236,6 +243,11 @@
     });
     dock.append(button);
   }
+  const quick = document.createElement('nav');
+  quick.className = 'room-primary-nav';
+  quick.setAttribute('aria-label', '常用操作');
+  quick.innerHTML = '<a href="#room-movement">移动</a><a href="#room-dice">掷骰</a><a href="#room-equipment">装备</a>';
+  dock.prepend(quick);
   toolsDialog.querySelector('[data-close-tools]').addEventListener('click', () => toolsDialog.close());
   toolsDialog.addEventListener('close', () => {
     activeTool = null;
@@ -249,10 +261,14 @@
     root.classList.toggle('battle-room-personal', personal);
     dock.hidden = !personal;
     if (!personal && toolsDialog.open) toolsDialog.close();
+    quick.firstElementChild.hidden = !state.board;
     if (!personal || !activeTool) return;
-    const markup = activeTool === 'argo'
-      ? (argoAbilities() || '<p>本场尚未准备阿尔戈能力。</p>')
-      : (roomTrauma() + traumaControls(state.heroes[actor.seat], actor.seat, true) || '<p>创伤牌库尚未准备。</p>');
+    const markup = {
+      rolls: latestHeroRolls,
+      apostle: () => roomProjection() || '<p>骇物面板尚未准备。</p>',
+      argo: () => argoAbilities() || '<p>本场尚未准备阿尔戈能力。</p>',
+      trauma: () => roomTrauma() + traumaControls(state.heroes[actor.seat], actor.seat, true) || '<p>创伤牌库尚未准备。</p>',
+    }[activeTool]();
     if (markup !== toolsMarkup) {
       const focused = toolsBody.contains(document.activeElement) ? document.activeElement : null;
       const focusKey = focused?.dataset.action || focused?.dataset.traumaDialog;
@@ -470,6 +486,14 @@
       + reactions(roll, latest) + '</li>';
   }
 
+  function latestHeroRolls() {
+    const rolls = dice.latestByHero(state.rolls, state.lastBattleRollId);
+    const seats = new Set(rolls.map(roll => roll.seat));
+    return '<ol class="room-last-rolls">' + rolls.map(roll => rollCard(roll, true)).join('')
+      + state.heroes.map((hero, seat) => seats.has(seat) ? '' : '<li class="room-roll room-roll-empty"><h4>'
+        + rollAvatar(seat) + escape(hero.name) + '</h4><small>本场尚未掷骰</small></li>').join('') + '</ol>';
+  }
+
   function diceCountField(kind, label, min, max, value) {
     const button = (delta, text) => '<button type="button" data-dice-step="' + kind + '" data-delta="' + delta
       + '" aria-label="' + (delta < 0 ? '减少' : '增加') + escape(label) + '"'
@@ -479,7 +503,7 @@
       + '" required aria-label="' + escape(label) + '">' + button(1, '+') + '</span></label>';
   }
 
-  function diceForm() {
+  function diceForm(powerPool) {
     if (state.closed || actor.role === 'viewer') return '';
     const seat = actor.role === 'host' ? rollSeat : actor.seat;
     const drafts = readDiceDraft(seat, rollMode);
@@ -502,7 +526,7 @@
           + (key === 'dodge' ? '<img src="room-dice-art/dodge.webp" alt="">' : '') + entry.name + '</button>').join('') + '</div>'
       + '<form data-roll class="battle-room-dice"><div>' + fields + followup
       + '<button type="submit">投掷' + dice.modes[rollMode].name + '</button></div></form>'
-      + (notes[rollMode] ? '<p class="room-dice-help">' + notes[rollMode] + '</p>' : '') + '</section>';
+      + (notes[rollMode] ? '<p class="room-dice-help">' + notes[rollMode] + '</p>' : '') + powerPool + '</section>';
   }
 
   function syncProjection() {
@@ -517,7 +541,6 @@
 
   function roomProjection() {
     const projection = state.projection;
-    if (actor.role !== 'viewer') return '';
     if (!projection) return state.board ? '<section class="room-projection"><h3>骇物战况</h3><p>等待房主同步 AIBP 战况。</p></section>' : '';
     const { title, level, panel, ai, bp, aiDeck, bpDeck, damage } = projection;
     function preview(label, card, empty) {
@@ -660,7 +683,8 @@
       for (const dieId of choices) if (!roll?.dice.some(die => die.id === dieId && dice.canReroll(die))) choices.delete(dieId);
       if (!choices.size) selectedDice.delete(id);
     }
-    const latestRoll = state.rolls.find(roll => roll.id === state.lastBattleRollId) || state.rolls[0];
+    const personal = role === 'player' && edit;
+    const latestRoll = personal ? null : state.rolls.find(roll => roll.id === state.lastBattleRollId) || state.rolls[0];
     const rolls = latestRoll ? rollCard(latestRoll, true)
       + state.rolls.filter(roll => roll !== latestRoll).map(roll => rollCard(roll, false)).join('') : '';
     const rollLog = '<section class="battle-room-rolls"><h3>掷骰记录</h3>'
@@ -669,15 +693,14 @@
     const focusRoot = summary.contains(active) ? summary : content;
     const focus = active && focusRoot.contains(active) ? [...focusRoot.querySelectorAll('button,select,input')].indexOf(active) : -1;
     const selection = focus >= 0 && active.name;
-    const personal = role === 'player' && edit;
-    const quick = personal ? '<nav class="room-primary-nav" aria-label="常用操作">'
-      + (state.board ? '<a href="#room-movement">移动</a>' : '')
-      + '<a href="#room-dice">掷骰</a><a href="#room-equipment">装备</a></nav>' : '';
     summary.innerHTML = '<div class="battle-room-head"><div><h2>' + escape(state.title) + '</h2><p>第 ' + state.round
-      + ' 轮' + (state.closed ? ' · 已结束' : '') + '</p></div><div>' + controls + '</div></div>' + links + quick;
+      + ' 轮' + (state.closed ? ' · 已结束' : '') + '</p></div><div>' + controls + '</div></div>' + links;
     const poolSection = '<section class="battle-room-pool"><header><h3>克拉托斯池</h3>' + clearPool + '</header><div>' + pool + '</div></section>';
-    const primary = personal ? diceForm() + own + rollLog + poolSection + teamActivity()
-      : roomProjection() + argoAbilities() + roomTrauma() + own + poolSection + diceForm() + (edit ? rollLog + teamActivity() : '');
+    const poolByDice = edit && (personal || rollMode === 'power');
+    const dicePanel = diceForm(poolByDice ? poolSection : '');
+    const primary = personal ? dicePanel + own + teamActivity()
+      : (role === 'viewer' ? roomProjection() : '') + argoAbilities() + roomTrauma() + own
+        + (poolByDice ? '' : poolSection) + dicePanel + (edit ? rollLog + teamActivity() : '');
     content.innerHTML = primary + (role !== 'player' ? '<h3 class="battle-room-heading">状态总览</h3>' : '') + overview
       + (edit ? '' : rollLog) + (state.squad && role !== 'viewer' ? '<p><a href="' + escape(squadLink.link('/aibp/squad', id)) + '">返回联机小队</a></p>' : '');
     renderTools();
@@ -824,6 +847,7 @@
         const source = state.rolls.find(roll => roll.id === rollId);
         if (rollMode === 'defense' && source) saveDiceDraft(rollSeat, 'defense', { red: source.defenseCount });
       }
+      if (rollFollowup && toolsDialog.open) toolsDialog.close();
       render();
       content.querySelector('[data-roll] input')?.focus();
       return;

@@ -20,6 +20,9 @@
 .squad-roll-controls button{border:1px solid #a4bd9e;border-radius:7px;background:#232b26f5;color:#fff5e4;padding:.35rem .55rem;font:14px system-ui,sans-serif}
 .squad-roll-controls button[aria-pressed="false"]{opacity:.75}
 .squad-check-overlay article{background:#232b26f5;color:#fff5e4;border:1px solid #a4bd9e;border-radius:10px;padding:.65rem .85rem;box-shadow:0 3px 20px #0006;font:clamp(15px,2vw,25px) system-ui,sans-serif}
+.squad-check-overlay article{max-height:36dvh;overflow:auto;overscroll-behavior:contain;pointer-events:auto}
+.squad-roll-entry + .squad-roll-entry{margin-top:.4rem;padding-top:.4rem;border-top:1px solid #a4bd9e55}
+#squad-latest-battle:has(.squad-roll-entry + .squad-roll-entry){font-size:clamp(14px,1.3vw,19px)}
 .squad-check-overlay strong{display:flex;align-items:center;gap:.35rem;color:#e4cca1}
 .squad-roll-avatar{height:1.5em;width:1.5em;border-radius:50%;object-fit:cover;object-position:top}
 .squad-roll-faces{display:flex;flex-wrap:wrap;gap:.3rem;margin-block:.3rem}
@@ -118,11 +121,11 @@
   <script src="../story/assets/story-marks.js?v=20261108-story-marks4"></script>
   <script async data-ato-mm-map src="../story/assets/mixed-media/mapping.js?v=20261023-runtime1"></script>
   <script src="../aibp/panel-overlay.js?v=20261013-panel-overlay1"></script>
-  <script src="../aibp/squad-link.js?v=5"></script>
+  <script src="../aibp/squad-link.js?v=6"></script>
   <script src="./app.js?v=20261118-squad"></script>
   <script src="../hero/hero-catalog.js"></script>
-  <script src="../aibp/room-dice.js?v=4"></script>
-  <script src="./squad-projection.js?v=6"></script>
+  <script src="../aibp/room-dice.js?v=5"></script>
+  <script src="./squad-projection.js?v=7"></script>
   <script src="../assets/ato-terms.js?v=20261110-loop-terms"></script>
   <script src="../assets/english-terms.js?v=20261011-english4"></script>
   <script src="../assets/english-ui.js?v=20261011-aibp-state1"></script>

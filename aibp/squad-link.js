@@ -84,7 +84,7 @@
         if (stopped) return;
         if (event.code === 4001) {
           stopped = true;
-          status?.('这个英雄已由其他成员接管，请使用邀请重新加入。');
+          status?.('你的英雄席位已释放或被接管，请重新加入小队。', event.code);
           return;
         }
         status?.('连接中断，正在重连…');

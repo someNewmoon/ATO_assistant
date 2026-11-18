@@ -234,3 +234,30 @@ test('退出版图模式后保留泰坦选择、移动上限与武器配置', ()
   assert.deepEqual(r.board.los.titanSpeeds, [5, 7]);
   assert.equal(r.board.los.weaponControls.reach, 3);
 });
+
+test('单个英雄连续掷骰不会挤掉队友的最后一次结果', () => {
+  const r = room();
+  const other = { role: 'player', seat: 1 };
+  reducer.apply(r, other, { type: 'roll', id: 'teammate', seat: 1, mode: 'attack', counts: { d10: 1 } });
+  for (let i = 0; i < 35; i++) {
+    reducer.apply(r, player, { type: 'roll', id: 'attack-' + i, seat: 0, mode: 'attack', counts: { d10: 1 } });
+  }
+  assert.equal(r.rolls.length, 30);
+  assert.equal(r.rolls[0].id, 'attack-34');
+  assert.ok(r.rolls.some(roll => roll.id === 'teammate'));
+});
+
+test('只有房主能释放队员席位，英雄和配装留在小队', () => {
+  const r = room();
+  r.squad = { phase: 'battle', hostSeat: 1, stock: { loadouts: { h0: { titanId: 't' } } } };
+  r.secrets = { players: ['member', null] };
+  r.heroes[0].player = '队员';
+  const release = { type: 'squad-remove-player', seat: 0 };
+  assert.throws(() => applySquad(r, player, release, random), /只有房主/);
+  assert.throws(() => applySquad(r, host, { ...release, seat: 1 }, random), /没有可移除/);
+  applySquad(r, host, release, random);
+  assert.deepEqual(r.secrets.players, [null, null]);
+  assert.equal(r.heroes[0].player, '');
+  assert.equal(r.heroes[0].id, 'h0');
+  assert.deepEqual(r.squad.stock.loadouts.h0, { titanId: 't' });
+});

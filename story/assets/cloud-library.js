@@ -18,13 +18,50 @@
       return access;
     }
 
+    async function fetchBytes(path, timeout) {
+      const response = await fetch(path, {
+        signal: AbortSignal.timeout(timeout), credentials: 'omit', cache: 'force-cache',
+      });
+      if (!response.ok) {
+        const error = new Error('线上故事正文暂时无法读取。');
+        error.status = response.status;
+        throw error;
+      }
+      return new Uint8Array(await response.arrayBuffer());
+    }
+
+    async function fetchParts(base, placeholders, cycle) {
+      const count = placeholders.parts[cycle];
+      const parts = Array(count);
+      let next = 0;
+      async function read() {
+        while (next < count) {
+          const part = next++;
+          const url = base + cycle + '-' + part + '.bin';
+          try { parts[part] = await fetchBytes(url, 20000); }
+          catch (error) {
+            if (error.status === 404) throw error;
+            parts[part] = await fetchBytes(url, 30000);
+          }
+        }
+      }
+      await Promise.all(Array.from({ length: Math.min(count, 4) }, read));
+      const bytes = new Uint8Array(parts.reduce((length, part) => length + part.length, 0));
+      let offset = 0;
+      for (const part of parts) {
+        bytes.set(part, offset);
+        offset += part.length;
+      }
+      return bytes;
+    }
+
     async function fetchBook(cycle) {
       const { key, version } = await ready();
-      const response = await fetch('./library/' + version + '/' + cycle + '.bin', {
-        signal: AbortSignal.timeout(90000), credentials: 'omit',
-      });
-      if (!response.ok) throw new Error('线上故事正文暂时无法读取。');
-      const encrypted = new Uint8Array(await response.arrayBuffer());
+      const base = './library/' + version + '/';
+      const parts = window.ATO_STORY_PARTS;
+      const encrypted = parts?.version === version && parts.parts[cycle]
+        ? await fetchParts(base, parts, cycle)
+        : await fetchBytes(base + cycle + '.bin', 90000);
       if (encrypted.length < 29) throw new Error('故事正文文件不完整。');
       const compressed = await crypto.subtle.decrypt({
         name: 'AES-GCM', iv: encrypted.slice(0, 12),

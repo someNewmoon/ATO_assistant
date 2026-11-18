@@ -61,12 +61,23 @@ try {
     })).trim();
     if (version) {
       if (!/^[a-f0-9]{20}$/.test(version)) throw new Error('Invalid story library version.');
-      await buildHostedStory(staging);
+      const parts = {};
       const dest = join(staging, 'story/library', version);
       await mkdir(dest, { recursive: true });
       for (const cycle of ['c1', 'c2', 'c3', 'c4', 'c5']) {
-        await copyFile(join(storyRoot, version, cycle + '.bin'), join(dest, cycle + '.bin'));
+        const name = cycle + '.bin';
+        const encrypted = await readFile(join(storyRoot, version, name));
+        await writeFile(join(dest, name), encrypted);
+        const size = 128 * 1024;
+        parts[cycle] = Math.ceil(encrypted.length / size);
+        for (let part = 0; part < parts[cycle]; part++) {
+          await writeFile(join(dest, cycle + '-' + part + '.bin'), encrypted.subarray(part * size, (part + 1) * size));
+        }
       }
+      if (sourceFiles.size + 9 + Object.values(parts).reduce((sum, count) => sum + count, 0) > 20000) {
+        throw new Error('Pages 免费版文件数上限为 20,000。');
+      }
+      await buildHostedStory(staging, { version, parts });
     }
   }
   await buildBattleRoom(staging, repo);

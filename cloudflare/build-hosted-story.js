@@ -3,7 +3,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { transform } from 'esbuild';
 
-export async function buildHostedStory(staging) {
+export async function buildHostedStory(staging, library) {
   const root = join(staging, 'story');
   const page = join(root, 'index.html');
   const html = await readFile(page, 'utf8');
@@ -49,6 +49,7 @@ export async function buildHostedStory(staging) {
     '<script>',
     '(() => {',
     '  const body = document.getElementById("storyText");',
+    '  window.ATO_STORY_PARTS = ' + JSON.stringify(library) + ';',
     '  let english;',
     '  window.ATO_LOAD_ENGLISH = () => {',
     '    if (english) return;',

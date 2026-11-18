@@ -225,7 +225,7 @@
     const squad = room.squad, seat = ownSeat();
     phaseLabel.textContent = phases[squad.phase];
     const key = JSON.stringify([squad.phase, squad.hostSeat, squad.battleNumber, room.title, room.publicLobby,
-      room.heroes.map(hero => hero.player), squad.loadouts[seat]]);
+      room.heroes.map(hero => hero.player), squad.loadouts[seat], squad.recap?.battleNumber]);
     if (renderKey !== key) {
       renderKey = key;
       const isHost = actor.role === 'host';
@@ -241,6 +241,7 @@
       const fight = squad.phase === 'battle' && !isHost ? '<section class="squad-panel">' + anchor(battleURL(actor.role), '进入当前战斗') + '</section>' : '';
       content.innerHTML = '<div class="squad-stack"><h2>' + e(room.title) + '</h2>'
         + (isHost ? hostControls() : button('transfer', '复制我的席位链接')) + claim + personal + fight
+        + (squad.phase === 'battle' ? '' : api.recapMarkup(squad.recap))
         + (hero && squad.phase !== 'battle' ? rollForm() : '') + (hero && squad.phase === 'prep' ? prepForm(seat) : '')
         + (isHost ? '<details class="squad-roster"' + (content.querySelector('.squad-roster')?.open ? ' open' : '')
           + '><summary>管理小队席位</summary><ul class="squad-log" data-roster></ul></details>' : '')

@@ -87,6 +87,8 @@ export function applyRoomBoard(room, actor, body) {
     const { seat, point, from, speed } = body;
     if (actor.role === 'viewer' || !Number.isInteger(seat) || seat < 0 || seat >= seats
       || (actor.role === 'player' && actor.seat !== seat)) fail('只能移动自己英雄的泰坦。', 403);
+    if (room.heroes[seat].condition === 'dead') fail('死亡的泰坦无法移动。', 409);
+    const deadSeats = room.heroes.flatMap((hero, index) => hero.condition === 'dead' ? [index] : []);
     const move = board?.titanMoves?.[seat];
     if (body.type === 'board-end-move') {
       if (!move || move.id !== body.move) fail('本次移动已更新，请重试。', 409);
@@ -103,7 +105,7 @@ export function applyRoomBoard(room, actor, body) {
       const size = terrain.getApostleProfile(board.apostle, board.level)?.size || 1;
       const hasBoss = Math.abs(pieces.apostle.column - origin.column) <= (size - 1) / 2
         && Math.abs(pieces.apostle.row - origin.row) <= (size - 1) / 2;
-      if (hasBoss || pieces.titans.some((titan, index) => index !== seat && titan.column === origin.column && titan.row === origin.row)) {
+      if (hasBoss || pieces.titans.some((titan, index) => index !== seat && !deadSeats.includes(index) && titan.column === origin.column && titan.row === origin.row)) {
         fail('原位置已有棋子，无法撤回。', 409);
       }
       pieces.titans[seat] = { ...origin };
@@ -124,7 +126,7 @@ export function applyRoomBoard(room, actor, body) {
     if (!remaining) fail('本次移动没有剩余步数。', 409);
     const overlay = los.buildLosOverlay(board.map, {
       active: true, mode: 'titan-move', selectedTitan: seat, moveSpeed: remaining,
-    }, terrain, board.apostle, { level: board.level });
+    }, terrain, board.apostle, { level: board.level, deadSeats });
     const route = los.titanMoveRoute(overlay, point);
     if (!route) fail('这一格当前不可达。', 409);
     const next = los.appendTitanMove(active, { id: body.id, seat, speed: active?.speed ?? speed, route });

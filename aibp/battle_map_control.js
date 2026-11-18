@@ -243,7 +243,7 @@
         window.BattleBoardPieces.render(startLayer, pieces, {
           apostle, size: window.BattleTerrain.getApostleProfile(apostle, level)?.size || 1,
           selected: losState.selectedTitan, mode: losState.mode, names: options.titanNames?.(), roster: options.titanRoster?.(),
-          portraits: options.heroPortraits?.(), priorityTarget, priorityVisible,
+          portraits: options.heroPortraits?.(), deadSeats: options.deadSeats?.(), priorityTarget, priorityVisible,
           trail: options.getTitanTrail?.() || (nativeTitanTrail?.map === options.getMap() ? nativeTitanTrail.move : null),
           bossTrail: options.getApostleTrail?.() || (nativeApostleTrail?.map === options.getMap() ? nativeApostleTrail.move : null),
           onSelectBoss: losState.mode !== "apostle-move" && editBoard() && tactics ? () => setTacticalMode("apostle-move") : undefined,
@@ -413,7 +413,7 @@
       if (!losLayer || !window.BattleLOS) return;
       // 移速已经算在 profile 里，这里连同当前等级一起交给引擎，避免它自己再按地图初始
       // 等级算一遍。
-      const engineOptions = { level: options.getLevel?.(), speed: losProfile(map)?.speed };
+      const engineOptions = { level: options.getLevel?.(), speed: losProfile(map)?.speed, deadSeats: options.deadSeats?.() };
       // 先建一次拿到 occ，据此判断是否跨越高地边界；若自动改了 elevated，重建一次再画。
       const state = currentTacticalState(map);
       let overlay = window.BattleLOS.buildLosOverlay(
@@ -667,7 +667,7 @@
     }
 
     function selectTitan(seat) {
-      if (losState.mode === "apostle-sight") return;
+      if (losState.mode === "apostle-sight" || options.deadSeats?.().includes(seat)) return;
       losState.selectedTitan = seat;
       renderLosAndNotify();
     }
@@ -720,6 +720,7 @@
       select.replaceChildren(...pieces.titans.map((piece, index) => {
         const option = document.createElement("option");
         option.value = String(index);
+        option.disabled = options.deadSeats?.().includes(index) === true;
         option.textContent = (names[index] || `泰坦 ${index + 1}`) + " · " + coordinateLabel(piece.row, piece.column);
         return option;
       }));

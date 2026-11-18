@@ -87,7 +87,9 @@ const t=new URL("room",u);t.search=u.search;t.hash=u.hash;location.replace(t.hre
     if (error.code === 'ENOENT') return '';
     throw error;
   });
-  const bootstrap = '<script>window.ATO_LIGHT_ROOM=true;window.ATO_DEFER_FULL_CARD_IMAGES=true;'
+  const backs = await readFile(join(staging, 'aibp/card-backs.json'), 'utf8');
+  const bootstrap = '<script>window.ATO_LIGHT_ROOM=true;window.ATO_DEFER_FULL_CARD_IMAGES=true;window.ATO_HOSTED_CARD_BACKS='
+    + backs.replace(/<\/script/gi, '<\\/script') + ';'
     + (inventory ? 'window.ATO_HOST_IMAGE_INDEX=' + inventory.replace(/<\/script/gi, '<\\/script') + ';' : '') + '</script>';
   const host = await optimizeHostScripts(staging, original.replace('<title>AIBP Apostle Viewer</title>',
     '<title>AIBP Apostle Viewer</title>' + bootstrap));

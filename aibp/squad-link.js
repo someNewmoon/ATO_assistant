@@ -100,5 +100,23 @@
     if (window.ATO_LANGUAGE) apply();
     else document.addEventListener('DOMContentLoaded', apply, { once: true });
   }
-  window.ATO_SQUAD_LINK = { read, save, forget, recentHost, listedHost, home, link, request, connect, language, validId, validKey, sharedOrigin };
+  function recapMarkup(recap) {
+    if (!recap) return '';
+    const { escape, heroPortrait } = window.ATO_HERO_CATALOG;
+    const spotlight = recap.heroes.find(hero => hero.id === recap.mvp);
+    return '<section class="room-battle-recap"><h3>第 ' + recap.battleNumber + ' 场 · 战斗称号</h3>'
+      + '<p>' + escape(recap.apostle) + ' · 第 ' + recap.round + ' 轮结束'
+      + (spotlight ? ' · ' + (recap.spotlights ? '全场最佳 ' : '本场特别提名 ') + escape(spotlight.name) : '') + '</p>'
+      + '<ul>' + recap.heroes.map(hero => {
+        const portrait = heroPortrait(hero);
+        const metrics = [hero.damage == null ? '' : '损伤 ' + hero.damage,
+          '投掷 ' + hero.rolls, '赞同 ' + hero.likes, '表态 ' + hero.feedback].filter(Boolean);
+        return '<li>' + (portrait ? '<img alt="" src="../hero/assets/' + escape(portrait) + '">' : '')
+          + '<div><strong>' + escape(hero.name) + ' · ' + escape(hero.title) + '</strong>'
+          + (hero.reason ? '<div>' + escape(hero.reason) + '</div>' : '')
+          + '<small>' + metrics.join(' · ') + '</small></div></li>';
+      }).join('') + '</ul></section>';
+  }
+
+  window.ATO_SQUAD_LINK = { read, save, forget, recentHost, listedHost, home, link, request, connect, language, validId, validKey, sharedOrigin, recapMarkup };
 })();

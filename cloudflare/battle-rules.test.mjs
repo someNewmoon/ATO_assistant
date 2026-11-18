@@ -276,3 +276,24 @@ test('一键回正只改变本英雄横置的装备，兼容旧存档的已用�
   assert.equal(r.heroes[0].mnemos[0].state, 'exhausted');
   assert.equal(r.heroes[1].gear[0].used, 1);
 });
+
+test('战斗回顾按真实损伤与表态发称号，保留被旧记录压缩的投掷数量', () => {
+  const r = room();
+  r.squad = { phase: 'battle', battleNumber: 1, hostSeat: 0 };
+  const action = (actor, body) => reducer.apply(r, actor, { battleNumber: 1, ...body });
+  const teammate = { role: 'player', seat: 1 };
+  action(teammate, { type: 'roll', id: 'teammate', seat: 1, mode: 'attack', counts: { d10: 1 } });
+  action(host, { type: 'roll-reaction', roll: 'teammate', value: 'down' });
+  action(host, { type: 'roll-reaction', roll: 'teammate', value: 'up' });
+  for (let i = 0; i < 33; i++) {
+    action(host, { type: 'roll', id: 'host-' + i, seat: 0, mode: 'attack', counts: { d10: 1 } });
+  }
+  action(host, { type: 'end', damage: [4, null] });
+  const { recap } = r.squad;
+  assert.equal(recap.mvp, 'h0');
+  assert.equal(recap.heroes[0].title, '骇物破壁者');
+  assert.equal(recap.heroes[0].rolls, 33);
+  assert.equal(recap.heroes[1].title, '全船掌声');
+  assert.equal(recap.heroes[1].likes, 1);
+  assert.equal(recap.heroes[1].feedback, 1);
+});

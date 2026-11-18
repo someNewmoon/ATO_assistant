@@ -238,7 +238,7 @@ body.aibp-room-only > .app > main > :not(#battleRoom) { display: none !important
 .room-projection { padding: 10px 0; border-top: 1px solid var(--room-border); }
 .room-projection-cards {
   display: grid;
-  grid-template-columns: minmax(0, 2fr) repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1.2fr)) minmax(0, 1fr);
   gap: 8px;
   margin-top: 8px;
 }
@@ -249,15 +249,15 @@ body.aibp-room-only > .app > main > :not(#battleRoom) { display: none !important
   border-radius: 7px;
 }
 .room-projection-cards h4 { margin-bottom: 5px; font-size: .85rem; }
-.room-projection-cards > div:first-child .battle-room-card-art { max-width: 24rem; }
-.room-projection-cards > div:first-child img { aspect-ratio: 3 / 2; }
+.room-projection-cards .room-projection-panel .battle-room-card-art { max-width: 24rem; }
+.room-projection-cards .room-projection-panel img { aspect-ratio: 3 / 2; }
 .room-projection-counts { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 0; }
 .room-projection-counts dt { font-weight: 700; }
 .room-projection-counts dd { margin: 2px 0 0; }
 .room-projection-deck { font-size: .82rem; }
 @media (max-width: 540px) {
   .room-projection-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .room-projection-cards > div:first-child { grid-column: 1 / -1; }
+  .room-projection-cards .room-projection-panel { grid-column: 1 / -1; }
 }
 
 .room-argo-abilities { padding: 9px 0; border-top: 1px solid var(--room-border); }
@@ -353,8 +353,14 @@ body.aibp-room-only > .app > main > :not(#battleRoom) { display: none !important
 .room-roll-head .room-roll-reactions { margin: 0; }
 .room-roll-head .room-roll-reactions:empty { display: none; }
 
-.room-projection-cards .room-projection-back { width: 42%; margin-top: .35rem; }
 
 .room-personal-result { margin-top: .7rem; }
 .room-personal-result .room-last-rolls { margin-block: .35rem; }
 .room-equipment-head { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: .4rem; }
+
+.room-projection-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .4rem; align-items: start; }
+.room-projection-pair small { display: block; margin-bottom: .25rem; }
+.room-battle-finish form { display: grid; gap: .55rem; }
+.room-battle-finish label { display: flex; gap: .5rem; justify-content: space-between; align-items: center; }
+.room-battle-finish input { width: 7rem; }
+.room-battle-finish footer { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .45rem; }

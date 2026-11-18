@@ -1320,6 +1320,7 @@ Add these script tags after the main viewer script:
             <button type="button" class="loot-recalc-button">重新随机计算</button>
           </div>
 
+          <div data-loot-recap></div>
           <div class="loot-summary"></div>
           <div class="loot-warning"></div>
           <div class="loot-details"></div>
@@ -2041,7 +2042,8 @@ Add these script tags after the main viewer script:
       if (safeGetCurrentApostle() !== apostle) return;
       const result = calculateBpLoot({ recordMultiplier });
       renderLootResult(lootDialog, result);
-      lootDialog.showModal();
+      lootDialog.querySelector("[data-loot-recap]").innerHTML = window.getAibpBattleRecap?.() || "";
+      if (!lootDialog.open) lootDialog.showModal();
     } catch (err) {
       window.alert(`战利品计算失败：\n${err.message || err}`);
     }
@@ -2468,6 +2470,7 @@ Add these script tags after the main viewer script:
   }
 
   function installButton() {
+    window.openAibpLoot = showLootDialog;
     if (document.getElementById("bpLootButton")) return;
 
     const button = document.createElement("button");

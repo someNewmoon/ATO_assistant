@@ -30,6 +30,8 @@
   let credentials = null;
   let state = null;
   let lastProjectionSent = '';
+  let projectionRetry;
+  let readingState = false;
   let lobbyCampaign;
   let abilityDictionary;
   const battleConfig = window.ATO_BATTLE_CONFIG;
@@ -111,12 +113,19 @@
     if (data.room.id !== id || (state && data.room.revision < state.revision)) return;
     if (state?.revision === data.room.revision && actor) return;
     const first = !actor;
+    const wasFighting = state?.squad?.phase === 'battle';
     state = data.room;
     actor = data.actor;
     if (first && actor.role === 'host') rollSeat = personalSeat() ?? 0;
     const language = state.squad?.language || state.language;
     if (language && language !== roomLanguage) { roomLanguage = language; squadLink?.language(language); }
     if (state.squad && (state.closed || state.squad.phase !== 'battle')) {
+      if (actor.role === 'host' && !state.closed && state.squad.phase === 'story' && state.squad.recap
+          && state.squad.recap.battleNumber === state.squad.battleNumber) {
+        renderRecap();
+        if (wasFighting) void window.openAibpLoot?.();
+        return;
+      }
       if (params.get('embed') === '1') return;
       location.replace(viewKey ? squadLink.link('/ss/', id, 'view', viewKey) : squadLink.link('/aibp/squad', id));
       return;
@@ -126,6 +135,19 @@
     render();
     if (actor.role === 'host') syncProjection();
   }
+
+  async function refreshRoomState() {
+    if (!state || state.closed || readingState || !credentials?.token || document.hidden
+        || (state.squad && state.squad.phase !== 'battle')) return;
+    readingState = true;
+    try { accept(await request(id + '/state')); }
+    catch { /* The socket and the next refresh continue recovery. */ }
+    finally { readingState = false; }
+  }
+
+  window.setInterval(() => {
+    if (activeTool === 'apostle' || socket?.readyState !== WebSocket.OPEN) void refreshRoomState();
+  }, 5000);
 
   function connect() {
     if (!credentials?.token || socket) return;
@@ -242,6 +264,7 @@
       toolsStatus.textContent = '';
       renderTools();
       toolsDialog.showModal();
+      if (key === 'apostle') void refreshRoomState();
     });
     dock.append(button);
   }
@@ -549,8 +572,48 @@
       + (notes[rollMode] ? '<p class="room-dice-help">' + notes[rollMode] + '</p>' : '') + powerPool + '</section>';
   }
 
+  window.getAibpBattleRecap = () => squadLink?.recapMarkup(state?.squad?.recap?.battleNumber === state?.squad?.battleNumber
+    && state?.squad?.phase === 'story' ? state.squad.recap : null);
+
+  function renderRecap() {
+    if (content.querySelector('.room-battle-recap')) return;
+    dock.hidden = true;
+    if (toolsDialog.open) toolsDialog.close();
+    boardMount.hidden = true;
+    summary.innerHTML = '';
+    content.innerHTML = squadLink.recapMarkup(state.squad.recap)
+      + '<p><button type="button" data-open-loot>计算战利品</button> <a href="'
+      + escape(squadLink.link('/aibp/squad', id)) + '">返回联机小队</a></p>';
+    const loot = content.querySelector('[data-open-loot]');
+    loot.addEventListener('click', () => window.openAibpLoot?.());
+    loot.hidden = !window.openAibpLoot;
+  }
+
+  function finishSquadBattle() {
+    const dialog = document.createElement('dialog');
+    dialog.className = 'room-trauma-dialog room-battle-finish';
+    dialog.innerHTML = '<form><h3>结束战斗</h3><p>可填写每位英雄造成的损伤，用于战斗称号。</p>'
+      + state.heroes.map((hero, seat) => '<label>' + escape(hero.name)
+        + '<input type="number" min="0" max="999" step="1" name="damage-' + seat + '" placeholder="可留空"></label>').join('')
+      + '<footer><button type="button" data-cancel>取消</button><button type="submit">结束战斗并结算</button></footer></form>';
+    dialog.querySelector('[data-cancel]').onclick = () => dialog.close();
+    dialog.addEventListener('close', () => dialog.remove(), { once: true });
+    dialog.querySelector('form').onsubmit = event => {
+      event.preventDefault();
+      const fields = new FormData(event.currentTarget);
+      const damage = state.heroes.map((_, seat) => {
+        const value = fields.get('damage-' + seat);
+        return value === '' ? null : Number(value);
+      });
+      dialog.close();
+      send({ id: crypto.randomUUID(), type: 'end', damage });
+    };
+    root.append(dialog);
+    dialog.showModal();
+  }
+
   function syncProjection() {
-    if (actor?.role !== 'host' || state.closed || !state.board) return;
+    if (actor?.role !== 'host' || state.closed || !state.board || (state.squad && state.squad.phase !== 'battle')) return;
     const projection = window.getAibpRoomProjection?.();
     if (!projection || projection.apostle !== state.board.apostle) return;
     const key = JSON.stringify(projection);
@@ -563,10 +626,13 @@
     const projection = state.projection;
     if (!projection) return state.board ? '<section class="room-projection"><h3>骇物战况</h3><p>等待房主同步 AIBP 战况。</p></section>' : '';
     const { title, level, panel, ai, bp, aiDeck, bpDeck, damage } = projection;
-    function preview(label, card, empty, back) {
-      const face = card?.src ? cardImage(card.src, card.label || label) : '';
-      const reverse = back?.src ? cardImage(back.src, back.label || '牌背', face ? 'room-projection-back' : '') : '';
-      return '<div><h4>' + label + '</h4>' + (face + reverse || '<p>' + empty + '</p>') + '</div>';
+    const bossArt = (src, label) => src ? cardImage('/aibp/' + src, label) : '';
+    function deckCards(type, card, deck) {
+      const face = bossArt(card?.src, card?.label || type) || '<p>尚未揭示</p>';
+      const reverse = deck.back?.src ? bossArt(deck.back.src, deck.back.label || type + ' 牌背')
+        : '<p>' + (deck.count ? escape(deck.backs || '等待牌背同步') : '牌堆已空') + '</p>';
+      return '<div><h4>' + type + '</h4><div class="room-projection-pair">'
+        + '<div><small>最后揭示</small>' + face + '</div><div><small>下一张牌背</small>' + reverse + '</div></div></div>';
     }
     function deckCounts(label, deck) {
       return '<div><dt>' + label + '</dt><dd>牌背 ' + deck.count + ' 张 · 弃牌 ' + deck.discard + ' 张</dd>'
@@ -575,8 +641,8 @@
     const damageText = damage.total + (damage.wounds ? ' / ' + damage.wounds : '')
       + (damage.damage1 == null ? '' : '（' + damage.damage1 + ' + ' + damage.damage2 + '）');
     return '<section class="room-projection"><h3>骇物战况</h3><p>' + escape([title, level].filter(Boolean).join(' · ')) + '</p>'
-      + '<div class="room-projection-cards">' + preview('骇物面板', { src: panel, label: title }, '暂无面板图')
-      + preview('AI', ai, '未揭示 AI', aiDeck.back) + preview('BP', bp, '未揭示 BP', bpDeck.back) + '</div>'
+      + '<div class="room-projection-cards">' + deckCards('AI', ai, aiDeck) + deckCards('BP', bp, bpDeck)
+      + '<div class="room-projection-panel"><h4>骇物面板</h4>' + (bossArt(panel, title) || '<p>暂无面板图</p>') + '</div></div>'
       + '<dl class="room-projection-counts"><div><dt>损伤</dt><dd>' + damageText + '</dd></div>'
       + deckCounts('AI 牌堆', aiDeck) + deckCounts('BP 牌堆', bpDeck) + '</dl></section>';
   }
@@ -759,11 +825,15 @@
         say('');
       } catch (error) {
         say(error.message);
-        if (error instanceof RejectedAction) {
-          if (action.type === 'room-projection') lastProjectionSent = '';
-          render();
-        }
-        else {
+        if (action.type === 'room-projection') {
+          lastProjectionSent = '';
+          if (!(error instanceof RejectedAction)) {
+            clearTimeout(projectionRetry);
+            projectionRetry = setTimeout(syncProjection, 3000);
+          }
+        } else if (error instanceof RejectedAction) {
+          if (!state.squad || state.squad.phase === 'battle') render();
+        } else {
           failedAction = action;
           appendRetry();
         }
@@ -839,6 +909,7 @@
   });
 
   window.addEventListener('aibp-room-projection', syncProjection);
+  window.addEventListener('online', () => { syncProjection(); void refreshRoomState(); });
 
   document.addEventListener('ato-battle-assets', () => {
     if (state) { roomBoard?.render(); render(); }
@@ -929,7 +1000,8 @@
     } else if (action === 'pool-clear') {
       send({ id: crypto.randomUUID(), type: action });
     } else if (action) {
-      if (action === 'end' && !window.confirm(state.squad ? '确认结束战斗并让大家返回小队？' : '确认结束本场战斗？结束后，房间将转为只读。')) return;
+      if (action === 'end' && state.squad) return finishSquadBattle();
+      if (action === 'end' && !window.confirm('确认结束本场战斗？结束后，房间将转为只读。')) return;
       void send({ id: crypto.randomUUID(), type: action, key, seat: Number(seat), delta: Number(delta) });
     }
   });
@@ -1015,6 +1087,8 @@
           const url = new URL(location.href);
           url.searchParams.delete('squad');
           url.searchParams.set('battle', squadId);
+          url.searchParams.set('apostle', board.apostle);
+          url.hash = '';
           location.assign(url);
         } catch (error) { say(error.message); button.disabled = false; }
       });

@@ -53,7 +53,7 @@ export function squadView(room, actor) {
   const squad = room.squad;
   if (!squad) return null;
   const { phase, cycle, language, battleNumber, hostSeat, checks, story, stock, gearNames } = squad;
-  const result = { phase, cycle, language, battleNumber, hostSeat, checks, lastBattleRoll: latestBattleRoll(room) || squad.lastBattleRoll || null };
+  const result = { phase, cycle, language, battleNumber, hostSeat, checks, recap: squad.recap, lastBattleRoll: latestBattleRoll(room) || squad.lastBattleRoll || null };
   if (actor.role === 'viewer' || actor.role === 'host') result.story = story;
   if (actor.role === 'host' || actor.role === 'player') {
     result.loadouts = room.heroes.map(hero => inventory.normalizeLoadout(stock.loadouts[hero.id]));
@@ -127,6 +127,7 @@ export function applySquad(room, actor, body, randomInt) {
     refreshCombatKit(room);
     room.priorityTarget = priorityTarget({ heroes: room.heroes });
     room.activity = [];
+    delete room.battleStats;
     Object.assign(room, { board, trauma, projection: roomProjection(body.projection, board.apostle), round: 1,
       rolls: [], lastBattleRollId: null, argoAbilities: {}, pool: Object.fromEntries(Object.keys(room.pool).map(key => [key, 0])) });
     squad.phase = 'battle';

@@ -33,7 +33,7 @@
     mount.prepend(toolbar);
 
     const canEdit = () => actor?.role === "host" && !room.closed;
-    const canMove = seat => !room.closed && (canEdit() || (actor.role === "player" && actor.seat === seat));
+    const canMove = seat => !room.closed && room.heroes[seat]?.condition !== "dead" && (canEdit() || (actor.role === "player" && actor.seat === seat));
     const overlayConfig = ({ active, mode, selectedTitan, weaponControls, titanSpeeds, elevated }) => ({
       active, mode, selectedTitan, weaponControls, titanSpeeds, elevated,
     });
@@ -71,6 +71,7 @@
           window.ATO_GEAR_INVENTORY.dreamwalkerPanel(titan)?.name || titan?.name || name),
         titanRoster: () => room.heroes.map(hero => hero.titan),
         priorityTarget: () => room.priorityTarget?.seat,
+        deadSeats: () => room.heroes.flatMap((hero, seat) => hero.condition === "dead" ? [seat] : []),
         heroPortraits: () => room.heroes.map(hero => {
           const path = window.ATO_HERO_CATALOG.heroPortrait(hero);
           return path && '../hero/assets/' + path;

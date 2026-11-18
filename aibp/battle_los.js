@@ -815,9 +815,9 @@
     } : null };
   }
 
-  function computeTitanMoves(source, pieces, selected, speed, tiles, terrainApi, occ, bossSize) {
+  function computeTitanMoves(source, pieces, selected, speed, tiles, terrainApi, occ, bossSize, deadSeats = []) {
     const occupied = new Set(pieces.titans.flatMap((piece, index) =>
-      index === selected ? [] : [cellKey(piece.column, piece.row)]));
+      index === selected || deadSeats.includes(index) ? [] : [cellKey(piece.column, piece.row)]));
     for (const { c, r } of losSourceCells(pieces.apostle, bossSize)) occupied.add(cellKey(c, r));
     for (const tile of tiles) {
       if (!/^(?:Column|City|Time-Frozen City)$/i.test(tile.name)) continue;
@@ -1133,7 +1133,7 @@
     const selected = Number.isInteger(state.selectedTitan) && state.selectedTitan >= 0 && state.selectedTitan < (pieceState?.titans.length || 4)
       ? state.selectedTitan : 0;
     const bossMode = mode === "apostle-sight" || mode === "apostle-move";
-    const sourceAnchor = tactical ? (bossMode ? pieceState.apostle : pieceState.titans[selected]) : state.anchor;
+    const sourceAnchor = tactical && !bossMode && settings.deadSeats?.includes(selected) ? null : tactical ? (bossMode ? pieceState.apostle : pieceState.titans[selected]) : state.anchor;
     const profile = (tactical ? bossMode : state.source === "apostle")
       ? (terrainApi.getApostleProfile(apostle, settings.level ?? map.startLevel) || null)
       : null;
@@ -1190,7 +1190,7 @@
     const bossSize = tactical ? terrainApi.getApostleProfile(apostle, settings.level ?? map.startLevel)?.size || 1 : 1;
     if (mode === "titan-move") {
       const speed = Number.isFinite(state.moveSpeed) ? Math.max(0, Math.min(20, state.moveSpeed)) : 5;
-      return { ...base, ...computeTitanMoves(source[0], pieceState, selected, speed, tiles, terrainApi, occ, bossSize) };
+      return { ...base, ...computeTitanMoves(source[0], pieceState, selected, speed, tiles, terrainApi, occ, bossSize, settings.deadSeats) };
     }
 
     if (mode === "apostle-move") return base;

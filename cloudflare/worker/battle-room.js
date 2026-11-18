@@ -4,6 +4,7 @@ import inventory from '../../technology/gear-inventory.js';
 import cardState from '../../aibp/room-card-state.js';
 import roomDice from '../../aibp/room-dice.js';
 import { roomProjection } from './room-projection.js';
+import { battleRecap, battleStats, countReaction } from './room-recap.js';
 import battleConfig from '../../technology/battle-config.js';
 import techDictionary from '../../technology/tech_card_dictionary.min.json';
 import gearProduction from '../../technology/ato_gear_production.json';
@@ -211,7 +212,7 @@ export class BattleRoom extends DurableObject {
   }
 
   view(room, actor) {
-    const { secrets, trauma, squad, owner, ...state } = room;
+    const { secrets, trauma, squad, owner, battleStats, ...state } = room;
     return { ok: true, room: { ...state, priorityTarget: priorityTarget(room), trauma: traumaView(room, actor), ...(squad && { squad: squadView(room, actor) }) }, actor };
   }
 
@@ -462,6 +463,11 @@ export class BattleRoom extends DurableObject {
         room.round++;
         if (room.board) delete room.board.titanMoves;
       } else if (room.squad) {
+        if (body.damage !== undefined && (!Array.isArray(body.damage) || body.damage.length !== room.heroes.length
+            || body.damage.some(value => value !== null && (!Number.isInteger(value) || value < 0 || value > 999)))) {
+          reject('请为每位英雄填写 0–999 的损伤，或留空。');
+        }
+        room.squad.recap = battleRecap(room, body.damage, randomInt);
         if (latestBattleRoll(room)) room.squad.lastBattleRoll = latestBattleRoll(room);
         room.squad.phase = 'story';
       }
@@ -474,6 +480,7 @@ export class BattleRoom extends DurableObject {
       const by = actor.role === 'host' ? 'host' : 'seat:' + actor.seat;
       if (roomDice.rollOwner(roll, room.squad?.hostSeat) === by) reject('只能回应队友的掷骰。', 403);
       if (![null, 'up', 'down'].includes(body.value)) reject('掷骰回应无效。');
+      countReaction(room, roll, by, body.value);
       roll.reactions ||= {};
       if (body.value === null) {
         delete roll.reactions[by];
@@ -541,6 +548,10 @@ export class BattleRoom extends DurableObject {
       case 'condition':
         if (!conditions.includes(body.value)) reject('未知英雄状态。');
         hero.condition = body.value;
+        if (hero.condition === 'dead' && room.board) {
+          if (room.board.titanMoves) delete room.board.titanMoves[seat];
+          if (room.board.lastTitanMove?.seat === seat) delete room.board.lastTitanMove;
+        }
         room.priorityTarget = priorityTarget(room);
         break;
       case 'gear': {
@@ -619,6 +630,7 @@ export class BattleRoom extends DurableObject {
       if (mode === 'defense') parent.defenseRoll = roll.id;
     }
     if (defenseCount) roll.defenseCount = defenseCount;
+    battleStats(room)[seat].rolls++;
     room.lastBattleRollId = roll.id;
     room.rolls.unshift(roll);
     if (room.rolls.length > 30) {

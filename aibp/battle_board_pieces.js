@@ -97,11 +97,11 @@
   }
 
   function render(layer, pieces, {
-    apostle, size = 1, selected = 0, mode, names = [], roster, portraits = [], priorityTarget, priorityVisible, trail, bossTrail, onSelect, onSelectBoss,
+    apostle, size = 1, selected = 0, mode, names = [], roster, portraits = [], deadSeats = [], priorityTarget, priorityVisible, trail, bossTrail, onSelect, onSelectBoss,
   } = {}) {
     layer.replaceChildren();
     layer.hidden = false;
-    drawTrail(layer, trail);
+    if (!deadSeats.includes(trail?.seat)) drawTrail(layer, trail);
     drawTrail(layer, bossTrail, true);
     if (priorityVisible) drawPriorityLink(layer, pieces.apostle, pieces.titans[priorityTarget]);
     const document = layer.ownerDocument;
@@ -167,6 +167,7 @@
     }
     token(pieces.apostle, size, "骇物", null, sprites[spriteKeys[apostle]]);
     pieces.titans.forEach((piece, index) => {
+      if (deadSeats.includes(index)) return;
       const titan = roster?.[index];
       const panel = window.ATO_GEAR_INVENTORY?.dreamwalkerPanel(titan);
       const type = window.ATO_GEAR_INVENTORY?.titanType(titan);

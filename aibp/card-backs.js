@@ -48,6 +48,8 @@
     return pending;
   }
 
+  if (root.ATO_HOSTED_CARD_BACKS) backs = normalize(root.ATO_HOSTED_CARD_BACKS);
+
   root.AibpCardBacks = {
     ready,
     backFor: (front) => typeof front === "string" ? backs?.[front.replace(/[?#].*$/, "")] || null : null,

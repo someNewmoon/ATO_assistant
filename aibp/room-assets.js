@@ -17,10 +17,16 @@
     return path ? new URL(path, origin).href : '';
   }
 
+  function gearImage(collection, id) {
+    const base = window.ATO_GEAR_INVENTORY.baseGearId(id);
+    return imageURL(Object.hasOwn(collection, id) ? collection[id]
+      : Object.hasOwn(collection, base) ? collection[base] : '');
+  }
+
   window.ATO_BATTLE_ASSETS = {
-    gearSrc: id => imageURL(Object.hasOwn(hosted.equipment, id) && hosted.equipment[id]),
+    gearSrc: id => gearImage(hosted.equipment, id),
     mnemosSrc: id => imageURL(Object.hasOwn(hosted.mnemos, id) && hosted.mnemos[id]),
-    thumbSrc: id => imageURL(Object.hasOwn(hosted.thumbs, id) && hosted.thumbs[id]),
+    thumbSrc: id => gearImage(hosted.thumbs, id),
     titanArt(titan) {
       const art = window.ATO_GEAR_INVENTORY.titanArtwork(titan, hosted);
       return art && { ...art, src: imageURL(art.path) };

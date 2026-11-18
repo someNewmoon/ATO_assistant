@@ -13,8 +13,8 @@ const box = { module: { exports: {} } };
 vm.runInNewContext(read('technology/gear-inventory.js'), box);
 const upstream = box.module.exports;
 assert.equal(upstream.gearKey('AJ0160@c2'), 'AJ0160@c2');
-assert.equal(moon.gearKey('AJ0160@c2'), '');
-console.log('CONFIRMED: upstream accepts ascended IDs; Moon currently drops them.');
+assert.equal(moon.gearKey('AJ0160@c2'), 'AJ0160@c2');
+console.log('FIXED: Moon now preserves upstream ascended IDs.');
 
 const stock = { arsenal: { AJ0160: { quantity: 1, manufactured: 1 } } };
 const probe = {

@@ -53,8 +53,10 @@ function counter(current, delta, limit) {
 }
 
 function equipmentName(id) {
-  const name = gearProduction.gearCards[id]?.trim();
-  return name?.match(/[\u3400-\u9fff].*/u)?.[0] || name || id;
+  const name = gearProduction.gearCards[inventory.baseGearId(id)]?.trim();
+  const label = name?.match(/[\u3400-\u9fff].*/u)?.[0] || name || id;
+  const cycle = inventory.ascendedCycle(id);
+  return label + (cycle ? ' · 登升至 ' + cycle.toUpperCase() : '');
 }
 
 export function squadAbilityOptions(campaign) {

@@ -6,7 +6,10 @@
   const status = root.querySelector('[role="status"]');
   const params = new URLSearchParams(location.search);
   const fragment = new URLSearchParams(location.hash.slice(1));
+  const squadLink = window.ATO_SQUAD_LINK;
+  const squadId = params.get('squad');
   const routeId = params.get('battle');
+  let roomLanguage;
   const invite = fragment.get('invite') || '';
   const quickJoin = params.get('quick') === '1';
   const viewKey = fragment.get('view') || '';
@@ -106,6 +109,13 @@
     if (state?.revision === data.room.revision && actor) return;
     state = data.room;
     actor = data.actor;
+    const language = state.squad?.language || state.language;
+    if (language && language !== roomLanguage) { roomLanguage = language; squadLink?.language(language); }
+    if (state.squad && state.squad.phase !== 'battle') {
+      if (params.get('embed') === '1') return;
+      location.replace(viewKey ? squadLink.link('/ss/', id, 'view', viewKey) : squadLink.link('/aibp/squad', id));
+      return;
+    }
     document.body.classList.toggle('aibp-room-only', actor.role !== 'host');
     roomBoard?.sync(state, actor);
     render();
@@ -561,7 +571,7 @@
     const host = role === 'host';
     const edit = role !== 'viewer' && !state.closed;
     const links = host && credentials.keys ? '<div class="battle-room-links">'
-      + (!state.closed ? '<button type="button" data-room-copy="invite">复制玩家邀请</button>' : '')
+      + (!state.closed && !state.squad ? '<button type="button" data-room-copy="invite">复制玩家邀请</button>' : '')
       + '<a href="' + escape(roomLink('view', credentials.keys.viewer)) + '" target="_blank" rel="noopener">打开只读投屏</a>'
       + (state.closed ? '<a href="./">返回 AIBP 开新战斗</a>' : '') + '</div>' : '';
     const controls = host && !state.closed ? '<button type="button" data-action="public-lobby" data-value="' + !state.publicLobby + '">' + (state.publicLobby ? '关闭快速参战' : '开放快速参战') + '</button><button type="button" data-action="round">下一轮</button><button type="button" data-action="end">结束战斗</button>' : '';
@@ -591,7 +601,7 @@
       + ' 轮' + (state.closed ? ' · 已结束' : '') + '</p></div><div>' + controls + '</div></div>' + links;
     content.innerHTML = roomProjection() + argoAbilities() + roomTrauma() + own + '<section class="battle-room-pool"><header><h3>克拉托斯池</h3>' + clearPool + '</header><div>' + pool + '</div></section>' + diceForm()
       + (edit ? rollLog : '') + (role !== 'player' ? '<h3 class="battle-room-heading">状态总览</h3>' : '') + overview
-      + (edit ? '' : rollLog);
+      + (edit ? '' : rollLog) + (state.squad && role !== 'viewer' ? '<p><a href="' + escape(squadLink.link('/aibp/squad', id)) + '">返回联机小队</a></p>' : '');
     if (focus >= 0) {
       const target = focusRoot.querySelectorAll('button,select,input')[focus];
       if (target && (!selection || target.name === selection)) target.focus({ preventScroll: true });
@@ -609,7 +619,7 @@
   }
 
   function send(action) {
-    actions.push(action);
+    actions.push(state?.squad ? { ...action, battleNumber: state.squad.battleNumber } : action);
     void writeActions();
   }
 
@@ -641,8 +651,11 @@
     toggle.setAttribute('aria-expanded', 'true');
     const recent = storageGet(savedRoom);
     const stored = recent && saved(recent);
+    const recentSquad = storageGet('ato-last-squad');
+    const squadResume = squadLink?.validId(recentSquad) && squadLink.read(recentSquad)?.token
+      ? '<p><a href="' + escape(squadLink.link('/aibp/squad', recentSquad)) + '">返回联机小队</a></p>' : '';
     const resume = stored?.token ? '<p><a href="' + escape(new URL('?battle=' + recent, location.href).href) + '">返回上一次战斗</a></p>' : '';
-    content.innerHTML = resume;
+    content.innerHTML = squadResume + resume;
     say('正在读取当前战役');
     try {
       const response = await fetch(campaignUrl, { cache: 'no-store', signal: AbortSignal.timeout(12000) });
@@ -661,13 +674,13 @@
         return;
       }
       const suggested = document.querySelector('#title')?.innerText?.trim() || '决战';
-      content.innerHTML += '<form data-create><label>战斗名称 <input name="title" maxlength="80" value="' + escape(suggested)
+      content.innerHTML += '<form data-create><label>战斗或小队名称 <input name="title" maxlength="80" value="' + escape(suggested)
         + '"></label><fieldset><legend>选择 1 至 4 位参战英雄</legend>'
         + heroes.map((hero, index) => '<label><input type="checkbox" name="heroIds" value="' + escape(hero.id)
           + '"' + (index < 4 ? ' checked' : '') + '> ' + escape(window.ATO_HERO_CATALOG.heroDisplayName(hero)) + '</label>').join('')
         + '</fieldset>' + configFields(available) + (data.campaign.sections.dashboard?.profiles?.[data.campaign.sections.dashboard?.activeProfileId]?.activeCycleId === 'c1'
           || !data.campaign.sections.dashboard?.profiles?.[data.campaign.sections.dashboard?.activeProfileId]?.activeCycleId
-          ? '<label><input name="traumaTutorial" type="checkbox">教程战 · 使用教程创伤牌库</label>' : '') + '<label><input name="publicLobby" type="checkbox" checked>允许从登录页快速参战（无需邀请链接）</label><button type="submit">创建战斗室</button></form>';
+          ? '<label><input name="traumaTutorial" type="checkbox">教程战 · 使用教程创伤牌库</label>' : '') + '<label><input name="publicLobby" type="checkbox" checked>允许从登录页快速参战（无需邀请链接）</label><button type="submit" value="battle">创建战斗室</button><button type="submit" value="squad">创建常驻联机小队</button></form>';
     } catch (error) {
       content.innerHTML += '<p>' + escape(error.message) + ' <a href="../index.html">打开主控台</a></p>';
     } finally {
@@ -677,10 +690,23 @@
 
   async function openJoinLobby() {
     const lobby = await request(id + '/lobby', { quick: quickJoin }, invite);
+    if (lobby.squad) {
+      const target = new URL(squadLink.link('/aibp/squad', id, 'invite', invite));
+      if (quickJoin) target.searchParams.set('quick', '1');
+      location.replace(target);
+      return;
+    }
+    squadLink?.language(lobby.language);
     const options = lobby.heroes.map((hero, index) => '<option value="' + index + '"' + (hero.taken ? ' disabled' : '') + '>'
       + escape(hero.name) + (hero.taken ? '（已认领）' : '') + '</option>').join('');
     const full = lobby.heroes.every(hero => hero.taken);
-    content.innerHTML = '<h2>' + escape(lobby.title) + '</h2>' + (full ? '<p>该房间的英雄已全部被认领。</p>'
+    const previews = lobby.heroes.map(hero => {
+      const avatar = heroPortrait(hero);
+      return '<li>' + (avatar ? '<img class="battle-room-avatar" src="../hero/assets/' + escape(avatar) + '" alt="">' : '')
+        + '<strong>' + escape(hero.name) + '</strong><small> · ' + escape(hero.titan ? window.ATO_GEAR_INVENTORY.titanLabel(hero.titan) : '未分配泰坦')
+        + (hero.gear?.length ? ' · ' + hero.gear.map(item => escape(item.name) + ' ×' + item.count).join('、') : '') + '</small></li>';
+    }).join('');
+    content.innerHTML = '<h2>' + escape(lobby.title) + '</h2><ul class="room-join-previews">' + previews + '</ul>' + (full ? '<p>该房间的英雄已全部被认领。</p>'
       : '<form data-join><label>玩家名 <input name="player" maxlength="32" required autocomplete="nickname"></label>'
       + '<label>英雄 <select name="seat" aria-label="英雄" required>' + options + '</select></label><button type="submit">加入战斗</button></form>');
     say('');
@@ -812,7 +838,7 @@
     } else if (action === 'pool-clear') {
       send({ id: crypto.randomUUID(), type: action });
     } else if (action) {
-      if (action === 'end' && !window.confirm('确认结束本场战斗？结束后，房间将转为只读。')) return;
+      if (action === 'end' && !window.confirm(state.squad ? '确认结束战斗并让大家返回小队？' : '确认结束本场战斗？结束后，房间将转为只读。')) return;
       void send({ id: crypto.randomUUID(), type: action, key, seat: Number(seat), delta: Number(delta) });
     }
   });
@@ -840,7 +866,18 @@
         const projection = window.getAibpRoomProjection?.();
         const configuration = readConfig(form);
         battleConfig.prepare(configuration, battleConfig.availability(lobbyCampaign, abilityDictionary));
-        const data = await request('create', { title: fields.get('title'), heroIds: fields.getAll('heroIds'), board, projection, battleConfig: configuration, traumaTutorial: fields.has('traumaTutorial'), publicLobby: fields.get('publicLobby') === 'on' });
+        const squad = event.submitter?.value === 'squad';
+        const titleField = form.elements.title;
+        const profile = lobbyCampaign.sections.dashboard;
+        const title = squad && titleField.value === titleField.defaultValue
+          ? profile?.profiles?.[profile.activeProfileId]?.name || '联机小队' : fields.get('title');
+        const data = await request('create', { squad, language: storageGet('ato-term-language-v1'), title, heroIds: fields.getAll('heroIds'), board, projection, battleConfig: configuration, traumaTutorial: fields.has('traumaTutorial'), publicLobby: !squad && fields.get('publicLobby') === 'on' });
+        if (squad) {
+          const squadId = data.room.id;
+          squadLink.save(squadId, { token: data.keys.host, keys: data.keys });
+          location.assign(squadLink.link('/aibp/squad', squadId));
+          return;
+        }
         lastProjectionSent = JSON.stringify(projection);
         id = data.room.id;
         credentials = { token: data.keys.host, keys: data.keys };
@@ -866,8 +903,49 @@
     }
   });
 
+  async function prepareSquadBattle() {
+    const credential = squadLink.read(squadId);
+    const back = squadLink.link('/aibp/squad', squadId);
+    root.hidden = false;
+    toggle.hidden = false;
+    toggle.setAttribute('aria-expanded', 'true');
+    try {
+      const data = await squadLink.request(squadId, 'state', credential?.token);
+      if (data.actor.role !== 'host' || data.room.squad?.phase !== 'prep') throw new Error('请先由房主开启备战。');
+      squadLink.language(data.room.squad.language);
+      content.innerHTML = '<h2>' + escape(data.room.title) + '</h2><p>从 AIBP 选择骇物和等级后，即可开战。</p>'
+        + (data.room.squad.cycle === 'c1' ? '<label><input type="checkbox" data-squad-tutorial> 教程战</label> ' : '')
+        + '<button type="button" data-squad-start>用当前骇物开战</button> <a href="' + escape(back) + '">返回小队</a>';
+      const button = content.querySelector('[data-squad-start]');
+      button.addEventListener('click', async () => {
+        button.disabled = true;
+        try {
+          const board = window.getAibpBoardSetup?.();
+          if (!board) throw new Error('请先选择骇物。');
+          await squadLink.request(squadId, 'action', credential.token, {
+            id: crypto.randomUUID(), type: 'squad-start', battleNumber: data.room.squad.battleNumber,
+            board, projection: window.getAibpRoomProjection?.(), tutorial: content.querySelector('[data-squad-tutorial]')?.checked === true,
+          });
+          const url = new URL(location.href);
+          url.searchParams.delete('squad');
+          url.searchParams.set('battle', squadId);
+          location.assign(url);
+        } catch (error) { say(error.message); button.disabled = false; }
+      });
+      toggle.addEventListener('click', event => {
+        event.stopImmediatePropagation();
+        root.hidden = !root.hidden;
+        if (!root.hidden) root.scrollIntoView({ block: 'nearest' });
+      }, true);
+    } catch (error) {
+      say(error.message);
+      content.innerHTML = '<a href="' + escape(back) + '">返回小队</a>';
+    }
+  }
+
   async function start() {
     if (params.has('theatreBattle') || location.protocol === 'file:') return;
+    if (!isLink && squadLink?.validId(squadId)) return prepareSquadBattle();
     if (!isLink) {
       try {
         const response = await fetch(new URL('../api/health', location.href), { cache: 'no-store', signal: AbortSignal.timeout(8000) });

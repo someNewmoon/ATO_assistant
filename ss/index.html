@@ -13,7 +13,13 @@
   <script src="../assets/fan-card-trims-data.js?v=20261020-fan-scan3" defer></script>
   <script src="../assets/fan-card-trims.js?v=20261020-title-guard1" defer></script>
   <script src="../assets/card-art.js?v=20261020-title-guard1" defer></script>
-</head>
+<style>
+.squad-check-overlay{position:fixed;right:clamp(.7rem,3vw,2rem);bottom:clamp(.7rem,3vh,2rem);z-index:2500;display:grid;gap:.45rem;max-width:min(33rem,calc(100vw - 1.4rem));pointer-events:none}
+.squad-check-overlay article{background:#232b26f5;color:#fff5e4;border:1px solid #a4bd9e;border-radius:10px;padding:.65rem .85rem;box-shadow:0 3px 20px #0006;font:clamp(15px,2vw,25px) system-ui,sans-serif}
+.squad-check-overlay strong{display:block;color:#e4cca1}.squad-check-overlay article[data-failed]{border-color:#de9c8d}
+.squad-projection-battle{position:fixed;inset:0;width:100%;height:100%;border:0;z-index:2100;background:#eee9e0}
+.squad-projection-prep{position:fixed;top:1rem;left:1rem;z-index:1100;color:#2c3e32;background:#f9f2e1;border-radius:.5rem;padding:.5rem .8rem}
+</style></head>
 <body data-theme-module="second-screen">
   <main class="screen-shell">
     <section id="unavailableView" class="pair-view" hidden>
@@ -96,7 +102,9 @@
   <script src="../story/assets/story-marks.js?v=20261108-story-marks4"></script>
   <script async data-ato-mm-map src="../story/assets/mixed-media/mapping.js?v=20261023-runtime1"></script>
   <script src="../aibp/panel-overlay.js?v=20261013-panel-overlay1"></script>
-  <script src="./app.js?v=20261108-story-marks4"></script>
+  <script src="../aibp/squad-link.js?v=1"></script>
+  <script src="./app.js?v=20261118-squad"></script>
+  <script src="./squad-projection.js?v=1"></script>
   <script src="../assets/ato-terms.js?v=20261110-loop-terms"></script>
   <script src="../assets/english-terms.js?v=20261011-english4"></script>
   <script src="../assets/english-ui.js?v=20261011-aibp-state1"></script>

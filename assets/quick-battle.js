@@ -19,12 +19,21 @@
       for (const room of data.rooms) {
         if (!/^[a-f0-9]{32}$/.test(room.id)) continue;
         const link = document.createElement('a'), title = document.createElement('strong'), detail = document.createElement('small');
-        const url = new URL('/aibp/room', location.href); url.searchParams.set('battle', room.id); url.searchParams.set('quick', '1');
+        const url = new URL(room.squad ? '/aibp/squad' : '/aibp/room', location.href); url.searchParams.set(room.squad ? 'squad' : 'battle', room.id); url.searchParams.set('quick', '1');
         link.href = url.href; title.setAttribute("data-user-content", ""); title.textContent = room.title;
-        detail.textContent = '第 ' + room.round + ' 轮 · ' + (room.available ? '空位 ' + room.available + ' / ' + room.seats : '席位已满') + ' · 进入战斗';
+        detail.textContent = (room.squad ? '联机小队 · ' + ({ story: '读剧情', prep: '备战', battle: '决战' }[room.phase] || '待命') + ' · ' : '第 ' + room.round + ' 轮 · ') + (room.available ? '空位 ' + room.available + ' / ' + room.seats : '席位已满') + (room.squad ? ' · 加入小队' : ' · 进入战斗');
         link.append(title, detail); list.appendChild(link);
       }
-      status.textContent = data.rooms.length ? '认领后会保存在当前浏览器，之后可直接返回。' : '暂无开放的战斗。房主可在战斗室开启快速参战。';
+      try {
+        const recent = localStorage.getItem('ato-last-squad');
+        if (/^[a-f0-9]{32}$/.test(recent || '') && localStorage.getItem('ato-aibp-room-' + recent)) {
+          const resume = document.createElement('a');
+          resume.href = '/aibp/squad?squad=' + recent;
+          resume.textContent = '返回上次的小队';
+          list.prepend(resume);
+        }
+      } catch { /* Storage is optional. */ }
+      status.textContent = data.rooms.length ? '认领后会保存在当前浏览器，之后可直接返回。' : '暂无开放的战斗或小队。';
     } catch {
       status.textContent = '暂时无法读取房间，请刷新重试。';
     } finally { pending = false; refresh.disabled = false; }

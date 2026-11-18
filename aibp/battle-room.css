@@ -295,3 +295,5 @@ body.aibp-room-only > .app > main > :not(#battleRoom) { display: none !important
 .room-trauma-dialog input[type="checkbox"] { justify-self: start; }
 .room-trauma-track { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: .45rem; }
 .room-trauma-track select { min-width: 0; width: 100%; }
+.room-join-previews { list-style:none; padding:0; display:grid; gap:.5rem; }
+.room-join-previews li { display:flex; align-items:center; flex-wrap:wrap; gap:.4rem; }

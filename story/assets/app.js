@@ -3585,6 +3585,46 @@
     }
   }
 
+  const squadId = new URLSearchParams(window.location?.search || '').get('squad');
+  const squadLink = window.ATO_SQUAD_LINK;
+  const squadCredentials = squadLink?.validId(squadId) ? squadLink.read(squadId) : null;
+  let squadStoryQueue = Promise.resolve();
+  if (squadCredentials?.token) {
+    const panel = document.createElement('aside');
+    panel.className = 'squad-story-status';
+    panel.setAttribute('aria-label', '联机小队投屏');
+    const back = document.createElement('a');
+    back.href = squadLink.link('/aibp/squad', squadId);
+    back.textContent = '返回小队';
+    const status = document.createElement('span');
+    status.id = 'squadStoryStatus';
+    status.setAttribute('role', 'status');
+    status.textContent = '打开一段剧情后自动投屏';
+    panel.append(back, status);
+    document.body.prepend(panel);
+    void squadLink.request(squadId, 'state', squadCredentials.token).then(data => {
+      if (data.actor.role === 'host' && data.room.squad) {
+        squadLink.language(data.room.squad.language);
+        syncStoryLanguage(data.room.squad.language);
+      }
+    }).catch(() => {});
+  }
+
+  function postSquadStory(snapshot) {
+    const status = document.querySelector('#squadStoryStatus');
+    const id = crypto.randomUUID();
+    squadStoryQueue = squadStoryQueue.then(async () => {
+      status.textContent = '正在同步投屏…';
+      try {
+        await squadLink.request(squadId, 'action', squadCredentials.token,
+          { id, type: 'squad-story', story: snapshot });
+        status.textContent = '已投屏 · ' + snapshot.title;
+      } catch (error) {
+        status.textContent = error.message;
+      }
+    });
+  }
+
   function postSecondScreenStorySnapshot(snapshot) {
     campaignSession?.assertCurrent();
     const body = {
@@ -3647,6 +3687,19 @@
     const generation = window.setTimeout(async () => {
       const snapshot = buildSecondScreenStorySnapshot();
       if (!snapshot) return;
+      if (squadCredentials?.token) {
+        const missingText = [snapshot.text, snapshot.fallbackText].filter(Boolean).every(value => {
+          const text = value.trim();
+          return text === fanData.placeholderText || text.startsWith('【官方版暂无正文】')
+            || text.startsWith('The English original for this paragraph is not available');
+        });
+        if (!snapshot.images?.length && missingText) {
+          document.querySelector('#squadStoryStatus').textContent = '此段暂无正文，可回小队使用「手动投屏段落」。';
+          return;
+        }
+        postSquadStory(snapshot);
+        return;
+      }
       // 以前这里把失败整个吞掉：快照写不进存档时第二屏会一直停在旧内容或空态，
       // 看起来就像「官方版没图」。现在重试两次，并把原因留在第二屏开关的提示里。
       for (let attempt = 0; attempt < SECOND_SCREEN_SNAPSHOT_ATTEMPTS; attempt += 1) {
@@ -3805,6 +3858,7 @@
   function syncUrlToEntry(entry) {
     if (!window.history || !entry) return;
     const params = new URLSearchParams();
+    if (squadCredentials?.token) params.set("squad", squadId);
     params.set("book", entryBookId(entry));
     params.set("chapter", entry.chapterKey || "all");
     if (entry.encounterKey) params.set("encounter", entry.encounterKey);

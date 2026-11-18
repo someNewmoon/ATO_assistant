@@ -9,7 +9,7 @@ const scripts = [
   'aibp/boss-levels-data.js', 'ss/terrain-data.js', 'aibp/battle_los.js',
   'aibp/tactical-sprites.js', 'aibp/battle_board_pieces.js', 'aibp/battle_map_control.js',
   'aibp/room-assets.js', 'aibp/room-card-state.js', 'aibp/room-dice.js',
-  'aibp/room-board.js', 'aibp/battle-room.js',
+  'aibp/room-board.js', 'aibp/squad-link.js', 'aibp/battle-room.js',
   'assets/ato-terms.js', 'assets/term-language.js',
 ];
 const styles = ['battle_map_control.css', 'battle_tactics.css', 'battle-room.css'];

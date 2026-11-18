@@ -1016,7 +1016,7 @@ window.CustomTraits?.ready.then(() => {
   if (activeMode === "aibp") applyBattleLayout();
 });
 
-checkConnection();
+if (!new URLSearchParams(window.location?.search || "").get("squad")) checkConnection();
 
 // A material map arriving after startup is an optional enhancement of the latest
 // snapshot. It must never restore an older snapshot or switch display modes.

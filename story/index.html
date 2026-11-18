@@ -16,7 +16,10 @@
   <link rel="stylesheet" href="../assets/mobile/play.css?v=20261028-apk-portrait1">
   <script src="../assets/mobile/layout.js?v=20261028-apk-portrait1" defer></script>
   <script src="../assets/mobile/play.js?v=20261028-apk-portrait1" defer></script>
-  </head>
+  <style>
+.squad-story-status{position:sticky;top:0;z-index:20;display:flex;gap:.75rem;align-items:center;padding:.5rem 1rem;background:var(--card,#fbf4e9);color:#372f25;border-bottom:1px solid #c1af95;font-size:.85rem}
+.squad-story-status a{color:inherit}
+</style></head>
   <body>
     <aside class="sidebar">
       <div class="brand">
@@ -161,7 +164,8 @@
     <!-- 段首 (拇指)/(圈) 标记的显示层图标化；源文本与混排映射都不动。 -->
     <script src="./assets/story-marks.js?v=20261108-story-marks4"></script>
     <!-- 安卓从资料包流式读取当前条目的 mapping；浏览器在空闲时加载完整 mapping。 -->
-    <script src="./assets/app.js?v=20261115-module-logo"></script>
+    <script src="../aibp/squad-link.js?v=1"></script>
+    <script src="./assets/app.js?v=20261118-squad"></script>
     <script src="./assets/centimanes.js?v=20261020-record-live1"></script>
     <script src="./assets/cryptic/glyph-catalog.js?v=20261004-manual1"></script>
     <script src="./assets/cryptic/vendor/text-format.js?v=20261004-manual1"></script>

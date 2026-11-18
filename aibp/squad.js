@@ -113,14 +113,38 @@
       + '>' + e(inventory.titanLabel(titan)) + ' · 库存 ' + titan.count + (titan.crippled ? ' · 残废' : '') + '</option>').join('');
     const panels = inventory.DREAMWALKER_PANELS.map(panel => '<option value="' + e(panel.id) + '"'
       + (panel.id === kit.titanPanelId ? ' selected' : '') + '>' + e(panel.name) + '</option>').join('');
-    const gear = squad.gear.filter(item => item.count || kit.gear[item.id]).map(item => '<label><span>' + e(item.name)
-      + ' <small class="squad-sub">库存 ' + item.count + '</small></span><input name="gear:' + e(item.id) + '" type="number" min="0" max="'
-      + Math.min(99, Math.max(kit.gear[item.id] || 0, item.count)) + '" value="' + (kit.gear[item.id] || 0) + '"></label>').join('');
+    const gear = squad.gear.filter(item => item.count || kit.gear[item.id] || item.holders?.length).map(item =>
+      '<label><span>' + e(item.name) + ' <small class="squad-sub" data-stock="' + e(item.id) + '"></small>'
+      + '<span class="squad-gear-owners" data-owners="' + e(item.id) + '"></span></span>'
+      + '<input name="gear:' + e(item.id) + '" type="number" min="0" value="' + (kit.gear[item.id] || 0) + '"></label>').join('');
     return '<section class="squad-panel"><h2>我的备战</h2><form data-form="kit" class="squad-form" data-base="' + e(JSON.stringify(kit))
       + '"><label>泰坦 <select name="titanId"><option value="">未分配</option>' + options + '</select></label>'
       + '<label data-titan-panel>梦行者面板 <select name="titanPanelId"><option value="">默认</option>' + panels + '</select></label>'
       + '<details><summary>装备数量</summary><div class="squad-gear">' + (gear || '<p>军械库暂无装备。</p>') + '</div></details>'
       + '<p class="squad-sub">旧忆沿用英雄记录。保存后的配装供本小队下一场战斗使用。</p><button type="submit">保存配装</button></form></section>';
+  }
+
+  function updatePrepStock() {
+    const form = content.querySelector('[data-form="kit"]');
+    if (!form) return;
+    const seat = ownSeat();
+    const heroId = room.heroes[seat].id;
+    const quantity = room.squad.loadouts[seat].gear;
+    const goods = new Map(room.squad.gear.map(item => [item.id, item]));
+    for (const label of form.querySelectorAll('[data-stock]')) {
+      const item = goods.get(label.dataset.stock);
+      if (!item) continue;
+      const holders = (item.holders || []).filter(holder => holder.id !== heroId);
+      const reserved = holders.reduce((sum, holder) => sum + holder.count, 0);
+      const cap = Math.min(99, Math.max(item.count - reserved, quantity[item.id] || 0));
+      form.elements.namedItem('gear:' + item.id).max = cap;
+      label.textContent = '库存 ' + item.count + ' · 可给你 ' + Math.max(0, item.count - reserved)
+        + (reserved > item.count ? ' · 已超库存' : '');
+      const owners = label.nextElementSibling;
+      const markup = holders.map(holder => '<span title="' + e(holder.name) + '">' + portrait(holder)
+        + e(holder.name) + ' ×' + holder.count + '</span>').join('');
+      if (owners.innerHTML !== markup) owners.innerHTML = markup;
+    }
   }
 
   function storyStats(hero) {
@@ -143,6 +167,12 @@
       + '<label>额外修正 <input name="modifier" type="number" min="-99" max="99" value="0" required></label></div>'
       + '<label data-dice-count hidden>骰子数量 <input name="count" type="number" value="1" min="1" max="6" required></label>'
       + '<button type="submit">投掷并同步</button></form></section>';
+  }
+
+  function storyRollArt(roll) {
+    const dice = window.ATO_ROOM_DICE;
+    return '<div class="squad-story-roll-art">' + portrait(room.heroes[roll.seat]) + dice.storyFaces(roll)
+      .map(die => dice.faceMarkup(die, '../aibp/room-dice-art/')).join('') + '</div>';
   }
 
   function rollLine(roll) {
@@ -185,6 +215,7 @@
         + '<section class="squad-panel"><h2>队伍记录</h2><ol class="squad-log" data-team-log></ol></section></div>';
       syncFields();
     }
+    updatePrepStock();
     const statePanel = content.querySelector('[data-story-stats]');
     if (statePanel) {
       const next = storyStats(room.heroes[seat]);
@@ -199,7 +230,7 @@
     if (roster) roster.innerHTML = room.heroes.map((hero, index) => '<li>' + heroMarkup(hero, kitSummary(index)) + '</li>').join('');
     const log = content.querySelector('[data-team-log]');
     const latest = squad.checks.find(roll => roll.seat === seat);
-    log.innerHTML = squad.checks.map(roll => '<li>' + rollLine(roll)
+    log.innerHTML = squad.checks.map(roll => '<li>' + storyRollArt(roll) + rollLine(roll)
       + (roll === latest && latest.target !== null && !latest.replaces && squad.phase !== 'battle'
         ? ' ' + button('reroll', '命运 +1 并重掷', latest.id) : '') + '</li>').join('') || '<li>暂无检定或掷骰。</li>';
     window.ATO_LANGUAGE?.refresh();

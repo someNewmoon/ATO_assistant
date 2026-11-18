@@ -1,7 +1,7 @@
 import inventory from '../../technology/gear-inventory.js';
 import heroCatalog from '../../hero/hero-catalog.js';
 import { ApiError } from './campaign.js';
-import { setupRoomBoard } from './board.js';
+import { priorityTarget, setupRoomBoard } from './board.js';
 import { createTrauma } from './room-trauma.js';
 import { roomProjection } from './room-projection.js';
 
@@ -16,6 +16,7 @@ export function createSquad(record, roster, language, cycle, gearName) {
     count: Math.max(1, Math.min(999, Number(titan.count) || 1)), crippled: Boolean(titan.crippled),
     traumaTrack: inventory.traumaTrack(titan.traumaTrack),
   }));
+  const rosterLabels = roster.map(hero => ({ id: hero.id, name: heroCatalog.heroDisplayName(hero), argonaut: hero.argonaut }));
   const validIds = new Set(roster.map(hero => hero.id));
   const loadouts = Object.fromEntries(Object.entries(record.loadouts || {}).filter(([id]) => validIds.has(id)).map(([id, loadout]) => {
     const kit = inventory.normalizeLoadout(loadout);
@@ -25,7 +26,7 @@ export function createSquad(record, roster, language, cycle, gearName) {
   const gearNames = Object.fromEntries([...new Set([...Object.keys(arsenal), ...Object.values(loadouts).flatMap(kit => Object.keys(kit.gear))])]
     .filter(key => !key.startsWith('T:')).map(key => [key, gearName(key)]));
   return { phase: 'story', cycle, language,
-    battleNumber: 0, hostSeat: null, checks: [], stock: { arsenal, titans, loadouts }, gearNames };
+    battleNumber: 0, hostSeat: null, checks: [], stock: { arsenal, titans, loadouts, roster: rosterLabels }, gearNames };
 }
 
 export function squadSkills(hero) {
@@ -57,7 +58,10 @@ export function squadView(room, actor) {
   if (actor.role === 'host' || actor.role === 'player') {
     result.loadouts = room.heroes.map(hero => inventory.normalizeLoadout(stock.loadouts[hero.id]));
     result.titans = stock.titans;
-    result.gear = Object.entries(gearNames).map(([id, name]) => ({ id, name, count: stock.arsenal[id]?.quantity || 0 }));
+    const roster = new Map(Object.keys(stock.loadouts).map(id => [id, { id, name: '其他英雄' }]));
+    for (const { id, name, argonaut } of [...(stock.roster || []), ...room.heroes]) roster.set(id, { id, name, argonaut });
+    const reservations = inventory.gearReservations(stock, [...roster.values()]);
+    result.gear = Object.entries(gearNames).map(([id, name]) => ({ id, name, count: stock.arsenal[id]?.quantity || 0, holders: reservations.get(id) || [] }));
   }
   return result;
 }
@@ -121,6 +125,8 @@ export function applySquad(room, actor, body, randomInt) {
     const trauma = createTrauma(squad.cycle, body.tutorial === true, randomInt);
     if (latestBattleRoll(room)) squad.lastBattleRoll = latestBattleRoll(room);
     refreshCombatKit(room);
+    room.priorityTarget = priorityTarget({ heroes: room.heroes });
+    room.activity = [];
     Object.assign(room, { board, trauma, projection: roomProjection(body.projection, board.apostle), round: 1,
       rolls: [], lastBattleRollId: null, argoAbilities: {}, pool: Object.fromEntries(Object.keys(room.pool).map(key => [key, 0])) });
     squad.phase = 'battle';

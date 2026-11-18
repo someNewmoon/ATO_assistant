@@ -51,5 +51,28 @@
     return faces[die.kind]?.findIndex(face => face.every((value, index) => value === die.symbols?.[index])) ?? -1;
   }
 
-  return { faces, names, limits, modes, naturalFace, remainingFace, canReroll, faceIndex, faceLabel, rollSummary };
+  function faceMarkup(die, dir) {
+    const natural = naturalFace(die);
+    const index = faceIndex(die);
+    if (natural && index >= 0 && Object.hasOwn(faces, die.kind)) {
+      return '<span class="room-die-face is-' + die.kind + '" role="img" aria-label="' + faceLabel(natural)
+        + '" style="background-position:' + index % 3 * 50 + '% ' + (index < 3 ? 50 : 100) + '%"></span>';
+    }
+    const number = Number(die.value);
+    if (!Number.isInteger(number) || number < 1 || number > 10) return '';
+    if (die.kind === 'd10' || die.kind === 'crit') {
+      return '<img class="room-die-face" src="' + dir + die.kind + '-' + number + '.svg" alt="' + names[die.kind] + ' ' + number + '">';
+    }
+    return '<span class="room-die-face room-die-number" aria-label="普通 d6 ' + number + '">' + number + '</span>';
+  }
+
+  function storyFaces(roll) {
+    return roll.values.map(value => ({ value, kind: roll.sides === 6 ? 'armor' : 'd10' }));
+  }
+
+  function rollOwner(roll, hostSeat) {
+    return roll.by || (roll.seat === hostSeat ? 'host' : 'seat:' + roll.seat);
+  }
+
+  return { faces, names, limits, modes, naturalFace, remainingFace, canReroll, faceIndex, faceLabel, rollSummary, faceMarkup, storyFaces, rollOwner };
 });

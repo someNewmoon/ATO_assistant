@@ -41,13 +41,15 @@ export function aibpImageIndex(files) {
 
 export function roomCardArt(files, gearCards) {
   const paths = new Set(files);
-  const equipment = Object.fromEntries(Object.entries(gearCards)
+  const officialEquipment = Object.fromEntries(Object.entries(gearCards)
     .map(([id, path]) => [id, 'technology/' + path])
     .filter(([id, path]) => /^[A-Z]J\d+$/.test(id) && paths.has(path)));
+  const fanEquipment = {};
   for (const path of files) {
     const scan = /^aibp\/images\/equipment\/([A-Z]J\d+)\.webp$/.exec(path);
-    if (scan) equipment[scan[1]] = path;
+    if (scan) fanEquipment[scan[1]] = path;
   }
+  const equipment = { ...fanEquipment, ...officialEquipment };
   const titans = files.filter(path => /^technology\/images\/titans\/tt_[a-z0-9_]+\.png$/.test(path));
   const titanScans = Object.fromEntries(files.flatMap(path => {
     const match = /^aibp\/images\/titan-cards\/([\u3400-\u9fff]{1,25})\.webp$/u.exec(path);
@@ -59,5 +61,5 @@ export function roomCardArt(files, gearCards) {
   }));
   const thumbs = Object.fromEntries([...Object.keys(equipment), ...Object.keys(titanScans), ...Object.keys(mnemos)]
     .map(id => [id, 'aibp/images/room-thumbs/' + id + '.jpg']).filter(([, path]) => paths.has(path)));
-  return { equipment, titans, titanScans, mnemos, thumbs };
+  return { equipment, officialEquipment, fanEquipment, titans, titanScans, mnemos, thumbs };
 }

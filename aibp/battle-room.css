@@ -301,3 +301,9 @@ body.aibp-room-only > .app > main > :not(#battleRoom) { display: none !important
 .battle-room-stats .battle-room-marker img {
   filter: brightness(0) saturate(100%) invert(26%) sepia(70%) saturate(2500%) hue-rotate(345deg);
 }
+
+.room-roll > h4, .room-team-activity li { display:flex; align-items:center; gap:.42rem; }
+.roll-hero-avatar { width:30px; height:30px; border-radius:50%; object-fit:cover; object-position:top; }
+.room-roll-reactions { display:flex; gap:.4rem; }
+.room-roll-reactions button[aria-pressed="true"] { outline:2px solid #cf9a5c; }
+.room-team-activity ol { max-height:16rem; overflow:auto; }

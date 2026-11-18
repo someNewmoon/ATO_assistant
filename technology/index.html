@@ -1059,6 +1059,9 @@ button.gear-group-name:hover {
 }
   .arsenal-loadout-dialog [data-titan-panel-field][hidden],
   .arsenal-loadout-dialog [data-loadout-titan-art][hidden] { display: none; }
+  .arsenal-gear-owners, .arsenal-gear-owners > span { display:flex; flex-wrap:wrap; align-items:center; gap:.35rem; }
+  .arsenal-gear-owners img { width:22px; height:22px; border-radius:50%; object-fit:cover; }
+  [data-preview-equipment] img { display:block; max-height:100px; width:auto; }
   .arsenal-loadout-dialog [data-loadout-titan-art] img {
     display: block; width: min(100%, 17rem); max-height: 8rem; object-fit: contain;
   }
@@ -1146,7 +1149,7 @@ button.gear-group-name:hover {
   <script src="structure-tech-rules.js?v=20261118-moon-resource-types1"></script>
   <script src="structure-tech-client.js?v=20261019-negotiation-rows2"></script>
 <script src="../hero/hero-catalog.js?v=20261117-battle-polish"></script>
-<script src="gear-inventory.js?v=20261118-ascension-off"></script>
+<script src="gear-inventory.js?v=20261118-shared-stock"></script>
 <script>
 const TECH_DICTIONARY_URL = 'tech_card_dictionary.min.json';
 const fetch = window.ATO_CAMPAIGN_NOTES.createFetch(window.fetch.bind(window), {
@@ -2224,6 +2227,8 @@ function editArsenalLoadout(heroId, catalog) {
     return assignments.filter(([id]) => id !== heroId)
       .map(([, loadout]) => inventory.normalizeLoadout(loadout));
   }
+  const holdersByGear = inventory.gearReservations(record, gearRecordHeroes
+    .filter(entry => entry.id !== heroId).map(entry => ({ id: entry.id, name: heroes.heroDisplayName(entry), argonaut: entry.argonaut })));
   const templates = inventory.loadoutTemplates(record);
   const roster = inventory.loadoutTitans(record);
   const dialog = document.createElement('dialog');
@@ -2246,6 +2251,8 @@ function editArsenalLoadout(heroId, catalog) {
           <select name="gear" aria-label="可分配装备"></select>
           <button type="button" class="tool-btn" data-add-loadout-gear>分配一件</button>
         </div>
+        <div data-loadout-picked-gear></div>
+        <details><summary>队友已分配的装备</summary><ul class="arsenal-loadout-gear" data-loadout-reservations></ul></details>
         <div class="arsenal-loadout-actions">
           <button type="button" class="tool-btn" data-close-loadout>取消</button>
           <button type="submit" class="tool-btn">保存配装</button>
@@ -2256,6 +2263,26 @@ function editArsenalLoadout(heroId, catalog) {
   const form = dialog.querySelector('form');
   const fields = dialog.querySelector('fieldset');
   const list = dialog.querySelector('ul');
+  const reservations = dialog.querySelector('[data-loadout-reservations]');
+  const picked = dialog.querySelector('[data-loadout-picked-gear]');
+  function avatars(holders) {
+    return holders.map(holder => {
+      const art = heroes.heroPortrait(holder);
+      return '<span>' + (art ? '<img loading="lazy" src="../hero/assets/' + esc(art) + '" alt="">' : '')
+        + esc(holder.name) + ' ×' + holder.count + '</span>';
+    }).join('');
+  }
+  function renderPicked() {
+    const item = catalog.find(item => item.gearId === gear.value);
+    const art = item && gearImageSrc(item.gearId);
+    const holders = item && holdersByGear.get(item.gearId);
+    picked.innerHTML = item ? (art ? '<button type="button" class="tool-btn" data-preview-equipment>'
+      + '<img src="' + esc(art) + '" alt="' + esc(item.name) + '"></button>' : '')
+      + (holders ? '<span class="arsenal-gear-owners">' + avatars(holders) + '</span>' : '') : '';
+    picked.querySelector('[data-preview-equipment]')?.addEventListener('click', () => {
+      showGearImageModal(art, item.name);
+    });
+  }
   const message = dialog.querySelector('[role="status"]');
   const titan = form.elements.namedItem('titan');
   const panel = form.elements.namedItem('titanPanel');
@@ -2310,6 +2337,14 @@ function editArsenalLoadout(heroId, catalog) {
       : '<option value="">没有可分配的装备</option>';
     if (options.some(([item]) => item.gearId === selection)) gear.value = selection;
     add.disabled = !options.length;
+    reservations.innerHTML = catalog.filter(item => item.searchText.includes(needle) && holdersByGear.has(item.gearId))
+      .map(item => {
+        const holders = holdersByGear.get(item.gearId);
+        const free = item.quantity - holders.reduce((sum, holder) => sum + holder.count, 0) - (draft.gear[item.gearId] || 0);
+        return '<li><span>' + esc(item.name) + ' · 库存 ' + item.quantity + ' · 剩余 ' + Math.max(0, free)
+          + (free < 0 ? ' · 超出库存' : '') + '</span><span class="arsenal-gear-owners">' + avatars(holders) + '</span></li>';
+      }).join('') || '<li>暂无符合条件的队友装备。</li>';
+    renderPicked();
   }
 
   function renderAssignedGear() {
@@ -2321,6 +2356,7 @@ function editArsenalLoadout(heroId, catalog) {
   }
 
   query.addEventListener('input', renderGearChoices);
+  gear.addEventListener('change', renderPicked);
   titan.addEventListener('change', () => {
     draft.titanId = titan.value;
     draft.titanPanelId = '';

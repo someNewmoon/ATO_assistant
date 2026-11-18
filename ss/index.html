@@ -20,7 +20,15 @@
 .squad-roll-controls button{border:1px solid #a4bd9e;border-radius:7px;background:#232b26f5;color:#fff5e4;padding:.35rem .55rem;font:14px system-ui,sans-serif}
 .squad-roll-controls button[aria-pressed="false"]{opacity:.75}
 .squad-check-overlay article{background:#232b26f5;color:#fff5e4;border:1px solid #a4bd9e;border-radius:10px;padding:.65rem .85rem;box-shadow:0 3px 20px #0006;font:clamp(15px,2vw,25px) system-ui,sans-serif}
-.squad-check-overlay strong{display:block;color:#e4cca1}.squad-check-overlay article[data-failed]{border-color:#de9c8d}
+.squad-check-overlay strong{display:flex;align-items:center;gap:.35rem;color:#e4cca1}
+.squad-roll-avatar{height:1.5em;width:1.5em;border-radius:50%;object-fit:cover;object-position:top}
+.squad-roll-faces{display:flex;flex-wrap:wrap;gap:.3rem;margin-block:.3rem}
+.squad-roll-faces .room-die-face{display:grid;place-items:center;width:1.65em;height:1.65em;object-fit:contain;background-size:300% 300%}
+.squad-roll-faces .is-red{background-image:url('../aibp/room-dice-art/red.webp')}
+.squad-roll-faces .is-black{background-image:url('../aibp/room-dice-art/black.webp')}
+.squad-roll-faces .is-white{background-image:url('../aibp/room-dice-art/white.webp')}
+.squad-roll-faces .room-die-number{background:#e8d5ad;color:#33271e;border-radius:.25em;font-weight:800}
+.squad-check-overlay article[data-failed]{border-color:#de9c8d}
 .squad-projection-battle{position:fixed;inset:0;width:100%;height:100%;border:0;z-index:2100;background:#eee9e0}
 .squad-projection-prep{position:fixed;top:1rem;left:1rem;z-index:1100;color:#2c3e32;background:#f9f2e1;border-radius:.5rem;padding:.5rem .8rem}
 </style></head>
@@ -95,11 +103,11 @@
     </section>
   </main>
 
-  <link rel="stylesheet" href="../aibp/battle_tactics.css">
+  <link rel="stylesheet" href="../aibp/battle_tactics.css?v=20261118-target">
   <script src="./terrain-data.js?v=20261117-board"></script>
   <script src="../aibp/tactical-sprites.js"></script>
-  <script src="../aibp/battle_board_pieces.js"></script>
-  <script src="../aibp/battle_los.js?v=20261117-board-pool"></script>
+  <script src="../aibp/battle_board_pieces.js?v=20261118-target"></script>
+  <script src="../aibp/battle_los.js?v=20261118-target"></script>
   <script src="../aibp/custom_traits.js?v=20260930-custom-trait4-lisu-simhei"></script>
   <script src="../story/assets/story-tables.js?v=20261016-reward-tables1"></script>
   <script src="../story/assets/mixed-media/renderer.js?v=c4c5-20261006-r3-compat1"></script>
@@ -108,8 +116,9 @@
   <script src="../aibp/panel-overlay.js?v=20261013-panel-overlay1"></script>
   <script src="../aibp/squad-link.js?v=5"></script>
   <script src="./app.js?v=20261118-squad"></script>
-  <script src="../aibp/room-dice.js?v=2"></script>
-  <script src="./squad-projection.js?v=4"></script>
+  <script src="../hero/hero-catalog.js"></script>
+  <script src="../aibp/room-dice.js?v=3"></script>
+  <script src="./squad-projection.js?v=5"></script>
   <script src="../assets/ato-terms.js?v=20261110-loop-terms"></script>
   <script src="../assets/english-terms.js?v=20261011-english4"></script>
   <script src="../assets/english-ui.js?v=20261011-aibp-state1"></script>

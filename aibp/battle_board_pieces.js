@@ -77,7 +77,7 @@
   }
 
   function render(layer, pieces, {
-    apostle, size = 1, selected = 0, mode, names = [], roster, portraits = [], trail, bossTrail, onSelect, onSelectBoss,
+    apostle, size = 1, selected = 0, mode, names = [], roster, portraits = [], priorityTarget, trail, bossTrail, onSelect, onSelectBoss,
   } = {}) {
     layer.replaceChildren();
     layer.hidden = false;
@@ -124,6 +124,15 @@
         avatar.alt = "";
         avatar.src = portraits[index];
         marker.appendChild(avatar);
+      }
+      if (!boss && priorityTarget === index) {
+        const priority = document.createElement("span");
+        priority.className = "battle-piece-priority";
+        priority.textContent = "◎";
+        priority.title = "首要目标";
+        priority.setAttribute("aria-hidden", "true");
+        marker.appendChild(priority);
+        marker.setAttribute("aria-label", name + " " + square + " · 首要目标");
       }
       if (boss) {
         const facing = document.createElement("span");

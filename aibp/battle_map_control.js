@@ -236,7 +236,7 @@
         window.BattleBoardPieces.render(startLayer, window.BattleTerrain.getBoardPieces(map, apostle, level), {
           apostle, size: window.BattleTerrain.getApostleProfile(apostle, level)?.size || 1,
           selected: losState.selectedTitan, mode: losState.mode, names: options.titanNames?.(), roster: options.titanRoster?.(),
-          portraits: options.heroPortraits?.(),
+          portraits: options.heroPortraits?.(), priorityTarget: options.priorityTarget?.(),
           trail: options.getTitanTrail?.() || (nativeTitanTrail?.map === options.getMap() ? nativeTitanTrail.move : null),
           bossTrail: options.getApostleTrail?.() || (nativeApostleTrail?.map === options.getMap() ? nativeApostleTrail.move : null),
           onSelectBoss: losState.mode !== "apostle-move" && editBoard() && tactics ? () => setTacticalMode("apostle-move") : undefined,
@@ -712,11 +712,10 @@
       control("place-boss").hidden = !editBoard();
       control("place-boss").textContent = bossMove ? "退出骇物移动" : "移动骇物";
       const target = lastOverlay?.weaponTarget;
-      const speed = lastOverlay?.profile?.speed;
       control("tactics-info").textContent = moving ? "绿格显示可达格和所需步数。"
         : attacking ? "金框显示武器射程。"
           + (target ? `距骇物 ${target.distance} 格 · ${target.inRange ? "射程内" : "射程外"}` : "")
-          : bossMove ? `骇物移速 ${speedLabel(speed)} · 数字为步数；点击高亮格，将骇物左上占格移到此处。`
+          : bossMove ? "点目的地的左上占格，记录骇物正交移动路线。"
             : bossSight ? "紫底表示骇物视线，斜纹表示盲区。" : "选择模式开始操作棋子。";
     }
 
@@ -788,7 +787,7 @@
         const clicked = window.BattleTerrain.boardCell({ column, row });
         const destination = window.BattleLOS.apostleMoveDestination(lastOverlay, clicked);
         if (!destination) {
-          tactics.querySelector("[data-board-tactics-info]").textContent = "请选择骇物移动范围内的空位。";
+          tactics.querySelector("[data-board-tactics-info]").textContent = "此格无法容纳骇物的完整占格。";
           return;
         }
         const position = { column: destination.c, row: destination.r };

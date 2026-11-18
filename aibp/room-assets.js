@@ -23,8 +23,14 @@
       : Object.hasOwn(collection, base) ? collection[base] : '');
   }
 
+  function gearSrc(id, language) {
+    return (language === 'fan' && gearImage(hosted.fanEquipment || {}, id)) || gearImage(hosted.equipment, id);
+  }
+
   window.ATO_BATTLE_ASSETS = {
-    gearSrc: id => gearImage(hosted.equipment, id),
+    gearSrc,
+    gearThumbSrc: (id, language) => gearSrc(id, language) === gearImage(hosted.fanEquipment || {}, id)
+      ? gearImage(hosted.thumbs, id) : '',
     mnemosSrc: id => imageURL(Object.hasOwn(hosted.mnemos, id) && hosted.mnemos[id]),
     thumbSrc: id => gearImage(hosted.thumbs, id),
     titanArt(titan) {

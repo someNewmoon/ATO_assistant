@@ -29,3 +29,12 @@ button,.squad-action{cursor:pointer}button:disabled{opacity:.52;cursor:default}.
 .squad-roster form { margin-top: .5rem; }
 
 .squad-stats img { filter: brightness(0) saturate(100%) invert(26%) sepia(70%) saturate(2500%) hue-rotate(345deg); }
+
+.squad-gear-owners, .squad-gear-owners > span { display:flex; flex-wrap:wrap; align-items:center; gap:.35rem; }
+.squad-gear-owners > span { color:var(--muted); font-size:.78rem; }
+.squad-gear-owners img { width:20px; height:20px; border-radius:50%; object-fit:cover; }
+
+.squad-story-roll-art { display:flex; align-items:center; flex-wrap:wrap; gap:.25rem; margin-bottom:.22rem; }
+.squad-story-roll-art > img, .squad-story-roll-art .room-die-face { width:30px; height:30px; object-fit:contain; }
+.squad-story-roll-art > img:not(.room-die-face) { border-radius:50%; object-fit:cover; object-position:top; }
+.squad-story-roll-art .room-die-number { display:grid; place-items:center; border:1px solid var(--line); border-radius:5px; }

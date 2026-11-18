@@ -13,6 +13,25 @@
       send({ type: "board-setup", ...layout, layoutRevision: room.board?.layoutRevision });
     });
 
+    const toolbar = document.createElement("div");
+    toolbar.className = "room-board-turn-tools";
+    const target = document.createElement("label");
+    target.append("首要目标 ");
+    const targetSelect = document.createElement("select");
+    target.append(targetSelect);
+    const lock = document.createElement("label");
+    const lockInput = document.createElement("input");
+    lockInput.type = "checkbox";
+    lock.append(lockInput, " 锁定标记");
+    const confirm = () => {
+      if (targetSelect.value !== "") send({ type: "priority-target", seat: Number(targetSelect.value), locked: lockInput.checked });
+    };
+    targetSelect.addEventListener("change", confirm);
+    lockInput.addEventListener("change", confirm);
+    const undo = document.createElement("div");
+    toolbar.append(target, lock, undo);
+    mount.prepend(toolbar);
+
     const canEdit = () => actor?.role === "host" && !room.closed;
     const canMove = seat => !room.closed && (canEdit() || (actor.role === "player" && actor.seat === seat));
     const overlayConfig = ({ active, mode, selectedTitan, weaponControls, titanSpeeds, elevated }) => ({
@@ -46,6 +65,7 @@
         titanNames: () => room.heroes.map(({ titan, name }) =>
           window.ATO_GEAR_INVENTORY.dreamwalkerPanel(titan)?.name || titan?.name || name),
         titanRoster: () => room.heroes.map(hero => hero.titan),
+        priorityTarget: () => room.priorityTarget?.seat,
         heroPortraits: () => room.heroes.map(hero => {
           const path = window.ATO_HERO_CATALOG.heroPortrait(hero);
           return path && '../hero/assets/' + path;
@@ -88,10 +108,28 @@
         mount.classList.toggle("room-tactical-read-only", actor.role === "viewer" || room.closed);
         open.hidden = !canEdit();
         if (open.parentNode !== mount) mount.append(open);
-        if (!room.board) return;
-        const stateKey = JSON.stringify([room.board, actor.role, room.closed]);
+        if (!room.board) { toolbar.hidden = true; return; }
+        const stateKey = JSON.stringify([room.board, actor.role, room.closed, room.priorityTarget, room.heroes.map(hero => hero.condition)]);
         if (stateKey === stamp) return;
         stamp = stateKey;
+        target.hidden = !canEdit();
+        lock.hidden = !canEdit();
+        const living = room.heroes.flatMap((hero, seat) => hero.condition === 'dead' ? [] : [new Option(hero.name, seat)]);
+        targetSelect.replaceChildren(...living);
+        targetSelect.value = room.priorityTarget?.seat ?? '';
+        lockInput.checked = room.priorityTarget?.locked === true;
+        lockInput.disabled = !living.length;
+        const buttons = Object.values(room.board.titanMoves || {}).filter(move => canMove(move.seat)).map(move => {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.textContent = "撤回移动 · " + room.heroes[move.seat].name;
+          button.addEventListener("click", () => {
+            send({ type: "board-undo-move", seat: move.seat, move: move.id });
+          });
+          return button;
+        });
+        undo.replaceChildren(...buttons);
+        toolbar.hidden = !canEdit() && !buttons.length;
         map = room.board.map;
         const existing = Boolean(control);
         if (!existing) setup();

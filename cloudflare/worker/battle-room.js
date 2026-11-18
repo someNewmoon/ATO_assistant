@@ -8,7 +8,7 @@ import battleConfig from '../../technology/battle-config.js';
 import techDictionary from '../../technology/tech_card_dictionary.min.json';
 import gearProduction from '../../technology/ato_gear_production.json';
 import { ApiError, activeCycle, errorResponse, object, response } from './campaign.js';
-import { applyRoomBoard, setupRoomBoard } from './board.js';
+import { applyRoomBoard, priorityTarget, setupRoomBoard } from './board.js';
 
 import { applyTrauma, createTrauma, traumaView } from './room-trauma.js';
 import { applySquad, createSquad, latestBattleRoll, squadSkills, squadStats, squadView } from './room-squad.js';
@@ -62,6 +62,12 @@ function equipmentName(id) {
 export function squadAbilityOptions(campaign) {
   const { limit, reserveLimit, cards } = battleConfig.availability(campaign, techDictionary);
   return { limit, reserveLimit, cards };
+}
+
+export function squadRosterForCampaign(campaign) {
+  return heroCatalog.activeHeroes(campaign).map(hero => ({
+    id: hero.id, name: clean(heroCatalog.heroDisplayName(hero)), argonaut: hero.argonaut,
+  }));
 }
 
 export function squadHeroStats(campaign) {
@@ -150,6 +156,29 @@ function publicSquadLoadouts(room) {
   }) };
 }
 
+const activityLabels = {
+  'board-move': '移动泰坦', 'board-undo-move': '撤回移动', 'board-apostle-move': '移动骇物',
+  'board-face': '调整骇物朝向', 'priority-target': '调整首要目标', round: '开启新一轮',
+  stat: '调整三曲盘', condition: '调整泰坦状态', gear: '使用装备', 'gear-card': '调整装备卡',
+  'mnemos-card': '调整旧忆卡', 'argo-use': '使用阿尔戈能力', 'argo-undo': '撤回阿尔戈能力',
+  'trauma-draw': '抽取创伤或结算受击', 'trauma-resolve': '结算创伤', 'pool-clear': '清空克拉托斯池',
+  reroll: '重掷骰子', convert: '转换威力骰',
+};
+
+function recordBattleActivity(room, actor, body) {
+  if (!Object.hasOwn(activityLabels, body.type)) return;
+  const seat = Number.isInteger(body.seat) && room.heroes[body.seat] ? body.seat : null;
+  const hero = room.heroes[seat];
+  let detail = '';
+  if (body.type === 'gear' || body.type === 'gear-card') detail = hero?.gear.find(item => item.id === body.key)?.name;
+  if (body.type === 'mnemos-card') detail = hero?.mnemos.find(item => item.id === body.key)?.name;
+  if (body.type === 'stat') detail = ({ rage: '怒气', fate: '命运', danger: '凶险' }[body.key]) + (body.delta > 0 ? ' +1' : ' −1');
+  if (body.type === 'board-move') detail = String.fromCharCode(64 + body.point.row) + body.point.column;
+  const by = actor.role === 'host' ? '房主' : room.heroes[actor.seat]?.player || room.heroes[actor.seat]?.name;
+  room.activity = [{ kind: body.type, label: activityLabels[body.type], by, seat, detail, round: room.round },
+    ...(room.activity || [])].slice(0, 20);
+}
+
 export class BattleRoom extends DurableObject {
   constructor(ctx, env) {
     super(ctx, env);
@@ -183,7 +212,7 @@ export class BattleRoom extends DurableObject {
 
   view(room, actor) {
     const { secrets, trauma, squad, owner, ...state } = room;
-    return { ok: true, room: { ...state, trauma: traumaView(room, actor), ...(squad && { squad: squadView(room, actor) }) }, actor };
+    return { ok: true, room: { ...state, priorityTarget: priorityTarget(room), trauma: traumaView(room, actor), ...(squad && { squad: squadView(room, actor) }) }, actor };
   }
 
   actor(room, secretHash) {
@@ -223,7 +252,7 @@ export class BattleRoom extends DurableObject {
   }
 
   async linkOwner(request) {
-    const { account, profile, saveName, keys, abilityOptions, storyStats, titanTracks } = await request.json();
+    const { account, profile, saveName, keys, abilityOptions, storyStats, titanTracks, roster } = await request.json();
     const token = request.headers.get('Authorization')?.match(/^Bearer (.+)$/)?.[1];
     const [host, invite, viewer] = await Promise.all([token, keys?.invite, keys?.viewer].map(hash));
     const room = this.load();
@@ -233,6 +262,8 @@ export class BattleRoom extends DurableObject {
     const name = clean(saveName, 80) || '默认存档';
     const libraryAnchor = this.storyAnchor(room);
     const validKeys = invite === room.secrets.invite && viewer === room.secrets.viewer;
+    const rosterChanged = Array.isArray(roster) && JSON.stringify(roster) !== JSON.stringify(room.squad.stock.roster);
+    if (rosterChanged) room.squad.stock.roster = roster;
     let tracksChanged = false;
     for (const titan of room.squad.stock.titans) {
       if (!titanTracks || !Object.hasOwn(titanTracks, titan.id)) continue;
@@ -241,7 +272,7 @@ export class BattleRoom extends DurableObject {
       titan.traumaTrack = track;
       tracksChanged = true;
     }
-    if (tracksChanged || !room.owner || room.owner.saveName !== name || JSON.stringify(room.squad.abilityOptions) !== JSON.stringify(abilityOptions)) {
+    if (tracksChanged || rosterChanged || !room.owner || room.owner.saveName !== name || JSON.stringify(room.squad.abilityOptions) !== JSON.stringify(abilityOptions)) {
       room.owner = { account, profile, saveName: name, libraryAnchor };
       room.squad.abilityOptions = abilityOptions;
       for (const hero of room.heroes) hero.storyStats ??= squadStats(storyStats[hero.id]);
@@ -387,6 +418,7 @@ export class BattleRoom extends DurableObject {
     }
     if (room.closed) reject(room.squad ? '小队已解散。' : '本场战斗已结束。', 409);
     this.apply(room, actor, body);
+    recordBattleActivity(room, actor, body);
     room.revision++;
     this.ctx.storage.transactionSync(() => {
       this.save(room);
@@ -434,6 +466,25 @@ export class BattleRoom extends DurableObject {
       else room.closed = true;
       return;
     }
+    if (body.type === 'roll-reaction') {
+      const roll = room.rolls.find(entry => entry.id === body.roll);
+      if (!roll) reject('这次掷骰已不在战斗记录中。', 409);
+      const by = actor.role === 'host' ? 'host' : 'seat:' + actor.seat;
+      if (roomDice.rollOwner(roll, room.squad?.hostSeat) === by) reject('只能回应队友的掷骰。', 403);
+      if (![null, 'up', 'down'].includes(body.value)) reject('掷骰回应无效。');
+      roll.reactions ||= {};
+      if (body.value === null) delete roll.reactions[by];
+      else roll.reactions[by] = body.value;
+      return;
+    }
+    if (body.type === 'priority-target') {
+      if (actor.role !== 'host') reject('首要目标由房主确认。', 403);
+      if (!Number.isInteger(body.seat) || !room.heroes[body.seat] || room.heroes[body.seat].condition === 'dead') {
+        reject('请选择存活的泰坦。');
+      }
+      room.priorityTarget = { seat: body.seat, locked: body.locked === true };
+      return;
+    }
     if (body.type === 'pool-clear') {
       for (const key of poolKeys) room.pool[key] = 0;
       return;
@@ -470,11 +521,17 @@ export class BattleRoom extends DurableObject {
         if (room.trauma && body.key === 'danger' && body.delta === 1) {
           return applyTrauma(room, actor, { ...body, type: 'trauma-draw', mode: 'gain', amount: 1, deck: 'auto' }, randomInt);
         }
+        const target = priorityTarget(room);
         hero.stats[body.key] = counter(hero.stats[body.key], body.delta, 30);
+        if (body.key === 'rage' && body.delta > 0 && hero.condition !== 'dead' && !target.locked
+            && (target.seat === null || hero.stats.rage > room.heroes[target.seat].stats.rage)) {
+          room.priorityTarget = { seat, locked: false };
+        } else if (body.key === 'rage') room.priorityTarget = target;
         break;
       case 'condition':
         if (!conditions.includes(body.value)) reject('未知英雄状态。');
         hero.condition = body.value;
+        room.priorityTarget = priorityTarget(room);
         break;
       case 'gear': {
         const item = hero.gear.find(entry => entry.id === body.key);
@@ -503,7 +560,7 @@ export class BattleRoom extends DurableObject {
         break;
       }
       case 'roll':
-        this.roll(room, hero, seat, body);
+        this.roll(room, hero, seat, body, actor);
         break;
       case 'reroll':
       case 'convert':
@@ -514,7 +571,7 @@ export class BattleRoom extends DurableObject {
     }
   }
 
-  roll(room, hero, seat, body) {
+  roll(room, hero, seat, body, actor) {
     const { counts, mode, parentRoll, defenseCount = 0 } = body;
     const { limits, modes } = roomDice;
     const modeRule = Object.hasOwn(modes, mode) && modes[mode];
@@ -538,7 +595,8 @@ export class BattleRoom extends DurableObject {
         || (mode === 'defense' && (!parent.defenseCount || parent.defenseRoll)))) {
       reject('关联投掷已结算或不存在。', 409);
     }
-    const roll = { id: body.id, seat, hero: hero.name, round: room.round, mode, dice };
+    const roll = { id: body.id, seat, hero: hero.name, round: room.round, mode, dice,
+      by: actor.role === 'host' ? 'host' : 'seat:' + seat };
     if (parent) {
       roll.parentRoll = parent.id;
       if (mode === 'defense') parent.defenseRoll = roll.id;

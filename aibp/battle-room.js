@@ -179,7 +179,7 @@
       + '</span>' + thresholds + passages + '</div>';
   }
 
-  function playableCard({ item, type, seat, slot = 0, value, detail, src, memory, editable }) {
+  function playableCard({ item, type, seat, slot = 0, value, detail, src, thumb, memory, editable }) {
     const id = [type, seat, item.id, slot].join(':');
     const armed = armedCard === id;
     const discarded = value === 'discarded';
@@ -187,7 +187,7 @@
     const next = armed ? 'discarded' : value === 'exhausted' ? 'ready' : 'exhausted';
     const attrs = ' data-key="' + escape(item.id) + '" data-seat="' + seat + '" data-slot="' + slot + '"';
     return '<li class="battle-room-playable" data-card-state="' + value + '" data-card-id="' + escape(id)
-      + '"><div class="battle-room-card-window">' + (src ? cardImage(src, item.name, '', window.ATO_BATTLE_ASSETS?.thumbSrc(item.id))
+      + '"><div class="battle-room-card-window">' + (src ? cardImage(src, item.name, '', thumb)
         : referenceCard(item.name, item.id, memory ? '旧忆资料卡' : '装备资料卡', memory)) + '</div>'
       + '<span class="battle-room-card-name">' + escape(item.name) + '</span>'
       + (detail ? '<small>' + escape(detail) + '</small>' : '')
@@ -300,10 +300,10 @@
     const avatar = portrait ? '<img class="battle-room-avatar" src="../hero/assets/' + portrait + '" alt="">' : '';
     const gear = hero.gear.map(item => Array.from({ length: Math.min(item.count, 48) }, (_, slot) => playableCard({
       item, type: 'gear-card', seat, slot, value: gearState(item, slot),
-      src: art?.gearSrc(item.id), editable, detail: item.count > 1 ? String(slot + 1) + '/' + item.count : '',
+      src: art?.gearSrc(item.id, roomLanguage), thumb: art?.gearThumbSrc(item.id, roomLanguage), editable, detail: item.count > 1 ? String(slot + 1) + '/' + item.count : '',
     })).join('') + (item.count > 48 ? '<li>' + escape(item.name) + ' 另有 ' + (item.count - 48) + ' 件</li>' : '')).join('');
     const mnemos = hero.mnemos.map(item => playableCard({
-      item, type: 'mnemos-card', seat, value: item.state || 'ready', src: art?.mnemosSrc(item.id),
+      item, type: 'mnemos-card', seat, value: item.state || 'ready', src: art?.mnemosSrc(item.id), thumb: art?.thumbSrc(item.id),
       memory: memoryCatalog.get(item.id), editable, detail: item.fated ? '命业旧忆' : item.progress + '/' + item.limit,
     })).join('');
     const stats = Object.entries(statNames).map(([key, label]) => '<div>'
@@ -337,17 +337,34 @@
   }
 
   function faceArt(die) {
-    const natural = dice.naturalFace(die);
-    if (natural) {
-      const index = dice.faceIndex(die);
-      if (index >= 0) return '<span class="room-die-face is-' + die.kind + '" role="img" aria-label="' + faceLabel(natural)
-        + '" style="background-position:' + index % 3 * 50 + '% ' + (index < 3 ? 50 : 100) + '%"></span>';
-    }
-    const name = dice.names[die.kind];
-    if (die.kind === 'd10' || die.kind === 'crit') {
-      return '<img class="room-die-face" src="room-dice-art/' + die.kind + '-' + die.value + '.svg" alt="' + name + ' ' + die.value + '">';
-    }
-    return '<span class="room-die-face room-die-number">' + escape(die.value) + '</span>';
+    return dice.faceMarkup(die, '../aibp/room-dice-art/');
+  }
+
+  function rollAvatar(seat) {
+    const path = heroPortrait(state.heroes[seat]);
+    return path ? '<img class="roll-hero-avatar" src="../hero/assets/' + escape(path) + '" alt="">' : '';
+  }
+
+  function reactions(roll) {
+    const by = actor.role === 'host' ? 'host' : 'seat:' + actor.seat;
+    const editable = roll.id && actor.role !== 'viewer' && !state.closed && dice.rollOwner(roll, state.squad?.hostSeat) !== by;
+    const counts = Object.values(roll.reactions || {});
+    return '<div class="room-roll-reactions">' + Object.entries({ up: ['👍', '赞同'], down: ['👎', '反对'] }).map(([value, [icon, label]]) => {
+      const count = counts.filter(choice => choice === value).length;
+      const own = roll.reactions?.[by] === value;
+      return editable ? '<button type="button" data-action="roll-reaction" data-roll-id="' + escape(roll.id)
+        + '" data-value="' + (own ? 'clear' : value) + '" aria-label="' + label + '" aria-pressed="' + own + '">' + icon + ' ' + count + '</button>'
+        : count ? '<span aria-label="' + label + '">' + icon + ' ' + count + '</span>' : '';
+    }).join('') + '</div>';
+  }
+
+  function teamActivity() {
+    const recent = state.activity || [];
+    if (actor.role === 'viewer' || !recent.length) return '';
+    return '<section class="battle-room-rolls room-team-activity"><h3>队友操作</h3><ol>'
+      + recent.map(entry => '<li>' + (entry.seat === null ? '' : rollAvatar(entry.seat))
+        + '<span><strong>' + escape(entry.by || '队友') + '</strong> · ' + escape(entry.label)
+        + (entry.detail ? ' · ' + escape(entry.detail) : '') + '</span></li>').join('') + '</ol></section>';
   }
 
   function rollCard(roll) {
@@ -373,14 +390,14 @@
         + '</div>';
     }).join('');
     const followup = roll.defenseCount && !roll.defenseRoll;
-    return '<li class="room-roll"><h4>' + escape(roll.hero) + (mode ? ' · ' + mode : '') + ' <small>第 ' + roll.round + ' 轮</small></h4>'
+    return '<li class="room-roll"><h4>' + rollAvatar(roll.seat) + escape(roll.hero) + (mode ? ' · ' + mode : '') + ' <small>第 ' + roll.round + ' 轮</small></h4>'
       + '<div class="room-dice-results">' + faces + '</div><p>' + rollSummary(roll) + '</p>'
       + (followup ? '<p class="room-dice-help">已配置 ' + roll.defenseCount + ' 枚防御红骰，请按闪避结果确认是否投掷。</p>' : '')
       + (editable && (roll.mode === 'attack' || followup) ? '<button type="button" data-roll-followup="'
         + (followup ? 'defense' : 'power') + '"' + attrs + '>' + (followup ? '准备投掷防御红骰' : '准备投掷威力骰') + '</button>' : '')
       + (editable && roll.dice.some(dice.canReroll) ? '<button type="button" data-action="reroll"' + attrs
         + (selection?.size ? '' : ' disabled') + '>重掷所选骰子' + (selection?.size ? '（' + selection.size + '）' : '') + '</button>' : '')
-      + '</li>';
+      + reactions(roll) + '</li>';
   }
 
   function diceCountField(kind, label, min, max, value) {
@@ -583,7 +600,7 @@
     summary.innerHTML = '<div class="battle-room-head"><div><h2>' + escape(state.title) + '</h2><p>第 ' + state.round
       + ' 轮' + (state.closed ? ' · 已结束' : '') + '</p></div><div>' + controls + '</div></div>' + links;
     content.innerHTML = roomProjection() + argoAbilities() + roomTrauma() + own + '<section class="battle-room-pool"><header><h3>克拉托斯池</h3>' + clearPool + '</header><div>' + pool + '</div></section>' + diceForm()
-      + (edit ? rollLog : '') + (role !== 'player' ? '<h3 class="battle-room-heading">状态总览</h3>' : '') + overview
+      + (edit ? rollLog + teamActivity() : '') + (role !== 'player' ? '<h3 class="battle-room-heading">状态总览</h3>' : '') + overview
       + (edit ? '' : rollLog) + (state.squad && role !== 'viewer' ? '<p><a href="' + escape(squadLink.link('/aibp/squad', id)) + '">返回联机小队</a></p>' : '');
     if (focus >= 0) {
       const target = focusRoot.querySelectorAll('button,select,input')[focus];
@@ -738,6 +755,10 @@
       else choice.add(dieId);
       selectedDice.set(rollId, choice);
       render();
+      return;
+    }
+    if (action === 'roll-reaction') {
+      send({ id: crypto.randomUUID(), type: action, roll: rollId, value: value === 'clear' ? null : value });
       return;
     }
     if (action === 'reroll' || action === 'convert') {

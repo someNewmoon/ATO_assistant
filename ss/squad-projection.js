@@ -44,9 +44,20 @@
         if (roll) {
           const heading = document.createElement('strong');
           const result = document.createElement('span');
-          heading.textContent = label + ' · ' + content.title;
+          const path = window.ATO_HERO_CATALOG?.heroPortrait(content.hero);
+          if (path) {
+            const image = document.createElement('img');
+            image.className = 'squad-roll-avatar';
+            image.src = '../hero/assets/' + path;
+            image.alt = '';
+            heading.append(image);
+          }
+          heading.append(label + ' · ' + content.title);
           result.textContent = content.result;
-          panel.append(heading, result);
+          const faces = document.createElement('div');
+          faces.className = 'squad-roll-faces';
+          faces.innerHTML = content.faces.map(die => dice.faceMarkup(die, '../aibp/room-dice-art/')).join('');
+          panel.append(heading, faces, result);
         }
       }
       sync();
@@ -66,19 +77,20 @@
   fight.hidden = true;
   document.body.append(prep, fight, overlay);
   let latestRevision = -1, battleNumber = -1, stop, preference;
-  function storyRoll(roll) {
-    if (!roll) return null;
+  function storyRoll(roll, heroes) {
+    if (!roll || !dice) return null;
     const modifier = roll.bonus + roll.modifier;
     const score = roll.values.join(' + ') + (modifier ? ' ' + (modifier > 0 ? '+ ' : '− ') + Math.abs(modifier) : '');
     return {
+      faces: dice.storyFaces(roll), hero: heroes[roll.seat],
       title: roll.hero + ' · ' + (roll.replaces ? '命运重掷 · ' : '') + (roll.skill || (roll.target !== null ? '检定' : 'd' + roll.sides)),
       result: score + ' → ' + roll.sum + (roll.target !== null ? ' / ' + roll.target + ' · ' + (roll.success ? '成功' : '失败') : ''),
     };
   }
 
-  function battleRoll(roll) {
+  function battleRoll(roll, heroes) {
     if (!roll || !dice) return null;
-    return { title: roll.hero + ' · ' + (dice.modes[roll.mode]?.name || '掷骰') + ' · 第 ' + roll.round + ' 轮',
+    return { hero: heroes[roll.seat], faces: roll.dice, title: roll.hero + ' · ' + (dice.modes[roll.mode]?.name || '掷骰') + ' · 第 ' + roll.round + ' 轮',
       result: dice.rollSummary(roll) };
   }
 
@@ -97,8 +109,8 @@
     }
     const latestStory = checks[0];
     const latestBattle = lastBattleRoll || room.rolls?.[0];
-    cards.story(latestStory, storyRoll(latestStory));
-    cards.battle(dice && latestBattle, battleRoll(latestBattle));
+    cards.story(dice && latestStory, storyRoll(latestStory, room.heroes));
+    cards.battle(dice && latestBattle, battleRoll(latestBattle, room.heroes));
     if (language !== preference) { preference = language; api.language(language); }
     applySecondScreenTheme({ cycleId: cycle });
     if (phase === 'battle') {

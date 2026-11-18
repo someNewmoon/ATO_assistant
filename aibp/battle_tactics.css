@@ -168,3 +168,14 @@ button.battle-piece { pointer-events: auto; cursor: pointer; min-height: 0; }
 .battle-piece.battle-piece-titan.is-selected { box-shadow: 0 0 0 .75px var(--piece-accent); }
 .battle-terrain-legend { margin: 5px 0; font-size: .75rem; text-align: center; }
 [data-board-tactics] :is(button, input, select) { color: #ecf3f8; background: #253847; border-color: #6e8393; }
+
+.room-tactical-board .battle-map-board-image { opacity: .53; filter: saturate(.54); }
+.room-tactical-board .battle-map-grid { opacity: .9; }
+.room-board-turn-tools, .room-board-turn-tools > div { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
+.room-board-turn-tools[hidden], .room-board-turn-tools label[hidden] { display: none; }
+.battle-piece-priority {
+  position: absolute; top: -.2em; right: -.2em; z-index: 2;
+  display: grid; place-items: center; width: 1.35em; height: 1.35em;
+  border: 1px solid #ffe092; border-radius: 50%; background: #462718; color: #fff0b5;
+  box-shadow: 0 1px 4px #0009; font: 800 clamp(12px, 1.4vw, 22px) / 1 system-ui, sans-serif;
+}

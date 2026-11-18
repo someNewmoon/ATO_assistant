@@ -253,6 +253,19 @@
     return Object.entries(record.loadouts || {}).filter(([id]) => active.has(id));
   }
 
+  function gearReservations(record, heroes) {
+    const byGear = new Map();
+    const roster = new Map(heroes.map(hero => [hero.id, hero]));
+    for (const [id, raw] of assignedLoadouts(record, heroes)) {
+      for (const [gear, count] of Object.entries(normalizeLoadout(raw).gear)) {
+        const holders = byGear.get(gear) || [];
+        holders.push({ ...roster.get(id), count });
+        byGear.set(gear, holders);
+      }
+    }
+    return byGear;
+  }
+
   function saveLoadout(record, heroes, heroId, base, draft, migration) {
     if (!heroId || /^[1-4]$/.test(heroId) || !heroes.some(hero => hero.id === heroId)) {
       throw new Error('该英雄已不在当前战役，请重新打开配装');
@@ -296,6 +309,6 @@
     ascensionEnabled, baseGearId, ascendedCycle, nextCycle, ascend, loadoutTemplates,
     TITAN_NAMES_ZH, TITAN_TYPES, DREAMWALKER_PANELS, TRAUMA_DECKS, traumaTrack, defaultTraumaTrack,
     dreamwalkerPanel, loadoutTitan, titanType, titanTypeFields, titanLabel, titanArtwork,
-    gearKey, normalize, adjust, normalizeLoadout, loadoutTitans, titanIdFor, assignedLoadouts, saveLoadout,
+    gearKey, normalize, adjust, normalizeLoadout, loadoutTitans, titanIdFor, assignedLoadouts, gearReservations, saveLoadout,
   };
 });

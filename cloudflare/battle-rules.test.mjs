@@ -11,7 +11,8 @@ import { pathToFileURL } from 'node:url';
 const bundled = await build({
   stdin: { contents: `export { BattleRoom } from './worker/battle-room.js';
     export { createTrauma, applyTrauma, traumaView } from './worker/room-trauma.js';
-    export { applySquad } from './worker/room-squad.js';`, resolveDir: import.meta.dirname },
+    export { applySquad } from './worker/room-squad.js';
+    export { setupRoomBoard } from './worker/board.js';`, resolveDir: import.meta.dirname },
   bundle: true, write: false, platform: 'node', format: 'esm',
   plugins: [{ name: 'cloudflare-test-base', setup(builder) {
     builder.onResolve({ filter: /^cloudflare:workers$/ }, () => ({ path: 'workers', namespace: 'test' }));
@@ -117,4 +118,68 @@ test('从备战开始下一场：重置战斗状态，保留剧情三曲盘', ()
   assert.equal(r.heroes[0].condition, 'standing'); assert.equal(r.heroes[0].stats.danger, 0);
   assert.equal(r.trauma.highestDanger, 0); assert.equal(r.trauma.drawn.length, 0);
   assert.deepEqual(r.heroes[0].storyStats, { danger: 2, rage: 3, fate: 4 });
+});
+
+test('骇物允许落到泰坦和地形所在格，路线只走正交步', () => {
+  const r = room();
+  r.board = api.setupRoomBoard({ apostle: 'HEKATON', level: 1 }, 2);
+  const pieces = r.board.map.pieces;
+  r.board.map.terrain = [{ id: 'obstacle', name: 'Column', column: 2, row: 2, rotation: 0 }];
+  pieces.apostle = { column: 10.5, row: 8.5, facing: 90 };
+  pieces.titans[0] = { column: 2, row: 2 };
+  const point = { column: 2.5, row: 2.5 };
+  reducer.apply(r, host, { type: 'board-apostle-move', from: pieces.apostle, point });
+  assert.deepEqual(pieces.apostle, { ...point, facing: 90 });
+  const route = r.board.lastApostleMove.route;
+  assert.deepEqual(route[0], { column: 10.5, row: 8.5 });
+  assert.deepEqual(route.at(-1), point);
+  for (let i = 1; i < route.length; i++) {
+    assert.equal(Math.abs(route[i].column - route[i - 1].column) + Math.abs(route[i].row - route[i - 1].row), 1);
+  }
+});
+
+test('撤回只应用于自己的最新移动，原格被占用时拒绝', () => {
+  const r = room();
+  r.board = api.setupRoomBoard({ apostle: 'HEKATON', level: 1 }, 2);
+  r.board.map.terrain = [];
+  r.board.map.pieces.titans = [{ column: 2, row: 2 }, { column: 5, row: 5 }];
+  const move = { type: 'board-move', seat: 0, id: 'move', from: { column: 2, row: 2 }, point: { column: 3, row: 2 }, speed: 5 };
+  reducer.apply(r, player, move);
+  const undo = { type: 'board-undo-move', seat: 0, move: 'move' };
+  assert.throws(() => reducer.apply(r, { role: 'player', seat: 1 }, undo), /自己/);
+  assert.throws(() => reducer.apply(r, player, { ...undo, move: 'old' }), /撤回/);
+  r.board.map.pieces.titans[1] = move.from;
+  assert.throws(() => reducer.apply(r, player, undo), /原位置/);
+  r.board.map.pieces.titans[1] = { column: 5, row: 5 };
+  reducer.apply(r, player, undo);
+  assert.deepEqual(r.board.map.pieces.titans[0], move.from);
+  assert.equal(r.board.lastTitanMove, undefined);
+  assert.throws(() => reducer.apply(r, player, undo), /撤回/);
+});
+
+test('首要目标按怒气严格超过时转移，平局保留，支持锁定和死亡后转移', () => {
+  const r = room();
+  const rage = seat => reducer.apply(r, host, { type: 'stat', seat, key: 'rage', delta: 1 });
+  rage(0); rage(1);
+  assert.deepEqual(r.priorityTarget, { seat: 0, locked: false });
+  rage(1);
+  assert.deepEqual(r.priorityTarget, { seat: 1, locked: false });
+  reducer.apply(r, host, { type: 'priority-target', seat: 0, locked: true });
+  rage(1);
+  assert.deepEqual(r.priorityTarget, { seat: 0, locked: true });
+  reducer.apply(r, host, { type: 'condition', seat: 0, value: 'dead' });
+  assert.deepEqual(r.priorityTarget, { seat: 1, locked: false });
+});
+
+test('骰子回应只允许队友，且一人可换票或取消', () => {
+  const r = room();
+  const id = crypto.randomUUID();
+  reducer.apply(r, player, { type: 'roll', id, seat: 0, mode: 'attack', counts: { d10: 1 } });
+  const react = { type: 'roll-reaction', roll: id, value: 'up' };
+  assert.throws(() => reducer.apply(r, player, react), /队友/);
+  reducer.apply(r, host, react);
+  reducer.apply(r, host, { ...react, value: 'down' });
+  assert.deepEqual(r.rolls[0].reactions, { host: 'down' });
+  reducer.apply(r, host, { ...react, value: null });
+  assert.deepEqual(r.rolls[0].reactions, {});
 });

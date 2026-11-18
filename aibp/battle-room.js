@@ -188,6 +188,106 @@
         : value !== 'ready' ? '<small class="battle-room-card-status">' + (discarded ? '已弃除' : '已横置') + '</small>' : '') + '</li>';
   }
 
+  const traumaDecks = { light: '轻微创伤', heavy: '严重创伤', lethal: '致命创伤', obol: '生死关头' };
+  const traumaDialog = document.createElement('dialog');
+  traumaDialog.className = 'room-trauma-dialog';
+  root.appendChild(traumaDialog);
+
+  function traumaOptions(auto = false) {
+    return (auto ? '<option value="auto">按泰坦创伤表</option>' : '')
+      + Object.entries(traumaDecks).map(([key, name]) => '<option value="' + key + '">' + name + '</option>').join('');
+  }
+
+  function traumaCardList(seat, editable) {
+    return (state.trauma?.drawn || []).filter(item => item.seat === seat).map(item => {
+      const { card } = item;
+      const data = ' data-seat="' + seat + '" data-draw="' + escape(item.id) + '"';
+      const act = (operation, label) => '<button type="button" data-action="trauma-resolve" data-value="' + operation + '"' + data + '>' + label + '</button>';
+      const shuffle = card.deck === 'obol' || card.return?.startsWith('shuffle');
+      return '<li>' + (card.art ? cardImage('../aibp/images/trauma/' + card.art, card.name) : '<p>' + escape(card.note) + '</p>')
+        + '<strong>' + escape(card.name) + '</strong><small>' + traumaDecks[card.deck] + ' · 凶险 ' + item.danger
+        + (item.kept ? ' · 持续' : ' · 待结算') + '</small>'
+        + (editable ? '<div class="room-trauma-actions">' + (!item.kept ? act('keep', '保留') : '')
+          + (card.return === 'temporary' ? act('bottom', '移除临时牌') : shuffle ? act('shuffle', '结算并洗回')
+            : act('bottom', '结算并放回牌底') + act('shuffle', '按卡文洗回')) + '</div>' : '') + '</li>';
+    }).join('');
+  }
+
+  function traumaControls(hero, seat, editable) {
+    if (!state.trauma) return '';
+    const canDraw = editable && hero.condition !== 'dead';
+    const button = (mode, label) => '<button type="button" data-trauma-dialog="' + mode + '" data-seat="' + seat + '">' + label + '</button>';
+    const cards = traumaCardList(seat, editable);
+    const trackKnown = !!state.trauma.tracks[seat];
+    return '<section class="room-trauma-hero"><div class="room-trauma-actions">'
+      + (canDraw ? button('hit', '结算受击') + button('draw', '抽创伤') + button('gain', '获得凶险') : '')
+      + (editable && actor.role === 'host' ? button('track', trackKnown ? '创伤表' : '填写创伤表') : '')
+      + '</div>' + (canDraw && !trackKnown ? '<small>未核对创伤表，可按卡文指定牌库。</small>' : '')
+      + (cards ? '<ul class="room-trauma-cards">' + cards + '</ul>' : '') + '</section>';
+  }
+
+  function roomTrauma() {
+    if (!state.trauma) return actor.role === 'host' && !state.closed
+      ? '<button type="button" data-trauma-dialog="setup">准备创伤牌库</button>' : '';
+    const { cycle, tutorial, counts, latest: recent } = state.trauma;
+    const latest = recent ? '<details class="room-trauma-latest"' + (content.querySelector('.room-trauma-latest')?.dataset.draw !== recent.id || content.querySelector('.room-trauma-latest')?.open ? ' open' : '')
+      + ' data-draw="' + escape(recent.id) + '"'
+      + '><summary>最近揭示 · ' + escape(state.heroes[recent.seat].name) + ' · ' + escape(recent.card.name) + '</summary>'
+      + (recent.card.art ? cardImage('../aibp/images/trauma/' + recent.card.art, recent.card.name) : '<p>' + escape(recent.card.note) + '</p>')
+      + '</details>' : '';
+    return '<section class="room-trauma-summary"><h3>创伤牌库</h3><small>故事集 ' + escape(cycle.slice(1)) + (tutorial ? ' · 教程' : '')
+      + ' · ' + Object.entries(counts).map(([deck, count]) => traumaDecks[deck] + ' ' + count).join(' · ') + '</small>'
+      + (actor.role === 'host' && !state.closed ? '<button type="button" data-trauma-dialog="manage">管理牌库</button>' : '') + latest + '</section>';
+  }
+
+  function openTraumaDialog(mode, seat) {
+    const title = { setup: '准备创伤牌库', manage: '调整创伤牌库', track: '泰坦创伤表', hit: '结算受击', draw: '抽创伤', gain: '获得凶险' }[mode];
+    const name = state.heroes[seat]?.name;
+    let fields = '';
+    if (mode === 'setup') {
+      fields = '<label>故事集 <select name="cycle" required><option value="">请选择</option>'
+        + [1,2,3,4,5].map(n => '<option value="c' + n + '">' + n + '</option>').join('')
+        + '</select></label><label><input type="checkbox" name="tutorial"> 教程战</label>';
+    } else if (mode === 'manage') {
+      const catalog = state.trauma.catalog;
+      const options = catalog.filter(card => !card.held).map(card =>
+        '<option value="' + escape(card.id) + '">' + escape(card.name) + (catalog.filter(item => item.name === card.name).length > 1 ? ' [' + escape(card.id.split('_').pop().toUpperCase()) + ']' : '') + ' · ' + traumaDecks[card.deck] + (card.inPlay ? ' · 已加入' : ' · 未加入') + '</option>').join('');
+      fields = '<p>按科技或事件指示操作。觉醒版和哈迪斯版会替换原牌；哈迪斯版仍在凶险达到 21 时入库。</p>'
+        + '<button type="submit" name="awakening" value="1" formnovalidate>应用觉醒牌库变化（加入觉醒并替换你已死亡）</button>'
+        + '<label>卡牌 <select name="card" required>' + options + '</select></label>'
+        + '<label>操作 <select name="operation"><option value="add">加入或替换</option><option value="remove">移出牌库</option></select></label>';
+    } else if (mode === 'track') {
+      fields = '<p>对照当前泰坦面板与创伤式样，逐格选择险情等级。</p><div class="room-trauma-track">'
+        + Array.from({ length: 9 }, (_, i) => '<label>凶险 ' + (i + 1) + ' <select name="track" required><option value="">请选择</option>'
+          + Object.entries(traumaDecks).map(([key, label]) => '<option value="' + key + '"'
+            + (state.trauma.tracks[seat]?.[i] === key ? ' selected' : '') + '>' + label + '</option>').join('')
+          + '</select></label>').join('') + '</div>';
+    } else if (mode === 'draw') {
+      fields = '<label>牌库 <select name="deck">' + traumaOptions(true) + '</select></label><small>当前凶险 ' + state.heroes[seat].stats.danger + '</small>';
+    } else {
+      fields = '<label>' + (mode === 'hit' ? '护甲减免后的净凶险' : '增加的凶险') + ' <input name="amount" type="number" min="0" max="99" required></label>'
+        + (mode === 'gain' ? '<small>非攻击来源，只有超过 9 才触发抽取。</small>'
+          : '<label>牌库 <select name="deck">' + traumaOptions(true) + '</select></label><small>超过 9 时按生死关头结算。</small>');
+    }
+    traumaDialog.innerHTML = '<form><h3>' + title + (name ? ' · ' + escape(name) : '') + '</h3>' + fields
+      + '<div class="room-trauma-actions"><button type="button" data-trauma-cancel>取消</button><button type="submit">确认</button></div></form>';
+    traumaDialog.querySelector('[data-trauma-cancel]').onclick = () => traumaDialog.close();
+    traumaDialog.querySelector('form').onsubmit = event => {
+      event.preventDefault();
+      const fields = new FormData(event.currentTarget);
+      const action = { id: crypto.randomUUID(), seat };
+      if (mode === 'setup') Object.assign(action, { type: 'trauma-setup', cycle: fields.get('cycle'), tutorial: fields.has('tutorial') });
+      else if (mode === 'manage') Object.assign(action, event.submitter?.name === 'awakening' ? { type: 'trauma-awakening' }
+        : { type: 'trauma-deck', card: fields.get('card'), operation: fields.get('operation') });
+      else if (mode === 'track') Object.assign(action, { type: 'trauma-track', track: fields.getAll('track') });
+      else Object.assign(action, { type: 'trauma-draw', mode, deck: fields.get('deck') || 'auto', amount: Number(fields.get('amount')) });
+      traumaDialog.close();
+      send(action);
+    };
+    traumaDialog.showModal();
+    window.ATO_LANGUAGE?.refresh();
+  }
+
   function heroCard(hero, seat) {
     const editable = !state.closed && (actor.role === 'host' || (actor.role === 'player' && actor.seat === seat));
     const art = window.ATO_BATTLE_ASSETS;
@@ -216,6 +316,7 @@
       + avatar + '<div><h3>' + escape(hero.name) + '</h3><small>' + escape(hero.player || '待认领') + '</small></div></div>'
       + titanImage + '<div class="battle-room-titan-status"><span>' + titan + '</span>' + condition + '</div></header>'
       + '<div class="battle-room-stats" role="group" aria-label="三曲盘">' + stats + '</div>'
+      + traumaControls(hero, seat, editable)
       + '<h4>装备</h4>' + (gear ? '<ul class="battle-room-card-list">' + gear + '</ul>' : '<p>未分配装备</p>')
       + '<h4>旧忆</h4>' + (mnemos ? '<ul class="battle-room-card-list">' + mnemos + '</ul>' : '<p>暂无旧忆卡牌</p>')
       + summary + '</article>';
@@ -488,7 +589,7 @@
     const selection = focus >= 0 && active.name;
     summary.innerHTML = '<div class="battle-room-head"><div><h2>' + escape(state.title) + '</h2><p>第 ' + state.round
       + ' 轮' + (state.closed ? ' · 已结束' : '') + '</p></div><div>' + controls + '</div></div>' + links;
-    content.innerHTML = roomProjection() + argoAbilities() + own + '<section class="battle-room-pool"><header><h3>克拉托斯池</h3>' + clearPool + '</header><div>' + pool + '</div></section>' + diceForm()
+    content.innerHTML = roomProjection() + argoAbilities() + roomTrauma() + own + '<section class="battle-room-pool"><header><h3>克拉托斯池</h3>' + clearPool + '</header><div>' + pool + '</div></section>' + diceForm()
       + (edit ? rollLog : '') + (role !== 'player' ? '<h3 class="battle-room-heading">状态总览</h3>' : '') + overview
       + (edit ? '' : rollLog);
     if (focus >= 0) {
@@ -564,7 +665,9 @@
         + '"></label><fieldset><legend>选择 1 至 4 位参战英雄</legend>'
         + heroes.map((hero, index) => '<label><input type="checkbox" name="heroIds" value="' + escape(hero.id)
           + '"' + (index < 4 ? ' checked' : '') + '> ' + escape(window.ATO_HERO_CATALOG.heroDisplayName(hero)) + '</label>').join('')
-        + '</fieldset>' + configFields(available) + '<label><input name="publicLobby" type="checkbox" checked>允许从登录页快速参战（无需邀请链接）</label><button type="submit">创建战斗室</button></form>';
+        + '</fieldset>' + configFields(available) + (data.campaign.sections.dashboard?.profiles?.[data.campaign.sections.dashboard?.activeProfileId]?.activeCycleId === 'c1'
+          || !data.campaign.sections.dashboard?.profiles?.[data.campaign.sections.dashboard?.activeProfileId]?.activeCycleId
+          ? '<label><input name="traumaTutorial" type="checkbox">教程战 · 使用教程创伤牌库</label>' : '') + '<label><input name="publicLobby" type="checkbox" checked>允许从登录页快速参战（无需邀请链接）</label><button type="submit">创建战斗室</button></form>';
     } catch (error) {
       content.innerHTML += '<p>' + escape(error.message) + ' <a href="../index.html">打开主控台</a></p>';
     } finally {
@@ -640,6 +743,10 @@
     }
     const { roomCopy, action, key, seat, delta, armCard, slot, value,
       rollMode: mode, rollFollowup, rollId, dieId, symbol } = button.dataset;
+    if (button.dataset.traumaDialog) {
+      openTraumaDialog(button.dataset.traumaDialog, Number(seat));
+      return;
+    }
     if (button.dataset.diceStep) {
       const input = button.form.elements.namedItem(button.dataset.diceStep);
       input.value = Math.max(Number(input.min), Math.min(Number(input.max), (Number(input.value) || 0) + Number(delta)));
@@ -698,6 +805,8 @@
       if (value === 'discarded') armedCard = '';
       void send({ id: crypto.randomUUID(), type: action, key, seat: Number(seat), slot: Number(slot), value });
       render();
+    } else if (action === 'trauma-resolve') {
+      send({ id: crypto.randomUUID(), type: action, seat: Number(seat), draw: button.dataset.draw, operation: value });
     } else if (action === 'public-lobby') {
       send({ id: crypto.randomUUID(), type: action, value: value === 'true' });
     } else if (action === 'pool-clear') {
@@ -731,7 +840,7 @@
         const projection = window.getAibpRoomProjection?.();
         const configuration = readConfig(form);
         battleConfig.prepare(configuration, battleConfig.availability(lobbyCampaign, abilityDictionary));
-        const data = await request('create', { title: fields.get('title'), heroIds: fields.getAll('heroIds'), board, projection, battleConfig: configuration, publicLobby: fields.get('publicLobby') === 'on' });
+        const data = await request('create', { title: fields.get('title'), heroIds: fields.getAll('heroIds'), board, projection, battleConfig: configuration, traumaTutorial: fields.has('traumaTutorial'), publicLobby: fields.get('publicLobby') === 'on' });
         lastProjectionSent = JSON.stringify(projection);
         id = data.room.id;
         credentials = { token: data.keys.host, keys: data.keys };

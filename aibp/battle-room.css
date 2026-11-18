@@ -282,3 +282,16 @@ body.aibp-room-only > .app > main > :not(#battleRoom) { display: none !important
 .room-dice-stepper input { width: 3.5rem; text-align: center; }
 .battle-room .room-dice-stepper button { min-width: 34px; min-height: 36px; padding: 3px 8px; font-size: 20px; }
 .room-dice-stepper input::-webkit-inner-spin-button { -webkit-appearance: none; }
+
+.room-trauma-summary, .room-trauma-hero { display: grid; gap: .45rem; margin-block: .65rem; }
+.room-trauma-summary > button { justify-self: start; }
+.room-trauma-actions { display: flex; flex-wrap: wrap; gap: .35rem; }
+.room-trauma-cards { list-style: none; display: grid; grid-template-columns: repeat(auto-fit,minmax(128px,1fr)); gap: .7rem; padding: 0; }
+.room-trauma-cards li { display: grid; justify-items: start; gap: .35rem; align-content: start; }
+.room-trauma-cards .battle-room-card-art, .room-trauma-latest .battle-room-card-art { max-width: 128px; }
+.room-trauma-dialog { width: min(31rem, 94vw); max-height: 88vh; overflow: auto; border: 1px solid var(--room-border, #9c8c73); border-radius: .6rem; background: var(--panel, #faf7f0); color: var(--text, #342d24); padding: 1rem; }
+.room-trauma-dialog::backdrop { background: #0d161bb0; }
+.room-trauma-dialog form, .room-trauma-dialog label { display: grid; gap: .6rem; }
+.room-trauma-dialog input[type="checkbox"] { justify-self: start; }
+.room-trauma-track { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: .45rem; }
+.room-trauma-track select { min-width: 0; width: 100%; }

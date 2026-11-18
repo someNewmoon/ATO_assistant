@@ -7,8 +7,10 @@ import { roomProjection } from './room-projection.js';
 import battleConfig from '../../technology/battle-config.js';
 import techDictionary from '../../technology/tech_card_dictionary.min.json';
 import gearProduction from '../../technology/ato_gear_production.json';
-import { ApiError, errorResponse, object, response } from './campaign.js';
+import { ApiError, activeCycle, errorResponse, object, response } from './campaign.js';
 import { applyRoomBoard, setupRoomBoard } from './board.js';
+
+import { applyTrauma, createTrauma, traumaView } from './room-trauma.js';
 
 export const roomIdPattern = /^[a-f0-9]{32}$/;
 const secretPattern = /^[a-f0-9]{64}$/;
@@ -92,9 +94,10 @@ export async function createBattleRoom(env, campaign, payload) {
   let configuration;
   try { configuration = battleConfig.prepare(selectedConfig, availableAbilities); }
   catch (error) { reject(error.message); }
+  const trauma = createTrauma(activeCycle(campaign), payload.traumaTutorial === true, randomInt);
   const id = crypto.randomUUID().replaceAll('-', '');
   return env.BATTLE_ROOMS.getByName(id).fetch('https://battle-room.internal/create', {
-    method: 'POST', body: JSON.stringify({ id, title, heroes, board, configuration, publicLobby: payload.publicLobby === true, projection: roomProjection(payload.projection, board?.apostle) }),
+    method: 'POST', body: JSON.stringify({ id, title, heroes, board, configuration, trauma, publicLobby: payload.publicLobby === true, projection: roomProjection(payload.projection, board?.apostle) }),
   });
 }
 
@@ -137,8 +140,8 @@ export class BattleRoom extends DurableObject {
   }
 
   view(room, actor) {
-    const { secrets, ...state } = room;
-    return { ok: true, room: state, actor };
+    const { secrets, trauma, ...state } = room;
+    return { ok: true, room: { ...state, trauma: traumaView(room, actor) }, actor };
   }
 
   actor(room, secretHash) {
@@ -157,11 +160,11 @@ export class BattleRoom extends DurableObject {
   }
 
   async create(request) {
-    const { id, title, heroes, board, projection, configuration, publicLobby } = await request.json();
+    const { id, title, heroes, board, projection, configuration, trauma, publicLobby } = await request.json();
     const keys = { host: newSecret(), viewer: newSecret(), invite: newSecret() };
     const [host, viewer, invite] = await Promise.all(Object.values(keys).map(hash));
     const room = {
-      id, title, heroes, board, projection, configuration, publicLobby: publicLobby === true, round: 1, revision: 0, closed: false,
+      id, title, heroes, board, projection, configuration, trauma, publicLobby: publicLobby === true, round: 1, revision: 0, closed: false,
       pool: Object.fromEntries(poolKeys.map(key => [key, 0])), rolls: [],
       secrets: { host, viewer, invite, players: heroes.map(() => null) },
     };
@@ -278,6 +281,7 @@ export class BattleRoom extends DurableObject {
   }
 
   apply(room, actor, body) {
+    if (typeof body.type === 'string' && body.type.startsWith('trauma-')) return applyTrauma(room, actor, body, randomInt);
     if (typeof body.type === "string" && body.type.startsWith("board-")) return applyRoomBoard(room, actor, body);
     if (body.type === 'room-projection') {
       if (actor.role !== 'host') reject('战况由房主同步。', 403);
@@ -330,6 +334,9 @@ export class BattleRoom extends DurableObject {
     switch (body.type) {
       case 'stat':
         if (!stats.includes(body.key)) reject('未知英雄数值。');
+        if (room.trauma && body.key === 'danger' && body.delta === 1) {
+          return applyTrauma(room, actor, { ...body, type: 'trauma-draw', mode: 'gain', amount: 1, deck: 'auto' }, randomInt);
+        }
         hero.stats[body.key] = counter(hero.stats[body.key], body.delta, 30);
         break;
       case 'condition':

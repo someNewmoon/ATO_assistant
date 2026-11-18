@@ -36,7 +36,7 @@
       sync();
     };
     const update = (roll, content) => {
-      const next = roll && JSON.stringify(roll);
+      const next = roll && JSON.stringify([roll, content.reactions]);
       if (next !== latest) {
         latest = next;
         panel.replaceChildren();
@@ -58,6 +58,33 @@
           faces.className = 'squad-roll-faces';
           faces.innerHTML = content.faces.map(die => dice.faceMarkup(die, '../aibp/room-dice-art/')).join('');
           panel.append(heading, faces, result);
+          const groups = (content.reactions || []).filter(group => group.people.length);
+          if (groups.length) {
+            const votes = document.createElement('div');
+            votes.className = 'squad-roll-votes';
+            for (const { icon, label, people } of groups) {
+              const group = document.createElement('span');
+              group.className = 'squad-roll-vote-group';
+              group.setAttribute('aria-label', label + ' ' + people.length);
+              group.append(icon);
+              for (const { hero, name } of people) {
+                const voter = document.createElement('span');
+                voter.className = 'squad-roll-voter';
+                voter.title = name;
+                voter.setAttribute('aria-label', name);
+                const path = window.ATO_HERO_CATALOG?.heroPortrait(hero);
+                if (path) {
+                  const image = document.createElement('img');
+                  image.src = '../hero/assets/' + path;
+                  image.alt = '';
+                  voter.append(image);
+                } else voter.textContent = [...name][0] || '';
+                group.append(voter);
+              }
+              votes.append(group);
+            }
+            panel.append(votes);
+          }
         }
       }
       sync();
@@ -88,15 +115,15 @@
     };
   }
 
-  function battleRoll(roll, heroes) {
+  function battleRoll(roll, heroes, hostSeat) {
     if (!roll || !dice) return null;
     return { hero: heroes[roll.seat], faces: roll.dice, title: roll.hero + ' · ' + (dice.modes[roll.mode]?.name || '掷骰') + ' · 第 ' + roll.round + ' 轮',
-      result: dice.rollSummary(roll) };
+      result: dice.rollSummary(roll), reactions: dice.reactionGroups(roll, heroes, hostSeat) };
   }
 
   function update({ room, actor }) {
     if (actor?.role !== 'viewer' || !room?.squad || room.revision <= latestRevision) return;
-    const { phase, story, checks, cycle, language, lastBattleRoll, battleNumber: nextBattle } = room.squad;
+    const { phase, story, checks, cycle, language, lastBattleRoll, hostSeat, battleNumber: nextBattle } = room.squad;
     latestRevision = room.revision;
     if (room.closed) {
       stop?.();
@@ -110,7 +137,7 @@
     const latestStory = checks[0];
     const latestBattle = lastBattleRoll || room.rolls?.[0];
     cards.story(dice && latestStory, storyRoll(latestStory, room.heroes));
-    cards.battle(dice && latestBattle, battleRoll(latestBattle, room.heroes));
+    cards.battle(dice && latestBattle, battleRoll(latestBattle, room.heroes, hostSeat));
     if (language !== preference) { preference = language; api.language(language); }
     applySecondScreenTheme({ cycleId: cycle });
     if (phase === 'battle') {

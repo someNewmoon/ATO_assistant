@@ -37,7 +37,7 @@ function cleanMap(value, apostle, level, seats) {
 
 function cleanOverlay(value, seats) {
   const state = object(value) ? value : {};
-  if (state.active === false) return { active: false, mode: '' };
+  const active = state.active !== false && modes.includes(state.mode);
   const controls = object(state.weaponControls) ? state.weaponControls : {};
   const ranged = los.normalizeWeapon({ ...controls, kind: 'ranged' });
   const reach = los.normalizeWeapon({ kind: 'reach', max: controls.reach }).max;
@@ -51,8 +51,7 @@ function cleanOverlay(value, seats) {
     return Number.isInteger(speed) && speed >= 0 && speed <= 20 ? speed : 5;
   });
   return {
-    active: true,
-    mode: modes.includes(state.mode) ? state.mode : modes[0],
+    active, mode: active ? state.mode : '',
     selectedTitan, weaponControls, weapon: los.normalizeWeapon({
       ...weaponControls, max: weaponControls.kind === 'reach' ? reach : weaponControls.max,
     }),

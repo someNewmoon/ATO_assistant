@@ -475,8 +475,16 @@ export class BattleRoom extends DurableObject {
       if (roomDice.rollOwner(roll, room.squad?.hostSeat) === by) reject('只能回应队友的掷骰。', 403);
       if (![null, 'up', 'down'].includes(body.value)) reject('掷骰回应无效。');
       roll.reactions ||= {};
-      if (body.value === null) delete roll.reactions[by];
-      else roll.reactions[by] = body.value;
+      if (body.value === null) {
+        delete roll.reactions[by];
+        if (roll.reactionPeople) delete roll.reactionPeople[by];
+      } else {
+        roll.reactions[by] = body.value;
+        const seat = actor.role === 'host' ? room.squad?.hostSeat : actor.seat;
+        const hero = room.heroes[seat];
+        (roll.reactionPeople ||= {})[by] = { name: hero?.name, argonaut: hero?.argonaut,
+          player: hero?.player || (actor.role === 'host' ? '房主' : '') };
+      }
       return;
     }
     if (body.type === 'priority-target') {

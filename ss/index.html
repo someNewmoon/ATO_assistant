@@ -27,6 +27,10 @@
 .squad-roll-faces .is-red{background-image:url('../aibp/room-dice-art/red.webp')}
 .squad-roll-faces .is-black{background-image:url('../aibp/room-dice-art/black.webp')}
 .squad-roll-faces .is-white{background-image:url('../aibp/room-dice-art/white.webp')}
+.squad-roll-votes,.squad-roll-vote-group{display:flex;align-items:center;flex-wrap:wrap;gap:.3rem}
+.squad-roll-votes{margin-top:.35rem;gap:.55rem}
+.squad-roll-voter{display:inline-grid;place-items:center;width:1.2em;height:1.2em;border-radius:50%;overflow:hidden;background:#41564a;font-size:.85em}
+.squad-roll-voter img{width:100%;height:100%;object-fit:cover;object-position:top}
 .squad-roll-faces .room-die-number{background:#e8d5ad;color:#33271e;border-radius:.25em;font-weight:800}
 .squad-check-overlay article[data-failed]{border-color:#de9c8d}
 .squad-projection-battle{position:fixed;inset:0;width:100%;height:100%;border:0;z-index:2100;background:#eee9e0}
@@ -117,8 +121,8 @@
   <script src="../aibp/squad-link.js?v=5"></script>
   <script src="./app.js?v=20261118-squad"></script>
   <script src="../hero/hero-catalog.js"></script>
-  <script src="../aibp/room-dice.js?v=3"></script>
-  <script src="./squad-projection.js?v=5"></script>
+  <script src="../aibp/room-dice.js?v=4"></script>
+  <script src="./squad-projection.js?v=6"></script>
   <script src="../assets/ato-terms.js?v=20261110-loop-terms"></script>
   <script src="../assets/english-terms.js?v=20261011-english4"></script>
   <script src="../assets/english-ui.js?v=20261011-aibp-state1"></script>

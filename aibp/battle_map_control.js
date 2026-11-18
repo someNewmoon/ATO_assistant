@@ -231,7 +231,7 @@
     }
 
     function renderStarts(map) {
-      if (window.BattleBoardPieces && (hasTactics(losState.mode) || (map.pieces && map.showStarts !== false))) {
+      if (window.BattleBoardPieces && (hasTactics(losState.mode) || (map.pieces && (options.alwaysRenderPieces || map.showStarts !== false)))) {
         const apostle = options.getApostle();
         const level = options.getLevel();
         window.BattleBoardPieces.render(startLayer, window.BattleTerrain.getBoardPieces(map, apostle, level), {
@@ -749,16 +749,20 @@
       renderLosAndNotify();
     }
 
+    function endTitanMovement() {
+      const seat = losState.selectedTitan;
+      const canFinish = options.canMoveTitan?.(seat) !== false && Boolean(titanMovement(seat));
+      if (canFinish && !options.onTitanEndMove) nativeTitanMoves.delete(seat);
+      setTacticalMode("");
+      if (canFinish) options.onTitanEndMove?.(seat);
+    }
+
     if (tactics) {
-      tactics.querySelector("[data-board-end-move]")?.addEventListener("click", () => {
-        const seat = losState.selectedTitan;
-        if (options.onTitanEndMove) return options.onTitanEndMove(seat);
-        nativeTitanMoves.delete(seat);
-        renderLosAndNotify();
-      });
+      tactics.querySelector("[data-board-end-move]")?.addEventListener("click", endTitanMovement);
       for (const mode of ["", ...tacticModes]) {
         tactics.querySelector(`[data-board-mode="${mode}"]`).addEventListener("click", () => {
-          setTacticalMode(losState.mode === mode && !options.tacticalOnly ? "" : mode);
+          if (losState.mode === "titan-move" && mode === "titan-move") return endTitanMovement();
+          setTacticalMode(losState.mode === mode ? "" : mode);
         });
       }
       tactics.addEventListener("click", event => {
@@ -1111,27 +1115,24 @@
       // 第二屏要画同样的标注，但 losState 不属于 battleMap（不该写进存档），所以单独
       // 导出一份可序列化快照，由 index.html 塞进第二屏 payload 的 los 字段。
       applyTacticalSnapshot(snapshot = {}) {
-        if (snapshot.active === false) {
-          losState.mode = "";
-          losState.active = false;
-          renderMap();
-          return;
-        }
-        if (!hasTactics(snapshot.mode)) return;
-        losState.mode = snapshot.mode;
-        losState.active = true;
-        lastOnHigh = Boolean(snapshot.elevated);
-        losState.elevated = Boolean(snapshot.elevated);
-        losState.selectedTitan = snapshot.selectedTitan ?? 0;
-        losState.titanSpeeds = snapshot.titanSpeeds?.slice() || [5, 5, 5, 5];
-        losState.weapon = { ...losState.weapon, ...snapshot.weaponControls };
+        if (snapshot.active !== false && !hasTactics(snapshot.mode)) return;
+        losState.mode = snapshot.active === false ? "" : snapshot.mode;
+        losState.active = Boolean(losState.mode);
+        if (snapshot.elevated !== undefined) lastOnHigh = losState.elevated = Boolean(snapshot.elevated);
+        if (Number.isInteger(snapshot.selectedTitan)) losState.selectedTitan = snapshot.selectedTitan;
+        if (snapshot.titanSpeeds) losState.titanSpeeds = snapshot.titanSpeeds.slice();
+        if (snapshot.weaponControls) losState.weapon = { ...losState.weapon, ...snapshot.weaponControls };
         renderMap();
       },
-      getLosSnapshot() {
+      getLosSnapshot({ keepTactics = false } = {}) {
         const trailMap = options.getMap();
         const bossTrail = options.getApostleTrail?.() || (nativeApostleTrail?.map === trailMap ? nativeApostleTrail.move : null);
         const titanTrail = options.getTitanTrail?.() || (nativeTitanTrail?.map === trailMap ? nativeTitanTrail.move : null);
-        if (!losState.active) return { active: false, ...(bossTrail && { bossTrail }), ...(titanTrail && { titanTrail }) };
+        if (!losState.active) return { active: false,
+          ...(keepTactics && { mode: "", selectedTitan: losState.selectedTitan, titanSpeeds: losState.titanSpeeds.slice(),
+            weaponControls: { ...losState.weapon }, elevated: losState.elevated }),
+          ...(bossTrail && { bossTrail }), ...(titanTrail && { titanTrail }),
+        };
         if (hasTactics(losState.mode)) {
           const map = currentMap();
           const state = currentTacticalState(map);

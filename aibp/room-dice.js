@@ -74,5 +74,20 @@
     return roll.by || (roll.seat === hostSeat ? 'host' : 'seat:' + roll.seat);
   }
 
-  return { faces, names, limits, modes, naturalFace, remainingFace, canReroll, faceIndex, faceLabel, rollSummary, faceMarkup, storyFaces, rollOwner };
+  function reactionGroups(roll, heroes, hostSeat) {
+    return [
+      { value: 'up', icon: '👍', label: '赞同' },
+      { value: 'down', icon: '👎', label: '反对' },
+    ].map(group => ({
+      ...group,
+      people: Object.entries(roll.reactions || {}).filter(([, choice]) => choice === group.value)
+        .map(([by]) => {
+          const seat = by === 'host' ? hostSeat : Number(by.slice(5));
+          const hero = roll.reactionPeople?.[by] || heroes[seat];
+          return { hero, name: hero?.player || hero?.name || (by === 'host' ? '房主' : '队友') };
+        }),
+    }));
+  }
+
+  return { faces, names, limits, modes, naturalFace, remainingFace, canReroll, faceIndex, faceLabel, rollSummary, faceMarkup, storyFaces, rollOwner, reactionGroups };
 });

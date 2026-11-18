@@ -177,10 +177,14 @@ test('骰子回应只允许队友，且一人可换票或取消', () => {
   reducer.apply(r, player, { type: 'roll', id, seat: 0, mode: 'attack', counts: { d10: 1 } });
   const react = { type: 'roll-reaction', roll: id, value: 'up' };
   assert.throws(() => reducer.apply(r, player, react), /队友/);
-  reducer.apply(r, host, react);
-  reducer.apply(r, host, { ...react, value: 'down' });
+  r.squad = { phase: 'battle', battleNumber: 1, hostSeat: 1 };
+  r.heroes[1].player = '原席位玩家';
+  reducer.apply(r, host, { ...react, battleNumber: 1 });
+  assert.equal(r.rolls[0].reactionPeople.host.player, '原席位玩家');
+  reducer.apply(r, host, { ...react, value: 'down', battleNumber: 1 });
   assert.deepEqual(r.rolls[0].reactions, { host: 'down' });
-  reducer.apply(r, host, { ...react, value: null });
+  reducer.apply(r, host, { ...react, value: null, battleNumber: 1 });
+  assert.deepEqual(r.rolls[0].reactionPeople, {});
   assert.deepEqual(r.rolls[0].reactions, {});
 });
 
@@ -215,4 +219,18 @@ test('一次泰坦移动共享步数，追加、撤回、结束和新回合正�
   reducer.apply(r, host, { type: 'round' });
   assert.equal(r.board.titanMoves, undefined);
   assert.equal(r.board.lastTitanMove.id, 'next');
+});
+
+test('退出版图模式后保留泰坦选择、移动上限与武器配置', () => {
+  const r = room();
+  r.board = api.setupRoomBoard({ apostle: 'HEKATON', level: 1 }, 2);
+  assert.equal(r.board.los.active, false);
+  reducer.apply(r, host, { type: 'board-overlay', overlay: {
+    active: false, selectedTitan: 1, titanSpeeds: [5, 7], weaponControls: { kind: 'reach', reach: 3 },
+  } });
+  assert.equal(r.board.los.active, false);
+  assert.equal(r.board.los.mode, '');
+  assert.equal(r.board.los.selectedTitan, 1);
+  assert.deepEqual(r.board.los.titanSpeeds, [5, 7]);
+  assert.equal(r.board.los.weaponControls.reach, 3);
 });

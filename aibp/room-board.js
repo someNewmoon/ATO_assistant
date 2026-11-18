@@ -76,8 +76,7 @@
           return path && '../hero/assets/' + path;
         }),
         canEditBoard: canEdit, canMoveTitan: canMove,
-        allowTacticalControls: actor.role !== "viewer",
-        tacticalOnly: actor.role !== "host",
+        allowTacticalControls: actor.role !== "viewer", alwaysRenderPieces: true,
         setMap(next) {
           if (!canEdit()) return;
           map = next;
@@ -96,7 +95,7 @@
         },
         onLosChange() {
           if (!canEdit()) return;
-          const overlay = overlayConfig(control.getLosSnapshot());
+          const overlay = overlayConfig(control.getLosSnapshot({ keepTactics: true }));
           const next = JSON.stringify(overlay);
           if (next === overlayStamp) return;
           overlayStamp = next;
@@ -108,6 +107,7 @@
     return {
       sync(nextRoom, nextActor) {
         const previous = room?.board;
+        const previousBattle = room?.squad?.battleNumber;
         room = nextRoom;
         actor = nextActor;
         mount.hidden = !room.board && !canEdit();
@@ -139,13 +139,14 @@
         map = room.board.map;
         const existing = Boolean(control);
         if (!existing) setup();
-        if (actor.role === "player" && existing && previous?.apostle === room.board.apostle) control.render();
+        if (actor.role === "player" && existing && previous?.apostle === room.board.apostle
+            && previousBattle === room.squad?.battleNumber) control.render();
         else {
           const snapshot = actor.role === "player" ? {
-            ...room.board.los, mode: "titan-move", selectedTitan: actor.seat,
+            ...room.board.los, active: false, mode: "", selectedTitan: actor.seat,
           } : room.board.los;
           control.applyTacticalSnapshot(snapshot);
-          overlayStamp = JSON.stringify(overlayConfig(control.getLosSnapshot()));
+          overlayStamp = JSON.stringify(overlayConfig(control.getLosSnapshot({ keepTactics: true })));
         }
       },
       render() {

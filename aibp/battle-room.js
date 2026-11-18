@@ -49,7 +49,9 @@
   const actions = [];
   let connection = '正在连接';
   let message = '';
-  const roomBoard = window.BattleRoomBoard?.create(root.querySelector('[data-room-board]'), action =>
+  const boardMount = root.querySelector('[data-room-board]');
+  boardMount.id = 'room-movement';
+  const roomBoard = window.BattleRoomBoard?.create(boardMount, action =>
     send({ id: crypto.randomUUID(), ...action }));
 
   function storageGet(key) {
@@ -79,6 +81,7 @@
 
   function updateStatus() {
     status.textContent = [state && connection, message].filter(Boolean).join(' · ');
+    if (toolsDialog.open) toolsStatus.textContent = message;
   }
 
   function say(text) {
@@ -203,6 +206,65 @@
   traumaDialog.className = 'room-trauma-dialog';
   root.appendChild(traumaDialog);
 
+  const toolNames = { argo: '阿尔戈能力', trauma: '创伤牌库' };
+  const dock = document.createElement('div');
+  dock.className = 'room-tool-dock';
+  dock.hidden = true;
+  const toolsDialog = document.createElement('dialog');
+  toolsDialog.className = 'room-tool-sheet';
+  toolsDialog.id = 'room-tool-sheet';
+  toolsDialog.setAttribute('aria-labelledby', 'room-tool-title');
+  toolsDialog.innerHTML = '<header><h3 id="room-tool-title"></h3><button type="button" data-close-tools>收起</button></header>'
+    + '<div data-tools-body></div><p data-tools-status role="status"></p>';
+  const toolsBody = toolsDialog.querySelector('[data-tools-body]');
+  const toolsStatus = toolsDialog.querySelector('[data-tools-status]');
+  let activeTool;
+  let toolsMarkup;
+  for (const [key, label] of Object.entries(toolNames)) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.textContent = label;
+    button.dataset.tool = key;
+    button.setAttribute('aria-controls', toolsDialog.id);
+    button.setAttribute('aria-haspopup', 'dialog');
+    button.addEventListener('click', () => {
+      activeTool = key;
+      toolsDialog.querySelector('h3').textContent = label;
+      toolsStatus.textContent = '';
+      renderTools();
+      toolsDialog.showModal();
+    });
+    dock.append(button);
+  }
+  toolsDialog.querySelector('[data-close-tools]').addEventListener('click', () => toolsDialog.close());
+  toolsDialog.addEventListener('close', () => {
+    activeTool = null;
+    toolsMarkup = null;
+    toolsBody.replaceChildren();
+  });
+  root.append(dock, toolsDialog);
+
+  function renderTools() {
+    const personal = actor.role === 'player' && !state.closed;
+    root.classList.toggle('battle-room-personal', personal);
+    dock.hidden = !personal;
+    if (!personal && toolsDialog.open) toolsDialog.close();
+    if (!personal || !activeTool) return;
+    const markup = activeTool === 'argo'
+      ? (argoAbilities() || '<p>本场尚未准备阿尔戈能力。</p>')
+      : (roomTrauma() + traumaControls(state.heroes[actor.seat], actor.seat, true) || '<p>创伤牌库尚未准备。</p>');
+    if (markup !== toolsMarkup) {
+      const focused = toolsBody.contains(document.activeElement) ? document.activeElement : null;
+      const focusKey = focused?.dataset.action || focused?.dataset.traumaDialog;
+      toolsBody.innerHTML = markup;
+      toolsMarkup = markup;
+      if (focusKey) [...toolsBody.querySelectorAll('button:not(:disabled)')].find(button =>
+        (button.dataset.action || button.dataset.traumaDialog) === focusKey
+        && button.dataset.key === focused.dataset.key && button.dataset.seat === focused.dataset.seat
+        && button.dataset.draw === focused.dataset.draw && button.dataset.value === focused.dataset.value)?.focus({ preventScroll: true });
+    }
+  }
+
   function traumaOptions(auto = false) {
     return (auto ? '<option value="auto">按泰坦创伤表</option>' : '')
       + Object.entries(traumaDecks).map(([key, name]) => '<option value="' + key + '">' + name + '</option>').join('');
@@ -239,7 +301,7 @@
     if (!state.trauma) return actor.role === 'host' && !state.closed
       ? '<button type="button" data-trauma-dialog="setup">准备创伤牌库</button>' : '';
     const { cycle, tutorial, counts, latest: recent } = state.trauma;
-    const latest = recent ? '<details class="room-trauma-latest"' + (content.querySelector('.room-trauma-latest')?.dataset.draw !== recent.id || content.querySelector('.room-trauma-latest')?.open ? ' open' : '')
+    const latest = recent ? '<details class="room-trauma-latest"' + (root.querySelector('.room-trauma-latest')?.dataset.draw !== recent.id || root.querySelector('.room-trauma-latest')?.open ? ' open' : '')
       + ' data-draw="' + escape(recent.id) + '"'
       + '><summary>最近揭示 · ' + escape(state.heroes[recent.seat].name) + ' · ' + escape(recent.card.name) + '</summary>'
       + (recent.card.art ? cardImage('../aibp/images/trauma/' + recent.card.art, recent.card.name) : '<p>' + escape(recent.card.note) + '</p>')
@@ -318,8 +380,8 @@
       + avatar + '<div><h3>' + escape(hero.name) + '</h3><small>' + escape(hero.player || '待认领') + '</small></div></div>'
       + titanImage + '<div class="battle-room-titan-status"><span>' + titan + '</span>' + condition + '</div></header>'
       + '<div class="battle-room-stats" role="group" aria-label="三曲盘">' + stats + '</div>'
-      + traumaControls(hero, seat, editable)
-      + '<h4>装备</h4>' + (gear ? '<ul class="battle-room-card-list">' + gear + '</ul>' : '<p>未分配装备</p>')
+      + ((actor.role === 'player' && actor.seat === seat && editable) ? '' : traumaControls(hero, seat, editable))
+      + '<h4' + (actor.role === 'player' && actor.seat === seat ? ' id="room-equipment"' : '') + '>装备</h4>' + (gear ? '<ul class="battle-room-card-list">' + gear + '</ul>' : '<p>未分配装备</p>')
       + '<h4>旧忆</h4>' + (mnemos ? '<ul class="battle-room-card-list">' + mnemos + '</ul>' : '<p>暂无旧忆卡牌</p>')
       + summary + '</article>';
   }
@@ -345,17 +407,25 @@
     return path ? '<img class="roll-hero-avatar" src="../hero/assets/' + escape(path) + '" alt="">' : '';
   }
 
-  function reactions(roll) {
+  function reactions(roll, latest) {
     const by = actor.role === 'host' ? 'host' : 'seat:' + actor.seat;
     const editable = roll.id && actor.role !== 'viewer' && !state.closed && dice.rollOwner(roll, state.squad?.hostSeat) !== by;
-    const counts = Object.values(roll.reactions || {});
-    return '<div class="room-roll-reactions">' + Object.entries({ up: ['👍', '赞同'], down: ['👎', '反对'] }).map(([value, [icon, label]]) => {
-      const count = counts.filter(choice => choice === value).length;
-      const own = roll.reactions?.[by] === value;
-      return editable ? '<button type="button" data-action="roll-reaction" data-roll-id="' + escape(roll.id)
-        + '" data-value="' + (own ? 'clear' : value) + '" aria-label="' + label + '" aria-pressed="' + own + '">' + icon + ' ' + count + '</button>'
-        : count ? '<span aria-label="' + label + '">' + icon + ' ' + count + '</span>' : '';
-    }).join('') + '</div>';
+    return '<div class="room-roll-reactions">' + dice.reactionGroups(roll, state.heroes, state.squad?.hostSeat)
+      .map(({ value, icon, label, people }) => {
+        if (!editable && !people.length) return '';
+        const own = roll.reactions?.[by] === value;
+        const voters = latest ? people.map(({ hero, name }) => {
+          const picture = heroPortrait(hero);
+          return '<span class="room-reaction-voter" title="' + escape(name) + '" aria-label="' + escape(name) + '">'
+            + (picture ? '<img src="../hero/assets/' + escape(picture) + '" alt="">' : escape([...name][0] || ''))
+            + '</span>';
+        }).join('') : '';
+        const labelText = icon + ' ' + people.length;
+        const control = editable ? '<button type="button" data-action="roll-reaction" data-roll-id="' + escape(roll.id)
+          + '" data-value="' + (own ? 'clear' : value) + '" aria-label="' + label + '" aria-pressed="' + own + '">' + labelText + '</button>'
+          : '<span aria-label="' + label + '">' + labelText + '</span>';
+        return '<span class="room-reaction-group">' + control + voters + '</span>';
+      }).join('') + '</div>';
   }
 
   function teamActivity() {
@@ -367,7 +437,7 @@
         + (entry.detail ? ' · ' + escape(entry.detail) : '') + '</span></li>').join('') + '</ol></section>';
   }
 
-  function rollCard(roll) {
+  function rollCard(roll, latest) {
     const editable = Boolean(roll.id) && !state.closed && (actor.role === 'host' || (actor.role === 'player' && actor.seat === roll.seat));
     const selection = selectedDice.get(roll.id);
     const attrs = ' data-roll-id="' + escape(roll.id) + '" data-seat="' + roll.seat + '"';
@@ -397,7 +467,7 @@
         + (followup ? 'defense' : 'power') + '"' + attrs + '>' + (followup ? '准备投掷防御红骰' : '准备投掷威力骰') + '</button>' : '')
       + (editable && roll.dice.some(dice.canReroll) ? '<button type="button" data-action="reroll"' + attrs
         + (selection?.size ? '' : ' disabled') + '>重掷所选骰子' + (selection?.size ? '（' + selection.size + '）' : '') + '</button>' : '')
-      + reactions(roll) + '</li>';
+      + reactions(roll, latest) + '</li>';
   }
 
   function diceCountField(kind, label, min, max, value) {
@@ -426,7 +496,7 @@
       dodge: '先结算闪避，根据结果决定是否投掷防御红骰。',
       power: '依命中与卡文确认威力骰数量。重掷费用和符号转换来源由玩家结算。',
     };
-    return '<section class="room-dice-panel"><h3>掷骰</h3>' + (options ? '<label>英雄 <select data-roll-seat>' + options + '</select></label>' : '')
+    return '<section class="room-dice-panel" id="room-dice"><h3>掷骰</h3>' + (options ? '<label>英雄 <select data-roll-seat>' + options + '</select></label>' : '')
       + '<div class="room-dice-modes" role="group" aria-label="投掷用途">' + Object.entries(dice.modes)
         .map(([key, entry]) => '<button type="button" data-roll-mode="' + key + '" aria-pressed="' + (key === rollMode) + '">'
           + (key === 'dodge' ? '<img src="room-dice-art/dodge.webp" alt="">' : '') + entry.name + '</button>').join('') + '</div>'
@@ -590,18 +660,27 @@
       for (const dieId of choices) if (!roll?.dice.some(die => die.id === dieId && dice.canReroll(die))) choices.delete(dieId);
       if (!choices.size) selectedDice.delete(id);
     }
-    const rolls = state.rolls.map(rollCard).join('');
+    const latestRoll = state.rolls.find(roll => roll.id === state.lastBattleRollId) || state.rolls[0];
+    const rolls = latestRoll ? rollCard(latestRoll, true)
+      + state.rolls.filter(roll => roll !== latestRoll).map(roll => rollCard(roll, false)).join('') : '';
     const rollLog = '<section class="battle-room-rolls"><h3>掷骰记录</h3>'
       + (rolls ? '<ol>' + rolls + '</ol>' : '<p>还没有掷骰。</p>') + '</section>';
     const active = document.activeElement;
     const focusRoot = summary.contains(active) ? summary : content;
     const focus = active && focusRoot.contains(active) ? [...focusRoot.querySelectorAll('button,select,input')].indexOf(active) : -1;
     const selection = focus >= 0 && active.name;
+    const personal = role === 'player' && edit;
+    const quick = personal ? '<nav class="room-primary-nav" aria-label="常用操作">'
+      + (state.board ? '<a href="#room-movement">移动</a>' : '')
+      + '<a href="#room-dice">掷骰</a><a href="#room-equipment">装备</a></nav>' : '';
     summary.innerHTML = '<div class="battle-room-head"><div><h2>' + escape(state.title) + '</h2><p>第 ' + state.round
-      + ' 轮' + (state.closed ? ' · 已结束' : '') + '</p></div><div>' + controls + '</div></div>' + links;
-    content.innerHTML = roomProjection() + argoAbilities() + roomTrauma() + own + '<section class="battle-room-pool"><header><h3>克拉托斯池</h3>' + clearPool + '</header><div>' + pool + '</div></section>' + diceForm()
-      + (edit ? rollLog + teamActivity() : '') + (role !== 'player' ? '<h3 class="battle-room-heading">状态总览</h3>' : '') + overview
+      + ' 轮' + (state.closed ? ' · 已结束' : '') + '</p></div><div>' + controls + '</div></div>' + links + quick;
+    const poolSection = '<section class="battle-room-pool"><header><h3>克拉托斯池</h3>' + clearPool + '</header><div>' + pool + '</div></section>';
+    const primary = personal ? diceForm() + own + rollLog + poolSection + teamActivity()
+      : roomProjection() + argoAbilities() + roomTrauma() + own + poolSection + diceForm() + (edit ? rollLog + teamActivity() : '');
+    content.innerHTML = primary + (role !== 'player' ? '<h3 class="battle-room-heading">状态总览</h3>' : '') + overview
       + (edit ? '' : rollLog) + (state.squad && role !== 'viewer' ? '<p><a href="' + escape(squadLink.link('/aibp/squad', id)) + '">返回联机小队</a></p>' : '');
+    renderTools();
     if (focus >= 0) {
       const target = focusRoot.querySelectorAll('button,select,input')[focus];
       if (target && (!selection || target.name === selection)) target.focus({ preventScroll: true });
@@ -720,7 +799,7 @@
 
   root.addEventListener('click', async event => {
     const button = event.target.closest('button');
-    if (!button || (!summary.contains(button) && !content.contains(button))) return;
+    if (!button || (!summary.contains(button) && !content.contains(button) && !toolsBody.contains(button))) return;
     if (button.hasAttribute('data-save-config')) {
       void saveConfig(button.form);
       return;

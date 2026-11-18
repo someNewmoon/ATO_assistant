@@ -297,3 +297,7 @@ body.aibp-room-only > .app > main > :not(#battleRoom) { display: none !important
 .room-trauma-track select { min-width: 0; width: 100%; }
 .room-join-previews { list-style:none; padding:0; display:grid; gap:.5rem; }
 .room-join-previews li { display:flex; align-items:center; flex-wrap:wrap; gap:.4rem; }
+
+.battle-room-stats .battle-room-marker img {
+  filter: brightness(0) saturate(100%) invert(26%) sepia(70%) saturate(2500%) hue-rotate(345deg);
+}

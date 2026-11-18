@@ -29,7 +29,7 @@
   const content = document.querySelector('#squadContent');
   const phaseLabel = document.querySelector('#squadPhase');
   const phases = { story: '读剧情', prep: '备战', battle: '决战' };
-  const stats = { danger: ['凶险', 'danger'], fate: ['命运', 'fate'], rage: ['怒气', 'rage'] };
+  const stats = { rage: ['怒气', 'rage'], fate: ['命运', 'fate'], danger: ['凶险', 'danger'] };
   const skills = { courage: '勇气', wisdom: '智慧', will: '意志', endurance: '耐力', cunning: '狡黠', fury: '力量' };
   const squadURL = () => api.link('/aibp/squad', id);
   function battleURL(role) {

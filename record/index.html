@@ -473,6 +473,10 @@
       gap: 8px;
     }
 
+    .titan-trauma { grid-column: 1 / -1; }
+    .titan-trauma summary { cursor: pointer; }
+    .titan-trauma > div { display: grid; grid-template-columns: repeat(auto-fit, minmax(105px, 1fr)); gap: .4rem; margin-block: .5rem; }
+    .titan-trauma > button { margin-inline-end: .4rem; }
     .titan-details select,
     .titan-details input {
       width: 100%;
@@ -1892,7 +1896,7 @@
   <script src="./matrix-data.js?v=20261106-c123-fixes2"></script>
   <script src="../assets/cycle-symbols.js?v=20261115-module-logo"></script>
   <script src="../assets/campaign-session.js?v=20260917"></script>
-  <script src="../technology/gear-inventory.js?v=20261117-dice"></script>
+  <script src="../technology/gear-inventory.js?v=20261118-trauma"></script>
   <script src="../assets/campaign-notes.js?v=20261015"></script>
   <script src="../assets/record-attachments.js?v=20261009"></script>
   <script src="./note-attachments.js?v=20261009-rename3"></script>
@@ -3160,6 +3164,7 @@
             id: String(item.id || `titan-${Date.now()}-${Math.random().toString(16).slice(2)}`),
             name: String(item.name || "泰坦"),
             ...window.ATO_GEAR_INVENTORY.titanTypeFields(item),
+            traumaTrack: window.ATO_GEAR_INVENTORY.traumaTrack(item.traumaTrack),
             notes: typeof item.notes === "string" ? item.notes.trim().slice(0, 500) : "",
             count: Math.max(1, Math.floor(Number(item.count || 1))),
             limit: Math.max(1, Math.floor(Number(item.limit || item.count || 1))),
@@ -3727,7 +3732,7 @@
       const crippledByDetails = new Map();
       state.titans = state.titans.filter((titan) => {
         if (!titan.crippled) return true;
-        const key = JSON.stringify([titan.name, titan.typeId || titan.type, titan.notes]);
+        const key = JSON.stringify([titan.name, titan.typeId || titan.type, titan.notes, titan.traumaTrack]);
         const existing = crippledByDetails.get(key);
         if (existing) {
           // Scheduled repairs still refer to the removed row's identity.
@@ -3863,10 +3868,61 @@
           queueSave();
         });
         notes.append("备注", notesInput);
-        details.append(type.element, notes, preview);
+        const trauma = createTitanTraumaField(titan);
+        type.element.addEventListener("change", trauma.refresh);
+        details.append(type.element, notes, preview, trauma.element);
         row.append(nameInput, countField, crippledLabel, removeButton, details);
         elements.titanList.appendChild(row);
       });
+    }
+
+    function createTitanTraumaField(titan) {
+      const inventory = window.ATO_GEAR_INVENTORY;
+      const element = document.createElement("details");
+      element.className = "titan-trauma";
+      const title = document.createElement("summary");
+      title.textContent = "创伤表";
+      const grid = document.createElement("div");
+      const selectors = Array.from({ length: 9 }, (_, index) => {
+        const label = document.createElement("label");
+        label.className = "titan-number-field";
+        const select = document.createElement("select");
+        const options = Object.entries(inventory.TRAUMA_DECKS);
+        select.add(new Option("请选择", ""));
+        for (const [id, name] of options) select.add(new Option(name, id));
+        label.append("凶险 " + (index + 1), select);
+        grid.append(label);
+        return select;
+      });
+      const save = document.createElement("button");
+      save.type = "button";
+      save.textContent = "保存创伤表";
+      const reset = document.createElement("button");
+      reset.type = "button";
+      reset.textContent = "恢复种类默认";
+      const status = document.createElement("small");
+      status.setAttribute("role", "status");
+      function refresh() {
+        const values = titan.traumaTrack || inventory.defaultTraumaTrack(titan);
+        selectors.forEach((select, index) => { select.value = values?.[index] || ""; });
+        reset.disabled = !titan.traumaTrack;
+        status.textContent = titan.traumaTrack ? "使用泰坦自定义表" : values ? "使用种类默认表" : "尚无创伤表";
+      }
+      save.onclick = () => {
+        const values = inventory.traumaTrack(selectors.map(select => select.value));
+        if (!values) { status.textContent = "请先填完整凶险 1 至 9。"; return; }
+        titan.traumaTrack = values;
+        queueSave();
+        refresh();
+      };
+      reset.onclick = () => {
+        titan.traumaTrack = null;
+        queueSave();
+        refresh();
+      };
+      element.append(title, grid, save, reset, status);
+      refresh();
+      return { element, refresh };
     }
 
     function createTitanTypeField(titan = {}, onChange = () => {}) {

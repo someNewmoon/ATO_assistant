@@ -7,9 +7,55 @@
     showUnavailable('请使用房主提供的小队投屏链接。');
     return;
   }
-  const overlay = document.createElement('div');
+  const overlay = document.createElement('section');
   overlay.className = 'squad-check-overlay';
-  overlay.setAttribute('aria-live', 'polite');
+  overlay.setAttribute('aria-label', '最近掷骰');
+  const controls = document.createElement('div');
+  controls.className = 'squad-roll-controls';
+  overlay.append(controls);
+  const dice = window.ATO_ROOM_DICE;
+  const cards = Object.fromEntries(Object.entries({ story: '剧情掷骰', battle: '战斗掷骰' }).map(([kind, label]) => {
+    const storageKey = 'ato-projection-roll-' + kind;
+    let visible = true;
+    try { visible = localStorage.getItem(storageKey) !== 'hidden'; } catch { /* Optional preference. */ }
+    const toggle = document.createElement('button');
+    toggle.type = 'button';
+    const panel = document.createElement('article');
+    panel.id = 'squad-latest-' + kind;
+    panel.setAttribute('aria-live', 'polite');
+    let latest;
+    function sync() {
+      toggle.setAttribute('aria-pressed', String(visible));
+      toggle.textContent = label + ' · ' + (visible ? '显示' : '隐藏');
+      panel.hidden = !visible || !latest;
+    }
+    toggle.setAttribute('aria-controls', panel.id);
+    toggle.onclick = () => {
+      visible = !visible;
+      try { localStorage.setItem(storageKey, visible ? 'visible' : 'hidden'); } catch { /* Optional preference. */ }
+      sync();
+    };
+    const update = (roll, content) => {
+      const next = roll && JSON.stringify(roll);
+      if (next !== latest) {
+        latest = next;
+        panel.replaceChildren();
+        panel.toggleAttribute('data-failed', roll?.success === false);
+        if (roll) {
+          const heading = document.createElement('strong');
+          const result = document.createElement('span');
+          heading.textContent = label + ' · ' + content.title;
+          result.textContent = content.result;
+          panel.append(heading, result);
+        }
+      }
+      sync();
+    };
+    controls.append(toggle);
+    overlay.append(panel);
+    sync();
+    return [kind, update];
+  }));
   const prep = document.createElement('p');
   prep.className = 'squad-projection-prep';
   prep.textContent = '小队备战中';
@@ -20,42 +66,44 @@
   fight.hidden = true;
   document.body.append(prep, fight, overlay);
   let latestRevision = -1, battleNumber = -1, stop, preference;
-  const seen = new Set();
-
-  function showRoll(roll) {
-    const item = document.createElement('article');
-    if (roll.success === false) item.dataset.failed = '';
-    const title = document.createElement('strong');
-    title.textContent = roll.hero + ' · ' + (roll.replaces ? '命运重掷 · ' : '') + (roll.skill || (roll.target !== null ? '检定' : 'd' + roll.sides));
-    const result = document.createElement('span');
+  function storyRoll(roll) {
+    if (!roll) return null;
     const modifier = roll.bonus + roll.modifier;
-    result.textContent = roll.values.join(' + ') + (modifier ? ' ' + (modifier > 0 ? '+ ' : '− ') + Math.abs(modifier) : '')
-      + ' → ' + roll.sum + (roll.target !== null ? ' / ' + roll.target + ' · ' + (roll.success ? '成功' : '失败') : '');
-    item.append(title, result);
-    overlay.append(item);
-    while (overlay.children.length > 3) overlay.firstElementChild.remove();
-    setTimeout(() => item.remove(), 7500);
+    const score = roll.values.join(' + ') + (modifier ? ' ' + (modifier > 0 ? '+ ' : '− ') + Math.abs(modifier) : '');
+    return {
+      title: roll.hero + ' · ' + (roll.replaces ? '命运重掷 · ' : '') + (roll.skill || (roll.target !== null ? '检定' : 'd' + roll.sides)),
+      result: score + ' → ' + roll.sum + (roll.target !== null ? ' / ' + roll.target + ' · ' + (roll.success ? '成功' : '失败') : ''),
+    };
+  }
+
+  function battleRoll(roll) {
+    if (!roll || !dice) return null;
+    return { title: roll.hero + ' · ' + (dice.modes[roll.mode]?.name || '掷骰') + ' · 第 ' + roll.round + ' 轮',
+      result: dice.rollSummary(roll) };
   }
 
   function update({ room, actor }) {
     if (actor?.role !== 'viewer' || !room?.squad || room.revision <= latestRevision) return;
-    const { phase, story, checks, cycle, language, battleNumber: nextBattle } = room.squad;
+    const { phase, story, checks, cycle, language, lastBattleRoll, battleNumber: nextBattle } = room.squad;
     latestRevision = room.revision;
     if (room.closed) {
       stop?.();
       fight.removeAttribute('src');
       fight.hidden = true;
       prep.hidden = true;
-      overlay.replaceChildren();
+      overlay.hidden = true;
       showUnavailable('小队已解散。');
       return;
     }
+    const latestStory = checks[0];
+    const latestBattle = lastBattleRoll || room.rolls?.[0];
+    cards.story(latestStory, storyRoll(latestStory));
+    cards.battle(dice && latestBattle, battleRoll(latestBattle));
     if (language !== preference) { preference = language; api.language(language); }
     applySecondScreenTheme({ cycleId: cycle });
     if (phase === 'battle') {
       prep.hidden = true;
       fight.hidden = false;
-      overlay.replaceChildren();
       if (battleNumber !== nextBattle) {
         battleNumber = nextBattle;
         const url = new URL(api.link('/aibp/room', id, 'view', token));
@@ -67,14 +115,6 @@
       fight.hidden = true;
       prep.hidden = phase !== 'prep';
       openStory({ story, cycleId: cycle });
-      for (const roll of checks.slice().reverse()) {
-        if (seen.has(roll.id) || Date.now() - roll.at > 9000) continue;
-        seen.add(roll.id);
-        showRoll(roll);
-      }
-    }
-    if (seen.size > 120) for (const key of seen) {
-      if (!checks.some(roll => roll.id === key)) seen.delete(key);
     }
   }
 

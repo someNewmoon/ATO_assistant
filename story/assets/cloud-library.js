@@ -1,16 +1,16 @@
 (() => {
-  function open(api, id, token) {
+  function open(authorizeAccess) {
     let access;
     const books = new Map();
 
     async function authorize() {
-      const result = await api.request(id, 'library', token, undefined, { timeout: 22000 });
+      const result = await authorizeAccess();
       if (!/^[a-f0-9]{20}$/.test(result.version) || !/^[A-Za-z0-9+/]{43}=$/.test(result.key)) {
         throw new Error('线上故事库配置无效。');
       }
       const rawKey = Uint8Array.from(atob(result.key), char => char.charCodeAt(0));
       const key = await crypto.subtle.importKey('raw', rawKey, 'AES-GCM', false, ['decrypt']);
-      return { key, version: result.version, cycle: result.cycle, language: result.language, phase: result.phase, current: result.current };
+      return { key, version: result.version, cycle: result.cycle, language: result.language, phase: result.phase, current: result.current, projection: result.projection };
     }
 
     function ready() {

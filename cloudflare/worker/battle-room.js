@@ -11,7 +11,7 @@ import { ApiError, activeCycle, errorResponse, object, response } from './campai
 import { applyRoomBoard, setupRoomBoard } from './board.js';
 
 import { applyTrauma, createTrauma, traumaView } from './room-trauma.js';
-import { applySquad, createSquad, squadSkills, squadStats, squadView } from './room-squad.js';
+import { applySquad, createSquad, latestBattleRoll, squadSkills, squadStats, squadView } from './room-squad.js';
 
 export const roomIdPattern = /^[a-f0-9]{32}$/;
 const secretPattern = /^[a-f0-9]{64}$/;
@@ -66,6 +66,12 @@ export function squadHeroStats(campaign) {
   return Object.fromEntries(heroCatalog.activeHeroes(campaign).map(hero => [hero.id, hero.triskelion || {}]));
 }
 
+export function squadTitanTrauma(campaign) {
+  const { record } = battleConfig.availability(campaign, techDictionary);
+  return Object.fromEntries(inventory.loadoutTitans(record)
+    .map(titan => [String(titan.id), inventory.traumaTrack(titan.traumaTrack)]));
+}
+
 export async function createBattleRoom(env, campaign, payload, owner) {
   const available = heroCatalog.activeHeroes(campaign);
   const selected = payload?.heroIds;
@@ -92,7 +98,7 @@ export async function createBattleRoom(env, campaign, payload, owner) {
       argonaut: heroCatalog.ARGONAUTS.find(argonaut => argonaut.id === hero.argonaut)?.id,
       titan: titan ? {
         name: clean(titan.name), ...inventory.titanTypeFields(titan),
-        panelId: titan.panelId, crippled: Boolean(titan.crippled),
+        panelId: titan.panelId, crippled: Boolean(titan.crippled), traumaTrack: inventory.traumaTrack(titan.traumaTrack),
       } : null,
       gear: Object.entries(kit.gear).map(([id, count]) => ({ id, name: equipmentName(id), count, used: 0 })),
       mnemos, stats: { danger: 0, rage: 0, fate: 0 }, ...(payload.squad === true && { storyStats: squadStats(hero.triskelion) }), condition: 'standing', player: '',
@@ -215,7 +221,7 @@ export class BattleRoom extends DurableObject {
   }
 
   async linkOwner(request) {
-    const { account, profile, saveName, keys, abilityOptions, storyStats } = await request.json();
+    const { account, profile, saveName, keys, abilityOptions, storyStats, titanTracks } = await request.json();
     const token = request.headers.get('Authorization')?.match(/^Bearer (.+)$/)?.[1];
     const [host, invite, viewer] = await Promise.all([token, keys?.invite, keys?.viewer].map(hash));
     const room = this.load();
@@ -225,7 +231,15 @@ export class BattleRoom extends DurableObject {
     const name = clean(saveName, 80) || '默认存档';
     const libraryAnchor = this.storyAnchor(room);
     const validKeys = invite === room.secrets.invite && viewer === room.secrets.viewer;
-    if (!room.owner || room.owner.saveName !== name || JSON.stringify(room.squad.abilityOptions) !== JSON.stringify(abilityOptions)) {
+    let tracksChanged = false;
+    for (const titan of room.squad.stock.titans) {
+      if (!titanTracks || !Object.hasOwn(titanTracks, titan.id)) continue;
+      const track = inventory.traumaTrack(titanTracks[titan.id]);
+      if (JSON.stringify(titan.traumaTrack || null) === JSON.stringify(track)) continue;
+      titan.traumaTrack = track;
+      tracksChanged = true;
+    }
+    if (tracksChanged || !room.owner || room.owner.saveName !== name || JSON.stringify(room.squad.abilityOptions) !== JSON.stringify(abilityOptions)) {
       room.owner = { account, profile, saveName: name, libraryAnchor };
       room.squad.abilityOptions = abilityOptions;
       for (const hero of room.heroes) hero.storyStats ??= squadStats(storyStats[hero.id]);
@@ -301,7 +315,7 @@ export class BattleRoom extends DurableObject {
         if (actor.role !== 'host' || !room.squad || room.closed) reject('请用小队房主权限打开故事书。', 403);
         if (!this.storyLibrary) reject('线上故事正文尚未导入。', 503);
         const { version, key } = JSON.parse(this.storyLibrary);
-        if (!this.storyAnchor(room)) reject('这个小队还没有开通线上故事书。', 403);
+        if (!this.storyAnchor(room)) reject('请用房主账号登录后打开故事书。', 403);
         const story = room.squad.story;
         const current = /^c[1-5]$/.test(story?.bookId || '') && story.entryKey
           ? { book: story.bookId, key: story.entryKey } : null;
@@ -411,7 +425,10 @@ export class BattleRoom extends DurableObject {
     if (body.type === 'round' || body.type === 'end') {
       if (actor.role !== 'host') reject('只有房主可以执行此操作。', 403);
       if (body.type === 'round') room.round++;
-      else if (room.squad) room.squad.phase = 'story';
+      else if (room.squad) {
+        if (latestBattleRoll(room)) room.squad.lastBattleRoll = latestBattleRoll(room);
+        room.squad.phase = 'story';
+      }
       else room.closed = true;
       return;
     }
@@ -525,6 +542,7 @@ export class BattleRoom extends DurableObject {
       if (mode === 'defense') parent.defenseRoll = roll.id;
     }
     if (defenseCount) roll.defenseCount = defenseCount;
+    room.lastBattleRollId = roll.id;
     room.rolls.unshift(roll);
     room.rolls = room.rolls.slice(0, 30);
   }
@@ -545,6 +563,7 @@ export class BattleRoom extends DurableObject {
       const dice = [...new Set(body.ids)].map(id => roll.dice.find(die => die.id === id));
       if (!dice.every(roomDice.canReroll)) reject('所选骰子已经重掷、转换或不存在。', 409);
       for (const die of dice) Object.assign(die, this.diceResult(die.kind), { rerolled: true });
+      room.lastBattleRollId = roll.id;
       return;
     }
     const die = roll.dice.find(entry => entry.id === body.die);

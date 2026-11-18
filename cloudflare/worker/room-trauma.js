@@ -1,17 +1,10 @@
 import cardList from './trauma-cards.json';
+import inventory from '../../technology/gear-inventory.js';
 import { ApiError } from './campaign.js';
 
-const decks = ['light', 'heavy', 'lethal', 'obol'];
+const decks = Object.keys(inventory.TRAUMA_DECKS);
 const cards = new Map(cardList.map(card => [card.id, card]));
 const cycles = ['c1', 'c2', 'c3', 'c4', 'c5'];
-const ranges = (light, heavy, lethal) => Array.from({ length: 9 }, (_, i) =>
-  i < light ? 'light' : i < heavy ? 'heavy' : i < lethal ? 'lethal' : 'obol');
-const standard = ranges(3, 6, 9);
-const tracks = {
-  dreamwalker: standard, tt_earthshaker: standard,
-  gamechanger: ranges(4, 8, 9), tt_mazerunner: ranges(2, 5, 8),
-  logicbreaker: ['obol', ...ranges(3, 6, 8).slice(0, 8)],
-};
 const fail = (message, status = 400) => { throw new ApiError(status, message); };
 
 function shuffle(pile, randomInt) {
@@ -36,7 +29,8 @@ function allowed(card, cycle) {
 }
 
 function trackFor(room, seat) {
-  return room.trauma.tracks[seat] || tracks[room.heroes[seat].titan?.typeId] || null;
+  const titan = room.heroes[seat].titan;
+  return inventory.traumaTrack(titan?.traumaTrack) || room.trauma.tracks[seat] || inventory.defaultTraumaTrack(titan);
 }
 
 function inPlay(state, id) {
@@ -173,7 +167,7 @@ export function applyTrauma(room, actor, body, randomInt) {
   if (body.mode === 'gain' && selected !== 'auto') fail('超过 9 的凶险按规则结算。');
   const overflow = danger > 9 && (selected === 'auto' || body.mode === 'hit');
   const deck = overflow ? 'obol' : selected !== 'auto' ? selected : track?.[danger - 1];
-  if (!deck) fail(danger === 0 ? '凶险为 0，请按卡文指定牌库。' : '当前泰坦的创伤表未核对，请由房主设置。', 409);
+  if (!deck) fail(danger === 0 ? '凶险为 0，请按卡文指定牌库。' : '当前泰坦缺少创伤表。请在泰坦管理中配置，或按卡文手动指定牌库。', 409);
   if (overflow) {
     state.highestDanger = Math.max(state.highestDanger, danger);
     addOverflowCards(state);

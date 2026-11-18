@@ -1,5 +1,5 @@
 import { DurableObject } from 'cloudflare:workers';
-import { battleRequest, createBattleRoom, squadAbilityOptions, squadHeroStats } from './battle-room.js';
+import { battleRequest, createBattleRoom, squadAbilityOptions, squadHeroStats, squadTitanTrauma } from './battle-room.js';
 export { BattleRoom, BattleDirectory } from './battle-room.js';
 import {
   ApiError, activeCycle, appendNotes, checkAccount, defaultCampaign, errorResponse,
@@ -86,7 +86,7 @@ export default {
         return env.ROOM_DIRECTORY.getByName('active').fetch('https://directory.internal/list');
       }
       const createRoom = url.pathname === '/api/battle-room/create';
-      const squadHome = url.pathname === '/api/battle-room/home';
+      const squadHome = ['/api/battle-room/home', '/api/battle-room/story-library'].includes(url.pathname);
       if (url.pathname.startsWith('/api/battle-room/') && !createRoom && !squadHome) return await battleRequest(env, request, url);
       if (createRoom && (request.method !== 'POST' || url.search)) throw new ApiError(405, '创建小队需要 POST。');
       if (!createRoom && !squadHome && url.pathname !== '/api/campaign-state.php') {
@@ -192,6 +192,14 @@ export class CampaignAccount extends DurableObject {
     const profile = dashboard?.activeProfileId || 'default';
     const saveName = dashboard?.profiles?.[profile]?.name || '默认存档';
     const registered = () => this.sql.exec('SELECT room, credentials FROM owned_squads WHERE profile = ?', profile).toArray()[0];
+    if (url.pathname.endsWith('/story-library')) {
+      if (request.method !== 'GET') throw new ApiError(405, '需要 GET。');
+      if (!this.roomEnv.ATO_STORY_LIBRARY) throw new ApiError(503, '线上故事正文尚未导入。');
+      const { version, key } = JSON.parse(this.roomEnv.ATO_STORY_LIBRARY);
+      const current = registered();
+      return response({ ok: true, version, key, cycle: activeCycle(campaign),
+        projection: current ? { id: current.room, token: JSON.parse(current.credentials).token } : null });
+    }
     const roomStub = id => this.roomEnv.BATTLE_ROOMS.getByName(id);
     const readCurrent = async () => {
       const current = registered();
@@ -228,7 +236,7 @@ export class CampaignAccount extends DurableObject {
       const result = await roomStub(id).fetch('https://battle-room.internal/link-owner', {
         method: 'POST', headers: { Authorization: 'Bearer ' + credentials.token },
         body: JSON.stringify({ account: user.id, profile, saveName, keys: credentials.keys, abilityOptions: squadAbilityOptions(campaign),
-          storyStats: squadHeroStats(campaign) }),
+          storyStats: squadHeroStats(campaign), titanTracks: squadTitanTrauma(campaign) }),
       });
       if (!result.ok) return result;
       const linked = await result.json();

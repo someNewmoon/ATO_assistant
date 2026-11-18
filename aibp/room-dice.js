@@ -32,6 +32,16 @@
     return [face[0] + potential + dots, face[1] - potential, face[2] - dots];
   }
 
+  function faceLabel([power, potential, dot]) {
+    return power + ' 威力 · ' + potential + ' 潜力 · ' + dot + ' ●';
+  }
+
+  function rollSummary(roll) {
+    const strengths = roll.dice.map(remainingFace).filter(Boolean);
+    if (!strengths.length) return roll.dice.map(die => names[die.kind] + ' ' + die.value).join('、');
+    return faceLabel(strengths.reduce((sum, face) => sum.map((value, index) => value + face[index]), [0, 0, 0]));
+  }
+
   function canReroll(die) {
     return Boolean(die?.id && !die.rerolled && !die.converted && !die.dotConverted);
   }
@@ -41,5 +51,5 @@
     return faces[die.kind]?.findIndex(face => face.every((value, index) => value === die.symbols?.[index])) ?? -1;
   }
 
-  return { faces, names, limits, modes, naturalFace, remainingFace, canReroll, faceIndex };
+  return { faces, names, limits, modes, naturalFace, remainingFace, canReroll, faceIndex, faceLabel, rollSummary };
 });

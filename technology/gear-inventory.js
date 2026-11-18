@@ -81,6 +81,25 @@
     return { typeId: entry?.id || '', type: entry?.name || String(titan?.type || '').trim().slice(0, 80) };
   }
 
+  const TRAUMA_DECKS = { light: '轻微创伤', heavy: '严重创伤', lethal: '致命创伤', obol: '生死关头' };
+  const ranges = (light, heavy, lethal) => Array.from({ length: 9 }, (_, i) =>
+    i < light ? 'light' : i < heavy ? 'heavy' : i < lethal ? 'lethal' : 'obol');
+  const standard = ranges(3, 6, 9);
+  const defaultTraumaTracks = {
+    dreamwalker: standard, tt_earthshaker: standard,
+    gamechanger: ranges(4, 8, 9), tt_mazerunner: ranges(2, 5, 8),
+    logicbreaker: ['obol', ...ranges(3, 6, 8).slice(0, 8)],
+  };
+
+  function traumaTrack(value) {
+    return Array.isArray(value) && value.length === 9 && Array.from(value).every(deck => Object.hasOwn(TRAUMA_DECKS, deck))
+      ? value.slice() : null;
+  }
+
+  function defaultTraumaTrack(titan) {
+    return defaultTraumaTracks[titanType(titan)?.id]?.slice() || null;
+  }
+
   function titanLabel(titan) {
     const panel = dreamwalkerPanel(titan);
     const name = panel?.name || titan?.name || '泰坦';
@@ -222,5 +241,5 @@
     return { ...record, loadouts };
   }
 
-  return { TITAN_NAMES_ZH, TITAN_TYPES, DREAMWALKER_PANELS, dreamwalkerPanel, loadoutTitan, titanType, titanTypeFields, titanLabel, titanArtwork, gearKey, normalize, adjust, normalizeLoadout, loadoutTitans, titanIdFor, assignedLoadouts, saveLoadout };
+  return { TITAN_NAMES_ZH, TITAN_TYPES, DREAMWALKER_PANELS, TRAUMA_DECKS, traumaTrack, defaultTraumaTrack, dreamwalkerPanel, loadoutTitan, titanType, titanTypeFields, titanLabel, titanArtwork, gearKey, normalize, adjust, normalizeLoadout, loadoutTitans, titanIdFor, assignedLoadouts, saveLoadout };
 });

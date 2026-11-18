@@ -14,6 +14,7 @@ export function createSquad(record, roster, language, cycle, gearName) {
   const titans = inventory.loadoutTitans(record).map(titan => ({
     id: String(titan.id), name: text(titan.name, 80), ...inventory.titanTypeFields(titan),
     count: Math.max(1, Math.min(999, Number(titan.count) || 1)), crippled: Boolean(titan.crippled),
+    traumaTrack: inventory.traumaTrack(titan.traumaTrack),
   }));
   const validIds = new Set(roster.map(hero => hero.id));
   const loadouts = Object.fromEntries(Object.entries(record.loadouts || {}).filter(([id]) => validIds.has(id)).map(([id, loadout]) => {
@@ -43,11 +44,15 @@ export function squadStats(raw) {
   ]));
 }
 
+export function latestBattleRoll(room) {
+  return room.rolls?.find(roll => roll.id === room.lastBattleRollId) || room.rolls?.[0] || null;
+}
+
 export function squadView(room, actor) {
   const squad = room.squad;
   if (!squad) return null;
   const { phase, cycle, language, battleNumber, hostSeat, checks, story, stock, gearNames } = squad;
-  const result = { phase, cycle, language, battleNumber, hostSeat, checks };
+  const result = { phase, cycle, language, battleNumber, hostSeat, checks, lastBattleRoll: latestBattleRoll(room) || squad.lastBattleRoll || null };
   if (actor.role === 'viewer' || actor.role === 'host') result.story = story;
   if (actor.role === 'host' || actor.role === 'player') {
     result.loadouts = room.heroes.map(hero => inventory.normalizeLoadout(stock.loadouts[hero.id]));
@@ -80,7 +85,7 @@ function refreshCombatKit(room) {
     const kit = inventory.normalizeLoadout(stock.loadouts[hero.id]);
     const titan = inventory.loadoutTitan(stock.titans.find(entry => entry.id === kit.titanId), kit.titanPanelId);
     hero.titan = titan ? {
-      name: titan.name, ...inventory.titanTypeFields(titan), panelId: titan.panelId, crippled: titan.crippled,
+      name: titan.name, ...inventory.titanTypeFields(titan), panelId: titan.panelId, crippled: titan.crippled, traumaTrack: inventory.traumaTrack(titan.traumaTrack),
     } : null;
     hero.gear = Object.entries(kit.gear).map(([id, count]) => ({ id, name: gearNames[id] || id, count, used: 0 }));
     hero.stats = { danger: 0, rage: 0, fate: 0 };
@@ -114,9 +119,10 @@ export function applySquad(room, actor, body, randomInt) {
     if (squad.phase !== 'prep' || body.battleNumber !== squad.battleNumber) fail('请先进入备战，或刷新小队状态。', 409);
     const board = setupRoomBoard(body.board, room.heroes.length);
     const trauma = createTrauma(squad.cycle, body.tutorial === true, randomInt);
+    if (latestBattleRoll(room)) squad.lastBattleRoll = latestBattleRoll(room);
     refreshCombatKit(room);
     Object.assign(room, { board, trauma, projection: roomProjection(body.projection, board.apostle), round: 1,
-      rolls: [], argoAbilities: {}, pool: Object.fromEntries(Object.keys(room.pool).map(key => [key, 0])) });
+      rolls: [], lastBattleRollId: null, argoAbilities: {}, pool: Object.fromEntries(Object.keys(room.pool).map(key => [key, 0])) });
     squad.phase = 'battle';
     squad.battleNumber++;
     return;

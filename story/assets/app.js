@@ -3597,8 +3597,11 @@
   let stopSquadStory;
   let squadProjectionClosed = false;
 
-  const squadStatusText = () => squadProjectionClosed ? '小队已解散' : squadPhase === 'story' ? '选段后自动投屏'
-    : '当前为备战或决战，选段只在本页显示';
+  const squadStatusText = () => {
+    if (!squadId) return '官方正文';
+    if (squadProjectionClosed) return '小队已解散';
+    return squadPhase === 'story' ? '选段后自动投屏' : '当前为备战或决战，选段只在本页显示';
+  };
   const loadedCloudBooks = new Set();
   let cloudStoryStarted = false;
   let storyBookRequest = 0;
@@ -3609,27 +3612,18 @@
     const back = document.createElement('a');
     back.id = 'squadStoryBack';
     back.href = '/aibp/squads';
+    back.hidden = true;
     back.textContent = '联机小队';
     const status = document.createElement('span');
     status.id = 'squadStoryStatus';
     status.setAttribute('role', 'status');
     status.textContent = '正在读取线上故事书…';
-    const edition = document.createElement('select');
-    edition.setAttribute('aria-label', '故事正文版本');
-    edition.add(new Option('官方版', 'official'));
-    edition.add(new Option('民间版', 'fan'));
-    edition.disabled = true;
-    edition.id = 'squadStoryEdition';
-    edition.addEventListener('change', () => {
-      syncStoryLanguage(edition.value);
-      if (!activeEntry) showFirstInScope();
-    });
     const retry = document.createElement('button');
     retry.type = 'button';
     retry.id = 'squadStoryRetry';
     retry.textContent = '重试';
     retry.hidden = true;
-    panel.append(back, edition, status, retry);
+    panel.append(back, status, retry);
     document.body.prepend(panel);
     if (secondScreenStoryModeLabel) secondScreenStoryModeLabel.hidden = true;
   }
@@ -3703,8 +3697,7 @@
       window.history.replaceState(null, '', url);
       squadPhase = access.phase || 'story';
       squadLink.language(access.language);
-      connectSquadStory();
-      document.querySelector('#squadStoryEdition').disabled = false;
+      if (squadId && squadCredentials?.token) connectSquadStory();
       setCloudStatus(squadStatusText());
       init();
     } catch (error) {
@@ -3724,6 +3717,7 @@
 
   function connectSquadStory() {
     stopSquadStory?.();
+    if (!squadId || !squadCredentials?.token) return;
     stopSquadStory = squadLink.connect(squadId, squadCredentials.token, ({ room }) => {
       if (!room?.squad || (room.squad.phase === squadPhase && room.closed === squadProjectionClosed)) return;
       squadPhase = room.squad.phase;
@@ -3737,7 +3731,7 @@
     const sequence = ++squadStorySequence;
     const action = { id: crypto.randomUUID(), type: 'squad-story', story: snapshot };
     const send = () => squadLink.request(squadId, 'action', squadCredentials.token, action, { timeout: 22000 });
-    const isCurrent = () => sequence === squadStorySequence && squadPhase === 'story' && !squadProjectionClosed;
+    const isCurrent = () => sequence === squadStorySequence && squadCredentials?.token && squadId && squadPhase === 'story' && !squadProjectionClosed;
     squadStoryQueue = squadStoryQueue.then(async () => {
       if (!isCurrent()) return;
       setCloudStatus('正在同步投屏…');
@@ -3819,7 +3813,7 @@
       const snapshot = buildSecondScreenStorySnapshot();
       if (!snapshot) return;
       if (cloudStory) {
-        if (squadPhase !== 'story' || squadProjectionClosed) return;
+        if (!squadId || !squadCredentials?.token || squadPhase !== 'story' || squadProjectionClosed) return;
         const missingText = [snapshot.text, snapshot.fallbackText].filter(Boolean).every(value => {
           const text = value.trim();
           return text === fanData.placeholderText || text.startsWith('【官方版暂无正文】')
@@ -5171,56 +5165,49 @@
   if (document.readyState === "complete") scheduleMixedMediaMap();
   else window.addEventListener("load", scheduleMixedMediaMap, { once: true });
 
-  async function locateStorySquad() {
-    if (squadCredentials?.token) return;
-    let home;
-    try {
-      home = await retryCloudRequest(
-        () => squadLink.home(undefined, { signal: AbortSignal.timeout(22000) }),
-        '小队连接较慢，正在重试…',
-      );
-    } catch (error) {
-      if (error.status !== 401) {
-        const recent = !explicitSquadId && squadLink.recentHost();
-        if (!recent) throw error;
-        ({ id: squadId, credentials: squadCredentials } = recent);
-        return;
-      }
-    }
-    const linked = home?.squad;
-    if (linked && (!explicitSquadId || linked.id === explicitSquadId)) {
-      ({ id: squadId, credentials: squadCredentials } = linked);
-      return;
-    }
-    if (!explicitSquadId && !linked) {
-      const legacy = await squadLink.listedHost();
-      if (legacy) {
-        ({ id: squadId, credentials: squadCredentials } = legacy);
-        if (home) void squadLink.home(legacy).catch(() => {});
-        return;
-      }
-    }
-    throw new Error(home ? '请从联机小队进入已开通正文的存档。' : '请先在主控台登录房主账号，再打开故事书。');
+  async function accountStoryAccess() {
+    const response = await window.fetch('/api/battle-room/story-library', {
+      cache: 'no-store', signal: AbortSignal.timeout(22000),
+    });
+    const data = await response.json().catch(() => null);
+    if (response.ok && data?.ok) return data;
+    const error = new Error(response.status === 401 ? '请先在主控台登录，再打开故事书。'
+      : data?.error || '线上故事正文暂时无法读取。');
+    error.status = response.status;
+    throw error;
   }
 
   async function startHostedStory() {
-    setCloudStatus('正在读取小队授权…');
+    setCloudStatus('正在读取故事书授权…');
     storyText.textContent = '正在读取线上故事书…';
     try {
-      await locateStorySquad();
-      const library = window.ATO_CLOUD_STORY_LIBRARY.open(squadLink, squadId, squadCredentials.token);
+      const library = window.ATO_CLOUD_STORY_LIBRARY.open(async () => {
+        try { return await accountStoryAccess(); }
+        catch (error) {
+          if (error.status !== 401 || !explicitSquadId || !squadCredentials?.token) throw error;
+          return squadLink.request(explicitSquadId, 'library', squadCredentials.token, undefined, { timeout: 22000 });
+        }
+      });
       const access = await retryCloudRequest(() => library.ready(), '故事正文授权连接较慢，正在重试…');
       cloudStory = library;
-      squadLink.save(squadId, squadCredentials);
-      const back = document.querySelector('#squadStoryBack');
-      back.href = squadLink.link('/aibp/squad', squadId);
-      back.textContent = '返回小队';
+      if (!explicitSquadId || !squadCredentials?.token) {
+        const projection = access.projection;
+        if (squadLink.validId(projection?.id) && (!explicitSquadId || projection.id === explicitSquadId)) {
+          squadId = projection.id;
+          squadCredentials = { token: projection.token };
+        } else {
+          squadId = null;
+          squadCredentials = null;
+        }
+      }
+      if (squadId && squadCredentials?.token) {
+        const back = document.querySelector('#squadStoryBack');
+        back.hidden = false;
+        back.href = squadLink.link('/aibp/squad', squadId);
+        back.textContent = '返回小队';
+      }
       await initCloudStory(access);
     } catch (error) {
-      if (!explicitSquadId) {
-        squadId = null;
-        squadCredentials = null;
-      }
       showCloudError(error, startHostedStory);
     }
   }

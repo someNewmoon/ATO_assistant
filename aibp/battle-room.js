@@ -21,10 +21,11 @@
   const { gearState } = window.ATO_ROOM_CARD_STATE;
   const memoryCatalog = new Map([...Object.values(MNEMOS).flat(), ...Object.values(FATED_MNEMOS).flat()]
     .map(card => [card.card, card]));
-  const statNames = { danger: '凶险', fate: '命运', rage: '怒气' };
+  const statNames = { rage: '怒气', fate: '命运', danger: '凶险' };
   const poolNames = { opening: '伺机', break: '破势', diversion: '分神', rouse: '激励', black: '破坏', fire: '火焰', hope: '希望' };
   const conditionNames = { standing: '站立', down: '倒地', rising: '起身', dead: '死亡' };
   const dice = window.ATO_ROOM_DICE;
+  const { faceLabel, rollSummary } = dice;
   let id = isLink ? routeId : '';
   let credentials = null;
   let state = null;
@@ -197,7 +198,7 @@
         : value !== 'ready' ? '<small class="battle-room-card-status">' + (discarded ? '已弃除' : '已横置') + '</small>' : '') + '</li>';
   }
 
-  const traumaDecks = { light: '轻微创伤', heavy: '严重创伤', lethal: '致命创伤', obol: '生死关头' };
+  const traumaDecks = window.ATO_GEAR_INVENTORY.TRAUMA_DECKS;
   const traumaDialog = document.createElement('dialog');
   traumaDialog.className = 'room-trauma-dialog';
   root.appendChild(traumaDialog);
@@ -230,8 +231,7 @@
     const trackKnown = !!state.trauma.tracks[seat];
     return '<section class="room-trauma-hero"><div class="room-trauma-actions">'
       + (canDraw ? button('hit', '结算受击') + button('draw', '抽创伤') + button('gain', '获得凶险') : '')
-      + (editable && actor.role === 'host' ? button('track', trackKnown ? '创伤表' : '填写创伤表') : '')
-      + '</div>' + (canDraw && !trackKnown ? '<small>未核对创伤表，可按卡文指定牌库。</small>' : '')
+      + '</div>' + (canDraw && !trackKnown ? '<small>当前泰坦缺少创伤表。可在泰坦管理配置，或按卡文指定牌库。</small>' : '')
       + (cards ? '<ul class="room-trauma-cards">' + cards + '</ul>' : '') + '</section>';
   }
 
@@ -250,7 +250,7 @@
   }
 
   function openTraumaDialog(mode, seat) {
-    const title = { setup: '准备创伤牌库', manage: '调整创伤牌库', track: '泰坦创伤表', hit: '结算受击', draw: '抽创伤', gain: '获得凶险' }[mode];
+    const title = { setup: '准备创伤牌库', manage: '调整创伤牌库', hit: '结算受击', draw: '抽创伤', gain: '获得凶险' }[mode];
     const name = state.heroes[seat]?.name;
     let fields = '';
     if (mode === 'setup') {
@@ -265,12 +265,6 @@
         + '<button type="submit" name="awakening" value="1" formnovalidate>应用觉醒牌库变化（加入觉醒并替换你已死亡）</button>'
         + '<label>卡牌 <select name="card" required>' + options + '</select></label>'
         + '<label>操作 <select name="operation"><option value="add">加入或替换</option><option value="remove">移出牌库</option></select></label>';
-    } else if (mode === 'track') {
-      fields = '<p>对照当前泰坦面板与创伤式样，逐格选择险情等级。</p><div class="room-trauma-track">'
-        + Array.from({ length: 9 }, (_, i) => '<label>凶险 ' + (i + 1) + ' <select name="track" required><option value="">请选择</option>'
-          + Object.entries(traumaDecks).map(([key, label]) => '<option value="' + key + '"'
-            + (state.trauma.tracks[seat]?.[i] === key ? ' selected' : '') + '>' + label + '</option>').join('')
-          + '</select></label>').join('') + '</div>';
     } else if (mode === 'draw') {
       fields = '<label>牌库 <select name="deck">' + traumaOptions(true) + '</select></label><small>当前凶险 ' + state.heroes[seat].stats.danger + '</small>';
     } else {
@@ -288,7 +282,6 @@
       if (mode === 'setup') Object.assign(action, { type: 'trauma-setup', cycle: fields.get('cycle'), tutorial: fields.has('tutorial') });
       else if (mode === 'manage') Object.assign(action, event.submitter?.name === 'awakening' ? { type: 'trauma-awakening' }
         : { type: 'trauma-deck', card: fields.get('card'), operation: fields.get('operation') });
-      else if (mode === 'track') Object.assign(action, { type: 'trauma-track', track: fields.getAll('track') });
       else Object.assign(action, { type: 'trauma-draw', mode, deck: fields.get('deck') || 'auto', amount: Number(fields.get('amount')) });
       traumaDialog.close();
       send(action);
@@ -343,10 +336,6 @@
     storageSet(diceDraftKey(seat, mode), JSON.stringify(fields));
   }
 
-  function faceLabel([power, potential, dot]) {
-    return power + ' 威力 · ' + potential + ' 潜力 · ' + dot + ' ●';
-  }
-
   function faceArt(die) {
     const natural = dice.naturalFace(die);
     if (natural) {
@@ -359,12 +348,6 @@
       return '<img class="room-die-face" src="room-dice-art/' + die.kind + '-' + die.value + '.svg" alt="' + name + ' ' + die.value + '">';
     }
     return '<span class="room-die-face room-die-number">' + escape(die.value) + '</span>';
-  }
-
-  function rollSummary(roll) {
-    const strengths = roll.dice.map(dice.remainingFace).filter(Boolean);
-    if (!strengths.length) return roll.dice.map(die => dice.names[die.kind] + ' ' + die.value).join('、');
-    return faceLabel(strengths.reduce((sum, face) => sum.map((value, index) => value + face[index]), [0, 0, 0]));
   }
 
   function rollCard(roll) {

@@ -54,12 +54,12 @@
     if (key) url.hash = new URLSearchParams({ [field]: key });
     return url.href;
   }
-  async function request(id, route, token, body) {
+  async function request(id, route, token, body, { timeout = 12000 } = {}) {
     if (!validId(id)) throw new Error('小队链接无效。');
     const headers = token ? { Authorization: 'Bearer ' + token } : {};
     if (body !== undefined) headers['Content-Type'] = 'application/json';
     const response = await fetch('/api/battle-room/' + id + '/' + route, {
-      cache: 'no-store', signal: AbortSignal.timeout(12000), headers,
+      cache: 'no-store', signal: AbortSignal.timeout(timeout), headers,
       ...(body !== undefined && { method: 'POST', body: JSON.stringify(body) }),
     });
     const data = await response.json().catch(() => null);
@@ -70,13 +70,13 @@
     }
     return data;
   }
-  function connect(id, token, receive, status) {
+  function connect(id, token, receive, status, { timeout: connectTimeout = 12000 } = {}) {
     const url = new URL('/api/battle-room/' + id + '/socket', location.href);
     url.protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
     let socket, timer, stopped = false, delay = 1000;
     function open() {
       socket = new WebSocket(url, ['ato-battle-v1', token]);
-      const timeout = setTimeout(() => socket.close(), 12000);
+      const timeout = setTimeout(() => socket.close(), connectTimeout);
       socket.onopen = () => { clearTimeout(timeout); delay = 1000; status?.(''); };
       socket.onmessage = event => receive(JSON.parse(event.data));
       socket.onclose = event => {

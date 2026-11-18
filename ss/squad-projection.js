@@ -78,12 +78,48 @@
     }
   }
 
-  function connect() { stop?.(); stop = api.connect(id, token, update); }
-  void api.request(id, 'state', token).then(data => {
-    if (data.actor.role !== 'viewer' || !data.room.squad) throw new Error('请打开正确的小队投屏链接。');
-    update(data);
-    if (!data.room.closed) connect();
-  }).catch(error => showUnavailable(error.message));
+  function connect() {
+    stop?.();
+    let connected = false, stopped = false, reading = false, timer;
+    async function readState() {
+      timer = null;
+      reading = true;
+      try {
+        const data = await api.request(id, 'state', token, undefined, { timeout: 22000 });
+        if (stopped) return;
+        if (data.actor.role !== 'viewer' || !data.room.squad) throw new Error('请打开正确的小队投屏链接。');
+        update(data);
+      } catch (error) {
+        if (stopped) return;
+        if (error.status === 401 || error.status === 403 || error.status === 404) {
+          showUnavailable(error.message);
+          stop?.();
+          return;
+        }
+        if (latestRevision < 0) showUnavailable('正在重连小队投屏…');
+      } finally {
+        reading = false;
+        if (!stopped && !connected) timer = setTimeout(readState, 4500);
+      }
+    }
+    const close = api.connect(id, token, update, message => {
+      connected = !message;
+      if (connected) {
+        clearTimeout(timer);
+        timer = null;
+      } else if (!timer && !reading) {
+        timer = setTimeout(readState, 1000);
+      }
+    }, { timeout: 22000 });
+    stop = () => {
+      stopped = true;
+      clearTimeout(timer);
+      close();
+    };
+    void readState();
+  }
+
+  connect();
   window.addEventListener('pagehide', () => stop?.());
-  window.addEventListener('pageshow', event => { if (event.persisted && latestRevision >= 0) connect(); });
+  window.addEventListener('pageshow', event => { if (event.persisted) connect(); });
 })();

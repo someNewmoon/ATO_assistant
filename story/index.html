@@ -17,7 +17,7 @@
   <script src="../assets/mobile/layout.js?v=20261028-apk-portrait1" defer></script>
   <script src="../assets/mobile/play.js?v=20261028-apk-portrait1" defer></script>
   <style>
-.squad-story-status{position:sticky;top:0;z-index:20;display:flex;gap:.75rem;align-items:center;padding:.5rem 1rem;background:var(--card,#fbf4e9);color:#372f25;border-bottom:1px solid #c1af95;font-size:.85rem}
+.squad-story-status{position:sticky;top:0;z-index:20;display:flex;gap:.75rem;align-items:center;flex-wrap:wrap;padding:.5rem 1rem;background:var(--card,#fbf4e9);color:#372f25;border-bottom:1px solid #c1af95;font-size:.85rem}
 .squad-story-status a{color:inherit}
 </style></head>
   <body>
@@ -146,7 +146,7 @@
     <!-- 官方版正文有十几兆，民间版用不到；只有浏览器已选官方版时才在首屏加载。 -->
     <script>
       (function () {
-        if (new URLSearchParams(location.search).has("squad")) return;
+        if (document.documentElement.hasAttribute("data-hosted-story") || new URLSearchParams(location.search).has("squad")) return;
         document.write('<script src="./data/storybook-data.js?v=20261106-c123-matrix2"><\/script>');
         var version = "";
         try { version = localStorage.getItem("ato-term-language-v1"); } catch (error) {}
@@ -165,9 +165,9 @@
     <!-- 段首 (拇指)/(圈) 标记的显示层图标化；源文本与混排映射都不动。 -->
     <script src="./assets/story-marks.js?v=20261108-story-marks4"></script>
     <!-- 安卓从资料包流式读取当前条目的 mapping；浏览器在空闲时加载完整 mapping。 -->
-    <script src="../aibp/squad-link.js?v=3"></script>
-    <script src="./assets/cloud-library.js?v=2"></script>
-    <script src="./assets/app.js?v=20261118-squad-reader"></script>
+    <script src="../aibp/squad-link.js?v=4"></script>
+    <script src="./assets/cloud-library.js?v=3"></script>
+    <script src="./assets/app.js?v=20261118-online-reader"></script>
     <script src="./assets/centimanes.js?v=20261020-record-live1"></script>
     <script src="./assets/cryptic/glyph-catalog.js?v=20261004-manual1"></script>
     <script src="./assets/cryptic/vendor/text-format.js?v=20261004-manual1"></script>

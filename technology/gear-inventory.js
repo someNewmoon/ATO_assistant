@@ -103,6 +103,8 @@
     return { path, name: entry.name, label: '查看泰坦插图' };
   }
 
+  // Shared by the arsenal UI and Moon Worker. Enable when the group unlocks ascension.
+  const ascensionEnabled = false;
   const CYCLES = ['c1', 'c2', 'c3', 'c4', 'c5'];
 
   function gearKey(value) {
@@ -271,5 +273,5 @@
     return { ...record, loadouts };
   }
 
-  return { baseGearId, ascendedCycle, nextCycle, ascend, loadoutTemplates, TITAN_NAMES_ZH, TITAN_TYPES, DREAMWALKER_PANELS, dreamwalkerPanel, loadoutTitan, titanType, titanTypeFields, titanLabel, titanArtwork, gearKey, normalize, adjust, normalizeLoadout, loadoutTitans, titanIdFor, assignedLoadouts, saveLoadout };
+  return { ascensionEnabled, baseGearId, ascendedCycle, nextCycle, ascend, loadoutTemplates, TITAN_NAMES_ZH, TITAN_TYPES, DREAMWALKER_PANELS, dreamwalkerPanel, loadoutTitan, titanType, titanTypeFields, titanLabel, titanArtwork, gearKey, normalize, adjust, normalizeLoadout, loadoutTitans, titanIdFor, assignedLoadouts, saveLoadout };
 });

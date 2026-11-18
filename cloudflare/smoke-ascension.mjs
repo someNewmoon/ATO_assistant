@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import inventory from '../technology/gear-inventory.js';
 const origin = process.argv[2] || 'http://127.0.0.1:8807';
 if (!['localhost', '127.0.0.1', '[::1]'].includes(new URL(origin).hostname)) throw new Error('仅用于本地测试。');
 let cookie;
@@ -20,6 +21,15 @@ assert.equal((await call('import-sections', { sections: {
   theatre: { hold: { c1: { core: { count: 3, notes: 'preserve' } } } },
 } })).status, 200);
 const payload = { operationId: crypto.randomUUID(), gearId: 'AJ0160', profileId: 'default', expectedAccountId: username };
+if (!inventory.ascensionEnabled) {
+  const before = (await call()).body.campaign;
+  const locked = await call('ascend-gear', payload);
+  assert.equal(locked.status, 403);
+  assert.equal(locked.body.code, 'ASCENSION_DISABLED');
+  assert.deepEqual((await call()).body.campaign, before);
+  console.log('登升未开启，提交被拒绝，装备库存和升华核心余额保持原值。');
+  process.exit(0);
+}
 // Discard the first successful result, exactly as if its response had been lost.
 assert.equal((await call('ascend-gear', payload)).status, 200);
 const replay = await call('ascend-gear', payload);

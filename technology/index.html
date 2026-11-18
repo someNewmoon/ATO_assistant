@@ -1146,7 +1146,7 @@ button.gear-group-name:hover {
   <script src="structure-tech-rules.js?v=20261118-moon-resource-types1"></script>
   <script src="structure-tech-client.js?v=20261019-negotiation-rows2"></script>
 <script src="../hero/hero-catalog.js?v=20261117-battle-polish"></script>
-<script src="gear-inventory.js?v=20261118-compat1"></script>
+<script src="gear-inventory.js?v=20261118-ascension-off"></script>
 <script>
 const TECH_DICTIONARY_URL = 'tech_card_dictionary.min.json';
 const fetch = window.ATO_CAMPAIGN_NOTES.createFetch(window.fetch.bind(window), {
@@ -2404,7 +2404,7 @@ function arsenalItemHtml(item) {
     return sum + (loadout.gear[item.gearId] || 0);
   }, 0);
   let pendingAscension = false;
-  try { pendingAscension = Boolean(localStorage.getItem('ato:ascension:' + campaignSession.accountId + ':' + activeAccountId + ':' + item.gearId)); } catch {}
+  if (inventory.ascensionEnabled) try { pendingAscension = Boolean(localStorage.getItem('ato:ascension:' + campaignSession.accountId + ':' + activeAccountId + ':' + item.gearId)); } catch {}
   const image = gearImageSrc(item.gearId);
   const thumbnail = image
     ? `<button type="button" class="gear-card-thumb" data-gear-img="${esc(image)}" data-gear-name="${esc(item.name)}" title="查看 ${esc(item.name)}"><img src="${esc(image)}" alt="${esc(item.name)}" loading="lazy"></button>`
@@ -2417,11 +2417,12 @@ function arsenalItemHtml(item) {
       <span class="arsenal-quantity-value">现有 ${item.quantity} 件${assigned ? `<small>已分配 ${assigned} 件${assigned > item.quantity ? ' · 超出库存' : ''}</small>` : ''}</span>
       <button type="button" class="gear-resource-btn" data-arsenal-gear="${esc(item.gearId)}" data-arsenal-delta="1" aria-label="增加 ${esc(item.name)}" ${gearMutationInFlight ? 'disabled' : ''}>+</button>
     </div>
-    ${!item.gearId.startsWith('T:') && inventory.nextCycle(inventory.ascendedCycle(item.gearId) || item.cycles[0]) ? `<button type="button" class="tool-btn" data-arsenal-ascend="${esc(item.gearId)}" ${gearMutationInFlight || (!pendingAscension && item.quantity <= assigned) ? 'disabled' : ''}>${pendingAscension ? '核对上次登升' : '登升一件 · 消耗对应升华核心'}</button>` : ''}
+    ${inventory.ascensionEnabled && !item.gearId.startsWith('T:') && inventory.nextCycle(inventory.ascendedCycle(item.gearId) || item.cycles[0]) ? `<button type="button" class="tool-btn" data-arsenal-ascend="${esc(item.gearId)}" ${gearMutationInFlight || (!pendingAscension && item.quantity <= assigned) ? 'disabled' : ''}>${pendingAscension ? '核对上次登升' : '登升一件 · 消耗对应升华核心'}</button>` : ''}
   </article>`;
 }
 
 async function ascendArsenalGear(gearId) {
+  if (!window.ATO_GEAR_INVENTORY.ascensionEnabled) return;
   if (gearMutationInFlight || campaignSession.changed || !gearRecordState) return;
   const account = campaignSession.accountId, profile = activeAccountId;
   const key = 'ato:ascension:' + account + ':' + profile + ':' + gearId;

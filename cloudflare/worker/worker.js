@@ -1,4 +1,5 @@
 import { DurableObject } from 'cloudflare:workers';
+import inventory from '../../technology/gear-inventory.js';
 import { ascensionIdentity, ascendCampaignGear } from './gear-ascension.js';
 import { battleRequest, createBattleRoom, squadAbilityOptions, squadHeroStats } from './battle-room.js';
 export { BattleRoom, BattleDirectory } from './battle-room.js';
@@ -303,6 +304,7 @@ export class CampaignAccount extends DurableObject {
   saveCampaign(url, action, user, payload) {
     let identity;
     if (action === 'ascend-gear') {
+      if (!inventory.ascensionEnabled) throw new ApiError(403, '登升功能尚未开启。', { code: 'ASCENSION_DISABLED' });
       if (payload.expectedAccountId !== user.id) throw new ApiError(409, '账号已切换，请重新打开军械库。');
       identity = ascensionIdentity(payload);
       const prior = this.sql.exec('SELECT identity, result FROM gear_operations WHERE id = ?', payload.operationId).toArray()[0];

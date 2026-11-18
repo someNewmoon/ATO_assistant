@@ -19,7 +19,7 @@ test('响应丢失并刷新页面后继续使用持久化操作ID，不重复登
     return { ok: true, json: async () => ({ ok: true, replayed }) };
   };
   const page = () => {
-    const context = vm.createContext({ localStorage, fetch, crypto: globalThis.crypto,
+    const context = vm.createContext({ window: { ATO_GEAR_INVENTORY: { ascensionEnabled: true } }, localStorage, fetch, crypto: globalThis.crypto,
       gearMutationInFlight: false, campaignSession: { accountId: 'test', changed: false, accept: x => x },
       gearRecordState: {}, activeAccountId: 'default', CAMPAIGN_STORAGE_URL: '/api/campaign-state.php',
       arsenalMessage: '', arsenalMessageError: false, loadGearRecordState: async () => {}, renderGearInventoryView() {},
@@ -34,7 +34,7 @@ test('响应丢失并刷新页面后继续使用持久化操作ID，不重复登
 });
 test('持久化失败时不发起登升请求', async () => {
   let sent = false;
-  const context = vm.createContext({ localStorage: { getItem: () => null, setItem: () => { throw new Error('storage unavailable'); } },
+  const context = vm.createContext({ window: { ATO_GEAR_INVENTORY: { ascensionEnabled: true } }, localStorage: { getItem: () => null, setItem: () => { throw new Error('storage unavailable'); } },
     fetch: async () => { sent = true; }, crypto: globalThis.crypto,
     gearMutationInFlight: false, campaignSession: { accountId: 'test', changed: false }, gearRecordState: {}, activeAccountId: 'default',
     arsenalMessage: '', arsenalMessageError: false, renderGearInventoryView() {},
@@ -55,4 +55,19 @@ test('战斗室登升卡图与缩略图按基础ID回退，仍优先采用独立
   assert.equal(assets.gearSrc('AJ0160@c3'), 'https://example.test/own.webp');
   assert.equal(assets.thumbSrc('AJ0160@c2'), 'https://example.test/thumb.webp');
   assert.equal(assets.gearSrc('constructor'), '');
+});
+
+test('登升关闭时军械库隐藏操作，旧装备记录仍显示', async () => {
+  const context = vm.createContext({
+    window: { ATO_GEAR_INVENTORY: { ...inventory, ascensionEnabled: false } },
+    gearRecordState: {}, gearRecordHeroes: [], gearMutationInFlight: false,
+    gearImageSrc: () => '', esc: String,
+  });
+  vm.runInContext(html.slice(html.indexOf('function arsenalItemHtml('), html.indexOf('async function ascendArsenalGear(')) + source, context);
+  const card = context.arsenalItemHtml({ gearId: 'AJ0160@c2', name: '测试装备', part: { label: '防具' },
+    cycles: ['c2'], quantity: 1, manufactured: 0 });
+  assert.match(card, /AJ0160@c2/);
+  assert.match(card, /现有 1 件/);
+  assert.doesNotMatch(card, /data-arsenal-ascend/);
+  await context.ascendArsenalGear('AJ0160@c2');
 });

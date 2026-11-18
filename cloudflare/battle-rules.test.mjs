@@ -261,3 +261,18 @@ test('只有房主能释放队员席位，英雄和配装留在小队', () => {
   assert.equal(r.heroes[0].id, 'h0');
   assert.deepEqual(r.squad.stock.loadouts.h0, { titanId: 't' });
 });
+
+test('一键回正只改变本英雄横置的装备，兼容旧存档的已用数量', () => {
+  const r = room();
+  r.heroes[0].gear = [{ id: 'gear', count: 4, used: 2 }];
+  r.heroes[0].mnemos = [{ id: 'memory', state: 'exhausted' }];
+  r.heroes[1].gear = [{ id: 'other', count: 1, used: 1 }];
+  reducer.apply(r, player, { type: 'gear-card', seat: 0, key: 'gear', slot: 0, value: 'discarded' });
+  reducer.apply(r, player, { type: 'gear-card', seat: 0, key: 'gear', slot: 2, value: 'exhausted' });
+  assert.throws(() => reducer.apply(r, player, { type: 'gear-ready-all', seat: 1 }), /只能操作自己的英雄/);
+  reducer.apply(r, player, { type: 'gear-ready-all', seat: 0 });
+  reducer.apply(r, player, { type: 'gear-ready-all', seat: 0 });
+  assert.deepEqual(r.heroes[0].gear[0], { id: 'gear', count: 4, used: 1, legacyUsed: 2, cards: { 0: 'discarded', 1: 'ready' } });
+  assert.equal(r.heroes[0].mnemos[0].state, 'exhausted');
+  assert.equal(r.heroes[1].gear[0].used, 1);
+});

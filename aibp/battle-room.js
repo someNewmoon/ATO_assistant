@@ -18,7 +18,7 @@
   const campaignUrl = new URL('../api/campaign-state.php', location.href);
   const tokenKey = id => 'ato-aibp-room-' + id;
   const { escape, heroPortrait, MNEMOS, FATED_MNEMOS } = window.ATO_HERO_CATALOG;
-  const { gearState } = window.ATO_ROOM_CARD_STATE;
+  const { gearState, findGearSlot } = window.ATO_ROOM_CARD_STATE;
   const memoryCatalog = new Map([...Object.values(MNEMOS).flat(), ...Object.values(FATED_MNEMOS).flat()]
     .map(card => [card.card, card]));
   const statNames = { rage: '怒气', fate: '命运', danger: '凶险' };
@@ -402,13 +402,16 @@
       + Object.entries(conditionNames).map(([key, label]) => '<option value="' + key + '"' + (key === hero.condition ? ' selected' : '') + '>' + label + '</option>').join('')
       + '</select>' : '<small>' + conditionNames[hero.condition] + '</small>';
     const last = state.rolls.find(roll => roll.seat === seat);
-    const summary = last ? '<p class="battle-room-result">最近一次掷骰 · ' + rollSummary(last) + '</p>' : '';
+    const summary = last && (!own || !editable) ? '<p class="battle-room-result">最近一次掷骰 · ' + rollSummary(last) + '</p>' : '';
+    const readyGear = editable && hero.gear.length ? '<button type="button" data-action="gear-ready-all" data-seat="' + seat
+      + '"' + (hero.gear.some(item => findGearSlot(item, 'exhausted') >= 0) ? '' : ' disabled') + '>一键回正装备</button>' : '';
     return '<article class="battle-room-hero" data-hero-seat="' + seat + '"><header><div class="battle-room-identity">'
       + avatar + '<div><h3>' + escape(hero.name) + '</h3><small>' + escape(hero.player || '待认领') + '</small></div></div>'
       + titanImage + '<div class="battle-room-titan-status"><span>' + titan + '</span>' + condition + '</div></header>'
       + '<div class="battle-room-stats" role="group" aria-label="三曲盘">' + stats + '</div>'
       + ((own && editable) ? '' : traumaControls(hero, seat, editable))
-      + '<h4' + (own ? ' id="room-equipment"' : '') + '>装备</h4>' + (gear ? '<ul class="battle-room-card-list">' + gear + '</ul>' : '<p>未分配装备</p>')
+      + '<div class="room-equipment-head"' + (own ? ' id="room-equipment"' : '') + '><h4>装备</h4>' + readyGear + '</div>'
+      + (gear ? '<ul class="battle-room-card-list">' + gear + '</ul>' : '<p>未分配装备</p>')
       + '<h4>旧忆</h4>' + (mnemos ? '<ul class="battle-room-card-list">' + mnemos + '</ul>' : '<p>暂无旧忆卡牌</p>')
       + summary + '</article>';
   }
@@ -529,6 +532,9 @@
       return diceCountField(kind, label, minimum, dice.limits[kind], drafts[kind] ?? minimum);
     }).join('');
     const followup = rollMode === 'dodge' ? diceCountField('defenseCount', '预计防御红骰', 0, 6, drafts.defenseCount ?? 0) : '';
+    const last = dice.latestByHero(state.rolls, state.lastBattleRollId).find(roll => roll.seat === seat);
+    const latestResult = '<section class="room-personal-result"><h4>最新投掷</h4>'
+      + (last ? '<ol class="room-last-rolls">' + rollCard(last, true) + '</ol>' : '<p>该英雄本场尚未掷骰。</p>') + '</section>';
     const notes = {
       attack: '按精准、伺机和卡文结算命中，再确认威力骰数量。',
       dodge: '先结算闪避，根据结果决定是否投掷防御红骰。',
@@ -539,7 +545,7 @@
         .map(([key, entry]) => '<button type="button" data-roll-mode="' + key + '" aria-pressed="' + (key === rollMode) + '">'
           + (key === 'dodge' ? '<img src="room-dice-art/dodge.webp" alt="">' : '') + entry.name + '</button>').join('') + '</div>'
       + '<form data-roll class="battle-room-dice"><div>' + fields + followup
-      + '<button type="submit">投掷' + dice.modes[rollMode].name + '</button></div></form>'
+      + '<button type="submit">投掷' + dice.modes[rollMode].name + '</button></div></form>' + latestResult
       + (notes[rollMode] ? '<p class="room-dice-help">' + notes[rollMode] + '</p>' : '') + powerPool + '</section>';
   }
 
@@ -910,6 +916,8 @@
     } else if (armCard) {
       armedCard = armedCard === armCard ? '' : armCard;
       render();
+    } else if (action === 'gear-ready-all') {
+      send({ id: crypto.randomUUID(), type: action, seat: Number(seat) });
     } else if (action === 'gear-card' || action === 'mnemos-card') {
       if (value === 'discarded') armedCard = '';
       void send({ id: crypto.randomUUID(), type: action, key, seat: Number(seat), slot: Number(slot), value });

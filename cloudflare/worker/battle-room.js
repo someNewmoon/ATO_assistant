@@ -159,7 +159,7 @@ function publicSquadLoadouts(room) {
 const activityLabels = {
   'board-move': '移动泰坦', 'board-undo-move': '撤回上一步', 'board-apostle-move': '移动骇物',
   'board-face': '调整骇物朝向', 'priority-target': '调整首要目标', round: '开启新一轮',
-  stat: '调整三曲盘', condition: '调整泰坦状态', gear: '使用装备', 'gear-card': '调整装备卡',
+  stat: '调整三曲盘', condition: '调整泰坦状态', gear: '使用装备', 'gear-card': '调整装备卡', 'gear-ready-all': '回正所有横置装备',
   'mnemos-card': '调整旧忆卡', 'argo-use': '使用阿尔戈能力', 'argo-undo': '撤回阿尔戈能力',
   'trauma-draw': '抽取创伤或结算受击', 'trauma-resolve': '结算创伤', 'pool-clear': '清空克拉托斯池',
   reroll: '重掷骰子', convert: '转换威力骰',
@@ -552,6 +552,13 @@ export class BattleRoom extends DurableObject {
         cardState.setGearState(item, slot, body.delta === 1 ? 'exhausted' : 'ready');
         break;
       }
+      case 'gear-ready-all':
+        for (const item of hero.gear) {
+          for (let slot = 0; slot < item.count; slot++) {
+            if (cardState.gearState(item, slot) === 'exhausted') cardState.setGearState(item, slot, 'ready');
+          }
+        }
+        break;
       case 'gear-card': {
         const item = hero.gear.find(entry => entry.id === body.key);
         const { slot, value } = body;

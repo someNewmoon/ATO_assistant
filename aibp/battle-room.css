@@ -354,3 +354,7 @@ body.aibp-room-only > .app > main > :not(#battleRoom) { display: none !important
 .room-roll-head .room-roll-reactions:empty { display: none; }
 
 .room-projection-cards .room-projection-back { width: 42%; margin-top: .35rem; }
+
+.room-personal-result { margin-top: .7rem; }
+.room-personal-result .room-last-rolls { margin-block: .35rem; }
+.room-equipment-head { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: .4rem; }

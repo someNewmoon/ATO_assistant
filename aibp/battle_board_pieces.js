@@ -76,6 +76,26 @@
     layer.appendChild(svg);
   }
 
+  function drawPriorityLink(layer, boss, target) {
+    if (!boss || !target) return;
+    const document = layer.ownerDocument;
+    const svg = document.createElementNS(svgNS, "svg");
+    svg.setAttribute("viewBox", "0 0 20 14");
+    svg.setAttribute("preserveAspectRatio", "none");
+    svg.setAttribute("class", "battle-piece-priority-link");
+    svg.setAttribute("role", "img");
+    svg.setAttribute("aria-label", "骇物到首要目标的连线");
+    const overlapping = boss.column === target.column && boss.row === target.row;
+    const shape = document.createElementNS(svgNS, overlapping ? "circle" : "line");
+    const attributes = overlapping
+      ? { cx: target.column - .5, cy: 14.5 - target.row, r: .58 }
+      : { x1: boss.column - .5, y1: 14.5 - boss.row, x2: target.column - .5, y2: 14.5 - target.row };
+    for (const [key, value] of Object.entries(attributes)) shape.setAttribute(key, value);
+    shape.setAttribute("vector-effect", "non-scaling-stroke");
+    svg.appendChild(shape);
+    layer.appendChild(svg);
+  }
+
   function render(layer, pieces, {
     apostle, size = 1, selected = 0, mode, names = [], roster, portraits = [], priorityTarget, trail, bossTrail, onSelect, onSelectBoss,
   } = {}) {
@@ -83,6 +103,7 @@
     layer.hidden = false;
     drawTrail(layer, trail);
     drawTrail(layer, bossTrail, true);
+    drawPriorityLink(layer, pieces.apostle, pieces.titans[priorityTarget]);
     const document = layer.ownerDocument;
     const sprites = window.BattleBoardSprites || {};
     function token(piece, span, name, index, sprite, fallback) {

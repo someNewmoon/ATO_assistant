@@ -349,3 +349,6 @@ body.aibp-room-only > .app > main > :not(#battleRoom) { display: none !important
   .room-tool-dock { gap: .3rem; }
   .battle-room .room-tool-dock > button { padding-inline: .38rem; font-size: .72rem; }
 }
+.room-roll-head { display: flex; align-items: center; justify-content: space-between; gap: .4rem; flex-wrap: wrap; }
+.room-roll-head .room-roll-reactions { margin: 0; }
+.room-roll-head .room-roll-reactions:empty { display: none; }

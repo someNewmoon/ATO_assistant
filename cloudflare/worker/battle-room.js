@@ -111,7 +111,7 @@ export async function createBattleRoom(env, campaign, payload) {
 export async function battleRequest(env, request, url) {
   const parts = url.pathname.split('/');
   if (parts.length !== 5 || !roomIdPattern.test(parts[3])) reject('战斗室不存在。', 404);
-  if (!['state', 'lobby', 'join', 'action', 'socket'].includes(parts[4])) reject('战斗室接口不存在。', 404);
+  if (!['state', 'lobby', 'join', 'action', 'socket', 'library'].includes(parts[4])) reject('战斗室接口不存在。', 404);
   const origin = request.headers.get('Origin');
   if ((origin && origin !== url.origin) || request.headers.get('Sec-Fetch-Site') === 'cross-site') {
     reject('请从本站加入战斗室。', 403);
@@ -132,6 +132,7 @@ function publicSquadLoadouts(room) {
 export class BattleRoom extends DurableObject {
   constructor(ctx, env) {
     super(ctx, env);
+    this.storyLibrary = env.ATO_STORY_LIBRARY;
     this.directory = env.ROOM_DIRECTORY?.getByName("active");
     this.sql = ctx.storage.sql;
     this.sql.exec('CREATE TABLE IF NOT EXISTS room (singleton INTEGER PRIMARY KEY CHECK(singleton = 1), data TEXT NOT NULL)');
@@ -209,7 +210,7 @@ export class BattleRoom extends DurableObject {
         server.send(JSON.stringify(this.view(room, actor)));
         return new Response(null, { status: 101, webSocket: client, headers: { 'Sec-WebSocket-Protocol': protocol } });
       }
-      const expectedMethod = route === 'state' ? 'GET' : 'POST';
+      const expectedMethod = ['state', 'library'].includes(route) ? 'GET' : 'POST';
       if (request.method !== expectedMethod) reject('请求方法不支持。', 405);
       const secretHash = await hash(request.headers.get('Authorization')?.match(/^Bearer (.+)$/)?.[1]);
       const body = expectedMethod === 'POST' ? await this.payload(request, route === 'action' ? 98304 : 4096) : null;
@@ -228,6 +229,16 @@ export class BattleRoom extends DurableObject {
       }
       const actor = this.actor(room, secretHash);
       if (route === 'state') return response(this.view(room, actor));
+      if (route === 'library') {
+        if (actor.role !== 'host' || !room.squad) reject('请用小队房主权限打开故事书。', 403);
+        if (!this.storyLibrary) reject('线上故事正文尚未导入。', 503);
+        const { version, key, squads } = JSON.parse(this.storyLibrary);
+        if (!Array.isArray(squads) || !squads.includes(room.id)) reject('这个小队还没有开通线上故事书。', 403);
+        const story = room.squad.story;
+        const current = /^c[1-5]$/.test(story?.bookId || '') && story.entryKey
+          ? { book: story.bookId, key: story.entryKey } : null;
+        return response({ ok: true, version, key, cycle: room.squad.cycle, language: room.squad.language, current });
+      }
       const result = this.action(room, actor, body);
       if (["public-lobby", "end", "round", "squad-phase", "squad-start", "squad-host-seat"].includes(body.type)) await this.syncDirectory(room);
       return result;

@@ -50,6 +50,23 @@ try {
       '',
     ].join('\n'));
   }
+  // The source directory may contain a secret. Copy only the five encrypted books.
+  const storyRoot = process.env.ATO_STORY_LIBRARY_DIR
+    || (imageRoot && join(dirname(imageRoot), '线上故事加密库'));
+  if (storyRoot) {
+    const version = (await readFile(join(storyRoot, 'publish-version'), 'utf8').catch(error => {
+      if (!process.env.ATO_STORY_LIBRARY_DIR && error.code === 'ENOENT') return '';
+      throw error;
+    })).trim();
+    if (version) {
+      if (!/^[a-f0-9]{20}$/.test(version)) throw new Error('Invalid story library version.');
+      const dest = join(staging, 'story/library', version);
+      await mkdir(dest, { recursive: true });
+      for (const cycle of ['c1', 'c2', 'c3', 'c4', 'c5']) {
+        await copyFile(join(storyRoot, version, cycle + '.bin'), join(dest, cycle + '.bin'));
+      }
+    }
+  }
   await buildBattleRoom(staging, repo);
   const gitVersion = execFileSync('git', ['describe', '--abbrev=0', '--match', 'v[0-9]*'], {
     cwd: repo, encoding: 'utf8',

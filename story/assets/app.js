@@ -51,7 +51,7 @@
     const required = ["renderHTML", "renderInto", "sectionRenderer", "enhanceHTML", "mount", "dispose", "close", "speechText"];
     return api && api.schema === 1 && required.every(name => typeof api[name] === "function") ? api : null;
   }
-  const fanData = window.STORYBOOK_DATA;
+  let fanData = window.STORYBOOK_DATA;
   let data = fanData;
   // 官方版正文只在官方版下使用；民间版不加载它，首次切到官方版时再按需读入。
   let officialData = window.STORYBOOK_OFFICIAL_DATA || { books: [] };
@@ -3589,6 +3589,10 @@
   const squadLink = window.ATO_SQUAD_LINK;
   const squadCredentials = squadLink?.validId(squadId) ? squadLink.read(squadId) : null;
   let squadStoryQueue = Promise.resolve();
+  const cloudStory = squadCredentials?.token && window.ATO_CLOUD_STORY_LIBRARY?.open(squadLink, squadId, squadCredentials.token);
+  const loadedCloudBooks = new Set();
+  let cloudStoryStarted = false;
+  let storyBookRequest = 0;
   if (squadCredentials?.token) {
     const panel = document.createElement('aside');
     panel.className = 'squad-story-status';
@@ -3599,15 +3603,76 @@
     const status = document.createElement('span');
     status.id = 'squadStoryStatus';
     status.setAttribute('role', 'status');
-    status.textContent = '打开一段剧情后自动投屏';
-    panel.append(back, status);
+    status.textContent = '正在读取线上故事书…';
+    const edition = document.createElement('select');
+    edition.setAttribute('aria-label', '故事正文版本');
+    edition.add(new Option('官方版', 'official'));
+    edition.add(new Option('民间版', 'fan'));
+    edition.disabled = true;
+    edition.id = 'squadStoryEdition';
+    edition.addEventListener('change', () => {
+      syncStoryLanguage(edition.value);
+      if (!activeEntry) showFirstInScope();
+    });
+    panel.append(back, edition, status);
     document.body.prepend(panel);
-    void squadLink.request(squadId, 'state', squadCredentials.token).then(data => {
-      if (data.actor.role === 'host' && data.room.squad) {
-        squadLink.language(data.room.squad.language);
-        syncStoryLanguage(data.room.squad.language);
-      }
-    }).catch(() => {});
+  }
+
+  async function loadCloudBook(cycle) {
+    const { fan, official } = await cloudStory.load(cycle);
+    const other = book => book.id !== cycle;
+    const existing = fanData.books.map(book => book.id === cycle ? fan : book);
+    fanData = { ...fanData, books: existing };
+    officialData = { ...officialData, books: [...officialData.books.filter(other), official] };
+    loadedCloudBooks.add(cycle);
+    indexOfficialData();
+    data = buildVersionData(storyVersion === '官方版');
+    for (const option of bookSelect.options) {
+      const book = data.books.find(item => item.id === option.value);
+      if (book) option.textContent = book.title + ' (' + book.entryCount + ')';
+    }
+  }
+
+  function withCloudBook(cycle, ready) {
+    if (!cloudStoryStarted || !cycle || loadedCloudBooks.has(cycle)) return false;
+    const generation = ++storyBookRequest;
+    const status = document.querySelector('#squadStoryStatus');
+    status.textContent = '正在读取故事集 ' + cycle.slice(1) + '…';
+    void loadCloudBook(cycle).then(() => {
+      if (generation !== storyBookRequest) return;
+      status.textContent = '选段后自动投屏';
+      ready();
+    }).catch(error => {
+      if (generation === storyBookRequest) status.textContent = error.message + ' 请重选故事集。';
+    });
+    return true;
+  }
+
+  async function initCloudStory() {
+    const status = document.querySelector('#squadStoryStatus');
+    try {
+      const access = await cloudStory.ready();
+      const url = new URL(window.location.href);
+      const target = readDeepLinkTarget(url.searchParams);
+      const resume = !target.bookId && !target.entryId && !target.entryKey && !target.chapterKey && !target.query
+        ? access.current : null;
+      const cycle = /^c[1-5]$/.test(target.bookId || '') ? target.bookId : resume?.book || access.cycle;
+      if (resume?.key) url.searchParams.set('key', resume.key);
+      storyVersion = '官方版';
+      await loadCloudBook(cycle);
+      cloudStoryStarted = true;
+      fanData = { ...fanData, books: fanData.books.filter(book => /^c[1-5]$/.test(book.id)) };
+      data = buildVersionData(true);
+      url.searchParams.set('book', cycle);
+      window.history.replaceState(null, '', url);
+      squadLink.language(access.language);
+      document.querySelector('#squadStoryEdition').disabled = false;
+      status.textContent = '选段后自动投屏';
+      init();
+    } catch (error) {
+      status.textContent = error.message + ' 可刷新重试。';
+      storyText.textContent = status.textContent;
+    }
   }
 
   function postSquadStory(snapshot) {
@@ -3863,6 +3928,7 @@
     params.set("chapter", entry.chapterKey || "all");
     if (entry.encounterKey) params.set("encounter", entry.encounterKey);
     params.set("entry", entry.id);
+    if (cloudStoryStarted) params.set("key", entry.key);
     window.history.replaceState(null, "", `${window.location.pathname}?${params.toString()}`);
   }
 
@@ -3936,6 +4002,7 @@
 
   function navigateToStoryTarget(target = {}) {
     const bookId = resolveBookId(target.bookId || target.book || "");
+    if (withCloudBook(bookId, () => navigateToStoryTarget(target))) return true;
     if (bookId) bookSelect.value = bookId;
     activeBook = currentBook();
 
@@ -4022,6 +4089,7 @@
         <span class="memory-meta">${escapeHtml(memoryDisplayText(memory))}</span>
       `;
       jump.addEventListener("click", () => {
+        if (withCloudBook(memory.bookId, () => navigateToStoryTarget(memory))) return;
         const targetBook = data.books.find((book) => book.id === memory.bookId);
         if (!targetBook) return;
         bookSelect.value = memory.bookId;
@@ -4709,13 +4777,23 @@
   }
 
   bookSelect.addEventListener("change", () => {
-    activeBook = currentBook();
-    activeEntry = null;
-    copyParagraphButton.disabled = true;
-    historyStack = [];
-    searchInput.value = "";
-    populateChapters(activeBook);
-    showFirstInScope();
+    const selected = bookSelect.value;
+    function selectBook() {
+      bookSelect.value = selected;
+      activeBook = currentBook();
+      activeEntry = null;
+      copyParagraphButton.disabled = true;
+      historyStack = [];
+      searchInput.value = "";
+      populateChapters(activeBook);
+      showFirstInScope();
+    }
+    storyBookRequest++;
+    if (withCloudBook(selected, selectBook)) {
+      bookSelect.value = activeBook?.id || selected;
+      return;
+    }
+    selectBook();
   });
 
   chapterSelect.addEventListener("change", () => {
@@ -4805,6 +4883,7 @@
     renderResults(searchEntries(searchInput.value));
   }
   function applyStoryLanguage(language) {
+    if (cloudStory) return;
     const nextVersion = language === "en" ? "English" : language === "official" || language === true ? "官方版" : "民间版";
     if (nextVersion === "官方版" && !officialData.books.length) {
       loadOfficialData()
@@ -5024,7 +5103,10 @@
   if (document.readyState === "complete") scheduleMixedMediaMap();
   else window.addEventListener("load", scheduleMixedMediaMap, { once: true });
 
-  init();
-  refreshSecondScreenStoryModeToggle();
-  void readStorySection().catch(() => {});
+  if (cloudStory) void initCloudStory();
+  else {
+    init();
+    refreshSecondScreenStoryModeToggle();
+    void readStorySection().catch(() => {});
+  }
 })();

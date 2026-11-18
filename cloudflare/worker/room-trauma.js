@@ -171,6 +171,8 @@ export function applyTrauma(room, actor, body, randomInt) {
   const selected = body.deck;
   if (selected !== 'auto' && !decks.includes(selected)) fail('请选择有效的创伤牌库。');
   if (body.mode === 'gain' && selected !== 'auto') fail('超过 9 的凶险按规则结算。');
+  // 官方中文规则 p42：普通创伤抽取在凶险为0时无事发生；卡文指定牌库除外。
+  if (body.mode === 'draw' && selected === 'auto' && danger === 0) return;
   const overflow = danger > 9 && (selected === 'auto' || body.mode === 'hit');
   const deck = overflow ? 'obol' : selected !== 'auto' ? selected : track?.[danger - 1];
   if (!deck) fail(danger === 0 ? '凶险为 0，请按卡文指定牌库。' : '当前泰坦的创伤表未核对，请由房主设置。', 409);

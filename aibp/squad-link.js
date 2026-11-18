@@ -13,6 +13,39 @@
       return true;
     } catch { return false; }
   }
+  function recentHost() {
+    try {
+      const ids = [localStorage.getItem('ato-last-squad')];
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key?.startsWith(prefix)) ids.push(key.slice(prefix.length));
+      }
+      for (const id of ids.filter(validId)) {
+        const credentials = read(id);
+        if (validKey(credentials?.token) && credentials.keys?.host === credentials.token) return { id, credentials };
+      }
+    } catch { /* Storage is optional. */ }
+    return null;
+  }
+  function forget(id) {
+    try {
+      localStorage.removeItem(prefix + id);
+      if (localStorage.getItem('ato-last-squad') === id) localStorage.removeItem('ato-last-squad');
+    } catch { /* Storage is optional. */ }
+  }
+  async function home(linked, { signal = AbortSignal.timeout(10000) } = {}) {
+    const response = await fetch('/api/battle-room/home', {
+      cache: 'no-store', signal,
+      ...(linked && { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(linked) }),
+    });
+    const data = await response.json().catch(() => null);
+    if (!response.ok || !data?.ok) {
+      const error = new Error(data?.error || '暂时无法读取当前存档的小队。');
+      error.status = response.status;
+      throw error;
+    }
+    return data;
+  }
   function link(path, id, field, key, share = false) {
     const url = new URL(path, share ? sharedOrigin() : location.origin);
     url.searchParams.set(path === '/aibp/room' ? 'battle' : 'squad', id);
@@ -44,9 +77,14 @@
       const timeout = setTimeout(() => socket.close(), 12000);
       socket.onopen = () => { clearTimeout(timeout); delay = 1000; status?.(''); };
       socket.onmessage = event => receive(JSON.parse(event.data));
-      socket.onclose = () => {
+      socket.onclose = event => {
         clearTimeout(timeout);
         if (stopped) return;
+        if (event.code === 4001) {
+          stopped = true;
+          status?.('这个英雄已由其他成员接管，请使用邀请重新加入。');
+          return;
+        }
         status?.('连接中断，正在重连…');
         timer = setTimeout(open, delay);
         delay = Math.min(delay * 2, 15000);
@@ -60,5 +98,5 @@
     if (window.ATO_LANGUAGE) apply();
     else document.addEventListener('DOMContentLoaded', apply, { once: true });
   }
-  window.ATO_SQUAD_LINK = { read, save, link, request, connect, language, validId, validKey, sharedOrigin };
+  window.ATO_SQUAD_LINK = { read, save, forget, recentHost, home, link, request, connect, language, validId, validKey, sharedOrigin };
 })();

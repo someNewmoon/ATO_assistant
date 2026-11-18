@@ -1,5 +1,5 @@
 import { DurableObject } from 'cloudflare:workers';
-import { battleRequest, createBattleRoom } from './battle-room.js';
+import { battleRequest, createBattleRoom, squadAbilityOptions, squadHeroStats } from './battle-room.js';
 export { BattleRoom, BattleDirectory } from './battle-room.js';
 import {
   ApiError, activeCycle, appendNotes, checkAccount, defaultCampaign, errorResponse,
@@ -86,9 +86,10 @@ export default {
         return env.ROOM_DIRECTORY.getByName('active').fetch('https://directory.internal/list');
       }
       const createRoom = url.pathname === '/api/battle-room/create';
-      if (url.pathname.startsWith('/api/battle-room/') && !createRoom) return await battleRequest(env, request, url);
-      if (createRoom && (request.method !== 'POST' || url.search)) throw new ApiError(405, '创建战斗室需要 POST。');
-      if (!createRoom && url.pathname !== '/api/campaign-state.php') {
+      const squadHome = url.pathname === '/api/battle-room/home';
+      if (url.pathname.startsWith('/api/battle-room/') && !createRoom && !squadHome) return await battleRequest(env, request, url);
+      if (createRoom && (request.method !== 'POST' || url.search)) throw new ApiError(405, '创建小队需要 POST。');
+      if (!createRoom && !squadHome && url.pathname !== '/api/campaign-state.php') {
         return response({ ok: false, code: 'UNSUPPORTED_CLOUD_API', error: '此接口尚未迁移到 Cloudflare。' }, 501);
       }
       verifyOrigin(request, url);
@@ -133,6 +134,7 @@ export class CampaignAccount extends DurableObject {
   constructor(ctx, env) {
     super(ctx, env);
     this.roomEnv = env;
+    this.pendingSquads = new Set();
     this.storage = ctx.storage;
     this.sql = ctx.storage.sql;
     this.sql.exec(`
@@ -142,6 +144,7 @@ export class CampaignAccount extends DurableObject {
       );
       CREATE TABLE IF NOT EXISTS sessions (hash TEXT PRIMARY KEY, expires INTEGER NOT NULL);
       CREATE TABLE IF NOT EXISTS saves (name TEXT PRIMARY KEY, state TEXT NOT NULL, revision INTEGER NOT NULL);
+      CREATE TABLE IF NOT EXISTS owned_squads (profile TEXT PRIMARY KEY, room TEXT NOT NULL, credentials TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL);
     `);
   }
@@ -163,9 +166,7 @@ export class CampaignAccount extends DurableObject {
       if (action === 'me') return response({ ok: true, authenticated: Boolean(authenticated), user: authenticated ? user : null });
       if (!authenticated) throw new ApiError(401, 'Please log in first.', { code: 'AUTH_REQUIRED' });
 
-      if (url.pathname === '/api/battle-room/create') {
-        return await createBattleRoom(this.roomEnv, this.loadCampaign(), await readPayload(request, 32768));
-      }
+      if (url.pathname.startsWith('/api/battle-room/')) return await this.squadHome(request, url, user);
       if (action === 'second-screen' && url.searchParams.get('preview') === 'aibp') {
         if (request.method !== 'GET') throw new ApiError(405, '投屏需要 GET。');
         const state = this.loadCampaign();
@@ -182,6 +183,62 @@ export class CampaignAccount extends DurableObject {
       return this.storage.transactionSync(() => this.saveCampaign(url, action, user, payload));
     } catch (error) {
       return errorResponse(error);
+    }
+  }
+
+  async squadHome(request, url, user) {
+    const campaign = this.loadCampaign();
+    const dashboard = campaign.sections.dashboard;
+    const profile = dashboard?.activeProfileId || 'default';
+    const saveName = dashboard?.profiles?.[profile]?.name || '默认存档';
+    const registered = () => this.sql.exec('SELECT room, credentials FROM owned_squads WHERE profile = ?', profile).toArray()[0];
+    const roomStub = id => this.roomEnv.BATTLE_ROOMS.getByName(id);
+    const readCurrent = async () => {
+      const current = registered();
+      if (!current) return null;
+      const credentials = JSON.parse(current.credentials);
+      const result = await roomStub(current.room).fetch('https://battle-room.internal/state', {
+        headers: { Authorization: 'Bearer ' + credentials.token },
+      });
+      if (!result.ok && ![401, 404].includes(result.status)) throw new ApiError(503, '暂时无法读取小队。');
+      const data = result.ok && await result.json();
+      return data?.room?.squad && !data.room.closed ? { id: current.room, title: data.room.title, credentials } : null;
+    };
+    if (request.method === 'GET' && url.pathname.endsWith('/home')) {
+      return response({ ok: true, squad: await readCurrent(), hostName: user.username, saveName });
+    }
+    if (request.method !== 'POST') throw new ApiError(405, '需要 POST。');
+    if (this.pendingSquads.has(profile)) throw new ApiError(409, '正在处理该存档的小队，请稍候。');
+    this.pendingSquads.add(profile);
+    try {
+      const payload = await readPayload(request, 32768);
+      if (url.pathname.endsWith('/create')) {
+        if (payload.squad !== true) throw new ApiError(400, '请从联机小队创建，再从小队开启战斗。');
+        if (await readCurrent()) throw new ApiError(409, '这个存档已有小队。');
+        const libraryAnchor = this.sql.exec("SELECT value FROM metadata WHERE key = 'storyLibraryAnchor'").toArray()[0]?.value;
+        const result = await createBattleRoom(this.roomEnv, campaign, payload, { account: user.id, profile, saveName, libraryAnchor });
+        if (!result.ok) return result;
+        const { room, keys } = await result.clone().json();
+        this.sql.exec('INSERT OR REPLACE INTO owned_squads VALUES (?, ?, ?)', profile, room.id, JSON.stringify({ token: keys.host, keys }));
+        return result;
+      }
+      const { id, credentials } = payload;
+      if (!/^[a-f0-9]{32}$/.test(id || '') || !/^[a-f0-9]{64}$/.test(credentials?.token || '')) throw new ApiError(400, '小队凭证无效。');
+      if (registered()?.room !== id && await readCurrent()) throw new ApiError(409, '这个存档已有小队。');
+      const result = await roomStub(id).fetch('https://battle-room.internal/link-owner', {
+        method: 'POST', headers: { Authorization: 'Bearer ' + credentials.token },
+        body: JSON.stringify({ account: user.id, profile, saveName, keys: credentials.keys, abilityOptions: squadAbilityOptions(campaign),
+          storyStats: squadHeroStats(campaign) }),
+      });
+      if (!result.ok) return result;
+      const linked = await result.json();
+      if (linked.libraryAnchor) this.sql.exec("INSERT OR REPLACE INTO metadata VALUES ('storyLibraryAnchor', ?)", linked.libraryAnchor);
+      const prior = registered();
+      const savedKeys = linked.keys || (prior?.room === id && JSON.parse(prior.credentials).keys);
+      this.sql.exec('INSERT OR REPLACE INTO owned_squads VALUES (?, ?, ?)', profile, id, JSON.stringify({ token: credentials.token, ...(savedKeys && { keys: savedKeys }) }));
+      return response({ ok: true });
+    } finally {
+      this.pendingSquads.delete(profile);
     }
   }
 

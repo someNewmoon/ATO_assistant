@@ -17,3 +17,13 @@ button,.squad-action{cursor:pointer}button:disabled{opacity:.52;cursor:default}.
 [hidden]{display:none!important}
 .squad-form textarea{width:100%;resize:vertical;font:inherit;color:inherit;background:var(--panel);border:1px solid var(--line);border-radius:7px;padding:.5rem}
 .squad-form summary,.squad-roster summary,[data-story-input] summary{cursor:pointer;margin-block:.45rem}
+
+.squad-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .45rem; }
+[data-story-stats] { margin-top: .9rem; }
+.squad-stats > div { border: 1px solid var(--line); border-radius: 7px; padding: .4rem; }
+.squad-stats span, .squad-stats > div > div { display: flex; align-items: center; justify-content: center; gap: .25rem; }
+.squad-stats img { width: 24px; height: 24px; object-fit: contain; }
+.squad-stats button { min-width: 27px; padding-inline: .25rem; }
+.squad-stats output { min-width: 1.2em; text-align: center; font-weight: 700; }
+.squad-stats span { margin-bottom: .35rem; }
+.squad-roster form { margin-top: .5rem; }

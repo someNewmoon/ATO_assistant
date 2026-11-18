@@ -26,7 +26,7 @@
     const item = document.createElement('article');
     if (roll.success === false) item.dataset.failed = '';
     const title = document.createElement('strong');
-    title.textContent = roll.hero + ' · ' + (roll.skill || (roll.target !== null ? '检定' : 'd' + roll.sides));
+    title.textContent = roll.hero + ' · ' + (roll.replaces ? '命运重掷 · ' : '') + (roll.skill || (roll.target !== null ? '检定' : 'd' + roll.sides));
     const result = document.createElement('span');
     const modifier = roll.bonus + roll.modifier;
     result.textContent = roll.values.join(' + ') + (modifier ? ' ' + (modifier > 0 ? '+ ' : '− ') + Math.abs(modifier) : '')
@@ -41,6 +41,15 @@
     if (actor?.role !== 'viewer' || !room?.squad || room.revision <= latestRevision) return;
     const { phase, story, checks, cycle, language, battleNumber: nextBattle } = room.squad;
     latestRevision = room.revision;
+    if (room.closed) {
+      stop?.();
+      fight.removeAttribute('src');
+      fight.hidden = true;
+      prep.hidden = true;
+      overlay.replaceChildren();
+      showUnavailable('小队已解散。');
+      return;
+    }
     if (language !== preference) { preference = language; api.language(language); }
     applySecondScreenTheme({ cycleId: cycle });
     if (phase === 'battle') {
@@ -73,7 +82,7 @@
   void api.request(id, 'state', token).then(data => {
     if (data.actor.role !== 'viewer' || !data.room.squad) throw new Error('请打开正确的小队投屏链接。');
     update(data);
-    connect();
+    if (!data.room.closed) connect();
   }).catch(error => showUnavailable(error.message));
   window.addEventListener('pagehide', () => stop?.());
   window.addEventListener('pageshow', event => { if (event.persisted && latestRevision >= 0) connect(); });

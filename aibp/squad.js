@@ -23,11 +23,13 @@
   const transfer = fragment.get('member');
   if (api.validKey(transfer)) history.replaceState(null, '', api.link('/aibp/squad', id));
   let credentials = api.validKey(transfer) ? { token: transfer } : api.read(id);
+  let claimOptions = [];
   let room, actor, stop, pending = false, language, renderKey;
   const status = document.querySelector('#squadStatus');
   const content = document.querySelector('#squadContent');
   const phaseLabel = document.querySelector('#squadPhase');
   const phases = { story: '读剧情', prep: '备战', battle: '决战' };
+  const stats = { danger: ['凶险', 'danger'], fate: ['命运', 'fate'], rage: ['怒气', 'rage'] };
   const skills = { courage: '勇气', wisdom: '智慧', will: '意志', endurance: '耐力', cunning: '狡黠', fury: '力量' };
   const squadURL = () => api.link('/aibp/squad', id);
   function battleURL(role) {
@@ -60,17 +62,18 @@
 
   function choice(hero, seat, kit) {
     return '<label class="squad-choice"><input type="radio" name="seat" value="' + seat + '" required'
-      + (hero.taken ? ' disabled' : '') + '><span class="squad-hero">' + portrait(hero) + '<span><strong>' + e(hero.name)
-      + (hero.taken ? ' · 已认领' : '') + '</strong><br>' + loadoutText(kit?.titan, kit?.gear || []) + '</span></span></label>';
+      + (hero.taken && !hero.reclaimable ? ' disabled' : '') + '><span class="squad-hero">' + portrait(hero) + '<span><strong>' + e(hero.name)
+      + (hero.reclaimable ? ' · 可接管' : hero.taken ? ' · 已认领' : '') + '</strong><br>' + loadoutText(kit?.titan, kit?.gear || []) + '</span></span></label>';
   }
 
   function lobby(data) {
     applyLanguage(data.language || 'official');
+    claimOptions = data.heroes;
     phaseLabel.textContent = '认领英雄';
     content.innerHTML = '<section class="squad-panel"><h2>' + e(data.title) + '</h2><form class="squad-form" data-form="join">'
       + '<label>玩家名 <input required name="player" maxlength="32" autocomplete="nickname"></label><fieldset class="squad-choices"><legend>选择自己的英雄</legend>'
       + data.heroes.map((hero, seat) => choice(hero, seat, data.kits?.[seat])).join('') + '</fieldset>'
-      + '<button type="submit"' + (data.heroes.every(hero => hero.taken) ? ' disabled' : '') + '>认领并加入</button></form></section>';
+      + '<button type="submit"' + (data.heroes.every(hero => hero.taken && !hero.reclaimable) ? ' disabled' : '') + '>认领并加入</button></form></section>';
   }
 
   function kitSummary(seat) {
@@ -90,7 +93,8 @@
       + (squad.phase !== 'battle' ? button('visibility', room.publicLobby ? '关闭快速加入' : '开放快速加入', !room.publicLobby) : '')
       + (squad.phase === 'story' ? anchor(storyURL(), '打开故事书') + button('phase', '开启备战', 'prep') : '')
       + (prep ? anchor(api.link('/aibp/', id), '选择骇物并开战') + button('phase', '返回读剧情', 'story') : '')
-      + (squad.phase === 'battle' ? anchor(battleURL(actor.role), '打开战斗主控台') : '') + '</div>'
+      + (squad.phase === 'battle' ? anchor(battleURL(actor.role), '打开战斗主控台') : '')
+      + button('disband', '解散小队') + '</div>'
       + (squad.phase === 'story' ? '<details data-story-input><summary>手动投屏段落</summary><form data-form="story" class="squad-form">'
         + '<label>标题 <input name="title" maxlength="240" placeholder="故事段落"></label>'
         + '<label>正文 <textarea name="text" required maxlength="24000" rows="6"></textarea></label>'
@@ -119,6 +123,17 @@
       + '<p class="squad-sub">旧忆沿用英雄记录。保存后的配装供本小队下一场战斗使用。</p><button type="submit">保存配装</button></form></section>';
   }
 
+  function storyStats(hero) {
+    return '<h3>当前状态</h3><div class="squad-stats">' + Object.entries(stats).map(([key, [label, icon]]) => {
+      const value = hero.storyStats?.[key] || 0;
+      const step = (delta, mark, disabled) => '<button type="button" data-action="stat" data-key="' + key
+        + '" data-value="' + delta + '" aria-label="' + (delta < 0 ? '减少' : '增加') + label + '"'
+        + (disabled ? ' disabled' : '') + '>' + mark + '</button>';
+      return '<div><span><img src="../hero/assets/tri_' + icon + '.png" alt=""> ' + label + '</span><div>'
+        + step(-1, '−', value === 0) + '<output>' + value + '</output>' + step(1, '+', value >= 999) + '</div></div>';
+    }).join('') + '</div>';
+  }
+
   function rollForm() {
     return '<section class="squad-panel"><h2>检定与掷骰</h2><form data-form="roll" class="squad-form">'
       + '<label>用途 <select name="kind"><option value="check">剧情检定</option><option value="10">普通 d10</option><option value="6">普通 d6</option></select></label>'
@@ -134,11 +149,18 @@
     const adjustment = roll.bonus + roll.modifier;
     const raw = roll.values.join(' + ');
     const total = adjustment ? raw + (adjustment > 0 ? ' + ' : ' − ') + Math.abs(adjustment) : raw;
-    return '<strong>' + e(roll.hero) + '</strong>' + e(roll.skill || (roll.target !== null ? '检定' : 'd' + roll.sides))
+    return '<strong>' + e(roll.hero) + '</strong>' + (roll.replaces ? '命运重掷 · ' : '') + e(roll.skill || (roll.target !== null ? '检定' : 'd' + roll.sides))
       + ' · ' + e(total) + ' → ' + roll.sum + (roll.target !== null ? ' / ' + roll.target + ' · ' + (roll.success ? '成功' : '失败') : '');
   }
 
   function render() {
+    if (room.closed) {
+      stop?.();
+      api.forget(id);
+      phaseLabel.textContent = '已解散';
+      content.innerHTML = '<p>这个小队已解散。</p>' + anchor('/aibp/squads', '返回联机小队');
+      return;
+    }
     const squad = room.squad, seat = ownSeat();
     phaseLabel.textContent = phases[squad.phase];
     const key = JSON.stringify([squad.phase, squad.hostSeat, squad.battleNumber, room.title, room.publicLobby,
@@ -150,11 +172,11 @@
 
       const personal = hero ? '<section class="squad-panel">' + heroMarkup(hero, kitSummary(seat))
         + '<dl class="squad-attrs">' + Object.entries(skills).map(([key, name]) => '<div><dt>' + name + '</dt><dd>' + hero.skills[key] + '</dd></div>').join('')
-        + '</dl></section>' : '';
-      const claim = isHost && seat === null && squad.phase !== 'battle' ? '<section class="squad-panel"><form data-form="host-seat" class="squad-form">'
+        + '</dl>' + (squad.phase !== 'battle' ? '<div data-story-stats></div>' : '') + '</section>' : '';
+      const claim = isHost && squad.phase !== 'battle' ? '<details class="squad-panel"' + (seat === null ? ' open' : '') + '><summary>房主席位</summary><form data-form="host-seat" class="squad-form">'
         + '<fieldset class="squad-choices"><legend>房主也可认领一个英雄</legend>'
-        + room.heroes.map((hero, index) => choice({ ...hero, taken: !!hero.player }, index, kitSummary(index))).join('')
-        + '</fieldset><button type="submit">认领英雄</button></form></section>' : '';
+        + room.heroes.map((hero, index) => choice({ ...hero, taken: Boolean(hero.player), reclaimable: Boolean(hero.player) && index !== seat }, index, kitSummary(index))).join('')
+        + '</fieldset><button type="submit">认领或接管英雄</button></form></details>' : '';
       const fight = squad.phase === 'battle' && !isHost ? '<section class="squad-panel">' + anchor(battleURL(actor.role), '进入当前战斗') + '</section>' : '';
       content.innerHTML = '<div class="squad-stack"><h2>' + e(room.title) + '</h2>'
         + (isHost ? hostControls() : button('transfer', '复制我的席位链接')) + claim + personal + fight
@@ -163,10 +185,23 @@
         + '<section class="squad-panel"><h2>队伍记录</h2><ol class="squad-log" data-team-log></ol></section></div>';
       syncFields();
     }
+    const statePanel = content.querySelector('[data-story-stats]');
+    if (statePanel) {
+      const next = storyStats(room.heroes[seat]);
+      if (statePanel.dataset.state !== next) {
+        const active = statePanel.contains(document.activeElement) ? document.activeElement.dataset : null;
+        statePanel.innerHTML = next;
+        statePanel.dataset.state = next;
+        if (active?.key) statePanel.querySelector('[data-key="' + active.key + '"][data-value="' + active.value + '"]')?.focus({ preventScroll: true });
+      }
+    }
     const roster = content.querySelector('[data-roster]');
     if (roster) roster.innerHTML = room.heroes.map((hero, index) => '<li>' + heroMarkup(hero, kitSummary(index)) + '</li>').join('');
     const log = content.querySelector('[data-team-log]');
-    log.innerHTML = squad.checks.map(roll => '<li>' + rollLine(roll) + '</li>').join('') || '<li>暂无检定或掷骰。</li>';
+    const latest = squad.checks.find(roll => roll.seat === seat);
+    log.innerHTML = squad.checks.map(roll => '<li>' + rollLine(roll)
+      + (roll === latest && latest.target !== null && !latest.replaces && squad.phase !== 'battle'
+        ? ' ' + button('reroll', '命运 +1 并重掷', latest.id) : '') + '</li>').join('') || '<li>暂无检定或掷骰。</li>';
     window.ATO_LANGUAGE?.refresh();
   }
 
@@ -221,6 +256,12 @@
     if (!node) return;
     const { action: name, value } = node.dataset;
     void run(async () => {
+      if (name === 'stat') return action('squad-stat', { seat: ownSeat(), key: node.dataset.key, delta: Number(value) });
+      if (name === 'reroll') return action('squad-reroll', { seat: ownSeat(), roll: value });
+      if (name === 'disband') {
+        if (window.confirm('解散这个小队？所有成员和当前投屏都会退出，战役存档仍会保留。')) await action('squad-disband');
+        return;
+      }
       if (name === 'phase') return action('squad-phase', { phase: value });
       if (name === 'visibility') return action('public-lobby', { value: value === 'true' });
       const link = name === 'invite' ? api.link('/aibp/squad', id, 'invite', credentials.keys.invite, true)
@@ -237,10 +278,12 @@
     void run(async () => {
       if (form.dataset.form === 'join') {
         // Retain the candidate key through retries, since joining is idempotent for a given key.
+        const reclaim = claimOptions[Number(pick)]?.reclaimable === true;
+        if (reclaim && !window.confirm('接管这个英雄？原席位链接会立即失效。')) return;
         const token = credentials?.token || crypto.randomUUID().replaceAll('-', '') + crypto.randomUUID().replaceAll('-', '');
         credentials = { token };
         api.save(id, credentials);
-        const data = await api.request(id, 'join', invite, { quick, seat: Number(pick), player: fields.get('player'), playerKey: token });
+        const data = await api.request(id, 'join', invite, { quick, seat: Number(pick), player: fields.get('player'), playerKey: token, reclaim });
         history.replaceState(null, '', squadURL());
         accept(data);
         startSocket();
@@ -249,7 +292,14 @@
       if (form.dataset.form === 'story') return action('squad-story', { story: {
         title: fields.get('title') || '故事段落', text: fields.get('text'),
       } });
-      if (form.dataset.form === 'host-seat') return action('squad-host-seat', { seat: Number(pick) });
+      if (form.dataset.form === 'host-seat') {
+        const seat = Number(pick);
+        const reclaim = Boolean(room.heroes[seat]?.player) && seat !== ownSeat();
+        if (!reclaim || window.confirm('让房主接管这个英雄？原席位链接会立即失效。')) {
+          return action('squad-host-seat', { seat, reclaim });
+        }
+        return;
+      }
       const seat = ownSeat();
       if (form.dataset.form === 'kit') {
         const gear = Object.fromEntries([...fields].filter(([key, value]) => key.startsWith('gear:') && Number(value) > 0)
@@ -267,13 +317,25 @@
   window.addEventListener('pagehide', () => { stop?.(); });
   window.addEventListener('pageshow', event => { if (event.persisted && room) startSocket(); });
   void run(async () => {
+    if (!credentials && !invite && !quick) {
+      const owner = (await api.home().catch(() => null))?.squad;
+      if (owner?.id === id) credentials = owner.credentials;
+    }
     if (credentials?.token) {
       try {
         accept(await api.request(id, 'state', credentials.token));
+        if (room.closed) return;
         api.save(id, credentials);
         startSocket();
+        if (actor.role === 'host') void api.home({ id, credentials }).catch(() => {});
         return;
-      } catch (error) { if (!invite && !quick) throw error; }
+      } catch (error) {
+        if (!invite && !quick) throw error;
+        if (error.status === 401) {
+          credentials = null;
+          api.forget(id);
+        }
+      }
     }
     if (!invite && !quick) throw new Error('请打开小队邀请，或使用之前认领席位的浏览器。');
     const data = await api.request(id, 'lobby', invite, { quick });

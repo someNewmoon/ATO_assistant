@@ -3585,15 +3585,22 @@
     }
   }
 
-  const squadId = new URLSearchParams(window.location?.search || '').get('squad');
+  const explicitSquadId = new URLSearchParams(window.location?.search || '').get('squad');
+  let squadId = explicitSquadId;
   const squadLink = window.ATO_SQUAD_LINK;
-  const squadCredentials = squadLink?.validId(squadId) ? squadLink.read(squadId) : null;
+  let squadCredentials = squadLink?.validId(squadId) ? squadLink.read(squadId) : null;
   let squadStoryQueue = Promise.resolve();
-  const cloudStory = squadCredentials?.token && window.ATO_CLOUD_STORY_LIBRARY?.open(squadLink, squadId, squadCredentials.token);
+  let cloudStory;
+  let squadPhase;
+  let stopSquadStory;
+  let squadProjectionClosed = false;
+
+  const squadStatusText = () => squadProjectionClosed ? '小队已解散' : squadPhase === 'story' ? '选段后自动投屏'
+    : '当前为备战或决战，选段只在本页显示';
   const loadedCloudBooks = new Set();
   let cloudStoryStarted = false;
   let storyBookRequest = 0;
-  if (squadCredentials?.token) {
+  function mountSquadStoryControls() {
     const panel = document.createElement('aside');
     panel.className = 'squad-story-status';
     panel.setAttribute('aria-label', '联机小队投屏');
@@ -3616,6 +3623,7 @@
     });
     panel.append(back, edition, status);
     document.body.prepend(panel);
+    if (secondScreenStoryModeLabel) secondScreenStoryModeLabel.hidden = true;
   }
 
   async function loadCloudBook(cycle) {
@@ -3640,7 +3648,7 @@
     status.textContent = '正在读取故事集 ' + cycle.slice(1) + '…';
     void loadCloudBook(cycle).then(() => {
       if (generation !== storyBookRequest) return;
-      status.textContent = '选段后自动投屏';
+      status.textContent = squadStatusText();
       ready();
     }).catch(error => {
       if (generation === storyBookRequest) status.textContent = error.message + ' 请重选故事集。';
@@ -3665,9 +3673,11 @@
       data = buildVersionData(true);
       url.searchParams.set('book', cycle);
       window.history.replaceState(null, '', url);
+      squadPhase = access.phase || 'story';
       squadLink.language(access.language);
+      connectSquadStory();
       document.querySelector('#squadStoryEdition').disabled = false;
-      status.textContent = '选段后自动投屏';
+      status.textContent = squadStatusText();
       init();
     } catch (error) {
       status.textContent = error.message + ' 可刷新重试。';
@@ -3675,10 +3685,22 @@
     }
   }
 
+  function connectSquadStory() {
+    stopSquadStory?.();
+    stopSquadStory = squadLink.connect(squadId, squadCredentials.token, ({ room }) => {
+      if (!room?.squad || (room.squad.phase === squadPhase && room.closed === squadProjectionClosed)) return;
+      squadPhase = room.squad.phase;
+      squadProjectionClosed = room.closed;
+      document.querySelector('#squadStoryStatus').textContent = squadStatusText();
+      if (room.closed) stopSquadStory?.();
+    });
+  }
+
   function postSquadStory(snapshot) {
     const status = document.querySelector('#squadStoryStatus');
     const id = crypto.randomUUID();
     squadStoryQueue = squadStoryQueue.then(async () => {
+      if (squadPhase !== 'story' || squadProjectionClosed) return;
       status.textContent = '正在同步投屏…';
       try {
         await squadLink.request(squadId, 'action', squadCredentials.token,
@@ -3752,7 +3774,8 @@
     const generation = window.setTimeout(async () => {
       const snapshot = buildSecondScreenStorySnapshot();
       if (!snapshot) return;
-      if (squadCredentials?.token) {
+      if (cloudStory) {
+        if (squadPhase !== 'story' || squadProjectionClosed) return;
         const missingText = [snapshot.text, snapshot.fallbackText].filter(Boolean).every(value => {
           const text = value.trim();
           return text === fanData.placeholderText || text.startsWith('【官方版暂无正文】')
@@ -3923,7 +3946,7 @@
   function syncUrlToEntry(entry) {
     if (!window.history || !entry) return;
     const params = new URLSearchParams();
-    if (squadCredentials?.token) params.set("squad", squadId);
+    if (explicitSquadId && squadCredentials?.token) params.set("squad", squadId);
     params.set("book", entryBookId(entry));
     params.set("chapter", entry.chapterKey || "all");
     if (entry.encounterKey) params.set("encounter", entry.encounterKey);
@@ -5103,10 +5126,49 @@
   if (document.readyState === "complete") scheduleMixedMediaMap();
   else window.addEventListener("load", scheduleMixedMediaMap, { once: true });
 
-  if (cloudStory) void initCloudStory();
-  else {
+  async function startStory() {
+    if (squadLink && window.ATO_CLOUD_STORY_LIBRARY && location.protocol !== 'file:') {
+      if (!squadCredentials?.token) {
+        const home = await squadLink.home(undefined, { signal: AbortSignal.timeout(4500) }).catch(() => null);
+        if (home?.squad && (!explicitSquadId || home.squad.id === explicitSquadId)) {
+          ({ id: squadId, credentials: squadCredentials } = home.squad);
+          squadLink.save(squadId, squadCredentials);
+        } else if (!explicitSquadId) {
+          const legacy = squadLink.recentHost();
+          if (legacy && (!home?.squad || home.squad.id === legacy.id)) {
+            if (home) await squadLink.home(legacy, { signal: AbortSignal.timeout(4500) }).catch(() => {});
+            ({ id: squadId, credentials: squadCredentials } = legacy);
+          }
+        }
+      }
+      if (squadCredentials?.token) {
+        const library = window.ATO_CLOUD_STORY_LIBRARY.open(squadLink, squadId, squadCredentials.token);
+        try {
+          await library.ready();
+          cloudStory = library;
+        } catch (error) {
+          if (explicitSquadId || ![401, 403, 404].includes(error.status)) {
+            mountSquadStoryControls();
+            const status = document.querySelector('#squadStoryStatus');
+            status.textContent = error.message + ' 可刷新重试。';
+            storyText.textContent = status.textContent;
+            return;
+          }
+        }
+      }
+    }
+    if (cloudStory) {
+      mountSquadStoryControls();
+      await initCloudStory();
+      return;
+    }
     init();
     refreshSecondScreenStoryModeToggle();
     void readStorySection().catch(() => {});
   }
+  window.addEventListener('pagehide', () => stopSquadStory?.());
+  window.addEventListener('pageshow', event => {
+    if (event.persisted && cloudStoryStarted && !squadProjectionClosed) connectSquadStory();
+  });
+  void startStory();
 })();

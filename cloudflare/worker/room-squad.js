@@ -37,6 +37,12 @@ export function squadSkills(hero) {
   return totals;
 }
 
+export function squadStats(raw) {
+  return Object.fromEntries(['danger', 'fate', 'rage'].map(key => [
+    key, Math.max(0, Math.min(999, Number.parseInt(raw?.[key] ?? (key === 'rage' && raw?.fury), 10) || 0)),
+  ]));
+}
+
 export function squadView(room, actor) {
   const squad = room.squad;
   if (!squad) return null;
@@ -87,8 +93,13 @@ export function applySquad(room, actor, body, randomInt) {
   const squad = room.squad;
   if (!squad) fail('此房间不是常驻小队。', 409);
   const host = actor.role === 'host';
-  if (['squad-phase','squad-start','squad-story','squad-host-seat'].includes(body.type) && !host) fail('只有房主可以操作。', 403);
+  if (['squad-phase','squad-start','squad-story','squad-host-seat','squad-disband'].includes(body.type) && !host) fail('只有房主可以操作。', 403);
 
+  if (body.type === 'squad-disband') {
+    room.closed = true;
+    room.publicLobby = false;
+    return;
+  }
   if (body.type === 'squad-phase') {
     if (squad.phase === 'battle' || !['story','prep'].includes(body.phase)) fail('请先结束当前战斗。', 409);
     squad.phase = body.phase;
@@ -115,11 +126,13 @@ export function applySquad(room, actor, body, randomInt) {
   const hero = Number.isInteger(seat) ? room.heroes[seat] : null;
   if (!hero) fail('请选择一个英雄。');
   if (body.type === 'squad-host-seat') {
-    if (squad.phase === 'battle' || (squad.hostSeat !== null && squad.hostSeat !== seat) || room.secrets.players[seat]) {
+    if (squad.phase === 'battle' || (room.secrets.players[seat] && body.reclaim !== true)) {
       fail('该席位已认领，或当前无法认领。', 409);
     }
+    if (squad.hostSeat !== null && squad.hostSeat !== seat) room.heroes[squad.hostSeat].player = '';
+    room.secrets.players[seat] = null;
     squad.hostSeat = seat;
-    hero.player = text(body.player, 32) || '房主';
+    hero.player = text(body.player, 32) || room.owner?.account || '房主';
     return;
   }
   if ((host ? squad.hostSeat : actor.seat) !== seat) fail('只能操作自己认领的英雄。', 403);
@@ -138,6 +151,28 @@ export function applySquad(room, actor, body, randomInt) {
       const updated = inventory.saveLoadout(stock, roster, hero.id, body.base, next);
       if (updated) squad.stock = updated;
     } catch (error) { fail(error.message, 409); }
+    return;
+  }
+  if (body.type === 'squad-stat' || body.type === 'squad-reroll') {
+    if (squad.phase === 'battle') fail('请返回读剧情或备战。', 409);
+    const values = squadStats(hero.storyStats);
+    if (body.type === 'squad-stat') {
+      if (!Object.hasOwn(values, body.key) || ![-1, 1].includes(body.delta)) fail('数值调整无效。');
+      const next = values[body.key] + body.delta;
+      if (next < 0 || next > 999) fail('数值已到上限或下限。', 409);
+      values[body.key] = next;
+    } else {
+      const latest = squad.checks.find(item => item.seat === seat);
+      if (!latest || latest.id !== body.roll || latest.target === null || latest.replaces) fail('只能对自己的最近一次检定重掷一次。', 409);
+      if (values.fate >= 999) fail('命运已到上限。', 409);
+      values.fate++;
+      const die = randomInt(10) + 1;
+      const sum = die + latest.bonus + latest.modifier;
+      const success = die === 10 || (die !== 1 && sum >= latest.target);
+      squad.checks = [{ ...latest, id: body.id, replaces: latest.id, values: [die], sum, success, at: Date.now() },
+        ...squad.checks.filter(item => item.id !== latest.id)].slice(0, 30);
+    }
+    hero.storyStats = values;
     return;
   }
   if (body.type === 'squad-roll') {

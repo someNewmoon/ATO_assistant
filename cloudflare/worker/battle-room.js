@@ -11,7 +11,7 @@ import { ApiError, activeCycle, errorResponse, object, response } from './campai
 import { applyRoomBoard, setupRoomBoard } from './board.js';
 
 import { applyTrauma, createTrauma, traumaView } from './room-trauma.js';
-import { applySquad, createSquad, squadSkills, squadView } from './room-squad.js';
+import { applySquad, createSquad, squadSkills, squadStats, squadView } from './room-squad.js';
 
 export const roomIdPattern = /^[a-f0-9]{32}$/;
 const secretPattern = /^[a-f0-9]{64}$/;
@@ -57,14 +57,23 @@ function equipmentName(id) {
   return name?.match(/[\u3400-\u9fff].*/u)?.[0] || name || id;
 }
 
-export async function createBattleRoom(env, campaign, payload) {
+export function squadAbilityOptions(campaign) {
+  const { limit, reserveLimit, cards } = battleConfig.availability(campaign, techDictionary);
+  return { limit, reserveLimit, cards };
+}
+
+export function squadHeroStats(campaign) {
+  return Object.fromEntries(heroCatalog.activeHeroes(campaign).map(hero => [hero.id, hero.triskelion || {}]));
+}
+
+export async function createBattleRoom(env, campaign, payload, owner) {
   const available = heroCatalog.activeHeroes(campaign);
   const selected = payload?.heroIds;
   if (!Array.isArray(selected) || selected.length < 1 || selected.length > 4
       || new Set(selected).size !== selected.length || !selected.every(id => available.some(hero => hero.id === id))) {
     reject('请从当前战役选择 1 至 4 位不同的英雄。');
   }
-  const title = clean(payload.title, 80) || '决战';
+  const title = clean(payload.title, 80) || owner?.saveName || '联机小队';
   const profile = campaign.sections.dashboard?.activeProfileId || 'default';
   const section = campaign.sections.record;
   const records = section?.users || section?.accounts;
@@ -86,7 +95,7 @@ export async function createBattleRoom(env, campaign, payload) {
         panelId: titan.panelId, crippled: Boolean(titan.crippled),
       } : null,
       gear: Object.entries(kit.gear).map(([id, count]) => ({ id, name: equipmentName(id), count, used: 0 })),
-      mnemos, stats: { danger: 0, rage: 0, fate: 0 }, condition: 'standing', player: '',
+      mnemos, stats: { danger: 0, rage: 0, fate: 0 }, ...(payload.squad === true && { storyStats: squadStats(hero.triskelion) }), condition: 'standing', player: '',
     };
   });
   const board = payload.board ? setupRoomBoard(payload.board, heroes.length) : null;
@@ -102,9 +111,13 @@ export async function createBattleRoom(env, campaign, payload) {
   const language = ['official','fan','en'].includes(payload.language) ? payload.language
     : ['official','fan','en'].includes(termLanguage) ? termLanguage : 'official';
   const squad = payload.squad === true ? createSquad(record, available, language, cycle, equipmentName) : null;
+  if (squad) {
+    const { limit, reserveLimit, cards } = availableAbilities;
+    squad.abilityOptions = { limit, reserveLimit, cards };
+  }
   const id = crypto.randomUUID().replaceAll('-', '');
   return env.BATTLE_ROOMS.getByName(id).fetch('https://battle-room.internal/create', {
-    method: 'POST', body: JSON.stringify({ id, title, heroes, board, configuration, trauma, squad, language, publicLobby: payload.publicLobby === true, projection: roomProjection(payload.projection, board?.apostle) }),
+    method: 'POST', body: JSON.stringify({ id, title, heroes, board, configuration, trauma, squad, language, owner, publicLobby: payload.publicLobby === true, projection: roomProjection(payload.projection, board?.apostle) }),
   });
 }
 
@@ -141,7 +154,9 @@ export class BattleRoom extends DurableObject {
 
   async syncDirectory(room) {
     if (!this.directory) return;
-    const entry = { id: room.id, title: room.title, round: room.round,
+    const entry = { id: room.id, title: room.title, round: room.round, revision: room.revision,
+      hostName: room.owner?.account || room.heroes[room.squad?.hostSeat]?.player || '',
+      saveName: room.owner?.saveName || room.title,
       seats: room.heroes.length, available: room.heroes.filter(hero => !hero.player).length,
       open: room.publicLobby === true && !room.closed,
       ...(room.squad && { squad: true, phase: room.squad.phase }) };
@@ -159,7 +174,7 @@ export class BattleRoom extends DurableObject {
   }
 
   view(room, actor) {
-    const { secrets, trauma, squad, ...state } = room;
+    const { secrets, trauma, squad, owner, ...state } = room;
     return { ok: true, room: { ...state, trauma: traumaView(room, actor), ...(squad && { squad: squadView(room, actor) }) }, actor };
   }
 
@@ -171,6 +186,13 @@ export class BattleRoom extends DurableObject {
     reject('请重新加入战斗室。', 401);
   }
 
+  revokeSeat(seat) {
+    for (const socket of this.ctx.getWebSockets()) {
+      const actor = socket.deserializeAttachment();
+      if (actor.role === 'player' && actor.seat === seat) socket.close(4001, 'Seat reassigned');
+    }
+  }
+
   publish(room) {
     for (const socket of this.ctx.getWebSockets()) {
       try { socket.send(JSON.stringify(this.view(room, socket.deserializeAttachment()))); }
@@ -179,11 +201,11 @@ export class BattleRoom extends DurableObject {
   }
 
   async create(request) {
-    const { id, title, heroes, board, projection, configuration, trauma, squad, language, publicLobby } = await request.json();
+    const { id, title, heroes, board, projection, configuration, trauma, squad, language, owner, publicLobby } = await request.json();
     const keys = { host: newSecret(), viewer: newSecret(), invite: newSecret() };
     const [host, viewer, invite] = await Promise.all(Object.values(keys).map(hash));
     const room = {
-      id, title, heroes, board, projection, configuration, trauma, ...(squad && { squad }), language, publicLobby: publicLobby === true, round: 1, revision: 0, closed: false,
+      id, title, heroes, board, projection, configuration, trauma, ...(squad && { squad }), language, owner, publicLobby: publicLobby === true, round: 1, revision: 0, closed: false,
       pool: Object.fromEntries(poolKeys.map(key => [key, 0])), rolls: [],
       secrets: { host, viewer, invite, players: heroes.map(() => null) },
     };
@@ -192,11 +214,55 @@ export class BattleRoom extends DurableObject {
     return response({ ...this.view(room, { role: 'host' }), keys }, 201);
   }
 
+  async linkOwner(request) {
+    const { account, profile, saveName, keys, abilityOptions, storyStats } = await request.json();
+    const token = request.headers.get('Authorization')?.match(/^Bearer (.+)$/)?.[1];
+    const [host, invite, viewer] = await Promise.all([token, keys?.invite, keys?.viewer].map(hash));
+    const room = this.load();
+    if (!host || host !== room.secrets.host) reject('只有原房主可以绑定小队。', 403);
+    if (!room.squad || room.closed) reject('小队已解散或不存在。', 404);
+    if (room.owner && (room.owner.account !== account || room.owner.profile !== profile)) reject('该小队已绑定到其他存档。', 409);
+    const name = clean(saveName, 80) || '默认存档';
+    const libraryAnchor = this.storyAnchor(room);
+    const validKeys = invite === room.secrets.invite && viewer === room.secrets.viewer;
+    if (!room.owner || room.owner.saveName !== name || JSON.stringify(room.squad.abilityOptions) !== JSON.stringify(abilityOptions)) {
+      room.owner = { account, profile, saveName: name, libraryAnchor };
+      room.squad.abilityOptions = abilityOptions;
+      for (const hero of room.heroes) hero.storyStats ??= squadStats(storyStats[hero.id]);
+      room.revision++;
+      this.save(room);
+      this.publish(room);
+      await this.syncDirectory(room);
+    }
+    return response({ ok: true, libraryAnchor, ...(validKeys && { keys: { host: token, invite: keys.invite, viewer: keys.viewer } }) });
+  }
+
+  storyAnchor(room) {
+    const allowed = this.storyLibrary && JSON.parse(this.storyLibrary).squads;
+    if (!Array.isArray(allowed)) return null;
+    return [room.id, room.owner?.libraryAnchor].find(id => id && allowed.includes(id)) || null;
+  }
+
+  retireLegacy() {
+    const room = this.load();
+    if (room.squad || room.closed || !room.publicLobby) return response({ ok: true, retired: room.closed });
+    room.closed = true;
+    room.publicLobby = false;
+    room.revision++;
+    this.save(room);
+    this.publish(room);
+    return response({ ok: true, retired: true });
+  }
+
   async fetch(request) {
     const url = new URL(request.url);
     const route = url.pathname.split('/').at(-1);
     try {
-      if (url.hostname === 'battle-room.internal' && url.pathname === '/create') return await this.create(request);
+      if (url.hostname === 'battle-room.internal' && request.method === 'POST') {
+        if (url.pathname === '/create') return await this.create(request);
+        if (url.pathname === '/link-owner') return await this.linkOwner(request);
+        if (url.pathname === '/retire-legacy') return this.retireLegacy();
+      }
       if (route === 'socket') {
         if (request.headers.get('Upgrade')?.toLowerCase() !== 'websocket') reject('需要 WebSocket 连接。', 426);
         const [version, secret, extra] = (request.headers.get('Sec-WebSocket-Protocol') || '').split(/,\s*/);
@@ -217,30 +283,33 @@ export class BattleRoom extends DurableObject {
       const newPlayer = route === 'join' ? await hash(body.playerKey) : '';
       const room = this.load();
       if (route === 'join' || route === 'lobby') {
-        if (!(body.quick === true && room.publicLobby === true) && (!secretHash || secretHash !== room.secrets.invite)) reject('邀请链接无效，或房主尚未开放快速参战。', 403);
-        if (room.closed) reject('本场战斗已结束。', 409);
-        if (route === 'lobby') return response({ ok: true, title: room.title, language: room.language || 'official', heroes: room.heroes.map(hero => ({
-          name: hero.name, taken: Boolean(hero.player), argonaut: hero.argonaut, titan: hero.titan, gear: hero.gear,
-        })), ...(room.squad && { squad: true, language: room.squad.language,
-          ...publicSquadLoadouts(room) }) });
-        const result = this.join(room, body, newPlayer);
+        const invited = Boolean(secretHash && secretHash === room.secrets.invite);
+        if (!(body.quick === true && room.publicLobby === true) && !invited) reject('邀请链接无效，或房主尚未开放快速加入。', 403);
+        if (room.closed) reject(room.squad ? '小队已解散。' : '本场战斗已结束。', 409);
+        const reclaim = invited && room.squad?.phase !== 'battle' && Boolean(room.squad);
+        if (route === 'lobby') return response({ ok: true, title: room.title, language: room.language || 'official', heroes: room.heroes.map((hero, seat) => ({
+          name: hero.name, taken: Boolean(hero.player), reclaimable: reclaim && Boolean(room.secrets.players[seat]),
+          argonaut: hero.argonaut, titan: hero.titan, gear: hero.gear,
+        })), ...(room.squad && { squad: true, language: room.squad.language, ...publicSquadLoadouts(room) }) });
+        const result = this.join(room, body, newPlayer, reclaim && body.reclaim === true);
         await this.syncDirectory(room);
         return result;
       }
       const actor = this.actor(room, secretHash);
       if (route === 'state') return response(this.view(room, actor));
       if (route === 'library') {
-        if (actor.role !== 'host' || !room.squad) reject('请用小队房主权限打开故事书。', 403);
+        if (actor.role !== 'host' || !room.squad || room.closed) reject('请用小队房主权限打开故事书。', 403);
         if (!this.storyLibrary) reject('线上故事正文尚未导入。', 503);
-        const { version, key, squads } = JSON.parse(this.storyLibrary);
-        if (!Array.isArray(squads) || !squads.includes(room.id)) reject('这个小队还没有开通线上故事书。', 403);
+        const { version, key } = JSON.parse(this.storyLibrary);
+        if (!this.storyAnchor(room)) reject('这个小队还没有开通线上故事书。', 403);
         const story = room.squad.story;
         const current = /^c[1-5]$/.test(story?.bookId || '') && story.entryKey
           ? { book: story.bookId, key: story.entryKey } : null;
-        return response({ ok: true, version, key, cycle: room.squad.cycle, language: room.squad.language, current });
+        return response({ ok: true, version, key, cycle: room.squad.cycle, language: room.squad.language, phase: room.squad.phase, current });
       }
-      const result = this.action(room, actor, body);
-      if (["public-lobby", "end", "round", "squad-phase", "squad-start", "squad-host-seat"].includes(body.type)) await this.syncDirectory(room);
+      const previousPlayers = room.secrets.players.slice();
+      const result = this.action(room, actor, body, previousPlayers);
+      if (["public-lobby", "end", "round", "squad-phase", "squad-start", "squad-host-seat", "squad-disband"].includes(body.type)) await this.syncDirectory(room);
       return result;
     } catch (error) {
       return errorResponse(error);
@@ -277,28 +346,30 @@ export class BattleRoom extends DurableObject {
     socket.close(1008, 'Use HTTP for actions');
   }
 
-  join(room, body, playerHash) {
+  join(room, body, playerHash, reclaim) {
     const { seat } = body;
     const player = clean(body.player, 32);
     if (!playerHash || !Number.isInteger(seat) || !room.heroes[seat] || !player) reject('请选择英雄并填写玩家名。');
     const existing = room.secrets.players.indexOf(playerHash);
     if (existing === seat) return response(this.view(room, { role: 'player', seat }));
-    if (existing >= 0 || room.secrets.players[seat] || room.squad?.hostSeat === seat) reject('这位英雄已被认领，请选另一位。', 409);
+    if (existing >= 0 || (room.secrets.players[seat] && !reclaim) || room.squad?.hostSeat === seat) reject('这位英雄已被认领，请选另一位。', 409);
+    const replaced = Boolean(room.secrets.players[seat]);
     room.secrets.players[seat] = playerHash;
     room.heroes[seat].player = player;
     room.revision++;
     this.save(room);
+    if (replaced) this.revokeSeat(seat);
     this.publish(room);
     return response(this.view(room, { role: 'player', seat }));
   }
 
-  action(room, actor, body) {
+  action(room, actor, body, previousPlayers) {
     if (actor.role === 'viewer') reject('投屏页面只能查看。', 403);
     if (typeof body.id !== 'string' || !/^[a-f0-9-]{36}$/.test(body.id)) reject('操作编号无效。');
     if (this.sql.exec('SELECT 1 FROM actions WHERE id = ?', body.id).toArray().length) {
       return response(this.view(room, actor));
     }
-    if (room.closed) reject('本场战斗已结束。', 409);
+    if (room.closed) reject(room.squad ? '小队已解散。' : '本场战斗已结束。', 409);
     this.apply(room, actor, body);
     room.revision++;
     this.ctx.storage.transactionSync(() => {
@@ -306,11 +377,20 @@ export class BattleRoom extends DurableObject {
       this.sql.exec('INSERT INTO actions VALUES (?, ?)', body.id, room.revision);
       this.sql.exec('DELETE FROM actions WHERE revision <= ?', room.revision - 512);
     });
+    previousPlayers.forEach((key, seat) => {
+      if (key && key !== room.secrets.players[seat]) this.revokeSeat(seat);
+    });
     this.publish(room);
     return response(this.view(room, actor));
   }
 
   apply(room, actor, body) {
+    if (body.type === 'squad-start' && actor.role === 'host' && room.squad?.phase === 'prep' && body.battleConfig) {
+      const available = room.squad.abilityOptions;
+      if (!available) reject('此小队沿用已保存的战斗配置。', 409);
+      try { room.configuration = battleConfig.prepare(body.battleConfig, available); }
+      catch (error) { reject(error.message); }
+    }
     if (typeof body.type === 'string' && body.type.startsWith('squad-')) return applySquad(room, actor, body, randomInt);
     if (room.squad && body.type !== 'public-lobby'
       && (room.squad.phase !== 'battle' || body.battleNumber !== room.squad.battleNumber)) reject('当前战斗已结束或已经切换。', 409);
@@ -481,17 +561,35 @@ export class BattleRoom extends DurableObject {
 
 export class BattleDirectory extends DurableObject {
   constructor(ctx, env) {
-    super(ctx, env); this.sql = ctx.storage.sql;
+    super(ctx, env);
+    this.rooms = env.BATTLE_ROOMS;
+    this.sql = ctx.storage.sql;
     this.sql.exec('CREATE TABLE IF NOT EXISTS entries (id TEXT PRIMARY KEY, data TEXT NOT NULL, updated INTEGER NOT NULL)');
   }
+
   async fetch(request) {
     if (request.method === 'GET') {
-      return response({ ok: true, rooms: this.sql.exec('SELECT data FROM entries ORDER BY updated DESC LIMIT 100').toArray().map(row => JSON.parse(row.data)) });
+      const entries = this.sql.exec('SELECT data FROM entries ORDER BY updated DESC').toArray();
+      const legacy = entries.filter(({ data }) => {
+        const entry = JSON.parse(data);
+        return entry.open && !entry.squad;
+      });
+      await Promise.allSettled(legacy.map(async ({ data }) => {
+        const { id } = JSON.parse(data);
+        const result = await this.rooms.getByName(id).fetch('https://battle-room.internal/retire-legacy', { method: 'POST' });
+        if (result.status === 404 || (result.ok && (await result.json()).retired)) {
+          this.sql.exec('DELETE FROM entries WHERE id = ? AND data = ?', id, data);
+        }
+      }));
+      return response({ ok: true, rooms: this.sql.exec(
+        "SELECT data FROM entries WHERE json_extract(data, '$.open') = 1 AND json_extract(data, '$.squad') = 1 ORDER BY updated DESC LIMIT 100",
+      ).toArray().map(row => JSON.parse(row.data)) });
     }
     const entry = await request.json();
     if (!roomIdPattern.test(entry.id || '')) return response({ error: 'Invalid room' }, 400);
-    if (!entry.open) this.sql.exec('DELETE FROM entries WHERE id = ?', entry.id);
-    else this.sql.exec('INSERT OR REPLACE INTO entries VALUES (?, ?, ?)', entry.id, JSON.stringify(entry), Date.now());
+    const existing = this.sql.exec('SELECT data FROM entries WHERE id = ?', entry.id).toArray()[0];
+    if (existing && (JSON.parse(existing.data).revision ?? -1) > entry.revision) return response({ ok: true });
+    this.sql.exec('INSERT OR REPLACE INTO entries VALUES (?, ?, ?)', entry.id, JSON.stringify(entry), Date.now());
     return response({ ok: true });
   }
 }

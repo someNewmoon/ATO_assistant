@@ -10,7 +10,7 @@
       }
       const rawKey = Uint8Array.from(atob(result.key), char => char.charCodeAt(0));
       const key = await crypto.subtle.importKey('raw', rawKey, 'AES-GCM', false, ['decrypt']);
-      return { key, version: result.version, cycle: result.cycle, language: result.language, current: result.current };
+      return { key, version: result.version, cycle: result.cycle, language: result.language, phase: result.phase, current: result.current };
     }
 
     function ready() {
@@ -21,7 +21,7 @@
     async function fetchBook(cycle) {
       const { key, version } = await ready();
       const response = await fetch('./library/' + version + '/' + cycle + '.bin', {
-        signal: AbortSignal.timeout(45000), credentials: 'omit',
+        signal: AbortSignal.timeout(90000), credentials: 'omit',
       });
       if (!response.ok) throw new Error('线上故事正文暂时无法读取。');
       const encrypted = new Uint8Array(await response.arrayBuffer());

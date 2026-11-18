@@ -16,7 +16,6 @@
   const isLink = /^[a-f0-9]{32}$/.test(routeId || '');
   const base = new URL('../api/battle-room/', location.href);
   const campaignUrl = new URL('../api/campaign-state.php', location.href);
-  const savedRoom = 'ato-aibp-last-room';
   const tokenKey = id => 'ato-aibp-room-' + id;
   const { escape, heroPortrait, MNEMOS, FATED_MNEMOS } = window.ATO_HERO_CATALOG;
   const { gearState } = window.ATO_ROOM_CARD_STATE;
@@ -111,7 +110,7 @@
     actor = data.actor;
     const language = state.squad?.language || state.language;
     if (language && language !== roomLanguage) { roomLanguage = language; squadLink?.language(language); }
-    if (state.squad && state.squad.phase !== 'battle') {
+    if (state.squad && (state.closed || state.squad.phase !== 'battle')) {
       if (params.get('embed') === '1') return;
       location.replace(viewKey ? squadLink.link('/ss/', id, 'view', viewKey) : squadLink.link('/aibp/squad', id));
       return;
@@ -574,7 +573,8 @@
       + (!state.closed && !state.squad ? '<button type="button" data-room-copy="invite">复制玩家邀请</button>' : '')
       + '<a href="' + escape(roomLink('view', credentials.keys.viewer)) + '" target="_blank" rel="noopener">打开只读投屏</a>'
       + (state.closed ? '<a href="./">返回 AIBP 开新战斗</a>' : '') + '</div>' : '';
-    const controls = host && !state.closed ? '<button type="button" data-action="public-lobby" data-value="' + !state.publicLobby + '">' + (state.publicLobby ? '关闭快速参战' : '开放快速参战') + '</button><button type="button" data-action="round">下一轮</button><button type="button" data-action="end">结束战斗</button>' : '';
+    const controls = host && !state.closed
+      ? '<button type="button" data-action="round">下一轮</button><button type="button" data-action="end">结束战斗</button>' : '';
     const pool = Object.entries(poolNames).map(([key, label]) => '<div>' + marker('images/battle-markers/' + key + '.webp', label)
       + buttons('pool', key, state.pool[key], undefined, label, 99, edit) + '</div>').join('');
     const clearPool = edit ? '<button type="button" data-action="pool-clear"'
@@ -646,48 +646,6 @@
     writing = false;
   }
 
-  async function openHostLobby() {
-    root.hidden = false;
-    toggle.setAttribute('aria-expanded', 'true');
-    const recent = storageGet(savedRoom);
-    const stored = recent && saved(recent);
-    const recentSquad = storageGet('ato-last-squad');
-    const squadResume = squadLink?.validId(recentSquad) && squadLink.read(recentSquad)?.token
-      ? '<p><a href="' + escape(squadLink.link('/aibp/squad', recentSquad)) + '">返回联机小队</a></p>' : '';
-    const resume = stored?.token ? '<p><a href="' + escape(new URL('?battle=' + recent, location.href).href) + '">返回上一次战斗</a></p>' : '';
-    content.innerHTML = squadResume + resume;
-    say('正在读取当前战役');
-    try {
-      const response = await fetch(campaignUrl, { cache: 'no-store', signal: AbortSignal.timeout(12000) });
-      if (!response.ok) throw new Error('请先在主控台登录，再创建在线战斗室。');
-      const data = await response.json();
-      lobbyCampaign = { ...data.campaign, accountId: data.user?.id };
-      if (!abilityDictionary) {
-        const dictionary = await fetch('../technology/tech_card_dictionary.min.json');
-        if (!dictionary.ok) throw new Error('无法读取科技卡牌目录，请刷新重试。');
-        abilityDictionary = await dictionary.json();
-      }
-      const available = battleConfig.availability(lobbyCampaign, abilityDictionary);
-      const heroes = window.ATO_HERO_CATALOG.activeHeroes(data.campaign);
-      if (!heroes.length) {
-        content.innerHTML += '<p>请先到<a href="../hero/">英雄页</a>添加参战英雄。</p>';
-        return;
-      }
-      const suggested = document.querySelector('#title')?.innerText?.trim() || '决战';
-      content.innerHTML += '<form data-create><label>战斗或小队名称 <input name="title" maxlength="80" value="' + escape(suggested)
-        + '"></label><fieldset><legend>选择 1 至 4 位参战英雄</legend>'
-        + heroes.map((hero, index) => '<label><input type="checkbox" name="heroIds" value="' + escape(hero.id)
-          + '"' + (index < 4 ? ' checked' : '') + '> ' + escape(window.ATO_HERO_CATALOG.heroDisplayName(hero)) + '</label>').join('')
-        + '</fieldset>' + configFields(available) + (data.campaign.sections.dashboard?.profiles?.[data.campaign.sections.dashboard?.activeProfileId]?.activeCycleId === 'c1'
-          || !data.campaign.sections.dashboard?.profiles?.[data.campaign.sections.dashboard?.activeProfileId]?.activeCycleId
-          ? '<label><input name="traumaTutorial" type="checkbox">教程战 · 使用教程创伤牌库</label>' : '') + '<label><input name="publicLobby" type="checkbox" checked>允许从登录页快速参战（无需邀请链接）</label><button type="submit" value="battle">创建战斗室</button><button type="submit" value="squad">创建常驻联机小队</button></form>';
-    } catch (error) {
-      content.innerHTML += '<p>' + escape(error.message) + ' <a href="../index.html">打开主控台</a></p>';
-    } finally {
-      say('');
-    }
-  }
-
   async function openJoinLobby() {
     const lobby = await request(id + '/lobby', { quick: quickJoin }, invite);
     if (lobby.squad) {
@@ -717,7 +675,7 @@
       root.hidden = !root.hidden;
       toggle.setAttribute('aria-expanded', String(!root.hidden));
       if (!root.hidden) root.scrollIntoView({ block: 'nearest' });
-    } else void openHostLobby();
+    }
   });
 
   content.addEventListener('input', event => {
@@ -861,31 +819,7 @@
     pending = true;
     form.querySelector('button[type=submit]').disabled = true;
     try {
-      if (form.matches('[data-create]')) {
-        const board = window.getAibpBoardSetup?.();
-        const projection = window.getAibpRoomProjection?.();
-        const configuration = readConfig(form);
-        battleConfig.prepare(configuration, battleConfig.availability(lobbyCampaign, abilityDictionary));
-        const squad = event.submitter?.value === 'squad';
-        const titleField = form.elements.title;
-        const profile = lobbyCampaign.sections.dashboard;
-        const title = squad && titleField.value === titleField.defaultValue
-          ? profile?.profiles?.[profile.activeProfileId]?.name || '联机小队' : fields.get('title');
-        const data = await request('create', { squad, language: storageGet('ato-term-language-v1'), title, heroIds: fields.getAll('heroIds'), board, projection, battleConfig: configuration, traumaTutorial: fields.has('traumaTutorial'), publicLobby: !squad && fields.get('publicLobby') === 'on' });
-        if (squad) {
-          const squadId = data.room.id;
-          squadLink.save(squadId, { token: data.keys.host, keys: data.keys });
-          location.assign(squadLink.link('/aibp/squad', squadId));
-          return;
-        }
-        lastProjectionSent = JSON.stringify(projection);
-        id = data.room.id;
-        credentials = { token: data.keys.host, keys: data.keys };
-        storageSet(savedRoom, id);
-        storageSet(tokenKey(id), JSON.stringify(credentials));
-        history.replaceState(null, '', roomLink());
-        accept(data);
-      } else if (form.matches('[data-join]')) {
+      if (form.matches('[data-join]')) {
         const token = credentials?.token || crypto.randomUUID().replaceAll('-', '') + crypto.randomUUID().replaceAll('-', '');
         credentials = { token };
         storageSet(tokenKey(id), JSON.stringify(credentials));
@@ -913,18 +847,37 @@
       const data = await squadLink.request(squadId, 'state', credential?.token);
       if (data.actor.role !== 'host' || data.room.squad?.phase !== 'prep') throw new Error('请先由房主开启备战。');
       squadLink.language(data.room.squad.language);
-      content.innerHTML = '<h2>' + escape(data.room.title) + '</h2><p>从 AIBP 选择骇物和等级后，即可开战。</p>'
-        + (data.room.squad.cycle === 'c1' ? '<label><input type="checkbox" data-squad-tutorial> 教程战</label> ' : '')
-        + '<button type="button" data-squad-start>用当前骇物开战</button> <a href="' + escape(back) + '">返回小队</a>';
-      const button = content.querySelector('[data-squad-start]');
-      button.addEventListener('click', async () => {
+      let available;
+      try {
+        const [campaignResponse, dictionary] = await Promise.all([
+          fetch(campaignUrl, { cache: 'no-store', signal: AbortSignal.timeout(8000) }),
+          fetch('../technology/tech_card_dictionary.min.json', { signal: AbortSignal.timeout(8000) }),
+          squadLink.home({ id: squadId, credentials: credential }),
+        ]);
+        if (campaignResponse.ok && dictionary.ok) {
+          const campaign = await campaignResponse.json();
+          lobbyCampaign = { ...campaign.campaign, accountId: campaign.user?.id };
+          abilityDictionary = await dictionary.json();
+          available = battleConfig.availability(lobbyCampaign, abilityDictionary);
+        }
+      } catch { /* An invited host still has the squad's saved configuration. */ }
+      content.innerHTML = '<h2>' + escape(data.room.title) + '</h2><p>在 AIBP 选择骇物和等级后开战。</p>'
+        + '<form data-prepare-battle>' + (available ? configFields(available) : '')
+        + (data.room.squad.cycle === 'c1' ? '<label><input type="checkbox" name="tutorial"> 教程战</label> ' : '')
+        + '<button type="submit">用当前骇物开战</button> <a href="' + escape(back) + '">返回小队</a></form>';
+      const form = content.querySelector('[data-prepare-battle]');
+      form.addEventListener('submit', async event => {
+        event.preventDefault();
+        event.stopPropagation();
+        const button = form.querySelector('[type="submit"]');
         button.disabled = true;
         try {
           const board = window.getAibpBoardSetup?.();
           if (!board) throw new Error('请先选择骇物。');
           await squadLink.request(squadId, 'action', credential.token, {
             id: crypto.randomUUID(), type: 'squad-start', battleNumber: data.room.squad.battleNumber,
-            board, projection: window.getAibpRoomProjection?.(), tutorial: content.querySelector('[data-squad-tutorial]')?.checked === true,
+            board, projection: window.getAibpRoomProjection?.(), tutorial: form.elements.tutorial?.checked === true,
+            ...(available && { battleConfig: readConfig(form) }),
           });
           const url = new URL(location.href);
           url.searchParams.delete('squad');

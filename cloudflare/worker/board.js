@@ -84,15 +84,20 @@ export function priorityTarget(room) {
 export function applyRoomBoard(room, actor, body) {
   const seats = room.heroes.length;
   const board = room.board;
-  if (body.type === 'board-move' || body.type === 'board-undo-move') {
+  if (['board-move', 'board-undo-move', 'board-end-move'].includes(body.type)) {
     const { seat, point, from, speed } = body;
     if (actor.role === 'viewer' || !Number.isInteger(seat) || seat < 0 || seat >= seats
       || (actor.role === 'player' && actor.seat !== seat)) fail('只能移动自己英雄的泰坦。', 403);
+    const move = board?.titanMoves?.[seat];
+    if (body.type === 'board-end-move') {
+      if (!move || move.id !== body.move) fail('本次移动已更新，请重试。', 409);
+      delete board.titanMoves[seat];
+      return;
+    }
     if (body.type === 'board-undo-move') {
-      const move = board?.titanMoves?.[seat];
       const pieces = board?.map.pieces;
       if (!move || move.id !== body.move || !pieces) fail('没有可撤回的移动。', 409);
-      const [origin] = move.route;
+      const { origin, previous } = los.rewindTitanMove(move);
       const destination = move.route.at(-1);
       const current = pieces.titans[seat];
       if (current.column !== destination.column || current.row !== destination.row) fail('泰坦位置已变更。', 409);
@@ -103,21 +108,29 @@ export function applyRoomBoard(room, actor, body) {
         fail('原位置已有棋子，无法撤回。', 409);
       }
       pieces.titans[seat] = { ...origin };
-      delete board.titanMoves[seat];
-      if (board.lastTitanMove?.id === move.id) delete board.lastTitanMove;
+      if (previous) board.titanMoves[seat] = previous;
+      else delete board.titanMoves[seat];
+      if (board.lastTitanMove?.id === move.id) {
+        if (previous) board.lastTitanMove = previous;
+        else delete board.lastTitanMove;
+      }
       return;
     }
     if (!board || !isCell(point) || !isCell(from) || !Number.isInteger(speed) || speed < 0 || speed > 20) fail('泰坦移动数据无效。');
     const current = board.map.pieces.titans[seat];
     if (current.column !== from.column || current.row !== from.row) fail('泰坦位置已更新，请重选目的格。', 409);
+    if (body.move !== undefined && body.move !== (move?.id ?? null)) fail('本次移动已更新，请重选目的格。', 409);
+    const active = move?.clicks ? move : null;
+    const remaining = active?.remaining ?? speed;
+    if (!remaining) fail('本次移动没有剩余步数。', 409);
     const overlay = los.buildLosOverlay(board.map, {
-      active: true, mode: 'titan-move', selectedTitan: seat, moveSpeed: speed,
+      active: true, mode: 'titan-move', selectedTitan: seat, moveSpeed: remaining,
     }, terrain, board.apostle, { level: board.level });
     const route = los.titanMoveRoute(overlay, point);
     if (!route) fail('这一格当前不可达。', 409);
-    const move = { id: body.id, seat, route };
-    (board.titanMoves ||= {})[seat] = move;
-    board.lastTitanMove = move;
+    const next = los.appendTitanMove(active, { id: body.id, seat, speed: active?.speed ?? speed, route });
+    (board.titanMoves ||= {})[seat] = next;
+    board.lastTitanMove = next;
     board.map.pieces.titans[seat] = { column: point.column, row: point.row };
     return;
   }

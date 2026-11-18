@@ -97,6 +97,7 @@
     const losPathSummary = root.querySelector("[data-battle-map-los-path-summary]");
     const tactics = root.querySelector("[data-board-tactics]");
     let nativeTitanTrail;
+    const nativeTitanMoves = new Map();
     let nativeApostleTrail;
     const tacticModes = ["titan-move", "titan-attack", "apostle-sight", "apostle-move"];
     const editBoard = () => options.canEditBoard?.() !== false;
@@ -408,14 +409,14 @@
       // 等级算一遍。
       const engineOptions = { level: options.getLevel?.(), speed: losProfile(map)?.speed };
       // 先建一次拿到 occ，据此判断是否跨越高地边界；若自动改了 elevated，重建一次再画。
-      const state = currentTacticalState();
+      const state = currentTacticalState(map);
       let overlay = window.BattleLOS.buildLosOverlay(
         map, state, window.BattleTerrain, options.getApostle(), engineOptions);
       lastOcc = overlay.occ;
       lastOverlay = overlay;
       if (options.allowTacticalControls !== false && syncAutoElevated(map)) {
         overlay = window.BattleLOS.buildLosOverlay(
-          map, currentTacticalState(), window.BattleTerrain, options.getApostle(), engineOptions);
+          map, currentTacticalState(map), window.BattleTerrain, options.getApostle(), engineOptions);
         lastOcc = overlay.occ;
       }
       lastOverlay = overlay;
@@ -665,12 +666,28 @@
       renderLosAndNotify();
     }
 
-    function currentTacticalState() {
+    function titanMovement(seat, map = currentMap()) {
+      if (options.getTitanMovement) return options.getTitanMovement(seat);
+      const stored = nativeTitanMoves.get(seat);
+      if (!stored) return null;
+      const pieces = window.BattleTerrain.getBoardPieces(map, options.getApostle(), options.getLevel());
+      const cell = pieces.titans[seat];
+      const last = stored.route.at(-1);
+      if (stored.setupKey !== map.setupKey || cell?.column !== last.column || cell?.row !== last.row) {
+        nativeTitanMoves.delete(seat);
+        return null;
+      }
+      return stored;
+    }
+
+    function currentTacticalState(map) {
       if (!losState.mode) return losState;
       const { weapon, selectedTitan } = losState;
       return {
         ...losState, source: losState.mode.startsWith("apostle-") ? "apostle" : "titan",
-        moveSpeed: losState.titanSpeeds[selectedTitan],
+        moveSpeed: losState.mode === "titan-move"
+          ? (titanMovement(selectedTitan, map)?.remaining ?? losState.titanSpeeds[selectedTitan])
+          : losState.titanSpeeds[selectedTitan],
         weapon: window.BattleLOS.normalizeWeapon(weapon.kind === "reach" ? { kind: "reach", max: weapon.reach } : weapon),
       };
     }
@@ -701,7 +718,12 @@
         return option;
       }));
       select.value = String(losState.selectedTitan);
-      control("speed").value = losState.titanSpeeds[losState.selectedTitan];
+      const movement = moving ? titanMovement(losState.selectedTitan, map) : null;
+      const remaining = movement?.remaining ?? losState.titanSpeeds[losState.selectedTitan];
+      control("speed").value = movement?.speed ?? losState.titanSpeeds[losState.selectedTitan];
+      control("speed").disabled = Number.isInteger(movement?.speed);
+      const finish = control("end-move");
+      if (finish) finish.hidden = !moving || !movement || options.canMoveTitan?.(losState.selectedTitan) === false;
       control("weapon").value = losState.weapon.kind;
       control("min").value = losState.weapon.min;
       control("max").value = losState.weapon.kind === "reach" ? losState.weapon.reach : losState.weapon.max;
@@ -712,7 +734,8 @@
       control("place-boss").hidden = !editBoard();
       control("place-boss").textContent = bossMove ? "退出骇物移动" : "移动骇物";
       const target = lastOverlay?.weaponTarget;
-      control("tactics-info").textContent = moving ? "绿格显示可达格和所需步数。"
+      control("tactics-info").textContent = moving ? '剩余步数 ' + remaining + ' / ' + (movement?.speed ?? losState.titanSpeeds[losState.selectedTitan])
+          + (remaining ? ' · 绿格数字是从当前位置到该格所需步数。' : ' · 可以撤回上一步或结束本次移动。')
         : attacking ? "金框显示武器射程。"
           + (target ? `距骇物 ${target.distance} 格 · ${target.inRange ? "射程内" : "射程外"}` : "")
           : bossMove ? "点目的地的左上占格，记录骇物正交移动路线。"
@@ -727,6 +750,12 @@
     }
 
     if (tactics) {
+      tactics.querySelector("[data-board-end-move]")?.addEventListener("click", () => {
+        const seat = losState.selectedTitan;
+        if (options.onTitanEndMove) return options.onTitanEndMove(seat);
+        nativeTitanMoves.delete(seat);
+        renderLosAndNotify();
+      });
       for (const mode of ["", ...tacticModes]) {
         tactics.querySelector(`[data-board-mode="${mode}"]`).addEventListener("click", () => {
           setTacticalMode(losState.mode === mode && !options.tacticalOnly ? "" : mode);
@@ -748,7 +777,7 @@
         const field = event.target;
         if (field.matches("[data-board-titan]")) return selectTitan(Number(field.value));
         const numeric = Number(field.value);
-        if (field.matches("[data-board-speed]")) {
+        if (field.matches("[data-board-speed]") && !titanMovement(losState.selectedTitan)) {
           losState.titanSpeeds[losState.selectedTitan] = Math.min(20, Math.max(0, Math.round(numeric)));
         }
         if (field.matches("[data-board-weapon]")) losState.weapon.kind = field.value;
@@ -779,7 +808,12 @@
         else {
           pieces.titans[seat] = point;
           const next = { ...map, pieces };
-          nativeTitanTrail = { map: next, move: { seat, route } };
+          const active = titanMovement(seat, map);
+          const move = window.BattleLOS.appendTitanMove(active, {
+            seat, speed: active?.speed ?? losState.titanSpeeds[seat], route,
+          });
+          nativeTitanMoves.set(seat, { ...move, setupKey: map.setupKey });
+          nativeTitanTrail = { map: next, move };
           commit(next);
           options.onLosChange?.();
         }
@@ -1099,8 +1133,8 @@
         const titanTrail = options.getTitanTrail?.() || (nativeTitanTrail?.map === trailMap ? nativeTitanTrail.move : null);
         if (!losState.active) return { active: false, ...(bossTrail && { bossTrail }), ...(titanTrail && { titanTrail }) };
         if (hasTactics(losState.mode)) {
-          const state = currentTacticalState();
           const map = currentMap();
+          const state = currentTacticalState(map);
           const pieces = window.BattleTerrain.getBoardPieces(map, options.getApostle(), options.getLevel());
           return {
             active: true, mode: state.mode, source: state.source, selectedTitan: state.selectedTitan,

@@ -157,7 +157,7 @@ function publicSquadLoadouts(room) {
 }
 
 const activityLabels = {
-  'board-move': '移动泰坦', 'board-undo-move': '撤回移动', 'board-apostle-move': '移动骇物',
+  'board-move': '移动泰坦', 'board-undo-move': '撤回上一步', 'board-apostle-move': '移动骇物',
   'board-face': '调整骇物朝向', 'priority-target': '调整首要目标', round: '开启新一轮',
   stat: '调整三曲盘', condition: '调整泰坦状态', gear: '使用装备', 'gear-card': '调整装备卡',
   'mnemos-card': '调整旧忆卡', 'argo-use': '使用阿尔戈能力', 'argo-undo': '撤回阿尔戈能力',
@@ -458,8 +458,10 @@ export class BattleRoom extends DurableObject {
     }
     if (body.type === 'round' || body.type === 'end') {
       if (actor.role !== 'host') reject('只有房主可以执行此操作。', 403);
-      if (body.type === 'round') room.round++;
-      else if (room.squad) {
+      if (body.type === 'round') {
+        room.round++;
+        if (room.board) delete room.board.titanMoves;
+      } else if (room.squad) {
         if (latestBattleRoll(room)) room.squad.lastBattleRoll = latestBattleRoll(room);
         room.squad.phase = 'story';
       }

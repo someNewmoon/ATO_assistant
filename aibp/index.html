@@ -2675,7 +2675,7 @@
                 </div>
                 <div class="battle-tactics-fields">
                   <label data-board-titan-field hidden>选中泰坦 <select data-board-titan aria-label="选中泰坦"></select></label>
-                  <label data-board-speed-field hidden>移动格数 <input data-board-speed type="number" min="0" max="20" step="1"></label>
+                  <label data-board-speed-field hidden>本次移动上限 <input data-board-speed type="number" min="0" max="20" step="1"></label>
                   <label data-board-weapon-field hidden>武器射程
                     <select data-board-weapon aria-label="武器射程">
                       <option value="melee">近战</option>
@@ -2694,6 +2694,7 @@
                   </div>
                   <button type="button" data-board-mode="apostle-move" data-board-place-boss aria-pressed="false" hidden>移动骇物</button>
                 </div>
+                <button type="button" data-board-end-move hidden>结束本次移动</button>
                 <p class="battle-tactics-info" data-board-tactics-info role="status"></p>
               </section>
               <div class="battle-map-toolbar" data-board-host-only>
@@ -2937,7 +2938,7 @@
   <script src="../assets/campaign-session.js?v=20260917"></script>
   <script src="../hero/hero-catalog.js?v=20261117-battle-polish"></script>
   <script src="room-assets.js?v=20261118-official" defer></script>
-  <script src="room-board.js?v=20261118-target" defer></script>
+  <script src="room-board.js?v=20261118-segmented" defer></script>
   <script src="room-card-state.js" defer></script>
   <script src="../technology/battle-config.js" defer></script>
   <script src="room-dice.js?v=3" defer></script>
@@ -2954,10 +2955,10 @@
   <!-- Boss 等级属性表先于 ss/terrain-data.js 加载：始徒移速直接取该表当前等级的值。 -->
   <script src="boss-levels-data.js?v=20261012-los-speed1"></script>
   <script src="../ss/terrain-data.js?v=20261117-board"></script>
-  <script src="battle_los.js?v=20261118-target"></script>
+  <script src="battle_los.js?v=20261118-segmented"></script>
   <script src="tactical-sprites.js?v=20261117-projection"></script>
   <script src="battle_board_pieces.js?v=20261118-target"></script>
-  <script src="battle_map_control.js?v=20261118-target"></script>
+  <script src="battle_map_control.js?v=20261118-segmented"></script>
   <script src="b4d7e218.js?v=20260926-hidden-ready2"></script>
   <script src="c9f0a6d3.js?v=20261011-panel-trait1"></script>
   <script src="5158e31a.js?v=20261019-blackbeak-shared-backs2"></script>

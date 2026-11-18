@@ -61,6 +61,11 @@
         getApostle: () => room.board.apostle,
         getLevel: () => room.board.level,
         getTitanTrail: () => room.board.lastTitanMove,
+        getTitanMovement: seat => room.board.titanMoves?.[seat],
+        onTitanEndMove(seat) {
+          const move = room.board.titanMoves?.[seat];
+          if (move) send({ type: "board-end-move", seat, move: move.id });
+        },
         getApostleTrail: () => room.board.lastApostleMove,
         titanNames: () => room.heroes.map(({ titan, name }) =>
           window.ATO_GEAR_INVENTORY.dreamwalkerPanel(titan)?.name || titan?.name || name),
@@ -86,7 +91,8 @@
           send({ type: "board-face", facing });
         },
         onTitanMove(seat, point, speed) {
-          send({ type: "board-move", seat, point, from: room.board.map.pieces.titans[seat], speed });
+          send({ type: "board-move", seat, point, from: room.board.map.pieces.titans[seat],
+            speed, move: room.board.titanMoves?.[seat]?.id ?? null });
         },
         onLosChange() {
           if (!canEdit()) return;
@@ -122,7 +128,7 @@
         const buttons = Object.values(room.board.titanMoves || {}).filter(move => canMove(move.seat)).map(move => {
           const button = document.createElement("button");
           button.type = "button";
-          button.textContent = "撤回移动 · " + room.heroes[move.seat].name;
+          button.textContent = "撤回上一步 · " + room.heroes[move.seat].name;
           button.addEventListener("click", () => {
             send({ type: "board-undo-move", seat: move.seat, move: move.id });
           });

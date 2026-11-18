@@ -854,6 +854,27 @@
     return route.reverse();
   }
 
+  function appendTitanMove(active, { id, seat, speed, route }) {
+    const steps = route.length - 1;
+    return {
+      id, seat, speed,
+      remaining: (active?.remaining ?? speed) - steps,
+      route: active ? [...active.route, ...route.slice(1)] : route,
+      clicks: [...(active?.clicks || []), { id, steps }],
+    };
+  }
+
+  function rewindTitanMove(move) {
+    if (!move.clicks?.length) return { origin: move.route[0], previous: null };
+    const { steps } = move.clicks.at(-1);
+    const route = move.route.slice(0, -steps);
+    const clicks = move.clicks.slice(0, -1);
+    return {
+      origin: route.at(-1),
+      previous: clicks.length ? { ...move, id: clicks.at(-1).id, clicks, route, remaining: move.remaining + steps } : null,
+    };
+  }
+
   // Movement choices are board squares at the footprint's upper-left corner.
   // Even-sized figures still store half-integer centers, but never paint or
   // click a half-square as a destination.
@@ -1432,6 +1453,8 @@
     renderTerrainEdges,
     apostleMoveDestination,
     titanMoveRoute,
+    appendTitanMove,
+    rewindTitanMove,
     normalizeWeapon,
     computeTitanWeapon,
     computeTitanMoves,

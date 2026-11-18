@@ -183,3 +183,36 @@ test('骰子回应只允许队友，且一人可换票或取消', () => {
   reducer.apply(r, host, { ...react, value: null });
   assert.deepEqual(r.rolls[0].reactions, {});
 });
+
+test('一次泰坦移动共享步数，追加、撤回、结束和新回合正确同步', () => {
+  const r = room();
+  r.board = api.setupRoomBoard({ apostle: 'HEKATON', level: 1 }, 2);
+  r.board.map.terrain = [];
+  r.board.map.pieces.titans = [{ column: 2, row: 2 }, { column: 5, row: 5 }];
+  const point = (column, row = 2) => ({ column, row });
+  const move = (id, previous, from, to, speed = 5) => reducer.apply(r, player, {
+    type: 'board-move', id, seat: 0, move: previous, from, point: to, speed,
+  });
+  move('first', null, point(2), point(4));
+  assert.equal(r.board.titanMoves[0].remaining, 3);
+  assert.throws(() => move('stale', null, point(4), point(5)), /移动已更新/);
+  assert.throws(() => move('over-budget', 'first', point(4), point(8), 20), /不可达/);
+  move('second', 'first', point(4), point(6), 20);
+  assert.equal(r.board.titanMoves[0].speed, 5);
+  assert.equal(r.board.titanMoves[0].remaining, 1);
+  assert.deepEqual(r.board.lastTitanMove.route, [2, 3, 4, 5, 6].map(column => point(column)));
+  reducer.apply(r, player, { type: 'board-undo-move', seat: 0, move: 'second' });
+  assert.deepEqual(r.board.map.pieces.titans[0], point(4));
+  assert.equal(r.board.titanMoves[0].remaining, 3);
+  assert.equal(r.board.lastTitanMove.id, 'first');
+  move('last', 'first', point(4), point(7));
+  assert.equal(r.board.titanMoves[0].remaining, 0);
+  assert.throws(() => move('over', 'last', point(7), point(8)), /没有剩余/);
+  reducer.apply(r, player, { type: 'board-end-move', seat: 0, move: 'last' });
+  assert.equal(r.board.titanMoves[0], undefined);
+  assert.equal(r.board.lastTitanMove.id, 'last');
+  move('next', null, point(7), point(8), 1);
+  reducer.apply(r, host, { type: 'round' });
+  assert.equal(r.board.titanMoves, undefined);
+  assert.equal(r.board.lastTitanMove.id, 'next');
+});

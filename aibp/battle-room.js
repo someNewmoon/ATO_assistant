@@ -38,6 +38,8 @@
   const battleConfig = window.ATO_BATTLE_CONFIG;
   let actor = null;
   let socket = null;
+  let socketActions = false;
+  let socketAction = null;
   let reconnectTimer;
   let connectionTimer;
   let reconnectDelay = 1000;
@@ -156,6 +158,7 @@
     const url = new URL(id + '/socket', base);
     url.protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
     socket = new WebSocket(url, ['ato-battle-v1', credentials.token]);
+    socketActions = false;
     const current = socket;
     connectionTimer = setTimeout(() => current.close(), 12000);
     current.onopen = () => {
@@ -164,10 +167,30 @@
       connection = '已连接 · 自动保存';
       updateStatus();
     };
-    current.onmessage = event => accept(JSON.parse(event.data));
+    current.onmessage = event => {
+      const data = JSON.parse(event.data);
+      if (data.type === 'action-result') {
+        if (socketAction?.id !== data.id || socketAction.socket !== current) return;
+        const pending = socketAction;
+        socketAction = null;
+        clearTimeout(pending.timer);
+        if (data.status >= 500) pending.reject(new TypeError(data.data.error || '战斗室暂时不可用。'));
+        else if (!data.data.ok) pending.reject(new RejectedAction(data.data.error || '战斗室请求失败。'));
+        else pending.resolve(data.data);
+        return;
+      }
+      if (data.socketActions === true) socketActions = true;
+      accept(data);
+    };
     current.onclose = event => {
       if (current !== socket) return;
       clearTimeout(connectionTimer);
+      socketActions = false;
+      if (socketAction?.socket === current) {
+        clearTimeout(socketAction.timer);
+        socketAction.reject(new TypeError('战斗连接已断开。'));
+        socketAction = null;
+      }
       socket = null;
       if (event.code === 4001 && actor?.role === 'player' && state?.squad) {
         squadLink.forget(id);
@@ -844,6 +867,28 @@
     finally { button.disabled = false; }
   }
 
+  const renderedMarkup = new WeakMap();
+  function renderMarkup(target, markup) {
+    const previous = renderedMarkup.get(target);
+    const current = [...target.childNodes];
+    const intact = previous && current.length === previous.nodes.length
+      && current.every((node, index) => node === previous.nodes[index]);
+    if (intact && previous.markup === markup) return;
+    const template = document.createElement('template');
+    template.innerHTML = markup;
+    const next = [...template.content.childNodes];
+    const sources = next.map(node => node.outerHTML ?? node.textContent);
+    for (const [index, node] of next.entries()) {
+      // Compare the source HTML. The language observer may have translated
+      // the live node, and open details and focused controls carry local state.
+      if (intact && previous.sources[index] === sources[index]) continue;
+      if (current[index]) current[index].replaceWith(node);
+      else target.append(node);
+    }
+    for (const node of current.slice(next.length)) node.remove();
+    renderedMarkup.set(target, { markup, sources, nodes: [...target.childNodes] });
+  }
+
   function render() {
     const { role } = actor;
     const seat = personalSeat();
@@ -881,8 +926,8 @@
     const focusRoot = summary.contains(active) ? summary : content;
     const focus = active && focusRoot.contains(active) ? [...focusRoot.querySelectorAll('button,select,input')].indexOf(active) : -1;
     const selection = focus >= 0 && active.name;
-    summary.innerHTML = '<div class="battle-room-head"><div><h2>' + escape(state.title) + '</h2><p>第 ' + state.round
-      + ' 轮' + (state.closed ? ' · 已结束' : '') + '</p></div><div>' + controls + '</div></div>' + links;
+    renderMarkup(summary, '<div class="battle-room-head"><div><h2>' + escape(state.title) + '</h2><p>第 ' + state.round
+      + ' 轮' + (state.closed ? ' · 已结束' : '') + '</p></div><div>' + controls + '</div></div>' + links);
     const poolSection = '<section class="battle-room-pool"><header><h3>克拉托斯池</h3>' + clearPool + '</header><div>' + pool + '</div></section>';
     const poolByDice = edit && (personal || !!own || rollMode === 'power');
     const dicePanel = diceForm(poolByDice ? poolSection : '');
@@ -890,8 +935,8 @@
       : (poolByDice ? '' : poolSection) + dicePanel + own
         + (role === 'viewer' ? roomProjection() : '') + argoAbilities() + roomTrauma()
         + (edit ? rollLog + teamActivity() : '');
-    content.innerHTML = primary + (role !== 'player' ? '<h3 class="battle-room-heading">状态总览</h3>' : '') + overview
-      + (edit ? '' : rollLog) + (state.squad && role !== 'viewer' ? '<p><a href="' + escape(squadLink.link('/aibp/squad', id)) + '">返回联机小队</a></p>' : '');
+    renderMarkup(content, primary + (role !== 'player' ? '<h3 class="battle-room-heading">状态总览</h3>' : '') + overview
+      + (edit ? '' : rollLog) + (state.squad && role !== 'viewer' ? '<p><a href="' + escape(squadLink.link('/aibp/squad', id)) + '">返回联机小队</a></p>' : ''));
     renderTools();
     renderTurn();
     if (focus >= 0) {
@@ -915,13 +960,40 @@
     void writeActions();
   }
 
+  async function submitAction(action) {
+    if (socketActions && socket?.readyState === WebSocket.OPEN) {
+      const current = socket;
+      try {
+        return await new Promise((resolve, reject) => {
+          const timer = setTimeout(() => {
+            socketAction = null;
+            current.close();
+            reject(new TypeError('战斗操作确认超时。'));
+          }, 8000);
+          socketAction = { id: action.id, socket: current, timer, resolve, reject };
+          try { current.send(JSON.stringify({ type: 'action', action })); }
+          catch (error) {
+            clearTimeout(timer);
+            socketAction = null;
+            reject(error);
+          }
+        });
+      } catch (error) {
+        if (error instanceof RejectedAction) throw error;
+        // An acknowledgement may be lost after the action was saved. Retrying
+        // the same operation ID through HTTP lets the server deduplicate it.
+      }
+    }
+    return request(id + '/action', action);
+  }
+
   async function writeActions() {
     if (writing || failedAction) return;
     writing = true;
     while (actions.length && !failedAction) {
       const action = actions.shift();
       try {
-        accept(await request(id + '/action', action));
+        accept(await submitAction(action));
         say('');
       } catch (error) {
         say(error.message);

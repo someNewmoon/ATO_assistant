@@ -226,7 +226,8 @@ export class BattleRoom extends DurableObject {
   view(room, actor) {
     const { secrets, trauma, squad, owner, battleStats, ...state } = room;
     return { ok: true, room: { ...state, priorityTarget: priorityTarget(room), trauma: traumaView(room, actor),
-      ...(squad && { squad: squadView(room, actor), damageBySeat: room.heroes.map((_, seat) => battleStats?.[seat]?.damage ?? 0) }) }, actor };
+      ...(squad && { squad: squadView(room, actor), damageBySeat: room.heroes.map((_, seat) => battleStats?.[seat]?.damage ?? 0) }) },
+      actor: { role: actor.role, ...(actor.role === 'player' && { seat: actor.seat }) } };
   }
 
   actor(room, secretHash) {
@@ -334,8 +335,8 @@ export class BattleRoom extends DurableObject {
         const actor = this.actor(room, secretHash);
         const [client, server] = Object.values(new WebSocketPair());
         this.ctx.acceptWebSocket(server);
-        server.serializeAttachment(actor);
-        server.send(JSON.stringify(this.view(room, actor)));
+        server.serializeAttachment({ ...actor, secretHash });
+        server.send(JSON.stringify({ ...this.view(room, actor), socketActions: true }));
         return new Response(null, { status: 101, webSocket: client, headers: { 'Sec-WebSocket-Protocol': protocol } });
       }
       const expectedMethod = ['state', 'library', 'story-scan'].includes(route) ? 'GET' : 'POST';
@@ -376,10 +377,7 @@ export class BattleRoom extends DurableObject {
           ? { book: story.bookId, key: story.entryKey } : null;
         return response({ ok: true, version, key, cycle: room.squad.cycle, language: room.squad.language, phase: room.squad.phase, current });
       }
-      const previousPlayers = room.secrets.players.slice();
-      const result = this.action(room, actor, body, previousPlayers);
-      if (["public-lobby", "end", "round", "squad-phase", "squad-start", "squad-host-seat", "squad-remove-player", "squad-disband"].includes(body.type)) await this.syncDirectory(room);
-      return result;
+      return await this.submitAction(room, actor, body);
     } catch (error) {
       return errorResponse(error);
     }
@@ -411,8 +409,30 @@ export class BattleRoom extends DurableObject {
     return parsed;
   }
 
-  webSocketMessage(socket) {
-    socket.close(1008, 'Use HTTP for actions');
+  async submitAction(room, actor, body) {
+    const result = this.action(room, actor, body, room.secrets.players.slice());
+    if (["public-lobby", "end", "round", "squad-phase", "squad-start", "squad-host-seat", "squad-remove-player", "squad-disband"].includes(body.type)) await this.syncDirectory(room);
+    return result;
+  }
+
+  async webSocketMessage(socket, message) {
+    let id;
+    let result;
+    try {
+      if (typeof message !== 'string' || new TextEncoder().encode(message).byteLength > 98304) {
+        reject('战斗操作请求过大。', 413);
+      }
+      let packet;
+      try { packet = JSON.parse(message); } catch { reject('请求格式无效。'); }
+      if (!object(packet) || packet.type !== 'action' || !object(packet.action)) reject('战斗操作格式无效。');
+      id = packet.action.id;
+      const room = this.load();
+      const actor = this.actor(room, socket.deserializeAttachment()?.secretHash);
+      result = await this.submitAction(room, actor, packet.action);
+    } catch (error) {
+      result = errorResponse(error);
+    }
+    socket.send(JSON.stringify({ type: 'action-result', id, status: result.status, data: await result.json() }));
   }
 
   join(room, body, playerHash, reclaim) {

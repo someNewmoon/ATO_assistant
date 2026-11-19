@@ -11,6 +11,24 @@ async function request(path, body, token) {
 }
 const action = (type, fields = {}, token = squad.keys.host) => request(`/api/battle-room/${squad.room.id}/action`,
   { id: crypto.randomUUID(), type, battleNumber: 1, ...fields }, token);
+function socketAction(token, action) {
+  return new Promise((resolve, reject) => {
+    const url = new URL(`/api/battle-room/${squad.room.id}/socket`, origin);
+    url.protocol = 'ws:';
+    const socket = new WebSocket(url, ['ato-battle-v1', token]);
+    const timer = setTimeout(() => { socket.close(); reject(new Error('WebSocket confirmation timed out.')); }, 5000);
+    socket.onmessage = event => {
+      const packet = JSON.parse(event.data);
+      if (packet.socketActions) socket.send(JSON.stringify({ type: 'action', action }));
+      else if (packet.type === 'action-result') {
+        clearTimeout(timer);
+        socket.close();
+        resolve(packet);
+      }
+    };
+    socket.onerror = () => { clearTimeout(timer); reject(new Error('WebSocket connection failed.')); };
+  });
+}
 try {
   assert.equal((await request('/api/campaign-state.php?action=register', {
     username: 'rules-' + crypto.randomUUID().slice(0, 12), password: crypto.randomUUID(),
@@ -24,6 +42,16 @@ try {
   assert.equal(created.status, 201); squad = created.body;
   assert.equal((await action('squad-phase', { phase: 'prep' })).status, 200);
   assert.equal((await action('squad-start', { battleNumber: 0, board: { apostle: 'HEKATON', level: 1 } })).status, 200);
+  const socketMove = { id: crypto.randomUUID(), type: 'pool', key: 'hope', delta: 1, battleNumber: 1 };
+  const socketFirst = await socketAction(squad.keys.host, socketMove);
+  const socketRetry = await socketAction(squad.keys.host, socketMove);
+  const httpRetry = await action('pool', socketMove);
+  assert.equal(socketFirst.status, 200);
+  assert.equal(socketFirst.data.room.pool.hope, 1);
+  assert.equal(socketRetry.data.room.revision, socketFirst.data.room.revision);
+  assert.equal(httpRetry.body.room.revision, socketFirst.data.room.revision);
+  assert.deepEqual(socketFirst.data.actor, { role: 'host' });
+  assert.equal((await socketAction(squad.keys.viewer, { ...socketMove, id: crypto.randomUUID() })).status, 403);
   assert.equal((await action('pool', { key: 'opening', delta: 1 }, squad.keys.viewer)).status, 403);
   const zero = await action('trauma-draw', { seat: 0, mode: 'draw', deck: 'auto' });
   assert.equal(zero.status, 200); assert.equal(zero.body.room.trauma.drawn.length, 0);
@@ -44,7 +72,7 @@ try {
   assert.equal(next.body.room.heroes[0].stats.danger, 0); assert.equal(next.body.room.trauma.drawn.length, 0);
   assert.equal(next.body.room.pool.opening, 0);
   assert.equal((await action('pool', { key: 'opening', delta: 1 })).status, 409);
-  console.log('Passed local HTTP battle lifecycle, zero-danger draw, overflow, viewer permissions, idempotency and stale-battle rejection.');
+  console.log('Passed HTTP/WebSocket battle lifecycle, cross-transport idempotency, zero-danger draw, overflow, viewer permissions and stale-battle rejection.');
 } finally {
   if (squad) await action('squad-disband').catch(() => {});
 }

@@ -815,15 +815,18 @@
     } : null };
   }
 
-  function computeTitanMoves(source, pieces, selected, speed, tiles, terrainApi, occ, bossSize, deadSeats = [], visited = []) {
-    const occupied = new Set(pieces.titans.flatMap((piece, index) =>
-      index === selected || deadSeats.includes(index) ? [] : [cellKey(piece.column, piece.row)]));
-    for (const { column, row } of visited) occupied.add(cellKey(column, row));
-    for (const { c, r } of losSourceCells(pieces.apostle, bossSize)) occupied.add(cellKey(c, r));
-    for (const tile of tiles) {
-      if (!/^(?:Column|City|Time-Frozen City)$/i.test(tile.name)) continue;
-      const def = terrainApi.catalog[tile.name];
-      for (const { c, r } of footprintCells(tile, def.width, def.height, def.los?.cells)) occupied.add(cellKey(c, r));
+  function computeTitanMoves(source, pieces, selected, speed, tiles, terrainApi, occ, bossSize, deadSeats = [], visited = [], forced = false) {
+    const occupied = new Set(visited.map(({ column, row }) => cellKey(column, row)));
+    if (!forced) {
+      pieces.titans.forEach((piece, index) => {
+        if (index !== selected && !deadSeats.includes(index)) occupied.add(cellKey(piece.column, piece.row));
+      });
+      for (const { c, r } of losSourceCells(pieces.apostle, bossSize)) occupied.add(cellKey(c, r));
+      for (const tile of tiles) {
+        if (!/^(?:Column|City|Time-Frozen City)$/i.test(tile.name)) continue;
+        const def = terrainApi.catalog[tile.name];
+        for (const { c, r } of footprintCells(tile, def.width, def.height, def.los?.cells)) occupied.add(cellKey(c, r));
+      }
     }
     const origin = cellKey(source.c, source.r);
     const parents = new Map([[origin, null]]);
@@ -1191,7 +1194,7 @@
     const bossSize = tactical ? terrainApi.getApostleProfile(apostle, settings.level ?? map.startLevel)?.size || 1 : 1;
     if (mode === "titan-move") {
       const speed = Number.isFinite(state.moveSpeed) ? Math.max(0, Math.min(20, state.moveSpeed)) : 5;
-      return { ...base, ...computeTitanMoves(source[0], pieceState, selected, speed, tiles, terrainApi, occ, bossSize, settings.deadSeats, state.visited) };
+      return { ...base, ...computeTitanMoves(source[0], pieceState, selected, speed, tiles, terrainApi, occ, bossSize, settings.deadSeats, state.visited, state.forced) };
     }
 
     if (mode === "apostle-move") {

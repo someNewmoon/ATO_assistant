@@ -4,6 +4,7 @@ import inventory from '../../technology/gear-inventory.js';
 import cardState from '../../aibp/room-card-state.js';
 import roomDice from '../../aibp/room-dice.js';
 import { roomProjection } from './room-projection.js';
+import { applyTurn, claimTurn, setTurnPhase } from './room-turn.js';
 import { battleRecap, battleStats, countReaction, setRollWounds } from './room-recap.js';
 import battleConfig from '../../technology/battle-config.js';
 import techDictionary from '../../technology/tech_card_dictionary.min.json';
@@ -158,6 +159,7 @@ function publicSquadLoadouts(room) {
 }
 
 const activityLabels = {
+  'turn-take': '开始英雄回合', 'turn-finish': '结束英雄回合',
   'board-move': '移动泰坦', 'board-undo-move': '撤回上一步', 'board-apostle-move': '移动骇物',
   'board-apostle-undo': '撤回骇物移动', 'board-face': '调整骇物朝向', 'priority-target': '调整首要目标', round: '开启新一轮',
   stat: '调整三曲盘', condition: '调整泰坦状态', gear: '使用装备', 'gear-card': '调整装备卡', 'gear-ready-all': '回正所有横置装备',
@@ -445,6 +447,7 @@ export class BattleRoom extends DurableObject {
     if (typeof body.type === 'string' && body.type.startsWith('squad-')) return applySquad(room, actor, body, randomInt);
     if (room.squad && body.type !== 'public-lobby'
       && (room.squad.phase !== 'battle' || body.battleNumber !== room.squad.battleNumber)) reject('当前战斗已结束或已经切换。', 409);
+    if (['turn-phase', 'turn-take', 'turn-finish'].includes(body.type)) return applyTurn(room, actor, body);
     if (typeof body.type === 'string' && body.type.startsWith('trauma-')) return applyTrauma(room, actor, body, randomInt);
     if (typeof body.type === "string" && body.type.startsWith("board-")) return applyRoomBoard(room, actor, body);
     if (body.type === 'room-projection') {
@@ -462,11 +465,15 @@ export class BattleRoom extends DurableObject {
     if (body.type === 'round' || body.type === 'end') {
       if (actor.role !== 'host') reject('只有房主可以执行此操作。', 403);
       if (body.type === 'round') {
-        room.round++;
-        if (room.board) {
-          delete room.board.titanMoves;
-          delete room.board.apostleMovement;
+        if (body.phase !== undefined && (body.round !== room.round || room.turn?.phase !== 'titans')) {
+          reject('轮次已更新，请重试。', 409);
         }
+        if (body.phase !== undefined && room.heroes.some((hero, seat) =>
+          hero.condition !== 'dead' && !room.turn.finished.includes(seat))) {
+          reject('还有泰坦尚未结束回合。', 409);
+        }
+        room.round++;
+        setTurnPhase(room, 'apostle');
       } else if (room.squad) {
         if (body.damage !== undefined && (!Array.isArray(body.damage) || body.damage.length !== room.heroes.length
             || body.damage.some(value => value !== null && (!Number.isInteger(value) || value < 0 || value > 999)))) {
@@ -553,9 +560,11 @@ export class BattleRoom extends DurableObject {
       case 'condition':
         if (!conditions.includes(body.value)) reject('未知英雄状态。');
         hero.condition = body.value;
-        if (hero.condition === 'dead' && room.board) {
-          if (room.board.titanMoves) delete room.board.titanMoves[seat];
-          if (room.board.lastTitanMove?.seat === seat) delete room.board.lastTitanMove;
+        if (hero.condition === 'dead') {
+          if (room.turn?.seat === seat) room.turn.seat = null;
+          if (room.board?.titanMoves) delete room.board.titanMoves[seat];
+          if (room.board?.forcedTitanMoves) delete room.board.forcedTitanMoves[seat];
+          if (room.board?.lastTitanMove?.seat === seat) delete room.board.lastTitanMove;
         }
         room.priorityTarget = priorityTarget(room);
         break;
@@ -641,6 +650,7 @@ export class BattleRoom extends DurableObject {
       if (mode === 'defense') parent.defenseRoll = roll.id;
     }
     if (defenseCount) roll.defenseCount = defenseCount;
+    if (mode === 'attack' || mode === 'power') claimTurn(room, seat);
     battleStats(room)[seat].rolls++;
     room.lastBattleRollId = roll.id;
     room.rolls.unshift(roll);

@@ -33,8 +33,8 @@
 
     const canEdit = () => actor?.role === "host" && !room.closed;
     const canMove = seat => !room.closed && room.heroes[seat]?.condition !== "dead" && (canEdit() || (actor.role === "player" && actor.seat === seat));
-    const overlayConfig = ({ active, mode, selectedTitan, weaponControls, titanSpeeds, elevated }) => ({
-      active, mode, selectedTitan, weaponControls, titanSpeeds, elevated,
+    const overlayConfig = ({ active, mode, selectedTitan, weaponControls, titanSpeeds, forced, elevated }) => ({
+      active, mode, selectedTitan, weaponControls, titanSpeeds, forced, elevated,
     });
 
     function setup() {
@@ -60,13 +60,13 @@
         getApostle: () => room.board.apostle,
         getLevel: () => room.board.level,
         getTitanTrail: () => room.board.lastTitanMove,
-        getTitanMovement: seat => room.board.titanMoves?.[seat],
-        onTitanEndMove(seat) {
-          const move = room.board.titanMoves?.[seat];
-          if (move) send({ type: "board-end-move", seat, move: move.id });
+        forcedByPhase: () => room.turn?.phase === "apostle",
+        getTitanMovement: (seat, forced) => (forced ? room.board.forcedTitanMoves : room.board.titanMoves)?.[seat],
+        onTitanEndMove(seat, move, forced) {
+          send({ type: "board-end-move", seat, move: move.id, forced });
         },
-        onTitanUndoMove(seat, move) {
-          send({ type: "board-undo-move", seat, move: move.id });
+        onTitanUndoMove(seat, move, forced) {
+          send({ type: "board-undo-move", seat, move: move.id, forced });
         },
         getApostleTrail: () => room.board.lastApostleMove,
         getApostleMovement: () => room.board.apostleMovement,
@@ -100,9 +100,9 @@
         onApostleFace(facing) {
           send({ type: "board-face", facing });
         },
-        onTitanMove(seat, point, speed) {
+        onTitanMove(seat, point, speed, move, forced) {
           send({ type: "board-move", seat, point, from: room.board.map.pieces.titans[seat],
-            speed, move: room.board.titanMoves?.[seat]?.id ?? null });
+            speed, move: move?.id ?? null, forced });
         },
         onLosChange() {
           if (!canEdit()) return;
@@ -126,7 +126,7 @@
         open.hidden = !canEdit();
         if (open.parentNode !== mount) mount.append(open);
         if (!room.board) { toolbar.hidden = true; return; }
-        const stateKey = JSON.stringify([room.board, actor.role, room.closed, room.priorityTarget, room.heroes.map(hero => hero.condition)]);
+        const stateKey = JSON.stringify([room.board, actor.role, room.closed, room.turn?.phase, room.priorityTarget, room.heroes.map(hero => hero.condition)]);
         if (stateKey === stamp) return;
         stamp = stateKey;
         target.hidden = !canEdit();

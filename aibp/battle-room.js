@@ -84,6 +84,7 @@
   function updateStatus() {
     status.textContent = [state && connection, message].filter(Boolean).join(' · ');
     if (toolsDialog.open) toolsStatus.textContent = message;
+    turnWindow.querySelector('[data-turn-status]').textContent = message;
   }
 
   function say(text) {
@@ -283,6 +284,65 @@
 
   function personalSeat() {
     return actor.role === 'host' ? state.squad?.hostSeat : actor.seat;
+  }
+
+  const turnWindow = document.createElement('details');
+  turnWindow.className = 'room-turn-window';
+  turnWindow.hidden = true;
+  turnWindow.innerHTML = '<summary aria-live="polite"></summary><div data-turn-body></div><small data-turn-status role="status"></small>';
+  root.append(turnWindow);
+  let turnHeading = '';
+  let turnMarkup = '';
+  turnWindow.addEventListener('click', event => {
+    const button = event.target.closest('[data-turn-action]');
+    if (!button || !state || state.closed) return;
+    const { turnAction: type, seat, value } = button.dataset;
+    send({ id: crypto.randomUUID(), type, round: state.round, phase: state.turn?.phase ?? null,
+      ...(seat !== undefined && { seat: Number(seat) }), ...(value && { value }) });
+  });
+
+  function renderTurn() {
+    turnWindow.hidden = state.closed;
+    if (state.closed) return;
+    const turn = state.turn;
+    const activeSeat = turn?.seat;
+    const titans = turn?.phase === 'titans';
+    const host = actor.role === 'host';
+    const everyoneFinished = titans && state.heroes.every((hero, seat) => hero.condition === 'dead' || turn.finished.includes(seat));
+    const label = !turn ? '等待房主设置轮次' : !titans ? '骇物轮次'
+      : activeSeat !== null ? '泰坦轮次 · ' + state.heroes[activeSeat].name
+        : everyoneFinished ? '泰坦轮次 · 全员已结束' : '泰坦轮次 · 等待认领';
+    const heading = '第 ' + state.round + ' 轮 · ' + label;
+    if (turnHeading !== heading) {
+      turnHeading = heading;
+      turnWindow.querySelector('summary').textContent = heading;
+    }
+    const action = (type, text, attr = '') => '<button type="button" data-turn-action="' + type + '"' + attr + '>' + text + '</button>';
+    const roster = state.heroes.map((hero, seat) => {
+      const dead = hero.condition === 'dead';
+      const acted = turn?.finished.includes(seat);
+      const current = activeSeat === seat;
+      const editable = host || (actor.role === 'player' && actor.seat === seat);
+      const actions = titans && editable && !dead && !acted ? current
+        ? action('turn-finish', '结束回合', ' data-seat="' + seat + '"')
+        : activeSeat === null ? action('turn-take', '认领回合', ' data-seat="' + seat + '"') : '' : '';
+      return '<li' + (current ? ' aria-current="true"' : '') + '>' + rollAvatar(seat)
+        + '<span>' + escape(hero.name) + '<small>' + (dead ? '死亡' : current ? '行动中' : acted ? '已结束' : '待行动')
+        + '</small></span>' + actions + '</li>';
+    }).join('');
+    const controls = host ? (!turn ? action('turn-phase', '进入骇物轮次', ' data-value="apostle"')
+        + action('turn-phase', '进入泰坦轮次', ' data-value="titans"')
+      : !titans ? action('turn-phase', '结束骇物轮次', ' data-value="titans"')
+        : action('round', '下一轮 · 骇物行动',
+          ' title="开始下一轮，回正阿尔戈能力"' + (everyoneFinished ? '' : ' disabled'))) : '';
+    const hint = !turn ? '' : !titans ? '<p>泰坦仍可结算闪避、击退和推斥。</p>'
+      : everyoneFinished ? '<p>结算本轮结束效果后，由房主开启下一轮。</p>'
+        : activeSeat === null ? '<p>首次主动移动或投掷攻击／威力骰会认领回合。</p>' : '';
+    const next = '<ul>' + roster + '</ul>' + hint + (controls ? '<div class="room-turn-controls">' + controls + '</div>' : '');
+    if (turnMarkup !== next) {
+      turnMarkup = next;
+      turnWindow.querySelector('[data-turn-body]').innerHTML = next;
+    }
   }
 
   function renderTools() {
@@ -586,6 +646,7 @@
   function renderRecap() {
     if (content.querySelector('.room-battle-recap')) return;
     dock.hidden = true;
+    turnWindow.hidden = true;
     if (toolsDialog.open) toolsDialog.close();
     boardMount.hidden = true;
     summary.innerHTML = '';
@@ -663,9 +724,7 @@
     if (!config?.abilities?.length && !config?.reserve?.length) return '';
     const editable = actor?.role !== 'viewer' && !state.closed;
     const cards = [...config.abilities, ...config.reserve];
-    const ready = editable && actor.role === 'host'
-      ? '<button type="button" data-action="round" title="推进到下一轮并回正能力卡；不补充剩余次数">下一轮 · 一键回正</button>' : '';
-    return '<section class="room-argo-abilities"><header><h3>阿尔戈能力</h3>' + ready + '</header><small>' + escape(config.name) + ' · 已准备 '
+    return '<section class="room-argo-abilities"><header><h3>阿尔戈能力</h3></header><small>' + escape(config.name) + ' · 已准备 '
       + config.abilities.length + '/' + config.limit + ' · 每项每轮限用一次</small><div class="room-argo-cards">'
       + cards.map(card => {
         const reserve = config.reserve.includes(card);
@@ -766,7 +825,7 @@
       + '<a href="' + escape(roomLink('view', credentials.keys.viewer)) + '" target="_blank" rel="noopener">打开只读投屏</a>'
       + (state.closed ? '<a href="./">返回 AIBP 开新战斗</a>' : '') + '</div>' : '';
     const controls = host && !state.closed
-      ? '<button type="button" data-action="round">下一轮</button><button type="button" data-action="end">结束战斗</button>' : '';
+      ? '<button type="button" data-action="end">结束战斗</button>' : '';
     const pool = Object.entries(poolNames).map(([key, label]) => '<div>' + marker('images/battle-markers/' + key + '.webp', label)
       + buttons('pool', key, state.pool[key], undefined, label, 99, edit) + '</div>').join('');
     const clearPool = edit ? '<button type="button" data-action="pool-clear"'
@@ -805,6 +864,7 @@
     content.innerHTML = primary + (role !== 'player' ? '<h3 class="battle-room-heading">状态总览</h3>' : '') + overview
       + (edit ? '' : rollLog) + (state.squad && role !== 'viewer' ? '<p><a href="' + escape(squadLink.link('/aibp/squad', id)) + '">返回联机小队</a></p>' : '');
     renderTools();
+    renderTurn();
     if (focus >= 0) {
       const target = focusRoot.querySelectorAll('button,select,input')[focus];
       if (target && (!selection || target.name === selection)) target.focus({ preventScroll: true });

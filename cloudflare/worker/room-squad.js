@@ -4,6 +4,7 @@ import { ApiError } from './campaign.js';
 import { priorityTarget, setupRoomBoard } from './board.js';
 import { createTrauma } from './room-trauma.js';
 import { roomProjection } from './room-projection.js';
+import { setTurnPhase } from './room-turn.js';
 
 const skills = { courage: '勇气', wisdom: '智慧', will: '意志', endurance: '耐力', cunning: '狡黠', fury: '力量' };
 const fail = (message, status = 400) => { throw new ApiError(status, message); };
@@ -130,6 +131,7 @@ export function applySquad(room, actor, body, randomInt) {
     delete room.battleStats;
     Object.assign(room, { board, trauma, projection: roomProjection(body.projection, board.apostle), round: 1,
       rolls: [], lastBattleRollId: null, argoAbilities: {}, pool: Object.fromEntries(Object.keys(room.pool).map(key => [key, 0])) });
+    setTurnPhase(room, 'apostle');
     squad.phase = 'battle';
     squad.battleNumber++;
     return;

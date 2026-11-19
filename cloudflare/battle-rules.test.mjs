@@ -339,3 +339,48 @@ test('只统计玩家为威力投掷选择的伤口，改判不会重复累加',
   assert.equal(r.squad.recap.heroes[0].damage, 2);
   assert.equal(r.squad.recap.heroes[1].damage, 0);
 });
+
+test('回合由首个主动行动认领，其他队员的操作不会抢走回合', () => {
+  const r = room();
+  const teammate = { role: 'player', seat: 1 };
+  const reader = { role: 'viewer' };
+  const turn = (actor, type, fields = {}) => reducer.apply(r, actor, { type, round: r.round, phase: r.turn?.phase ?? null, ...fields });
+  turn(host, 'turn-phase', { value: 'apostle' });
+  assert.throws(() => turn(player, 'turn-phase', { value: 'titans' }), /房主/);
+  assert.throws(() => turn(player, 'turn-take', { seat: 0 }), /骇物轮次/);
+  turn(host, 'turn-phase', { value: 'titans' });
+  reducer.apply(r, player, { type: 'roll', id: 'dodge', seat: 0, mode: 'dodge', counts: { d10: 1 } });
+  assert.equal(r.turn.seat, null);
+  reducer.apply(r, teammate, { type: 'roll', id: 'attack', seat: 1, mode: 'attack', counts: { d10: 1 } });
+  assert.equal(r.turn.seat, 1);
+  assert.throws(() => turn(player, 'turn-take', { seat: 0 }), /已被认领/);
+  assert.throws(() => turn(reader, 'turn-finish', { seat: 1 }), /只能查看/);
+  assert.throws(() => turn(host, 'round'), /尚未结束/);
+  turn(teammate, 'turn-finish', { seat: 1 });
+  assert.throws(() => turn(teammate, 'turn-take', { seat: 1 }), /已经结束/);
+  turn(player, 'turn-take', { seat: 0 });
+  turn(player, 'turn-finish', { seat: 0 });
+  turn(host, 'round');
+  assert.equal(r.round, 2);
+  assert.deepEqual(r.turn, { phase: 'apostle', seat: null, finished: [] });
+});
+
+test('骇物轮次的非主动移动可经过其他泰坦，单独记步且不认领回合', () => {
+  const r = room();
+  r.board = api.setupRoomBoard({ apostle: 'HEKATON', level: 1 }, 2);
+  const pieces = r.board.map.pieces;
+  pieces.titans = [{ column: 2, row: 2 }, { column: 3, row: 2 }];
+  reducer.apply(r, host, { type: 'turn-phase', phase: null, round: 1, value: 'apostle' });
+  reducer.apply(r, player, { type: 'board-move', id: 'push', seat: 0, from: { column: 2, row: 2 },
+    point: { column: 4, row: 2 }, speed: 2 });
+  assert.equal(r.turn.seat, null);
+  assert.equal(r.board.titanMoves, undefined);
+  assert.deepEqual(r.board.forcedTitanMoves[0].route, [2, 3, 4].map(column => ({ column, row: 2 })));
+  reducer.apply(r, player, { type: 'board-undo-move', seat: 0, move: 'push' });
+  assert.deepEqual(pieces.titans[0], { column: 2, row: 2 });
+  reducer.apply(r, host, { type: 'turn-phase', phase: 'apostle', round: 1, value: 'titans' });
+  reducer.apply(r, player, { type: 'board-move', id: 'active', seat: 0, from: { column: 2, row: 2 },
+    point: { column: 2, row: 3 }, speed: 2 });
+  assert.equal(r.turn.seat, 0);
+  assert.equal(r.board.titanMoves[0].remaining, 1);
+});

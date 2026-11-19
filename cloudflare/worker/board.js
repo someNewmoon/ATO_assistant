@@ -2,6 +2,7 @@ import '../../aibp/boss-levels-data.js';
 import terrain from '../../ss/terrain-data.js';
 import los from '../../aibp/battle_los.js';
 import { ApiError, object } from './campaign.js';
+import { claimTurn, forcedTitanMove } from './room-turn.js';
 
 const H = 14;
 const W = 20;
@@ -55,7 +56,7 @@ function cleanOverlay(value, seats) {
     selectedTitan, weaponControls, weapon: los.normalizeWeapon({
       ...weaponControls, max: weaponControls.kind === 'reach' ? reach : weaponControls.max,
     }),
-    moveSpeed: titanSpeeds[selectedTitan], titanSpeeds, elevated: state.elevated === true,
+    moveSpeed: titanSpeeds[selectedTitan], titanSpeeds, forced: state.forced === true, elevated: state.elevated === true,
   };
 }
 
@@ -89,10 +90,12 @@ export function applyRoomBoard(room, actor, body) {
       || (actor.role === 'player' && actor.seat !== seat)) fail('只能移动自己英雄的泰坦。', 403);
     if (room.heroes[seat].condition === 'dead') fail('死亡的泰坦无法移动。', 409);
     const deadSeats = room.heroes.flatMap((hero, index) => hero.condition === 'dead' ? [index] : []);
-    const move = board?.titanMoves?.[seat];
+    const forced = forcedTitanMove(room, body);
+    const movesKey = forced ? 'forcedTitanMoves' : 'titanMoves';
+    const move = board?.[movesKey]?.[seat];
     if (body.type === 'board-end-move') {
       if (!move || move.id !== body.move) fail('本次移动已更新，请重试。', 409);
-      delete board.titanMoves[seat];
+      delete board[movesKey][seat];
       return;
     }
     if (body.type === 'board-undo-move') {
@@ -105,12 +108,12 @@ export function applyRoomBoard(room, actor, body) {
       const size = terrain.getApostleProfile(board.apostle, board.level)?.size || 1;
       const hasBoss = Math.abs(pieces.apostle.column - origin.column) <= (size - 1) / 2
         && Math.abs(pieces.apostle.row - origin.row) <= (size - 1) / 2;
-      if (hasBoss || pieces.titans.some((titan, index) => index !== seat && !deadSeats.includes(index) && titan.column === origin.column && titan.row === origin.row)) {
+      if (!forced && (hasBoss || pieces.titans.some((titan, index) => index !== seat && !deadSeats.includes(index) && titan.column === origin.column && titan.row === origin.row))) {
         fail('原位置已有棋子，无法撤回。', 409);
       }
       pieces.titans[seat] = { ...origin };
-      if (previous) board.titanMoves[seat] = previous;
-      else delete board.titanMoves[seat];
+      if (previous) board[movesKey][seat] = previous;
+      else delete board[movesKey][seat];
       if (board.lastTitanMove?.id === move.id) {
         if (previous) board.lastTitanMove = previous;
         else delete board.lastTitanMove;
@@ -122,15 +125,19 @@ export function applyRoomBoard(room, actor, body) {
     if (current.column !== from.column || current.row !== from.row) fail('泰坦位置已更新，请重选目的格。', 409);
     if (body.move !== undefined && body.move !== (move?.id ?? null)) fail('本次移动已更新，请重选目的格。', 409);
     const active = move?.clicks ? move : null;
+    if (active && (active.route.at(-1).column !== current.column || active.route.at(-1).row !== current.row)) {
+      fail('位置在这次移动之外已改变，请先结束这次移动。', 409);
+    }
     const remaining = active?.remaining ?? speed;
     if (!remaining) fail('本次移动没有剩余步数。', 409);
     const overlay = los.buildLosOverlay(board.map, {
-      active: true, mode: 'titan-move', selectedTitan: seat, moveSpeed: remaining, visited: active?.route,
+      active: true, mode: 'titan-move', selectedTitan: seat, moveSpeed: remaining, visited: active?.route, forced,
     }, terrain, board.apostle, { level: board.level, deadSeats });
     const route = los.titanMoveRoute(overlay, point);
     if (!route) fail('这一格当前不可达。', 409);
     const next = los.appendTitanMove(active, { id: body.id, seat, speed: active?.speed ?? speed, route });
-    (board.titanMoves ||= {})[seat] = next;
+    (board[movesKey] ||= {})[seat] = next;
+    if (!forced) claimTurn(room, seat);
     board.lastTitanMove = next;
     board.map.pieces.titans[seat] = { column: point.column, row: point.row };
     return;
@@ -194,6 +201,7 @@ export function applyRoomBoard(room, actor, body) {
     delete board.lastApostleMove;
     delete board.apostleMovement;
     delete board.titanMoves;
+    delete board.forcedTitanMoves;
     if (!body.keepTitans) delete board.lastTitanMove;
     board.layoutRevision++;
     return;

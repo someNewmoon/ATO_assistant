@@ -13,7 +13,7 @@ import { ApiError, activeCycle, errorResponse, object, response } from './campai
 import { applyRoomBoard, priorityTarget, setupRoomBoard } from './board.js';
 
 import { applyTrauma, createTrauma, traumaView } from './room-trauma.js';
-import { applySquad, createSquad, latestBattleRoll, squadSkills, squadStats, squadView } from './room-squad.js';
+import { applySquad, createSquad, syncLoadoutTrauma, latestBattleRoll, squadSkills, squadStats, squadView } from './room-squad.js';
 
 export const roomIdPattern = /^[a-f0-9]{32}$/;
 const secretPattern = /^[a-f0-9]{64}$/;
@@ -79,8 +79,14 @@ export function squadHeroStats(campaign) {
 
 export function squadTitanTrauma(campaign) {
   const { record } = battleConfig.availability(campaign, techDictionary);
-  return Object.fromEntries(inventory.loadoutTitans(record)
+  const titanTracks = Object.fromEntries(inventory.loadoutTitans(record)
     .map(titan => [String(titan.id), inventory.traumaTrack(titan.traumaTrack)]));
+  const loadoutTracks = Object.fromEntries(inventory.assignedLoadouts(record, heroCatalog.activeHeroes(campaign))
+    .map(([id, raw]) => {
+      const { titanId, titanPanelId, traumaTrack } = inventory.normalizeLoadout(raw);
+      return [id, { titanId: inventory.titanIdFor(record, titanId), titanPanelId, traumaTrack }];
+    }));
+  return { titanTracks, loadoutTracks };
 }
 
 export async function createBattleRoom(env, campaign, payload, owner) {
@@ -109,7 +115,7 @@ export async function createBattleRoom(env, campaign, payload, owner) {
       argonaut: heroCatalog.ARGONAUTS.find(argonaut => argonaut.id === hero.argonaut)?.id,
       titan: titan ? {
         name: clean(titan.name), ...inventory.titanTypeFields(titan),
-        panelId: titan.panelId, crippled: Boolean(titan.crippled), traumaTrack: inventory.traumaTrack(titan.traumaTrack),
+        panelId: titan.panelId, crippled: Boolean(titan.crippled), traumaTrack: inventory.loadoutTraumaTrack(titan, kit),
       } : null,
       gear: Object.entries(kit.gear).map(([id, count]) => ({ id, name: equipmentName(id), count, used: 0 })),
       mnemos, stats: { danger: 0, rage: 0, fate: 0 }, ...(payload.squad === true && { storyStats: squadStats(hero.triskelion) }), condition: 'standing', player: '',
@@ -259,7 +265,7 @@ export class BattleRoom extends DurableObject {
   }
 
   async linkOwner(request) {
-    const { account, profile, saveName, keys, abilityOptions, storyStats, titanTracks, roster } = await request.json();
+    const { account, profile, saveName, keys, abilityOptions, storyStats, titanTracks, loadoutTracks, roster } = await request.json();
     const token = request.headers.get('Authorization')?.match(/^Bearer (.+)$/)?.[1];
     const [host, invite, viewer] = await Promise.all([token, keys?.invite, keys?.viewer].map(hash));
     const room = this.load();
@@ -279,6 +285,7 @@ export class BattleRoom extends DurableObject {
       titan.traumaTrack = track;
       tracksChanged = true;
     }
+    if (syncLoadoutTrauma(room.squad.stock, loadoutTracks)) tracksChanged = true;
     if (tracksChanged || rosterChanged || !room.owner || room.owner.saveName !== name || JSON.stringify(room.squad.abilityOptions) !== JSON.stringify(abilityOptions)) {
       room.owner = { account, profile, saveName: name, libraryAnchor };
       room.squad.abilityOptions = abilityOptions;

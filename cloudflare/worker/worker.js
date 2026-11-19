@@ -239,7 +239,7 @@ export class CampaignAccount extends DurableObject {
       const result = await roomStub(id).fetch('https://battle-room.internal/link-owner', {
         method: 'POST', headers: { Authorization: 'Bearer ' + credentials.token },
         body: JSON.stringify({ account: user.id, profile, saveName, keys: credentials.keys, abilityOptions: squadAbilityOptions(campaign),
-          storyStats: squadHeroStats(campaign), titanTracks: squadTitanTrauma(campaign), roster: squadRosterForCampaign(campaign) }),
+          storyStats: squadHeroStats(campaign), ...squadTitanTrauma(campaign), roster: squadRosterForCampaign(campaign) }),
       });
       if (!result.ok) return result;
       const linked = await result.json();

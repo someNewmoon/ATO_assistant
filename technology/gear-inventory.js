@@ -100,6 +100,10 @@
     return defaultTraumaTracks[titanType(titan)?.id]?.slice() || null;
   }
 
+  function loadoutTraumaTrack(titan, kit) {
+    return titan ? traumaTrack(kit?.traumaTrack) || traumaTrack(titan.traumaTrack) : null;
+  }
+
   function titanLabel(titan) {
     const panel = dreamwalkerPanel(titan);
     const name = panel?.name || titan?.name || '泰坦';
@@ -223,10 +227,12 @@
       const amount = count(quantity);
       if (id && !id.startsWith('T:') && amount) gear[id] = amount;
     }
+    const track = value?.titanId && traumaTrack(value.traumaTrack);
     return {
       player: String(value?.player || '').trim().slice(0, 60),
       titanId: String(value?.titanId || ''),
       ...(DREAMWALKER_PANELS.some(panel => panel.id === value?.titanPanelId) && { titanPanelId: value.titanPanelId }),
+      ...(track && { traumaTrack: track }),
       gear,
     };
   }
@@ -275,6 +281,7 @@
     next.titanId = titanIdFor(record, next.titanId);
     const assignedTitan = loadoutTitans(record).find(titan => String(titan.id) === next.titanId);
     if (next.titanPanelId && titanType(assignedTitan)?.id !== 'dreamwalker') delete next.titanPanelId;
+    if (!assignedTitan) delete next.traumaTrack;
     if (JSON.stringify(saved) === JSON.stringify(next) && (!migration || !record.loadouts?.[migration.slot])) return null;
     if (JSON.stringify(saved) !== JSON.stringify(normalizeLoadout(base))) {
       throw new Error('该英雄的配装已在另一设备修改，请重新打开配装');
@@ -307,7 +314,7 @@
 
   return {
     ascensionEnabled, baseGearId, ascendedCycle, nextCycle, ascend, loadoutTemplates,
-    TITAN_NAMES_ZH, TITAN_TYPES, DREAMWALKER_PANELS, TRAUMA_DECKS, traumaTrack, defaultTraumaTrack,
+    TITAN_NAMES_ZH, TITAN_TYPES, DREAMWALKER_PANELS, TRAUMA_DECKS, traumaTrack, defaultTraumaTrack, loadoutTraumaTrack,
     dreamwalkerPanel, loadoutTitan, titanType, titanTypeFields, titanLabel, titanArtwork,
     gearKey, normalize, adjust, normalizeLoadout, loadoutTitans, titanIdFor, assignedLoadouts, gearReservations, saveLoadout,
   };

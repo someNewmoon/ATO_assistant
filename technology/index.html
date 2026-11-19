@@ -1059,6 +1059,11 @@ button.gear-group-name:hover {
 }
   .arsenal-loadout-dialog [data-titan-panel-field][hidden],
   .arsenal-loadout-dialog [data-loadout-titan-art][hidden] { display: none; }
+  .arsenal-loadout-dialog [data-loadout-trauma] summary { cursor: pointer; }
+  .arsenal-loadout-dialog .loadout-trauma-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr)); gap: .4rem;
+    margin-top: .4rem;
+  }
   .arsenal-gear-owners, .arsenal-gear-owners > span { display:flex; flex-wrap:wrap; align-items:center; gap:.35rem; }
   .arsenal-gear-owners img { width:22px; height:22px; border-radius:50%; object-fit:cover; }
   [data-preview-equipment] img { display:block; max-height:100px; width:auto; }
@@ -1149,7 +1154,7 @@ button.gear-group-name:hover {
   <script src="structure-tech-rules.js?v=20261118-moon-resource-types1"></script>
   <script src="structure-tech-client.js?v=20261019-negotiation-rows2"></script>
 <script src="../hero/hero-catalog.js?v=20261117-battle-polish"></script>
-<script src="gear-inventory.js?v=20261118-shared-stock"></script>
+<script src="gear-inventory.js?v=20261119-loadout-trauma"></script>
 <script>
 const TECH_DICTIONARY_URL = 'tech_card_dictionary.min.json';
 const fetch = window.ATO_CAMPAIGN_NOTES.createFetch(window.fetch.bind(window), {
@@ -2243,6 +2248,20 @@ function editArsenalLoadout(heroId, catalog) {
           <select name="titanPanel" aria-label="梦行者面板"></select>
         </label>
         <a data-loadout-titan-art target="_blank" rel="noopener" hidden><img alt=""></a>
+        <details data-loadout-trauma hidden>
+          <summary>创伤表</summary>
+          <label>创伤表来源<select name="traumaMode" aria-label="创伤表来源">
+            <option value="titan">沿用泰坦创伤表</option>
+            <option value="custom">自定义当前配装</option>
+          </select></label>
+          <div class="loadout-trauma-grid">
+            ${Array.from({ length: 9 }, (_, i) => `<label>凶险 ${i + 1}<select data-trauma-deck aria-label="凶险 ${i + 1}">
+              <option value="">请选择</option>
+              ${Object.entries(inventory.TRAUMA_DECKS).map(([id, name]) => `<option value="${id}">${esc(name)}</option>`).join('')}
+            </select></label>`).join('')}
+          </div>
+          <small data-trauma-source></small>
+        </details>
         ${heroes.mnemosHtml(hero)}
         ${templates.length ? `<label>导入配装模板<select name="template"><option value="">选择模板</option>${templates.map(item => `<option value="${esc(item.id)}">${esc(item.name)}</option>`).join('')}</select></label><small>模板仅填入当前草稿，保存时检查库存；不会覆盖原模板。</small>` : ''}
         <ul class="arsenal-loadout-gear" aria-label="已分配装备"></ul>
@@ -2286,6 +2305,10 @@ function editArsenalLoadout(heroId, catalog) {
   const message = dialog.querySelector('[role="status"]');
   const titan = form.elements.namedItem('titan');
   const panel = form.elements.namedItem('titanPanel');
+  const trauma = dialog.querySelector('[data-loadout-trauma]');
+  const traumaMode = form.elements.namedItem('traumaMode');
+  const traumaDecks = [...trauma.querySelectorAll('[data-trauma-deck]')];
+  const traumaSource = trauma.querySelector('[data-trauma-source]');
   const query = form.elements.namedItem('query');
   const gear = form.elements.namedItem('gear');
   const add = dialog.querySelector('[data-add-loadout-gear]');
@@ -2312,7 +2335,20 @@ function editArsenalLoadout(heroId, catalog) {
       .map(({ id, name }) => `<option value="${id}">${esc(name)}</option>`).join('');
     panel.value = isDreamwalker ? (inventory.dreamwalkerPanel(entry, draft.titanPanelId)?.id || '') : '';
     const link = dialog.querySelector('[data-loadout-titan-art]');
-    const art = inventory.titanArtwork(inventory.loadoutTitan(entry, draft.titanPanelId));
+    const selectedTitan = inventory.loadoutTitan(entry, draft.titanPanelId);
+    const art = inventory.titanArtwork(selectedTitan);
+    const inheritedTrack = inventory.loadoutTraumaTrack(selectedTitan);
+    const track = draft.traumaTrack || inheritedTrack || inventory.defaultTraumaTrack(selectedTitan);
+    trauma.hidden = !entry;
+    traumaMode.disabled = !entry;
+    traumaMode.value = draft.traumaTrack ? 'custom' : 'titan';
+    traumaSource.textContent = draft.traumaTrack ? '仅用于当前英雄的配装。'
+      : inheritedTrack ? '沿用泰坦管理里保存的创伤表。'
+      : track ? '沿用该泰坦种类的默认创伤表。' : '这枚泰坦还没有创伤表，可为当前配装设置。';
+    traumaDecks.forEach((select, i) => {
+      select.value = track?.[i] || '';
+      select.disabled = !draft.traumaTrack;
+    });
     link.hidden = !art;
     if (art) {
       link.href = '../' + art.path;
@@ -2360,16 +2396,33 @@ function editArsenalLoadout(heroId, catalog) {
   titan.addEventListener('change', () => {
     draft.titanId = titan.value;
     draft.titanPanelId = '';
+    delete draft.traumaTrack;
     renderTitans();
   });
   panel.addEventListener('change', () => {
     draft.titanPanelId = panel.value;
+    delete draft.traumaTrack;
     renderTitans();
+  });
+  traumaMode.addEventListener('change', () => {
+    if (traumaMode.value === 'custom') {
+      draft.traumaTrack = traumaDecks.map(select => select.value);
+    } else {
+      delete draft.traumaTrack;
+    }
+    renderTitans();
+  });
+  trauma.addEventListener('change', event => {
+    if (event.target.matches('[data-trauma-deck]')) {
+      draft.traumaTrack = traumaDecks.map(select => select.value);
+    }
   });
   form.elements.namedItem('template')?.addEventListener('change', event => {
     const template = templates.find(item => item.id === event.target.value);
     if (!template) return;
     migration = undefined;
+    delete draft.traumaTrack;
+    delete draft.titanPanelId;
     Object.assign(draft, inventory.normalizeLoadout({ ...template.kit, player: base.player }));
     draft.titanId = inventory.titanIdFor(record, draft.titanId);
     renderTitans(); renderAssignedGear();
@@ -2380,6 +2433,7 @@ function editArsenalLoadout(heroId, catalog) {
     const source = inventory.normalizeLoadout(migration?.base || base);
     draft.titanId = inventory.titanIdFor(record, source.titanId);
     draft.titanPanelId = source.titanPanelId;
+    draft.traumaTrack = source.traumaTrack;
     draft.gear = source.gear;
     renderTitans();
     renderAssignedGear();
@@ -2406,6 +2460,12 @@ function editArsenalLoadout(heroId, catalog) {
     if (fields.disabled) return;
     if (activeAccountId !== profileId || campaignSession.accountId !== accountId || campaignSession.changed) {
       message.textContent = '档案或账号已切换，请重新打开配装。';
+      return;
+    }
+    if (draft.traumaTrack && !inventory.traumaTrack(draft.traumaTrack)) {
+      trauma.open = true;
+      message.textContent = '请先为凶险 1 至 9 选择创伤牌库。';
+      traumaDecks.find(select => !select.value)?.focus();
       return;
     }
     draft.titanId = titan.value;

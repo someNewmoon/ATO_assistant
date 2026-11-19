@@ -90,7 +90,8 @@ function refreshCombatKit(room) {
     const kit = inventory.normalizeLoadout(stock.loadouts[hero.id]);
     const titan = inventory.loadoutTitan(stock.titans.find(entry => entry.id === kit.titanId), kit.titanPanelId);
     hero.titan = titan ? {
-      name: titan.name, ...inventory.titanTypeFields(titan), panelId: titan.panelId, crippled: titan.crippled, traumaTrack: inventory.traumaTrack(titan.traumaTrack),
+      name: titan.name, ...inventory.titanTypeFields(titan), panelId: titan.panelId, crippled: titan.crippled,
+      traumaTrack: inventory.loadoutTraumaTrack(titan, kit),
     } : null;
     hero.gear = Object.entries(kit.gear).map(([id, count]) => ({ id, name: gearNames[id] || id, count, used: 0 }));
     hero.stats = { danger: 0, rage: 0, fate: 0 };
@@ -98,6 +99,27 @@ function refreshCombatKit(room) {
     hero.condition = 'standing';
     hero.mnemos = hero.mnemos.map(({ state, ...card }) => card);
   }
+}
+
+function sameTitanPanel(titan, kit, other) {
+  return Boolean(titan) && kit.titanId === other.titanId
+    && inventory.loadoutTitan(titan, kit.titanPanelId).panelId === inventory.loadoutTitan(titan, other.titanPanelId).panelId;
+}
+
+export function syncLoadoutTrauma(stock, tracks) {
+  let changed = false;
+  for (const [id, source] of Object.entries(tracks || {})) {
+    if (!Object.hasOwn(stock.loadouts, id)) continue;
+    const kit = stock.loadouts[id];
+    const titan = stock.titans.find(entry => entry.id === kit.titanId);
+    if (!sameTitanPanel(titan, kit, source)) continue;
+    const track = inventory.traumaTrack(source.traumaTrack);
+    if (JSON.stringify(kit.traumaTrack || null) === JSON.stringify(track)) continue;
+    if (track) kit.traumaTrack = track;
+    else delete kit.traumaTrack;
+    changed = true;
+  }
+  return changed;
 }
 
 export function applySquad(room, actor, body, randomInt) {
@@ -165,7 +187,10 @@ export function applySquad(room, actor, body, randomInt) {
     const { stock } = squad;
     const current = inventory.normalizeLoadout(stock.loadouts[hero.id]);
     const next = inventory.normalizeLoadout({ ...body.kit, player: current.player });
-    if (next.titanId && !stock.titans.some(titan => titan.id === next.titanId)) fail('军械库中没有这个泰坦。');
+    const titan = stock.titans.find(entry => entry.id === next.titanId);
+    if (next.titanId && !titan) fail('军械库中没有这个泰坦。');
+    if (sameTitanPanel(titan, next, current) && current.traumaTrack) next.traumaTrack = current.traumaTrack;
+    else delete next.traumaTrack;
     for (const [id, count] of Object.entries(next.gear)) {
       if (!Object.hasOwn(squad.gearNames, id) || count > 99) fail('装备或数量无效。');
     }

@@ -84,6 +84,14 @@ export function priorityTarget(room) {
 export function applyRoomBoard(room, actor, body) {
   const seats = room.heroes.length;
   const board = room.board;
+  if (body.type === 'board-ping') {
+    if (!['host', 'player'].includes(actor.role)) fail('投屏只能查看点位。', 403);
+    if (!board || !isCell(body.point)) fail('请选择有效的版图点位。');
+    const hero = room.heroes[actor.seat];
+    room.boardPing = { id: body.id, column: body.point.column, row: body.point.row,
+      by: actor.role === 'host' ? '房主' : hero?.player || hero?.name || '队员', expiresAt: Date.now() + 12000 };
+    return;
+  }
   if (['board-move', 'board-undo-move', 'board-end-move'].includes(body.type)) {
     const { seat, point, from, speed } = body;
     if (actor.role === 'viewer' || !Number.isInteger(seat) || seat < 0 || seat >= seats
@@ -146,6 +154,7 @@ export function applyRoomBoard(room, actor, body) {
   if (body.type === 'board-setup') {
     if (board && board.layoutRevision !== body.layoutRevision) fail('版图布局已更新。', 409);
     room.board = setupRoomBoard(body, seats);
+    delete room.boardPing;
     if (room.projection?.apostle !== room.board.apostle) room.projection = null;
     room.board.layoutRevision = (board?.layoutRevision ?? -1) + 1;
     return;
@@ -198,6 +207,7 @@ export function applyRoomBoard(room, actor, body) {
     const map = cleanMap(body.map, board.apostle, board.level, seats);
     if (body.keepTitans) map.pieces.titans = board.map.pieces.titans;
     board.map = map;
+    delete room.boardPing;
     delete board.lastApostleMove;
     delete board.apostleMovement;
     delete board.titanMoves;

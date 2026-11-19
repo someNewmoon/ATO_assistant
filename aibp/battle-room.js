@@ -22,6 +22,7 @@
   const memoryCatalog = new Map([...Object.values(MNEMOS).flat(), ...Object.values(FATED_MNEMOS).flat()]
     .map(card => [card.card, card]));
   const statNames = { rage: '怒气', fate: '命运', danger: '凶险' };
+  const titanMarkerNames = { despair: '绝望', ambrosia: '神浆' };
   const poolNames = { opening: '伺机', break: '破势', diversion: '分神', rouse: '激励', black: '破坏', fire: '火焰', hope: '希望' };
   const conditionNames = { standing: '站立', down: '倒地', rising: '起身', dead: '死亡' };
   const dice = window.ATO_ROOM_DICE;
@@ -496,6 +497,9 @@
     const stats = Object.entries(statNames).map(([key, label]) => '<div>'
       + marker('../hero/assets/tri_' + key + '.png', label)
       + buttons('stat', key, hero.stats[key], seat, label, 30, editable) + '</div>').join('');
+    const markers = Object.entries(titanMarkerNames).map(([key, label]) => '<div data-titan-marker="' + key + '">'
+      + '<span class="room-titan-marker-name">' + label + '</span>'
+      + buttons('titan-marker', key, hero.markers?.[key] ?? 0, seat, label, 99, editable) + '</div>').join('');
     const condition = editable ? '<select data-condition="' + seat + '" aria-label="' + escape(hero.name) + '的泰坦状态">'
       + Object.entries(conditionNames).map(([key, label]) => '<option value="' + key + '"' + (key === hero.condition ? ' selected' : '') + '>' + label + '</option>').join('')
       + '</select>' : '<small>' + conditionNames[hero.condition] + '</small>';
@@ -507,6 +511,7 @@
       + avatar + '<div><h3>' + escape(hero.name) + '</h3><small>' + escape(hero.player || '待认领') + '</small></div></div>'
       + titanImage + '<div class="battle-room-titan-status"><span>' + titan + '</span>' + condition + '</div></header>'
       + '<div class="battle-room-stats" role="group" aria-label="三曲盘">' + stats + '</div>'
+      + '<div class="battle-room-stats room-titan-markers" role="group" aria-label="泰坦状态标记">' + markers + '</div>'
       + ((own && editable) ? '' : traumaControls(hero, seat, editable))
       + '<div class="room-equipment-head"' + (own ? ' id="room-equipment"' : '') + '><h4>装备</h4>' + readyGear + '</div>'
       + (gear ? '<ul class="battle-room-card-list">' + gear + '</ul>' : '<p>未分配装备</p>')

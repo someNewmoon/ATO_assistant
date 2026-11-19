@@ -94,6 +94,7 @@ function refreshCombatKit(room) {
     } : null;
     hero.gear = Object.entries(kit.gear).map(([id, count]) => ({ id, name: gearNames[id] || id, count, used: 0 }));
     hero.stats = { danger: 0, rage: 0, fate: 0 };
+    delete hero.markers;
     hero.condition = 'standing';
     hero.mnemos = hero.mnemos.map(({ state, ...card }) => card);
   }
@@ -129,6 +130,7 @@ export function applySquad(room, actor, body, randomInt) {
     room.priorityTarget = priorityTarget({ heroes: room.heroes });
     room.activity = [];
     delete room.battleStats;
+    delete room.boardPing;
     Object.assign(room, { board, trauma, projection: roomProjection(body.projection, board.apostle), round: 1,
       rolls: [], lastBattleRollId: null, argoAbilities: {}, pool: Object.fromEntries(Object.keys(room.pool).map(key => [key, 0])) });
     setTurnPhase(room, 'apostle');

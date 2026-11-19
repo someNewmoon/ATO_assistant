@@ -1020,10 +1020,23 @@
       options.onLosChange?.();
     }
 
-    board.addEventListener("click", (event) => {
+    function boardClickPoint(event) {
       const rect = board.getBoundingClientRect();
-      const column = (event.clientX - rect.left) / rect.width * 20 + 0.5;
-      const row = (rect.top + rect.height - event.clientY) / rect.height * 14 + 0.5;
+      return {
+        column: (event.clientX - rect.left) / rect.width * (window.BattleLOS?.COLUMNS ?? 20) + 0.5,
+        row: (rect.top + rect.height - event.clientY) / rect.height * (window.BattleLOS?.ROWS ?? 14) + 0.5,
+      };
+    }
+
+    if (options.onBoardPoint) board.addEventListener("click", event => {
+      if (event.detail && options.onBoardPoint(window.BattleTerrain.boardCell(boardClickPoint(event)))) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+      }
+    }, true);
+
+    board.addEventListener("click", (event) => {
+      const { column, row } = boardClickPoint(event);
       if (hasTactics(losState.mode)) return tacticalClick(column, row);
       // In LoS mode, a board click sets the source anchor instead of moving terrain.
       if (losState.active) {

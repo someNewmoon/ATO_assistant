@@ -384,3 +384,41 @@ test('骇物轮次的非主动移动可经过其他泰坦，单独记步且不�
   assert.equal(r.turn.seat, 0);
   assert.equal(r.board.titanMoves[0].remaining, 1);
 });
+
+test('版图点位由房主或队员标记，经校验且不改变棋子、移动或回合', () => {
+  const r = room();
+  r.board = api.setupRoomBoard({ apostle: 'HEKATON', level: 1 }, 2);
+  r.turn = { phase: 'titans', seat: null, finished: [] };
+  r.heroes[0].player = '点位测试';
+  const board = structuredClone(r.board);
+  const mark = { type: 'board-ping', id: 'first', point: { column: 20, row: 1 }, by: '伪造姓名' };
+  assert.throws(() => reducer.apply(r, { role: 'viewer' }, mark), /只能查看/);
+  assert.throws(() => reducer.apply(r, player, { ...mark, point: { column: 20, row: 0 } }), /有效/);
+  const now = Date.now();
+  reducer.apply(r, player, mark);
+  assert.equal(r.boardPing.by, '点位测试');
+  assert.ok(r.boardPing.expiresAt >= now + 12000);
+  assert.deepEqual(r.board, board);
+  assert.equal(r.turn.seat, null);
+  reducer.apply(r, host, { ...mark, id: 'second', point: { column: 1, row: 14 } });
+  assert.equal(r.boardPing.id, 'second');
+  assert.equal(r.boardPing.by, '房主');
+  const replacement = { type: 'board-layout', map: r.board.map, layoutRevision: r.board.layoutRevision };
+  reducer.apply(r, host, replacement);
+  assert.equal(r.boardPing, undefined);
+});
+
+test('绝望和神浆独立计数，可从旧状态直接增加，队员不能修改其他英雄', () => {
+  const r = room();
+  const change = (actor, key, delta, seat = 0) => reducer.apply(r, actor, { type: 'titan-marker', key, delta, seat });
+  const original = structuredClone(r.heroes[0].stats);
+  change(player, 'despair', 1);
+  change(host, 'ambrosia', 1);
+  change(player, 'despair', -1);
+  assert.throws(() => change(player, 'despair', -1), /范围|上限|下限/);
+  assert.throws(() => change(player, 'ambrosia', 1, 1), /自己的英雄/);
+  assert.throws(() => change(host, 'danger', 1), /未知/);
+  assert.deepEqual(r.heroes[0].markers, { despair: 0, ambrosia: 1 });
+  assert.deepEqual(r.heroes[0].stats, original);
+  assert.equal(r.heroes[1].markers, undefined);
+});

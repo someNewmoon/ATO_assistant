@@ -20,6 +20,7 @@ const secretPattern = /^[a-f0-9]{64}$/;
 const protocol = 'ato-battle-v1';
 const poolKeys = ['opening', 'break', 'diversion', 'rouse', 'black', 'fire', 'hope'];
 const stats = ['danger', 'rage', 'fate'];
+const titanMarkerNames = { despair: '绝望', ambrosia: '神浆' };
 const conditions = ['standing', 'down', 'rising', 'dead'];
 const encoder = new TextEncoder();
 
@@ -162,7 +163,7 @@ const activityLabels = {
   'turn-take': '开始英雄回合', 'turn-finish': '结束英雄回合',
   'board-move': '移动泰坦', 'board-undo-move': '撤回上一步', 'board-apostle-move': '移动骇物',
   'board-apostle-undo': '撤回骇物移动', 'board-face': '调整骇物朝向', 'priority-target': '调整首要目标', round: '开启新一轮',
-  stat: '调整三曲盘', condition: '调整泰坦状态', gear: '使用装备', 'gear-card': '调整装备卡', 'gear-ready-all': '回正所有横置装备',
+  stat: '调整三曲盘', 'titan-marker': '调整泰坦标记', condition: '调整泰坦状态', gear: '使用装备', 'gear-card': '调整装备卡', 'gear-ready-all': '回正所有横置装备',
   'mnemos-card': '调整旧忆卡', 'argo-use': '使用阿尔戈能力', 'argo-undo': '撤回阿尔戈能力',
   'trauma-draw': '抽取创伤或结算受击', 'trauma-resolve': '结算创伤', 'pool-clear': '清空克拉托斯池',
   reroll: '重掷骰子', convert: '转换威力骰', 'roll-wounds': '记录击破结果',
@@ -176,6 +177,7 @@ function recordBattleActivity(room, actor, body) {
   if (body.type === 'gear' || body.type === 'gear-card') detail = hero?.gear.find(item => item.id === body.key)?.name;
   if (body.type === 'mnemos-card') detail = hero?.mnemos.find(item => item.id === body.key)?.name;
   if (body.type === 'stat') detail = ({ rage: '怒气', fate: '命运', danger: '凶险' }[body.key]) + (body.delta > 0 ? ' +1' : ' −1');
+  if (body.type === 'titan-marker') detail = titanMarkerNames[body.key] + (body.delta > 0 ? ' +1' : ' −1');
   if (body.type === 'roll-wounds') detail = roomDice.woundResults[body.value];
   if (body.type === 'board-move') detail = String.fromCharCode(64 + body.point.row) + body.point.column;
   const by = actor.role === 'host' ? '房主' : room.heroes[actor.seat]?.player || room.heroes[actor.seat]?.name;
@@ -557,6 +559,13 @@ export class BattleRoom extends DurableObject {
           room.priorityTarget = { seat, locked: false };
         } else if (body.key === 'rage') room.priorityTarget = target;
         break;
+      case 'titan-marker': {
+        if (!Object.hasOwn(titanMarkerNames, body.key)) reject('未知泰坦标记。');
+        const current = hero.markers?.[body.key] ?? 0;
+        const next = counter(current, body.delta, 99);
+        (hero.markers ||= {})[body.key] = next;
+        break;
+      }
       case 'condition':
         if (!conditions.includes(body.value)) reject('未知英雄状态。');
         hero.condition = body.value;

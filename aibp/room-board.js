@@ -37,6 +37,66 @@
       active, mode, selectedTitan, weaponControls, titanSpeeds, forced, elevated,
     });
 
+    let selectingPoint = false;
+    let shownPing = null;
+    let pingTimer;
+    let pingStatusText = "";
+    let grid;
+    const pingBar = document.createElement("div");
+    pingBar.className = "room-board-ping-bar";
+    const pingButton = document.createElement("button");
+    pingButton.type = "button";
+    pingButton.textContent = "标记点位";
+    const pingStatus = document.createElement("span");
+    pingStatus.setAttribute("role", "status");
+    const pingMarker = document.createElement("span");
+    pingMarker.className = "room-board-ping";
+    pingMarker.setAttribute("aria-hidden", "true");
+    pingMarker.hidden = true;
+    pingBar.append(pingButton, pingStatus);
+
+    const canPing = () => Boolean(room?.board && !room.closed && ["host", "player"].includes(actor?.role));
+    function renderPingStatus() {
+      pingButton.setAttribute("aria-pressed", String(selectingPoint));
+      grid?.classList.toggle("is-picking-point", selectingPoint);
+      const label = shownPing ? shownPing.by + " · " + pingMarker.textContent : "";
+      const next = selectingPoint ? "点选要标记的格子，再点按钮可取消。" : label;
+      if (pingStatusText !== next) {
+        pingStatusText = next;
+        pingStatus.textContent = next;
+      }
+      pingBar.hidden = !canPing() && !label;
+    }
+
+    function showPing(ping) {
+      if (shownPing?.id !== ping?.id) {
+        clearTimeout(pingTimer);
+        shownPing = ping?.expiresAt > Date.now() ? ping : null;
+        pingMarker.hidden = !shownPing;
+        if (shownPing) {
+          const { COLUMNS, ROWS } = window.BattleLOS;
+          const { row, column, expiresAt } = shownPing;
+          pingMarker.style.left = (column - 1) / COLUMNS * 100 + "%";
+          pingMarker.style.top = (ROWS - row) / ROWS * 100 + "%";
+          pingMarker.textContent = String.fromCharCode(64 + row) + column;
+          pingTimer = setTimeout(() => showPing(null), Math.max(0, expiresAt - Date.now()));
+        }
+      }
+      renderPingStatus();
+    }
+
+    pingButton.addEventListener("click", () => {
+      if (!canPing()) return;
+      selectingPoint = !selectingPoint;
+      renderPingStatus();
+    });
+
+    mount.addEventListener("keydown", event => {
+      if (event.key !== "Escape" || !selectingPoint) return;
+      selectingPoint = false;
+      renderPingStatus();
+    });
+
     const finishTurn = document.createElement("button");
     finishTurn.type = "button";
     finishTurn.dataset.boardFinishTurn = "";
@@ -54,6 +114,9 @@
         if (!canEdit()) node.hidden = true;
       }
       panel.querySelector(".battle-movement-actions").append(finishTurn);
+      grid = panel.querySelector("[data-battle-map-board]");
+      panel.querySelector(".battle-map-head").append(pingBar);
+      grid.append(pingMarker);
       mount.append(panel);
       const cards = panel.querySelector(".battle-map-cards");
       const details = document.createElement("details");
@@ -95,6 +158,13 @@
           const path = window.ATO_HERO_CATALOG.heroPortrait(hero);
           return path && '../hero/assets/' + path;
         }),
+        onBoardPoint(point) {
+          if (!selectingPoint || !canPing() || !point) return false;
+          selectingPoint = false;
+          renderPingStatus();
+          send({ type: "board-ping", point });
+          return true;
+        },
         canEditBoard: canEdit, canMoveTitan: canMove,
         allowTacticalControls: actor.role !== "viewer", alwaysRenderPieces: true,
         setMap(next) {
@@ -136,6 +206,11 @@
         mount.classList.toggle("room-tactical-read-only", actor.role === "viewer" || room.closed);
         open.hidden = !canEdit();
         if (open.parentNode !== mount) mount.append(open);
+        if (!canPing() || previousBattle !== room.squad?.battleNumber || previous?.apostle !== room.board?.apostle) {
+          selectingPoint = false;
+        }
+        pingButton.hidden = !canPing();
+        showPing(room.board && !room.closed ? room.boardPing : null);
         if (!room.board) { toolbar.hidden = true; return; }
         const seat = room.turn?.seat;
         finishTurn.hidden = room.turn?.phase !== "titans" || !Number.isInteger(seat) || !canMove(seat);

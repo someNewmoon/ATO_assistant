@@ -394,3 +394,25 @@ body.aibp-room-only > .app > main > :not(#battleRoom) { display: none !important
 .room-power-card .battle-room-card-art { width: 100%; padding: 0; }
 .room-power-card img { display: block; width: 100%; height: auto; }
 .room-tactical-board [data-board-finish-turn] { border-color: #dca974; font-weight: 700; }
+
+.room-board-ping-bar { display: flex; gap: .55rem; align-items: center; flex-wrap: wrap; }
+.room-board-ping-bar[hidden], .room-board-ping-bar button[hidden], .room-board-ping[hidden] { display: none; }
+.room-board-ping-bar button[aria-pressed="true"] { border-color: #57e3f3; box-shadow: inset 0 0 0 1px #57e3f3; }
+.room-board-ping-bar span { font-size: .88rem; }
+.battle-map-board.is-picking-point, .battle-map-board.is-picking-point button { cursor: crosshair; }
+.room-board-ping {
+  position: absolute; z-index: 8; display: grid; place-items: center; pointer-events: none;
+  width: 5%; height: calc(100% / 14); box-sizing: border-box;
+  border: 2px solid #71f1ff; border-radius: .3rem; background: #0a8caa45;
+  color: #fff; font-size: clamp(9px, 1.7vw, 17px); font-weight: 800; line-height: 1;
+  text-shadow: 0 1px 3px #002631; box-shadow: 0 0 0 1px #102936, 0 0 12px #57e3f3;
+  animation: room-board-ping-in .7s ease-out;
+}
+@keyframes room-board-ping-in { from { box-shadow: 0 0 0 .55rem #57e3f366, 0 0 18px #57e3f3; } }
+@media (prefers-reduced-motion: reduce) { .room-board-ping { animation: none; } }
+
+.battle-room:has(.is-picking-point) :is(.room-tool-dock, .room-turn-window) { visibility: hidden; }
+.battle-room .room-titan-markers { margin-top: .35rem; }
+.room-titan-marker-name { font-size: .82rem; font-weight: 650; }
+.room-titan-markers [data-titan-marker="despair"] { border-left: 3px solid #a985bf; }
+.room-titan-markers [data-titan-marker="ambrosia"] { border-left: 3px solid #d9a74f; }

@@ -28,8 +28,7 @@
     };
     targetSelect.addEventListener("change", confirm);
     lockInput.addEventListener("change", confirm);
-    const undo = document.createElement("div");
-    toolbar.append(target, lock, undo);
+    toolbar.append(target, lock);
     mount.prepend(toolbar);
 
     const canEdit = () => actor?.role === "host" && !room.closed;
@@ -66,7 +65,17 @@
           const move = room.board.titanMoves?.[seat];
           if (move) send({ type: "board-end-move", seat, move: move.id });
         },
+        onTitanUndoMove(seat, move) {
+          send({ type: "board-undo-move", seat, move: move.id });
+        },
         getApostleTrail: () => room.board.lastApostleMove,
+        getApostleMovement: () => room.board.apostleMovement,
+        onApostleUndoMove(move) {
+          send({ type: "board-apostle-undo", move: move.id });
+        },
+        onApostleEndMove(move) {
+          send({ type: "board-apostle-end", move: move.id });
+        },
         titanNames: () => room.heroes.map(({ titan, name }) =>
           window.ATO_GEAR_INVENTORY.dreamwalkerPanel(titan)?.name || titan?.name || name),
         titanRoster: () => room.heroes.map(hero => hero.titan),
@@ -84,8 +93,9 @@
           send({ type: "board-layout", map: next, keepTitans: Boolean(next.pieces),
             layoutRevision: room.board.layoutRevision });
         },
-        onApostleMove(point) {
-          send({ type: "board-apostle-move", point, from: room.board.map.pieces.apostle });
+        onApostleMove(point, limit) {
+          send({ type: "board-apostle-move", point, from: room.board.map.pieces.apostle,
+            move: room.board.apostleMovement?.id ?? null, ...(limit !== null && { speed: limit }) });
         },
         onApostleFace(facing) {
           send({ type: "board-face", facing });
@@ -126,17 +136,7 @@
         targetSelect.value = room.priorityTarget?.seat ?? '';
         lockInput.checked = room.priorityTarget?.locked === true;
         lockInput.disabled = !living.length;
-        const buttons = Object.values(room.board.titanMoves || {}).filter(move => canMove(move.seat)).map(move => {
-          const button = document.createElement("button");
-          button.type = "button";
-          button.textContent = "撤回上一步 · " + room.heroes[move.seat].name;
-          button.addEventListener("click", () => {
-            send({ type: "board-undo-move", seat: move.seat, move: move.id });
-          });
-          return button;
-        });
-        undo.replaceChildren(...buttons);
-        toolbar.hidden = !canEdit() && !buttons.length;
+        toolbar.hidden = !canEdit();
         map = room.board.map;
         const existing = Boolean(control);
         if (!existing) setup();

@@ -7,11 +7,12 @@ function addVotes(entry, votes) {
 
 export function battleStats(room) {
   if (room.battleStats) return room.battleStats;
-  const stats = room.heroes.map(() => ({ rolls: 0, likes: 0, feedback: 0 }));
+  const stats = room.heroes.map(() => ({ rolls: 0, likes: 0, feedback: 0, damage: 0 }));
   for (const roll of room.rolls) {
     const entry = stats[roll.seat];
     if (!entry) continue;
     entry.rolls++;
+    entry.damage += roll.wounds ?? 0;
     addVotes(entry, roll.reactions);
   }
   room.battleStats = stats;
@@ -25,6 +26,12 @@ export function countReaction(room, roll, by, next) {
   entry.likes += Number(next === 'up') - Number(previous === 'up');
 }
 
+export function setRollWounds(room, roll, wounds) {
+  const entry = battleStats(room)[roll.seat];
+  entry.damage = (entry.damage ?? 0) + wounds - (roll.wounds ?? 0);
+  roll.wounds = wounds;
+}
+
 const metrics = [
   { key: 'damage', title: '骇物破壁者', label: '造成最多损伤' },
   { key: 'likes', title: '全船掌声', label: '获得最多赞同' },
@@ -36,7 +43,7 @@ const bonusTitles = ['逆风守舵人', '甲板定海针', '决战见证者', '�
 export function battleRecap(room, damage, randomInt) {
   const tally = battleStats(room);
   const entries = room.heroes.map((hero, seat) => ({
-    id: hero.id, name: hero.name, argonaut: hero.argonaut, ...tally[seat], damage: damage?.[seat] ?? null,
+    id: hero.id, name: hero.name, argonaut: hero.argonaut, ...tally[seat], damage: damage?.[seat] ?? tally[seat].damage ?? 0,
   }));
   const available = [...bonusTitles];
   const awarded = new Set();

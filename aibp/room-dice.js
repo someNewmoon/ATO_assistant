@@ -36,6 +36,8 @@
     return power + ' 威力 · ' + potential + ' 潜力 · ' + dot + ' ●';
   }
 
+  const woundResults = ['未造成伤口', '单次伤口', '二次伤口', '3 个伤口'];
+
   function rollSummary(roll) {
     const strengths = roll.dice.map(remainingFace).filter(Boolean);
     if (!strengths.length) return roll.dice.map(die => names[die.kind] + ' ' + die.value).join('、');
@@ -98,5 +100,5 @@
     }));
   }
 
-  return { faces, names, limits, modes, naturalFace, remainingFace, canReroll, faceIndex, faceLabel, rollSummary, faceMarkup, storyFaces, rollOwner, latestByHero, reactionGroups };
+  return { faces, names, limits, modes, naturalFace, remainingFace, canReroll, faceIndex, faceLabel, rollSummary, woundResults, faceMarkup, storyFaces, rollOwner, latestByHero, reactionGroups };
 });

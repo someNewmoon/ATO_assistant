@@ -513,6 +513,13 @@
         + '</div>';
     }).join('');
     const followup = roll.defenseCount && !roll.defenseRoll;
+    const wounds = roll.wounds ?? 0;
+    const result = roll.mode === 'power' ? '<div class="room-wound-result">'
+      + '<span>击破结果 · ' + dice.woundResults[wounds] + (roll.wounds === undefined ? '（默认）' : '') + '</span>'
+      + (editable ? '<div role="group" aria-label="击破结果">' + dice.woundResults.map((label, value) =>
+          '<button type="button" data-action="roll-wounds" data-value="' + value + '"' + attrs
+          + ' aria-pressed="' + (roll.wounds === value) + '">' + label + '</button>').join('') + '</div>' : '')
+      + '</div>' : '';
     const feedback = reactions(roll, latest);
     const heading = '<h4>' + rollAvatar(roll.seat) + escape(roll.hero) + (mode ? ' · ' + mode : '')
       + ' <small>第 ' + roll.round + ' 轮</small></h4>';
@@ -520,10 +527,10 @@
       + '<div class="room-dice-results">' + faces + '</div><p>' + rollSummary(roll) + '</p>'
       + (followup ? '<p class="room-dice-help">已配置 ' + roll.defenseCount + ' 枚防御红骰，请按闪避结果确认是否投掷。</p>' : '')
       + (editable && (roll.mode === 'attack' || followup) ? '<button type="button" data-roll-followup="'
-        + (followup ? 'defense' : 'power') + '"' + attrs + '>' + (followup ? '准备投掷防御红骰' : '准备投掷威力骰') + '</button>' : '')
+        + (followup ? 'defense' : 'power') + '"' + attrs + '>' + (followup ? '准备投掷防御红骰' : '命中后准备投掷威力骰') + '</button>' : '')
       + (editable && roll.dice.some(dice.canReroll) ? '<button type="button" data-action="reroll"' + attrs
         + (selection?.size ? '' : ' disabled') + '>重掷所选骰子' + (selection?.size ? '（' + selection.size + '）' : '') + '</button>' : '')
-      + (quickFeedback ? '' : feedback) + '</li>';
+      + result + (quickFeedback ? '' : feedback) + '</li>';
   }
 
   function latestHeroRolls() {
@@ -559,14 +566,15 @@
     const latestResult = '<section class="room-personal-result"><h4>最新投掷</h4>'
       + (last ? '<ol class="room-last-rolls">' + rollCard(last, true) + '</ol>' : '<p>该英雄本场尚未掷骰。</p>') + '</section>';
     const notes = {
-      attack: '按精准、伺机和卡文结算命中，再确认威力骰数量。',
+      attack: '宣告武器，增加 2 怒气并检查首要目标，再投攻击骰。命中后先结算第一能力时段，再揭示部位卡牌。',
       dodge: '先结算闪避，根据结果决定是否投掷防御红骰。',
-      power: '依命中与卡文确认威力骰数量。重掷费用和符号转换来源由玩家结算。',
+      power: '先揭示部位卡牌。重掷和转换潜力后，对照永世力场选结果，再按牌面结算骇物响应、伤口和激化。结算后清空克拉托斯池，再进入第二能力时段。',
     };
     return '<section class="room-dice-panel" id="room-dice"><h3>掷骰</h3>' + (options ? '<label>英雄 <select data-roll-seat>' + options + '</select></label>' : '')
       + '<div class="room-dice-modes" role="group" aria-label="投掷用途">' + Object.entries(dice.modes)
         .map(([key, entry]) => '<button type="button" data-roll-mode="' + key + '" aria-pressed="' + (key === rollMode) + '">'
           + (key === 'dodge' ? '<img src="room-dice-art/dodge.webp" alt="">' : '') + entry.name + '</button>').join('') + '</div>'
+      + (rollMode === 'power' && state.board ? '<button type="button" data-open-bp>查看已揭示的部位卡牌</button>' : '')
       + '<form data-roll class="battle-room-dice"><div>' + fields + followup
       + '<button type="submit">投掷' + dice.modes[rollMode].name + '</button></div></form>' + latestResult
       + (notes[rollMode] ? '<p class="room-dice-help">' + notes[rollMode] + '</p>' : '') + powerPool + '</section>';
@@ -592,10 +600,13 @@
   function finishSquadBattle() {
     const dialog = document.createElement('dialog');
     dialog.className = 'room-trauma-dialog room-battle-finish';
-    dialog.innerHTML = '<form><h3>结束战斗</h3><p>可填写每位英雄造成的损伤，用于战斗称号。</p>'
+    dialog.innerHTML = '<form><h3>结束战斗</h3><p>已按每次威力投掷的击破结果累计损伤。</p><ul>'
+      + state.heroes.map((hero, seat) => '<li>' + escape(hero.name) + ' · ' + (state.damageBySeat?.[seat] ?? 0) + '</li>').join('')
+      + '</ul><details><summary>调整其他来源造成的损伤</summary>'
       + state.heroes.map((hero, seat) => '<label>' + escape(hero.name)
-        + '<input type="number" min="0" max="999" step="1" name="damage-' + seat + '" placeholder="可留空"></label>').join('')
-      + '<footer><button type="button" data-cancel>取消</button><button type="submit">结束战斗并结算</button></footer></form>';
+        + '<input type="number" min="0" max="999" step="1" name="damage-' + seat
+        + '" placeholder="' + (state.damageBySeat?.[seat] ?? 0) + '"></label>').join('')
+      + '</details><footer><button type="button" data-cancel>取消</button><button type="submit">结束战斗并结算</button></footer></form>';
     dialog.querySelector('[data-cancel]').onclick = () => dialog.close();
     dialog.addEventListener('close', () => dialog.remove(), { once: true });
     dialog.querySelector('form').onsubmit = event => {
@@ -606,7 +617,7 @@
         return value === '' ? null : Number(value);
       });
       dialog.close();
-      send({ id: crypto.randomUUID(), type: 'end', damage });
+      send({ id: crypto.randomUUID(), type: 'end', ...(damage.some(value => value !== null) && { damage }) });
     };
     root.append(dialog);
     dialog.showModal();
@@ -631,7 +642,7 @@
       const face = bossArt(card?.src, card?.label || type) || '<p>尚未揭示</p>';
       const reverse = deck.back?.src ? bossArt(deck.back.src, deck.back.label || type + ' 牌背')
         : '<p>' + (deck.count ? escape(deck.backs || '等待牌背同步') : '牌堆已空') + '</p>';
-      return '<div><h4>' + type + '</h4><div class="room-projection-pair">'
+      return '<div data-projection-deck="' + type + '"><h4>' + type + '</h4><div class="room-projection-pair">'
         + '<div><small>最后揭示</small>' + face + '</div><div><small>下一张牌背</small>' + reverse + '</div></div></div>';
     }
     function deckCounts(label, deck) {
@@ -945,6 +956,15 @@
       if (rollFollowup && toolsDialog.open) toolsDialog.close();
       render();
       content.querySelector('[data-roll] input')?.focus();
+      return;
+    }
+    if (button.hasAttribute('data-open-bp')) {
+      dock.querySelector('[data-tool="apostle"]').click();
+      toolsBody.querySelector('[data-projection-deck="BP"]')?.scrollIntoView({ block: 'nearest' });
+      return;
+    }
+    if (action === 'roll-wounds') {
+      send({ id: crypto.randomUUID(), type: action, roll: rollId, seat: Number(seat), value: Number(value) });
       return;
     }
     if (button.hasAttribute('data-select-die')) {

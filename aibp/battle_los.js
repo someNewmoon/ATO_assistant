@@ -815,9 +815,10 @@
     } : null };
   }
 
-  function computeTitanMoves(source, pieces, selected, speed, tiles, terrainApi, occ, bossSize, deadSeats = []) {
+  function computeTitanMoves(source, pieces, selected, speed, tiles, terrainApi, occ, bossSize, deadSeats = [], visited = []) {
     const occupied = new Set(pieces.titans.flatMap((piece, index) =>
       index === selected || deadSeats.includes(index) ? [] : [cellKey(piece.column, piece.row)]));
+    for (const { column, row } of visited) occupied.add(cellKey(column, row));
     for (const { c, r } of losSourceCells(pieces.apostle, bossSize)) occupied.add(cellKey(c, r));
     for (const tile of tiles) {
       if (!/^(?:Column|City|Time-Frozen City)$/i.test(tile.name)) continue;
@@ -858,7 +859,7 @@
     const steps = route.length - 1;
     return {
       id, seat, speed,
-      remaining: (active?.remaining ?? speed) - steps,
+      remaining: speed === null ? null : (active?.remaining ?? speed) - steps,
       route: active ? [...active.route, ...route.slice(1)] : route,
       clicks: [...(active?.clicks || []), { id, steps }],
     };
@@ -871,7 +872,7 @@
     const clicks = move.clicks.slice(0, -1);
     return {
       origin: route.at(-1),
-      previous: clicks.length ? { ...move, id: clicks.at(-1).id, clicks, route, remaining: move.remaining + steps } : null,
+      previous: clicks.length ? { ...move, id: clicks.at(-1).id, clicks, route, remaining: move.speed === null ? null : move.remaining + steps } : null,
     };
   }
 
@@ -1190,10 +1191,23 @@
     const bossSize = tactical ? terrainApi.getApostleProfile(apostle, settings.level ?? map.startLevel)?.size || 1 : 1;
     if (mode === "titan-move") {
       const speed = Number.isFinite(state.moveSpeed) ? Math.max(0, Math.min(20, state.moveSpeed)) : 5;
-      return { ...base, ...computeTitanMoves(source[0], pieceState, selected, speed, tiles, terrainApi, occ, bossSize, settings.deadSeats) };
+      return { ...base, ...computeTitanMoves(source[0], pieceState, selected, speed, tiles, terrainApi, occ, bossSize, settings.deadSeats, state.visited) };
     }
 
-    if (mode === "apostle-move") return base;
+    if (mode === "apostle-move") {
+      const remaining = state.apostleMoveRemaining;
+      if (!Number.isInteger(remaining)) return base;
+      const half = (size - 1) / 2;
+      const column = sourceAnchor.column - half, row = sourceAnchor.row + half;
+      const moveCells = [];
+      for (let c = Math.max(1, column - remaining); c <= Math.min(COLUMNS - size + 1, column + remaining); c++) {
+        for (let r = Math.max(size, row - remaining); r <= Math.min(ROWS, row + remaining); r++) {
+          const steps = Math.abs(c - column) + Math.abs(r - row);
+          if (steps && steps <= remaining) moveCells.push({ c, r, steps });
+        }
+      }
+      return { ...base, moveCells };
+    }
 
     const center = losSourceCenter(sourceAnchor, size);
     const blindspots = new Set(
@@ -1335,7 +1349,8 @@
     if (!overlay.source.length) return;
 
     for (const { c, r, steps } of overlay.moveCells || []) {
-      const movementCell = cell(c, r, "battle-map-titan-move");
+      const movementCell = cell(c, r, overlay.mode === "apostle-move"
+        ? "battle-map-titan-move is-apostle" : "battle-map-titan-move");
       movementCell.textContent = String(steps);
       layer.appendChild(movementCell);
     }

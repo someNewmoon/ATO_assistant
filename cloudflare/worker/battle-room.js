@@ -4,7 +4,7 @@ import inventory from '../../technology/gear-inventory.js';
 import cardState from '../../aibp/room-card-state.js';
 import roomDice from '../../aibp/room-dice.js';
 import { roomProjection } from './room-projection.js';
-import { battleRecap, battleStats, countReaction } from './room-recap.js';
+import { battleRecap, battleStats, countReaction, setRollWounds } from './room-recap.js';
 import battleConfig from '../../technology/battle-config.js';
 import techDictionary from '../../technology/tech_card_dictionary.min.json';
 import gearProduction from '../../technology/ato_gear_production.json';
@@ -159,11 +159,11 @@ function publicSquadLoadouts(room) {
 
 const activityLabels = {
   'board-move': '移动泰坦', 'board-undo-move': '撤回上一步', 'board-apostle-move': '移动骇物',
-  'board-face': '调整骇物朝向', 'priority-target': '调整首要目标', round: '开启新一轮',
+  'board-apostle-undo': '撤回骇物移动', 'board-face': '调整骇物朝向', 'priority-target': '调整首要目标', round: '开启新一轮',
   stat: '调整三曲盘', condition: '调整泰坦状态', gear: '使用装备', 'gear-card': '调整装备卡', 'gear-ready-all': '回正所有横置装备',
   'mnemos-card': '调整旧忆卡', 'argo-use': '使用阿尔戈能力', 'argo-undo': '撤回阿尔戈能力',
   'trauma-draw': '抽取创伤或结算受击', 'trauma-resolve': '结算创伤', 'pool-clear': '清空克拉托斯池',
-  reroll: '重掷骰子', convert: '转换威力骰',
+  reroll: '重掷骰子', convert: '转换威力骰', 'roll-wounds': '记录击破结果',
 };
 
 function recordBattleActivity(room, actor, body) {
@@ -174,6 +174,7 @@ function recordBattleActivity(room, actor, body) {
   if (body.type === 'gear' || body.type === 'gear-card') detail = hero?.gear.find(item => item.id === body.key)?.name;
   if (body.type === 'mnemos-card') detail = hero?.mnemos.find(item => item.id === body.key)?.name;
   if (body.type === 'stat') detail = ({ rage: '怒气', fate: '命运', danger: '凶险' }[body.key]) + (body.delta > 0 ? ' +1' : ' −1');
+  if (body.type === 'roll-wounds') detail = roomDice.woundResults[body.value];
   if (body.type === 'board-move') detail = String.fromCharCode(64 + body.point.row) + body.point.column;
   const by = actor.role === 'host' ? '房主' : room.heroes[actor.seat]?.player || room.heroes[actor.seat]?.name;
   room.activity = [{ kind: body.type, label: activityLabels[body.type], by, seat, detail, round: room.round },
@@ -213,7 +214,8 @@ export class BattleRoom extends DurableObject {
 
   view(room, actor) {
     const { secrets, trauma, squad, owner, battleStats, ...state } = room;
-    return { ok: true, room: { ...state, priorityTarget: priorityTarget(room), trauma: traumaView(room, actor), ...(squad && { squad: squadView(room, actor) }) }, actor };
+    return { ok: true, room: { ...state, priorityTarget: priorityTarget(room), trauma: traumaView(room, actor),
+      ...(squad && { squad: squadView(room, actor), damageBySeat: room.heroes.map((_, seat) => battleStats?.[seat]?.damage ?? 0) }) }, actor };
   }
 
   actor(room, secretHash) {
@@ -461,7 +463,10 @@ export class BattleRoom extends DurableObject {
       if (actor.role !== 'host') reject('只有房主可以执行此操作。', 403);
       if (body.type === 'round') {
         room.round++;
-        if (room.board) delete room.board.titanMoves;
+        if (room.board) {
+          delete room.board.titanMoves;
+          delete room.board.apostleMovement;
+        }
       } else if (room.squad) {
         if (body.damage !== undefined && (!Array.isArray(body.damage) || body.damage.length !== room.heroes.length
             || body.damage.some(value => value !== null && (!Number.isInteger(value) || value < 0 || value > 999)))) {
@@ -590,6 +595,12 @@ export class BattleRoom extends DurableObject {
       case 'roll':
         this.roll(room, hero, seat, body, actor);
         break;
+      case 'roll-wounds': {
+        const roll = room.rolls.find(entry => entry.id === body.roll && entry.seat === seat && entry.mode === 'power');
+        if (!roll || !Number.isInteger(body.value) || !Object.hasOwn(roomDice.woundResults, body.value)) reject('击破结果无效。');
+        setRollWounds(room, roll, body.value);
+        break;
+      }
       case 'reroll':
       case 'convert':
         this.changeRoll(room, seat, body);

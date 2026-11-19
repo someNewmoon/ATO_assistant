@@ -125,7 +125,7 @@ export function applyRoomBoard(room, actor, body) {
     const remaining = active?.remaining ?? speed;
     if (!remaining) fail('本次移动没有剩余步数。', 409);
     const overlay = los.buildLosOverlay(board.map, {
-      active: true, mode: 'titan-move', selectedTitan: seat, moveSpeed: remaining,
+      active: true, mode: 'titan-move', selectedTitan: seat, moveSpeed: remaining, visited: active?.route,
     }, terrain, board.apostle, { level: board.level, deadSeats });
     const route = los.titanMoveRoute(overlay, point);
     if (!route) fail('这一格当前不可达。', 409);
@@ -144,15 +144,34 @@ export function applyRoomBoard(room, actor, body) {
     return;
   }
   if (!board) fail('请先载入房间版图。');
-  if (body.type === 'board-apostle-move') {
-    const profile = terrain.getApostleProfile(board.apostle, board.level);
-    const size = profile?.size || 1;
+  if (['board-apostle-move', 'board-apostle-undo', 'board-apostle-end'].includes(body.type)) {
+    const active = board.apostleMovement;
     const current = board.map.pieces.apostle;
+    if (body.type !== 'board-apostle-move') {
+      if (!active || active.id !== body.move) fail('骇物移动已更新。', 409);
+      delete board.apostleMovement;
+      if (body.type === 'board-apostle-end') return;
+      const { origin, previous } = los.rewindTitanMove(active);
+      Object.assign(current, origin);
+      if (previous) board.apostleMovement = previous;
+      if (previous) board.lastApostleMove = previous;
+      else delete board.lastApostleMove;
+      board.layoutRevision++;
+      return;
+    }
+    if (body.move !== undefined && body.move !== (active?.id ?? null)) fail('骇物移动已更新，请重选目的格。', 409);
+    const profile = terrain.getApostleProfile(board.apostle, board.level);
     if (body.from?.column !== current.column || body.from?.row !== current.row) fail('骇物位置已更新，请重选目的格。', 409);
-    const point = terrain.boardCell(body.point, size);
+    const point = terrain.boardCell(body.point, profile?.size || 1);
     if (!point || point.column !== body.point.column || point.row !== body.point.row) fail('骇物落位无效。');
-    if (point.column === current.column && point.row === current.row) return;
-    board.lastApostleMove = { route: los.apostleMoveRoute(current, point) };
+    const route = los.apostleMoveRoute(current, point);
+    if (route.length < 2) return;
+    if (body.speed !== undefined && (!Number.isInteger(body.speed) || body.speed < 0 || body.speed > 32)) fail('骇物移动上限无效。');
+    const speed = active ? active.speed : (body.speed ?? (Number.isFinite(profile?.speed) ? profile.speed : null));
+    const remaining = active ? active.remaining : speed;
+    if (remaining !== null && route.length - 1 > remaining) fail('目的格超出骇物剩余步数。', 409);
+    const next = los.appendTitanMove(active, { id: body.id, speed, route });
+    board.apostleMovement = board.lastApostleMove = next;
     Object.assign(current, point);
     board.layoutRevision++;
     return;
@@ -173,6 +192,7 @@ export function applyRoomBoard(room, actor, body) {
     if (body.keepTitans) map.pieces.titans = board.map.pieces.titans;
     board.map = map;
     delete board.lastApostleMove;
+    delete board.apostleMovement;
     delete board.titanMoves;
     if (!body.keepTitans) delete board.lastTitanMove;
     board.layoutRevision++;

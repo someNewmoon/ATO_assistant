@@ -2419,7 +2419,7 @@
   </style>
   <link rel="stylesheet" href="c45_specials.css?v=20260926-titan-group-layout1">
   <link rel="stylesheet" href="battle_map_control.css?v=20261117-battle-polish">
-  <link rel="stylesheet" href="battle_tactics.css?v=20261118-battle-recap">
+  <link rel="stylesheet" href="battle_tactics.css?v=20261119-battle-turn">
   <link rel="stylesheet" href="../api/cycle-theme.css">
   <script src="../assets/theme.js?v=20261114-light-sidebar1" defer></script>
   <link rel="stylesheet" href="editorial.css?v=20261105-pile-row-alignment1">
@@ -2439,7 +2439,7 @@
   <script src="../assets/mobile/layout.js?v=20261028-apk-portrait1" defer></script>
   <script src="../assets/mobile/play.js?v=20261114-theatre-return" defer></script>
   <link rel="stylesheet" href="room-recap.css">
-  <link rel="stylesheet" href="battle-room.css?v=20261118-battle-recap">
+  <link rel="stylesheet" href="battle-room.css?v=20261119-battle-turn">
   <script src="theatre-battle.js?v=2"></script>
   <script src="../theatre/terms.js?v=2"></script>
 </head>
@@ -2677,6 +2677,7 @@
                 <div class="battle-tactics-fields">
                   <label data-board-titan-field hidden>选中泰坦 <select data-board-titan aria-label="选中泰坦"></select></label>
                   <label data-board-speed-field hidden>本次移动上限 <input data-board-speed type="number" min="0" max="20" step="1"></label>
+                  <label data-board-apostle-speed-field hidden>骇物移动上限 <input data-board-apostle-speed type="number" min="0" max="32" step="1"></label>
                   <label data-board-weapon-field hidden>武器射程
                     <select data-board-weapon aria-label="武器射程">
                       <option value="melee">近战</option>
@@ -2695,8 +2696,11 @@
                   </div>
                   <button type="button" data-board-mode="apostle-move" data-board-place-boss aria-pressed="false" hidden>移动骇物</button>
                 </div>
-                <button type="button" data-board-end-move hidden>结束本次移动</button>
-                <p class="battle-tactics-info" data-board-tactics-info role="status"></p>
+                <div class="battle-movement-actions">
+                  <p class="battle-tactics-info" data-board-tactics-info role="status"></p>
+                  <button type="button" data-board-undo-move hidden>撤回上一步</button>
+                  <button type="button" data-board-end-move hidden>结束本次移动</button>
+                </div>
               </section>
               <div class="battle-map-toolbar" data-board-host-only>
                 <button type="button" data-battle-map-rotate-left disabled aria-label="逆时针旋转" title="逆时针旋转">↶ 左转</button>
@@ -2939,12 +2943,12 @@
   <script src="../assets/campaign-session.js?v=20260917"></script>
   <script src="../hero/hero-catalog.js?v=20261117-battle-polish"></script>
   <script src="room-assets.js?v=20261118-official" defer></script>
-  <script src="room-board.js?v=20261118-battle-recap" defer></script>
+  <script src="room-board.js?v=20261119-battle-turn" defer></script>
   <script src="room-card-state.js" defer></script>
   <script src="../technology/battle-config.js" defer></script>
-  <script src="room-dice.js?v=5" defer></script>
+  <script src="room-dice.js?v=20261119-battle-turn" defer></script>
   <script src="squad-link.js?v=7" defer></script>
-  <script src="battle-room.js?v=20261118-battle-recap" defer></script>
+  <script src="battle-room.js?v=20261119-battle-turn" defer></script>
   <script src="../technology/gear-inventory.js?v=20261118-trauma"></script>
   <script src="../assets/campaign-notes.js?v=20261015-aibp-summary1"></script>
   <script src="../assets/cycle-symbols.js?v=20261115-module-logo"></script>
@@ -2956,10 +2960,10 @@
   <!-- Boss 等级属性表先于 ss/terrain-data.js 加载：始徒移速直接取该表当前等级的值。 -->
   <script src="boss-levels-data.js?v=20261012-los-speed1"></script>
   <script src="../ss/terrain-data.js?v=20261117-board"></script>
-  <script src="battle_los.js?v=20261118-battle-recap"></script>
+  <script src="battle_los.js?v=20261119-battle-turn"></script>
   <script src="tactical-sprites.js?v=20261117-projection"></script>
   <script src="battle_board_pieces.js?v=20261118-battle-recap"></script>
-  <script src="battle_map_control.js?v=20261118-battle-recap"></script>
+  <script src="battle_map_control.js?v=20261119-battle-turn"></script>
   <script src="b4d7e218.js?v=20260926-hidden-ready2"></script>
   <script src="c9f0a6d3.js?v=20261011-panel-trait1"></script>
   <script src="5158e31a.js?v=20261019-blackbeak-shared-backs2"></script>

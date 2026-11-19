@@ -184,3 +184,7 @@ button.battle-piece { pointer-events: auto; cursor: pointer; min-height: 0; }
   fill: none; stroke: #f34252; stroke-width: 2.5px; stroke-dasharray: 7px 4px;
   stroke-linecap: round; filter: drop-shadow(0 0 1px #4b101a);
 }
+
+.battle-movement-actions { display: flex; align-items: center; flex-wrap: wrap; gap: .45rem; }
+.battle-movement-actions button { min-height: 36px; }
+.battle-map-titan-move.is-apostle { color: #fff0d5; border-color: #f2a067; background: #783f2c88; }

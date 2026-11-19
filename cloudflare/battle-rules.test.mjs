@@ -128,7 +128,7 @@ test('骇物允许落到泰坦和地形所在格，路线只走正交步', () =>
   pieces.apostle = { column: 10.5, row: 8.5, facing: 90 };
   pieces.titans[0] = { column: 2, row: 2 };
   const point = { column: 2.5, row: 2.5 };
-  reducer.apply(r, host, { type: 'board-apostle-move', from: pieces.apostle, point });
+  reducer.apply(r, host, { type: 'board-apostle-move', from: pieces.apostle, point, speed: 32 });
   assert.deepEqual(pieces.apostle, { ...point, facing: 90 });
   const route = r.board.lastApostleMove.route;
   assert.deepEqual(route[0], { column: 10.5, row: 8.5 });
@@ -199,6 +199,8 @@ test('一次泰坦移动共享步数，追加、撤回、结束和新回合正�
   });
   move('first', null, point(2), point(4));
   assert.equal(r.board.titanMoves[0].remaining, 3);
+  assert.throws(() => reducer.apply(r, player, { type: 'board-move', seat: 0,
+    from: point(4), point: point(2), speed: 5, move: r.board.titanMoves[0].id }), /不可达/);
   assert.throws(() => move('stale', null, point(4), point(5)), /移动已更新/);
   assert.throws(() => move('over-budget', 'first', point(4), point(8), 20), /不可达/);
   move('second', 'first', point(4), point(6), 20);
@@ -296,4 +298,44 @@ test('战斗回顾按真实损伤与表态发称号，保留被旧记录压缩�
   assert.equal(recap.heroes[1].title, '全船掌声');
   assert.equal(recap.heroes[1].likes, 1);
   assert.equal(recap.heroes[1].feedback, 1);
+});
+
+test('骇物各段共用速度上限，撤回会返还步数，结束保留轨迹', () => {
+  const r = room();
+  r.board = api.setupRoomBoard({ apostle: 'HEKATON', level: 1 }, 2);
+  const pieces = r.board.map.pieces;
+  pieces.apostle = { column: 10.5, row: 8.5, facing: 0 };
+  const move = (id, column, row, extra) => reducer.apply(r, host, {
+    type: 'board-apostle-move', id, from: { ...pieces.apostle }, point: { column, row }, ...extra,
+  });
+  assert.throws(() => move('over', 17.5, 8.5), /超出骇物剩余步数/);
+  move('first', 12.5, 8.5, { speed: 4, move: null });
+  assert.equal(r.board.apostleMovement.remaining, 2);
+  assert.throws(() => move('over', 12.5, 5.5, { speed: 20, move: 'first' }), /超出骇物剩余步数/);
+  move('second', 12.5, 6.5, { move: 'first' });
+  assert.equal(r.board.apostleMovement.remaining, 0);
+  reducer.apply(r, host, { type: 'board-apostle-undo', move: 'second' });
+  assert.equal(r.board.apostleMovement.remaining, 2);
+  assert.deepEqual(pieces.apostle, { column: 12.5, row: 8.5, facing: 0 });
+  reducer.apply(r, host, { type: 'board-apostle-end', move: 'first' });
+  assert.equal(r.board.apostleMovement, undefined);
+  assert.equal(r.board.lastApostleMove.route.length, 3);
+});
+
+test('只统计玩家为威力投掷选择的伤口，改判不会重复累加', () => {
+  const r = room();
+  r.squad = { phase: 'battle', battleNumber: 1, hostSeat: 1 };
+  const action = (actor, body) => reducer.apply(r, actor, { battleNumber: 1, ...body });
+  const power = id => action(player, { type: 'roll', id, seat: 0, mode: 'power', counts: { red: 1 } });
+  power('unselected');
+  power('selected');
+  const wound = value => ({ type: 'roll-wounds', seat: 0, roll: 'selected', value });
+  assert.throws(() => action({ role: 'player', seat: 1 }, wound(2)), /只能操作自己的英雄/);
+  action(player, wound(1));
+  action(player, wound(2));
+  action(player, wound(2));
+  for (let i = 0; i < 33; i++) power('next-' + i);
+  action(host, { type: 'end' });
+  assert.equal(r.squad.recap.heroes[0].damage, 2);
+  assert.equal(r.squad.recap.heroes[1].damage, 0);
 });

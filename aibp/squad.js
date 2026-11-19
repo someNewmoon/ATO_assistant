@@ -91,7 +91,8 @@
   function kitSummary(seat) {
     const kit = room.squad.loadouts[seat];
     const titan = inventory.loadoutTitan(room.squad.titans.find(t => t.id === kit.titanId), kit.titanPanelId);
-    return { titan: titan && inventory.titanLabel(titan),
+    const names = inventory.loadoutPatterns(titan, kit, room.squad.cycle).map(pattern => pattern.name);
+    return { titan: titan && [inventory.titanLabel(titan), ...names].join(' · '),
       gear: Object.entries(kit.gear).map(([id, count]) => ({ name: room.squad.gear.find(item => item.id === id)?.name || id, count })) };
   }
 
@@ -137,6 +138,7 @@
     return '<section class="squad-panel"><h2>我的备战</h2><form data-form="kit" class="squad-form" data-base="' + e(JSON.stringify(kit))
       + '"><label>泰坦 <select name="titanId"><option value="">未分配</option>' + options + '</select></label>'
       + '<label data-titan-panel>梦行者面板 <select name="titanPanelId"><option value="">默认</option>' + panels + '</select></label>'
+      + '<p class="squad-sub" data-prep-patterns></p>'
       + '<details open><summary>选择装备</summary><div class="squad-gear">' + (gear || '<p>军械库暂无装备。</p>') + '</div></details>'
       + '<p class="squad-sub">旧忆沿用英雄记录。保存后的配装供本小队下一场战斗使用。</p><button type="submit">保存配装</button></form></section>';
   }
@@ -291,6 +293,10 @@
       const dreamwalker = inventory.titanType(selected)?.id === 'dreamwalker';
       kit.querySelector('[data-titan-panel]').hidden = !dreamwalker;
       kit.elements.titanPanelId.disabled = !dreamwalker;
+      const saved = JSON.parse(kit.dataset.base);
+      const patterns = saved.titanId === selected?.id ? inventory.loadoutPatterns(selected, saved, room.squad.cycle) : [];
+      kit.querySelector('[data-prep-patterns]').textContent = patterns.length
+        ? '样式卡牌 · ' + patterns.map(pattern => pattern.name).join('、') : '';
     }
   }
 

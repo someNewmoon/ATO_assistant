@@ -438,10 +438,12 @@
     const canDraw = editable && hero.condition !== 'dead';
     const button = (mode, label) => '<button type="button" data-trauma-dialog="' + mode + '" data-seat="' + seat + '">' + label + '</button>';
     const cards = traumaCardList(seat, editable);
-    const trackKnown = !!state.trauma.tracks[seat];
+    const track = state.trauma.tracks[seat];
+    const level = track && window.ATO_GEAR_INVENTORY.traumaDeckLabel(track[hero.stats.danger - 1]);
     return '<section class="room-trauma-hero"><div class="room-trauma-actions">'
       + (canDraw ? button('hit', '结算受击') + button('draw', '抽创伤') + button('gain', '获得凶险') : '')
-      + '</div>' + (canDraw && !trackKnown ? '<small>当前泰坦缺少创伤表。可在泰坦管理配置，或按卡文指定牌库。</small>' : '')
+      + '</div>' + (canDraw && !track ? '<small>当前泰坦缺少创伤表。可在泰坦管理配置，或按卡文指定牌库。</small>'
+        : level ? '<small>当前凶险对应 · ' + escape(level) + '</small>' : '')
       + (cards ? '<ul class="room-trauma-cards">' + cards + '</ul>' : '') + '</section>';
   }
 
@@ -506,6 +508,8 @@
     const art = window.ATO_BATTLE_ASSETS;
     const titan = hero.titan ? escape(window.ATO_GEAR_INVENTORY.titanLabel(hero.titan)) : '未分配泰坦';
     const titanArt = hero.titan && art?.titanArt(hero.titan);
+    const patterns = window.ATO_GEAR_INVENTORY.TITAN_PATTERNS.filter(pattern => hero.titan?.patternIds?.includes(pattern.id))
+      .map(pattern => '<li>' + cardImage('../' + pattern.art, pattern.name) + '<span>' + escape(pattern.name) + '</span></li>').join('');
     const titanImage = titanArt ? cardImage(titanArt.src, titanArt.name, 'battle-room-titan-art', art.thumbSrc(titanArt.name)) : '';
     const portrait = heroPortrait(hero);
     const avatar = portrait ? '<img class="battle-room-avatar" src="../hero/assets/' + portrait + '" alt="">' : '';
@@ -538,6 +542,7 @@
       + ((own && editable) ? '' : traumaControls(hero, seat, editable))
       + '<div class="room-equipment-head"' + (own ? ' id="room-equipment"' : '') + '><h4>装备</h4>' + readyGear + '</div>'
       + (gear ? '<ul class="battle-room-card-list">' + gear + '</ul>' : '<p>未分配装备</p>')
+      + (patterns ? '<h4>样式卡牌</h4><ul class="battle-room-card-list">' + patterns + '</ul>' : '')
       + '<h4>旧忆</h4>' + (mnemos ? '<ul class="battle-room-card-list">' + mnemos + '</ul>' : '<p>暂无旧忆卡牌</p>')
       + summary + '</article>';
   }
@@ -662,6 +667,34 @@
         : '<small>' + (projection ? '尚未揭示' : '等待房主同步') + '</small>') + '</aside>';
   }
 
+  function kratosReminder(hero) {
+    const kratos = window.ATO_KRATOS_TABLES;
+    const table = kratos?.forTitan(hero?.titan);
+    if (!table) return '';
+    const rage = hero.stats.rage;
+    const unlocked = table.rows.filter(([threshold]) => threshold <= rage);
+    const next = table.rows.find(([threshold]) => threshold > rage);
+    function rowMarkup([threshold, options]) {
+      return '<li><strong>怒气 ' + threshold + '</strong><div>' + options.map(effects =>
+        '<span>' + effects.map(effect => {
+          const icon = kratos.icons[effect];
+          const label = escape(kratos.labels[effect]);
+          return icon ? marker('images/' + icon, label) : label;
+        }).join(' + ') + '</span>').join('<small>或</small>') + '</div></li>';
+    }
+    const latest = unlocked.at(-1);
+    const old = unlocked.slice(0, -1);
+    const open = content.querySelector('.room-kratos-reminder details')?.open;
+    return '<section class="room-kratos-reminder" aria-label="克拉托斯表能力">'
+      + '<h4>克拉托斯表 · ' + escape(table.name) + '</h4><p aria-live="polite">当前怒气 ' + rage
+      + ' · 解锁 ' + unlocked.length + ' 档' + (next ? ' · 下一档怒气 ' + next[0] : ' · 全部档位已解锁') + '</p>'
+      + (latest ? '<ul class="room-kratos-latest">' + rowMarkup(latest) + '</ul>' : '')
+      + (old.length ? '<details' + (open ? ' open' : '') + '><summary>较低怒气档位（仍可用）</summary><ul>'
+        + old.map(rowMarkup).join('') + '</ul></details>' : '')
+      + (latest ? '<small>每档选一项，带「+」的效果一起结算。放入池中的标记请按能力时段手动添加。</small>' : '')
+      + '</section>';
+  }
+
   function diceForm(powerPool) {
     if (state.closed || actor.role === 'viewer') return '';
     const seat = actor.role === 'host' ? rollSeat : actor.seat;
@@ -689,7 +722,8 @@
         .map(([key, entry]) => '<button type="button" data-roll-mode="' + key + '" aria-pressed="' + (key === rollMode) + '">'
           + (key === 'dodge' ? '<img src="room-dice-art/dodge.webp" alt="">' : '') + entry.name + '</button>').join('') + '</div>'
       + (rollMode === 'power' ? '<div class="room-power-workspace">' + powerPartCard() + form + '</div>' : form) + latestResult
-      + (notes[rollMode] ? '<p class="room-dice-help">' + notes[rollMode] + '</p>' : '') + powerPool + '</section>';
+      + (notes[rollMode] ? '<p class="room-dice-help">' + notes[rollMode] + '</p>' : '')
+      + (['attack', 'power'].includes(rollMode) ? kratosReminder(state.heroes[seat]) : '') + powerPool + '</section>';
   }
 
   window.getAibpBattleRecap = () => squadLink?.recapMarkup(state?.squad?.recap?.battleNumber === state?.squad?.battleNumber

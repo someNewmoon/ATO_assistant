@@ -170,6 +170,10 @@ export function applyTrauma(room, actor, body, randomInt) {
   const overflow = danger > 9 && (selected === 'auto' || body.mode === 'hit');
   const deck = overflow ? 'obol' : selected !== 'auto' ? selected : track?.[danger - 1];
   if (!deck) fail(danger === 0 ? '凶险为 0，请按卡文指定牌库。' : '当前泰坦缺少创伤表。请在泰坦管理中配置，或按卡文手动指定牌库。', 409);
+  if (deck === 'none') {
+    hero.stats.danger = Math.min(danger, 9);
+    return;
+  }
   if (overflow) {
     state.highestDanger = Math.max(state.highestDanger, danger);
     addOverflowCards(state);

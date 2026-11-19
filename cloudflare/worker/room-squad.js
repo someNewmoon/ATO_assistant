@@ -95,6 +95,7 @@ function refreshCombatKit(room) {
     hero.titan = titan ? {
       name: titan.name, ...inventory.titanTypeFields(titan), panelId: titan.panelId, crippled: titan.crippled,
       traumaTrack: inventory.loadoutTraumaTrack(titan, kit),
+      patternIds: inventory.loadoutPatterns(titan, kit, room.squad.cycle).map(pattern => pattern.id),
     } : null;
     hero.gear = Object.entries(kit.gear).map(([id, count]) => ({ id, name: gearNames[id] || id, count, used: 0 }));
     hero.stats = { danger: 0, rage: 0, fate: 0 };
@@ -109,12 +110,21 @@ function sameTitanPanel(titan, kit, other) {
     && inventory.loadoutTitan(titan, kit.titanPanelId).panelId === inventory.loadoutTitan(titan, other.titanPanelId).panelId;
 }
 
-export function syncLoadoutTrauma(stock, tracks) {
+export function syncLoadoutTitanOptions(stock, tracks) {
   let changed = false;
   for (const [id, source] of Object.entries(tracks || {})) {
     if (!Object.hasOwn(stock.loadouts, id)) continue;
     const kit = stock.loadouts[id];
     const titan = stock.titans.find(entry => entry.id === kit.titanId);
+    if (!titan || kit.titanId !== source.titanId) continue;
+    const validPatterns = inventory.loadoutPatterns(titan, source);
+    for (const field of Object.keys(inventory.PATTERN_FIELDS)) {
+      const value = validPatterns.find(pattern => pattern.id === source[field])?.id;
+      if (kit[field] === value) continue;
+      if (value) kit[field] = value;
+      else delete kit[field];
+      changed = true;
+    }
     if (!sameTitanPanel(titan, kit, source)) continue;
     const track = inventory.traumaTrack(source.traumaTrack);
     if (JSON.stringify(kit.traumaTrack || null) === JSON.stringify(track)) continue;
@@ -189,7 +199,12 @@ export function applySquad(room, actor, body, randomInt) {
     if (squad.phase !== 'prep') fail('只有备战时可以更改配装。', 409);
     const { stock } = squad;
     const current = inventory.normalizeLoadout(stock.loadouts[hero.id]);
-    const next = inventory.normalizeLoadout({ ...body.kit, player: current.player });
+    const next = inventory.normalizeLoadout({
+      ...body.kit, player: current.player,
+      ...Object.fromEntries(Object.keys(inventory.PATTERN_FIELDS).map(field => [
+        field, body.kit?.titanId === current.titanId ? current[field] : undefined,
+      ])),
+    });
     const titan = stock.titans.find(entry => entry.id === next.titanId);
     if (next.titanId && !titan) fail('军械库中没有这个泰坦。');
     if (sameTitanPanel(titan, next, current) && current.traumaTrack) next.traumaTrack = current.traumaTrack;

@@ -14,7 +14,7 @@ import { ApiError, activeCycle, errorResponse, object, response } from './campai
 import { applyRoomBoard, priorityTarget, setupRoomBoard } from './board.js';
 
 import { applyTrauma, createTrauma, traumaView } from './room-trauma.js';
-import { applySquad, createSquad, syncLoadoutTrauma, latestBattleRoll, squadSkills, squadStats, squadView } from './room-squad.js';
+import { applySquad, createSquad, syncLoadoutTitanOptions, latestBattleRoll, squadSkills, squadStats, squadView } from './room-squad.js';
 
 export const roomIdPattern = /^[a-f0-9]{32}$/;
 const secretPattern = /^[a-f0-9]{64}$/;
@@ -84,8 +84,8 @@ export function squadTitanTrauma(campaign) {
     .map(titan => [String(titan.id), inventory.traumaTrack(titan.traumaTrack)]));
   const loadoutTracks = Object.fromEntries(inventory.assignedLoadouts(record, heroCatalog.activeHeroes(campaign))
     .map(([id, raw]) => {
-      const { titanId, titanPanelId, traumaTrack } = inventory.normalizeLoadout(raw);
-      return [id, { titanId: inventory.titanIdFor(record, titanId), titanPanelId, traumaTrack }];
+      const { titanId, titanPanelId, traumaTrack, traumaPatternId, kratosPatternId } = inventory.normalizeLoadout(raw);
+      return [id, { titanId: inventory.titanIdFor(record, titanId), titanPanelId, traumaTrack, traumaPatternId, kratosPatternId }];
     }));
   return { titanTracks, loadoutTracks };
 }
@@ -117,6 +117,7 @@ export async function createBattleRoom(env, campaign, payload, owner) {
       titan: titan ? {
         name: clean(titan.name), ...inventory.titanTypeFields(titan),
         panelId: titan.panelId, crippled: Boolean(titan.crippled), traumaTrack: inventory.loadoutTraumaTrack(titan, kit),
+        patternIds: inventory.loadoutPatterns(titan, kit, activeCycle(campaign)).map(pattern => pattern.id),
       } : null,
       gear: Object.entries(kit.gear).map(([id, count]) => ({ id, name: equipmentName(id), count, used: 0 })),
       mnemos, stats: { danger: 0, rage: 0, fate: 0 }, ...(payload.squad === true && { storyStats: squadStats(hero.triskelion) }), condition: 'standing', player: '',
@@ -287,7 +288,7 @@ export class BattleRoom extends DurableObject {
       titan.traumaTrack = track;
       tracksChanged = true;
     }
-    if (syncLoadoutTrauma(room.squad.stock, loadoutTracks)) tracksChanged = true;
+    if (syncLoadoutTitanOptions(room.squad.stock, loadoutTracks)) tracksChanged = true;
     if (tracksChanged || rosterChanged || !room.owner || room.owner.saveName !== name || JSON.stringify(room.squad.abilityOptions) !== JSON.stringify(abilityOptions)) {
       room.owner = { account, profile, saveName: name, libraryAnchor };
       room.squad.abilityOptions = abilityOptions;

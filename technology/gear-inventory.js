@@ -85,6 +85,49 @@
   const ranges = (light, heavy, lethal) => Array.from({ length: 9 }, (_, i) =>
     i < light ? 'light' : i < heavy ? 'heavy' : i < lethal ? 'lethal' : 'obol');
   const standard = ranges(3, 6, 9);
+  // Card IDs, art and thresholds come from the supplied Windows resources.
+  // Chinese names follow the official storybooks.
+  const shadeTrack = ['light', 'light', 'heavy', 'heavy', 'light', 'heavy', 'heavy', 'lethal', 'lethal'];
+  const TITAN_PATTERNS = [
+    ['AW0284', '伊阿珀托斯世系', standard],
+    ['AW0285', '普罗米修斯世系', ['none', ...standard.slice(1)]],
+    ['AW0286', '迷阵行者'],
+    ['AW0287', '梦行者II'],
+    ['AW0288', '严酷锻炼', standard],
+    ['AW0289', '重装训练', standard],
+    ['AW0290', '神盾种', standard],
+    ['BW0974', '斯巴达梦行者', null, true, 'c2'],
+    ['BW0976', '人形怪兽', null, true],
+    ['BW0977', '运河疾步者', standard],
+    ['BW0978', '本影世系', standard],
+    ['BW0979', '禅道训练', standard],
+    ['BW0980', '支援专精', standard],
+    ['BW0981', '梦行者III', null, true],
+    ['CW1550', '德尔斐梦行者', null, true, 'c3'],
+    ['CW1551', '时光世系', null, true],
+    ['CW1552', '灼伤锻炼', standard],
+    ['CW1553', '北方乐土世系', shadeTrack],
+    ['CW1554', '超时间流锻炼', standard],
+    ['CW1555', '遮光训练', shadeTrack],
+    ['CW1556', '西西弗斯世系', null, true],
+  ].map(([id, name, track, hasBack, cycleOverlay]) => ({
+    id, name, track, hasBack, cycleOverlay, art: 'aibp/images/patterns/' + id + '.webp',
+  }));
+  const patternsById = new Map(TITAN_PATTERNS.map(pattern => [pattern.id, pattern]));
+  const PATTERN_FIELDS = { traumaPatternId: '创伤样式', kratosPatternId: '克拉托斯样式' };
+
+  function loadoutPatterns(titan, kit, cycle) {
+    if (!titan) return [];
+    const type = titanType(titan)?.id;
+    return Object.keys(PATTERN_FIELDS).map(field => patternsById.get(kit?.[field])).filter(pattern =>
+      pattern && (!pattern.cycleOverlay || ((!cycle || cycle === pattern.cycleOverlay)
+        && (type === 'dreamwalker' || (type === 'spartan-dreamwalker' && pattern.id === 'BW0974')))));
+  }
+
+  function traumaDeckLabel(deck) {
+    return deck === 'none' ? '不抽取' : TRAUMA_DECKS[deck] || '';
+  }
+
   const defaultTraumaTracks = {
     dreamwalker: standard, tt_earthshaker: standard,
     gamechanger: ranges(4, 8, 9), tt_mazerunner: ranges(2, 5, 8),
@@ -92,7 +135,7 @@
   };
 
   function traumaTrack(value) {
-    return Array.isArray(value) && value.length === 9 && Array.from(value).every(deck => Object.hasOwn(TRAUMA_DECKS, deck))
+    return Array.isArray(value) && value.length === 9 && Array.from(value).every(deck => deck === 'none' || Object.hasOwn(TRAUMA_DECKS, deck))
       ? value.slice() : null;
   }
 
@@ -101,7 +144,9 @@
   }
 
   function loadoutTraumaTrack(titan, kit) {
-    return titan ? traumaTrack(kit?.traumaTrack) || traumaTrack(titan.traumaTrack) : null;
+    if (!titan) return null;
+    const pattern = loadoutPatterns(titan, kit).find(pattern => pattern.track);
+    return traumaTrack(pattern?.track) || traumaTrack(kit?.traumaTrack) || traumaTrack(titan.traumaTrack);
   }
 
   function titanLabel(titan) {
@@ -232,6 +277,9 @@
       player: String(value?.player || '').trim().slice(0, 60),
       titanId: String(value?.titanId || ''),
       ...(DREAMWALKER_PANELS.some(panel => panel.id === value?.titanPanelId) && { titanPanelId: value.titanPanelId }),
+      ...(value?.titanId && patternsById.get(value.traumaPatternId)?.track && { traumaPatternId: value.traumaPatternId }),
+      ...(value?.titanId && patternsById.has(value.kratosPatternId) && !patternsById.get(value.kratosPatternId).track
+        && { kratosPatternId: value.kratosPatternId }),
       ...(track && { traumaTrack: track }),
       gear,
     };
@@ -282,6 +330,10 @@
     const assignedTitan = loadoutTitans(record).find(titan => String(titan.id) === next.titanId);
     if (next.titanPanelId && titanType(assignedTitan)?.id !== 'dreamwalker') delete next.titanPanelId;
     if (!assignedTitan) delete next.traumaTrack;
+    const assignedPatterns = loadoutPatterns(assignedTitan, next, record.cycle);
+    for (const field of Object.keys(PATTERN_FIELDS)) {
+      if (!assignedPatterns.some(pattern => pattern.id === next[field])) delete next[field];
+    }
     if (JSON.stringify(saved) === JSON.stringify(next) && (!migration || !record.loadouts?.[migration.slot])) return null;
     if (JSON.stringify(saved) !== JSON.stringify(normalizeLoadout(base))) {
       throw new Error('该英雄的配装已在另一设备修改，请重新打开配装');
@@ -315,6 +367,7 @@
   return {
     ascensionEnabled, baseGearId, ascendedCycle, nextCycle, ascend, loadoutTemplates,
     TITAN_NAMES_ZH, TITAN_TYPES, DREAMWALKER_PANELS, TRAUMA_DECKS, traumaTrack, defaultTraumaTrack, loadoutTraumaTrack,
+    TITAN_PATTERNS, PATTERN_FIELDS, loadoutPatterns, traumaDeckLabel,
     dreamwalkerPanel, loadoutTitan, titanType, titanTypeFields, titanLabel, titanArtwork,
     gearKey, normalize, adjust, normalizeLoadout, loadoutTitans, titanIdFor, assignedLoadouts, gearReservations, saveLoadout,
   };

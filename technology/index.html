@@ -1156,7 +1156,7 @@ button.gear-group-name:hover {
   <script src="structure-tech-rules.js?v=20261118-moon-resource-types1"></script>
   <script src="structure-tech-client.js?v=20261019-negotiation-rows2"></script>
 <script src="../hero/hero-catalog.js?v=20261117-battle-polish"></script>
-<script src="gear-inventory.js?v=20261120-titan-patterns"></script>
+<script src="gear-inventory.js?v=20261120-battle-prep"></script>
 <script>
 const TECH_DICTIONARY_URL = 'tech_card_dictionary.min.json';
 const fetch = window.ATO_CAMPAIGN_NOTES.createFetch(window.fetch.bind(window), {
@@ -2254,8 +2254,7 @@ function editArsenalLoadout(heroId, catalog) {
         <a data-loadout-titan-art target="_blank" rel="noopener" hidden><img alt=""></a>
         <details data-loadout-trauma hidden open>
           <summary>样式卡牌与创伤表</summary>
-          ${Object.entries(inventory.PATTERN_FIELDS).map(([field, label]) =>
-            `<label>${label}<select name="${field}" aria-label="${label}"></select></label>`).join('')}
+          <small><a href="../record/">去泰坦管理调整样式或面板</a></small>
           <div class="arsenal-pattern-previews" data-loadout-patterns></div>
           <div class="loadout-trauma-grid" data-trauma-track aria-label="创伤表"></div>
           <small data-trauma-source></small>
@@ -2329,7 +2328,7 @@ function editArsenalLoadout(heroId, catalog) {
     titan.value = draft.titanId;
     const entry = roster.find(item => String(item.id) === draft.titanId);
     const isDreamwalker = inventory.titanType(entry)?.id === 'dreamwalker';
-    panel.closest('label').hidden = !isDreamwalker;
+    panel.closest('label').hidden = !isDreamwalker || Object.hasOwn(entry, 'panelId');
     panel.innerHTML = '<option value="">通用面板</option>' + inventory.DREAMWALKER_PANELS
       .map(({ id, name }) => `<option value="${id}">${esc(name)}</option>`).join('');
     panel.value = isDreamwalker ? (inventory.dreamwalkerPanel(entry, draft.titanPanelId)?.id || '') : '';
@@ -2337,15 +2336,6 @@ function editArsenalLoadout(heroId, catalog) {
     const selectedTitan = inventory.loadoutTitan(entry, draft.titanPanelId);
     const art = inventory.titanArtwork(selectedTitan);
     const patterns = inventory.loadoutPatterns(selectedTitan, draft, record.cycle);
-    for (const field of patternFields) {
-      const select = form.elements.namedItem(field);
-      const options = inventory.TITAN_PATTERNS.filter(pattern =>
-        Boolean(pattern.track) === (field === 'traumaPatternId')
-        && inventory.loadoutPatterns(selectedTitan, { [field]: pattern.id }, record.cycle).length);
-      select.innerHTML = '<option value="">无</option>' + options.map(pattern =>
-        `<option value="${pattern.id}">${esc(pattern.name)} · ${pattern.id}</option>`).join('');
-      select.value = patterns.find(pattern => pattern.id === draft[field])?.id || '';
-    }
     patternPreviews.innerHTML = patterns.map(pattern => `<a href="../${esc(pattern.art)}" target="_blank" rel="noopener">
       <img src="../${esc(pattern.art)}" alt="${esc(pattern.name)}"></a>`
       + (pattern.hasBack ? `<a href="../${esc(pattern.art.replace('.webp', '-back.webp'))}" target="_blank" rel="noopener">查看${esc(pattern.name)}背面</a>` : '')).join('');
@@ -2415,13 +2405,6 @@ function editArsenalLoadout(heroId, catalog) {
     delete draft.traumaTrack;
     renderTitans();
   });
-  for (const field of patternFields) {
-    const select = form.elements.namedItem(field);
-    select.addEventListener('change', () => {
-      draft[field] = select.value;
-      renderTitans();
-    });
-  }
   form.elements.namedItem('template')?.addEventListener('change', event => {
     const template = templates.find(item => item.id === event.target.value);
     if (!template) return;

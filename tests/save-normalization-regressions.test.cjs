@@ -35,6 +35,7 @@ function recordContext() {
     atomicMergePaths: new Set(['crewBoxes', 'maxUnlocked']),
     cycleScopedBindKeys: new Set(['boons', 'afflictions', 'counters', 'notes', 'syncLog']),
   });
+  vm.runInContext("globalThis.window ??= {};\n" + require("node:fs").readFileSync(require("node:path").join(__dirname, "../record/enemy-evolution.js"), "utf8"), c);
   vm.runInContext(source.slice(source.indexOf('    const cycleData = '), source.indexOf('    const elements = ')), c);
   return c;
 }

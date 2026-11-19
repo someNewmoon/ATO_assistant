@@ -135,7 +135,7 @@
         + '<span class="squad-gear-owners"></span><label hidden>数量 <input data-gear-count type="number" min="1"'
         + ' value="' + (count || 1) + '"></label></article>';
     }).join('');
-    return '<section class="squad-panel"><h2>我的备战</h2><form data-form="kit" class="squad-form" data-base="' + e(JSON.stringify(kit))
+    return '<section class="squad-panel"><h2>' + (squad.phase === 'prep' ? '我的备战' : '我的配装') + '</h2><form data-form="kit" class="squad-form" data-base="' + e(JSON.stringify(kit))
       + '"><label>泰坦 <select name="titanId"><option value="">未分配</option>' + options + '</select></label>'
       + '<label data-titan-panel>梦行者面板 <select name="titanPanelId"><option value="">默认</option>' + panels + '</select></label>'
       + '<p class="squad-sub" data-prep-patterns></p>'
@@ -227,7 +227,8 @@
     const squad = room.squad, seat = ownSeat();
     phaseLabel.textContent = phases[squad.phase];
     const key = JSON.stringify([squad.phase, squad.hostSeat, squad.battleNumber, room.title, room.publicLobby,
-      room.heroes.map(hero => hero.player), squad.loadouts[seat], squad.recap?.battleNumber]);
+      room.heroes.map(hero => hero.player), squad.loadouts[seat], squad.recap?.battleNumber,
+      squad.titans, squad.gear?.map(item => [item.id, item.name, item.count > 0, Boolean(item.holders?.length)])]);
     if (renderKey !== key) {
       renderKey = key;
       const isHost = actor.role === 'host';
@@ -244,7 +245,7 @@
       content.innerHTML = '<div class="squad-stack"><h2>' + e(room.title) + '</h2>'
         + (isHost ? hostControls() : button('transfer', '复制我的席位链接')) + claim + personal + fight
         + (squad.phase === 'battle' ? '' : api.recapMarkup(squad.recap))
-        + (hero && squad.phase !== 'battle' ? rollForm() : '') + (hero && squad.phase === 'prep' ? prepForm(seat) : '')
+        + (hero && squad.phase !== 'battle' ? rollForm() : '') + (hero && squad.phase !== 'battle' ? prepForm(seat) : '')
         + (isHost ? '<details class="squad-roster"' + (content.querySelector('.squad-roster')?.open ? ' open' : '')
           + '><summary>管理小队席位</summary><ul class="squad-log" data-roster></ul></details>' : '')
         + '<section class="squad-panel"><h2>队伍记录</h2><ol class="squad-log" data-team-log></ol></section></div>';
@@ -291,8 +292,9 @@
     if (kit) {
       const selected = room.squad.titans.find(t => t.id === kit.elements.titanId.value);
       const dreamwalker = inventory.titanType(selected)?.id === 'dreamwalker';
-      kit.querySelector('[data-titan-panel]').hidden = !dreamwalker;
-      kit.elements.titanPanelId.disabled = !dreamwalker;
+      const configurablePanel = dreamwalker && !Object.hasOwn(selected, 'panelId');
+      kit.querySelector('[data-titan-panel]').hidden = !configurablePanel;
+      kit.elements.titanPanelId.disabled = !configurablePanel;
       const saved = JSON.parse(kit.dataset.base);
       const patterns = saved.titanId === selected?.id ? inventory.loadoutPatterns(selected, saved, room.squad.cycle) : [];
       kit.querySelector('[data-prep-patterns]').textContent = patterns.length
@@ -307,6 +309,12 @@
     if (!room.squad || !['host', 'player'].includes(actor.role)) throw new Error('这个链接不属于联机小队成员。');
     applyLanguage(room.squad.language);
     render();
+  }
+
+  let hostStockRefresh;
+  function refreshHostStock() {
+    hostStockRefresh ||= api.home({ id, credentials }).finally(() => { hostStockRefresh = null; });
+    return hostStockRefresh;
   }
 
   async function action(type, fields = {}) {
@@ -358,7 +366,10 @@
         }
         return;
       }
-      if (name === 'phase') return action('squad-phase', { phase: value });
+      if (name === 'phase') {
+        if (value === 'prep') await refreshHostStock();
+        return action('squad-phase', { phase: value });
+      }
       if (name === 'visibility') return action('public-lobby', { value: value === 'true' });
       const link = name === 'invite' ? api.link('/aibp/squad', id, 'invite', credentials.keys.invite, true)
         : api.link('/aibp/squad', id, 'member', credentials.token, true);
@@ -426,7 +437,7 @@
         if (room.closed) return;
         api.save(id, credentials);
         startSocket();
-        if (actor.role === 'host') void api.home({ id, credentials }).catch(() => {});
+        if (actor.role === 'host') void refreshHostStock().catch(() => {});
         return;
       } catch (error) {
         if (error.status === 401) {

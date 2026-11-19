@@ -277,6 +277,7 @@ function recordPageContext() {
     state: null, elements: { cycleTitle: {}, cycleWarning: {} },
     document: { querySelectorAll: () => [] },
   });
+  vm.runInContext("globalThis.window ??= {};\n" + require("node:fs").readFileSync(require("node:path").join(__dirname, "../record/enemy-evolution.js"), "utf8"), context);
   vm.runInContext(source.slice(source.indexOf("    const cycleData = "), source.indexOf("    const elements = "))
     + "\nthis.cycles = cycleData; this.summons = summonCards;", context);
   const names = ["isPlainObject", "cloneJson", "migrateEnemyStages", "normalizeState", "normalizeCycleStats",

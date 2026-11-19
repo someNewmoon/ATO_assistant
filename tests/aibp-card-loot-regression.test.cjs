@@ -95,6 +95,7 @@ const nonzero = value => Object.fromEntries(Object.entries(clone(value)).filter(
 function recordHarness(cycle, resources = {}) {
   const source = fs.readFileSync(path.join(root, 'record/index.html'), 'utf8').replace(/\r\n/g, '\n');
   const ctx = vm.createContext({ state: { cycle, resources: clone(resources) } });
+  vm.runInContext("globalThis.window ??= {};\n" + require("node:fs").readFileSync(require("node:path").join(__dirname, "../record/enemy-evolution.js"), "utf8"), ctx);
   vm.runInContext(source.slice(source.indexOf('    const cycleData = '), source.indexOf('    const elements = ')), ctx);
   for (const name of ['isPlainObject', 'cloneJson', 'normalizeResources', 'migrateSharedResourceKey',
     'currentCycle', 'currentNemesis', 'currentResources', 'resourceStorageKey']) {

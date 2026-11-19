@@ -61,8 +61,8 @@
   function dreamwalkerPanel(titan, choice) {
     const type = titanType(titan);
     if (!titan || (type && type.id !== 'dreamwalker')) return null;
-    return DREAMWALKER_PANELS.find(panel => panel.id === choice)
-      || DREAMWALKER_PANELS.find(panel => panel.id === titan.panelId)
+    const selected = Object.hasOwn(titan, 'panelId') ? titan.panelId : choice;
+    return DREAMWALKER_PANELS.find(panel => panel.id === selected)
       || DREAMWALKER_PANELS.find(panel => panel.name === titan.name) || null;
   }
 
@@ -119,9 +119,18 @@
   function loadoutPatterns(titan, kit, cycle) {
     if (!titan) return [];
     const type = titanType(titan)?.id;
-    return Object.keys(PATTERN_FIELDS).map(field => patternsById.get(kit?.[field])).filter(pattern =>
+    return Object.keys(PATTERN_FIELDS).map(field => patternsById.get(Object.hasOwn(titan, field) ? titan[field] : kit?.[field])).filter(pattern =>
       pattern && (!pattern.cycleOverlay || ((!cycle || cycle === pattern.cycleOverlay)
         && (type === 'dreamwalker' || (type === 'spartan-dreamwalker' && pattern.id === 'BW0974')))));
+  }
+
+  function titanPatternFields(titan) {
+    const trauma = patternsById.get(titan?.traumaPatternId);
+    const kratos = patternsById.get(titan?.kratosPatternId);
+    return {
+      ...(Object.hasOwn(titan || {}, 'traumaPatternId') && { traumaPatternId: trauma?.track ? trauma.id : '' }),
+      ...(Object.hasOwn(titan || {}, 'kratosPatternId') && { kratosPatternId: kratos && !kratos.track ? kratos.id : '' }),
+    };
   }
 
   function traumaDeckLabel(deck) {
@@ -146,14 +155,16 @@
   function loadoutTraumaTrack(titan, kit) {
     if (!titan) return null;
     const pattern = loadoutPatterns(titan, kit).find(pattern => pattern.track);
-    return traumaTrack(pattern?.track) || traumaTrack(kit?.traumaTrack) || traumaTrack(titan.traumaTrack);
+    const legacy = Object.hasOwn(titan, 'traumaPatternId') ? null : traumaTrack(kit?.traumaTrack);
+    return traumaTrack(pattern?.track) || legacy || traumaTrack(titan.traumaTrack);
   }
 
   function titanLabel(titan) {
     const panel = dreamwalkerPanel(titan);
-    const name = panel?.name || titan?.name || '泰坦';
+    const name = titan?.name && titan.name !== '泰坦' && titan.name !== titanType(titan)?.name
+      ? titan.name : panel?.name || titan?.name || '泰坦';
     const { type } = titanTypeFields(panel ? loadoutTitan(titan) : titan);
-    return [name, type !== name && type, titan?.crippled ? '残废' : ''].filter(Boolean).join(' · ');
+    return [name, panel?.name !== name && panel?.name, type !== name && type, titan?.crippled ? '残废' : ''].filter(Boolean).join(' · ');
   }
 
   function titanArtwork(titan, manifest) {
@@ -328,11 +339,11 @@
     const next = normalizeLoadout(draft);
     next.titanId = titanIdFor(record, next.titanId);
     const assignedTitan = loadoutTitans(record).find(titan => String(titan.id) === next.titanId);
-    if (next.titanPanelId && titanType(assignedTitan)?.id !== 'dreamwalker') delete next.titanPanelId;
+    if (next.titanPanelId && (Object.hasOwn(assignedTitan || {}, 'panelId') || titanType(assignedTitan)?.id !== 'dreamwalker')) delete next.titanPanelId;
     if (!assignedTitan) delete next.traumaTrack;
     const assignedPatterns = loadoutPatterns(assignedTitan, next, record.cycle);
     for (const field of Object.keys(PATTERN_FIELDS)) {
-      if (!assignedPatterns.some(pattern => pattern.id === next[field])) delete next[field];
+      if (Object.hasOwn(assignedTitan || {}, field) || !assignedPatterns.some(pattern => pattern.id === next[field])) delete next[field];
     }
     if (JSON.stringify(saved) === JSON.stringify(next) && (!migration || !record.loadouts?.[migration.slot])) return null;
     if (JSON.stringify(saved) !== JSON.stringify(normalizeLoadout(base))) {
@@ -367,7 +378,7 @@
   return {
     ascensionEnabled, baseGearId, ascendedCycle, nextCycle, ascend, loadoutTemplates,
     TITAN_NAMES_ZH, TITAN_TYPES, DREAMWALKER_PANELS, TRAUMA_DECKS, traumaTrack, defaultTraumaTrack, loadoutTraumaTrack,
-    TITAN_PATTERNS, PATTERN_FIELDS, loadoutPatterns, traumaDeckLabel,
+    TITAN_PATTERNS, PATTERN_FIELDS, loadoutPatterns, titanPatternFields, traumaDeckLabel,
     dreamwalkerPanel, loadoutTitan, titanType, titanTypeFields, titanLabel, titanArtwork,
     gearKey, normalize, adjust, normalizeLoadout, loadoutTitans, titanIdFor, assignedLoadouts, gearReservations, saveLoadout,
   };

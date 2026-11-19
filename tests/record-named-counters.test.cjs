@@ -30,6 +30,7 @@ function harness(saved) {
     cycleScopedBindKeys: new Set(['counters', 'notes']), atomicMergePaths: new Set(),
     recordProfileLoaded: false, campaignUserId: 'default',
   });
+  vm.runInContext("globalThis.window ??= {};\n" + require("node:fs").readFileSync(require("node:path").join(__dirname, "../record/enemy-evolution.js"), "utf8"), c);
   vm.runInContext(source.slice(source.indexOf('    const cycleData = '), source.indexOf('    const elements = ')), c);
   vm.runInContext([
     'isPlainObject', 'cloneJson', 'jsonEqual', 'normalizeState', 'normalizeCycleStats', 'normalizeCrewCounters',

@@ -135,9 +135,13 @@
       return;
     }
     document.body.classList.toggle('aibp-room-only', actor.role !== 'host');
+    if (actor.role === 'host' && state.board) window.setAibpRoomBattleLevel?.(state.board.apostle, state.board.level);
     roomBoard?.sync(state, actor);
     render();
-    if (actor.role === 'host') syncProjection();
+    if (actor.role === 'host') { syncProjection(); void processBpRequest(); }
+    clearTimeout(bpRetryTimer);
+    const retryIn = state.bpRequest?.createdAt + 15000 - Date.now();
+    if (retryIn > 0) bpRetryTimer = setTimeout(() => { if (state?.squad?.phase === 'battle') render(); }, retryIn + 10);
   }
 
   async function refreshRoomState() {
@@ -327,10 +331,17 @@
   root.append(turnWindow);
   let turnHeading = '';
   let turnMarkup = '';
+  let promptedAiRound = '';
   turnWindow.addEventListener('click', event => {
     const button = event.target.closest('[data-turn-action]');
     if (!button || !state || state.closed) return;
     const { turnAction: type, seat, value } = button.dataset;
+    if (type === 'draw-ai') {
+      const result = window.drawAibpRoomCard?.('AI', state.board?.apostle);
+      turnWindow.querySelector('[data-turn-status]').textContent = result?.aiPending ? '' : '请在 AIBP 检查当前骇物和 AI 牌堆。';
+      if (result?.aiPending) syncProjection();
+      return;
+    }
     send({ id: crypto.randomUUID(), type, round: state.round, phase: state.turn?.phase ?? null,
       ...(seat !== undefined && { seat: Number(seat) }), ...(value && { value }) });
   });
@@ -342,6 +353,12 @@
     const activeSeat = turn?.seat;
     const titans = turn?.phase === 'titans';
     const host = actor.role === 'host';
+    const aiRound = (state.squad?.battleNumber || 0) + ':' + state.round;
+    const shouldDrawAi = host && turn?.phase === 'apostle' && !state.projection?.aiPending && Boolean(window.drawAibpRoomCard);
+    if (shouldDrawAi && promptedAiRound !== aiRound) {
+      promptedAiRound = aiRound;
+      turnWindow.open = true;
+    }
     const everyoneFinished = titans && state.heroes.every((hero, seat) => hero.condition === 'dead' || turn.finished.includes(seat));
     const label = !turn ? '等待房主设置轮次' : !titans ? '骇物轮次'
       : activeSeat !== null ? '泰坦轮次 · ' + state.heroes[activeSeat].name
@@ -366,10 +383,11 @@
     }).join('');
     const controls = host ? (!turn ? action('turn-phase', '进入骇物轮次', ' data-value="apostle"')
         + action('turn-phase', '进入泰坦轮次', ' data-value="titans"')
-      : !titans ? action('turn-phase', '结束骇物轮次', ' data-value="titans"')
+      : !titans ? (shouldDrawAi ? action('draw-ai', '抽取 AI') : '') + action('turn-phase', '结束骇物轮次', ' data-value="titans"')
         : action('round', '下一轮 · 骇物行动',
           ' title="开始下一轮，回正阿尔戈能力"' + (everyoneFinished ? '' : ' disabled'))) : '';
-    const hint = !turn ? '' : !titans ? '<p>泰坦仍可结算闪避、击退和推斥。</p>'
+    const hint = !turn ? '' : !titans ? (shouldDrawAi ? '<p>骇物轮开始，请揭示 AI。</p>' : '')
+      + '<p>泰坦仍可结算闪避、击退和推斥。</p>'
       : everyoneFinished ? '<p>结算本轮结束效果后，由房主开启下一轮。</p>'
         : activeSeat === null ? '<p>首次主动移动或投掷攻击／威力骰会认领回合。</p>' : '';
     const next = '<ul>' + roster + '</ul>' + hint + (controls ? '<div class="room-turn-controls">' + controls + '</div>' : '');
@@ -658,13 +676,19 @@
       + '" required aria-label="' + escape(label) + '">' + button(1, '+') + '</span></label>';
   }
 
-  function powerPartCard() {
+  function powerPartCard(seat) {
     const projection = state.projection;
     const bp = projection?.bp;
     const caption = bp?.src ? projection.bpPending === true ? '当前部位牌' : '最后揭示的部位牌' : '部位牌';
+    const turn = state.turn;
+    const canRequest = state.heroes[seat]?.condition !== 'dead' && turn?.phase !== 'apostle'
+      && (turn?.seat == null || turn.seat === seat) && !turn?.finished.includes(seat);
+    const waiting = state.bpRequest && Date.now() - state.bpRequest.createdAt < 15000;
     return '<aside class="room-power-card"><h4>' + caption + '</h4>'
       + (bp?.src ? cardImage('/aibp/' + bp.src, bp.label || '部位牌')
-        : '<small>' + (projection ? '尚未揭示' : '等待房主同步') + '</small>') + '</aside>';
+        : '<small>' + (projection ? '尚未揭示' : '等待房主同步') + '</small>')
+      + (!projection?.bpPending && canRequest ? '<button type="button" data-bp-request="' + seat + '"'
+        + (waiting ? ' disabled>等待房主 AIBP' : '>揭示 BP') + '</button>' : '') + '</aside>';
   }
 
   function kratosReminder(hero) {
@@ -721,7 +745,7 @@
       + '<div class="room-dice-modes" role="group" aria-label="投掷用途">' + Object.entries(dice.modes)
         .map(([key, entry]) => '<button type="button" data-roll-mode="' + key + '" aria-pressed="' + (key === rollMode) + '">'
           + (key === 'dodge' ? '<img src="room-dice-art/dodge.webp" alt="">' : '') + entry.name + '</button>').join('') + '</div>'
-      + (rollMode === 'power' ? '<div class="room-power-workspace">' + powerPartCard() + form + '</div>' : form) + latestResult
+      + (rollMode === 'power' ? '<div class="room-power-workspace">' + powerPartCard(seat) + form + '</div>' : form) + latestResult
       + (notes[rollMode] ? '<p class="room-dice-help">' + notes[rollMode] + '</p>' : '')
       + (['attack', 'power'].includes(rollMode) ? kratosReminder(state.heroes[seat]) : '') + powerPool + '</section>';
   }
@@ -778,6 +802,29 @@
     if (key === lastProjectionSent) return;
     lastProjectionSent = key;
     send({ id: crypto.randomUUID(), type: 'room-projection', projection });
+  }
+
+  let processingBp = false;
+  let bpRetryTimer;
+  async function processBpRequest() {
+    const pending = state?.bpRequest;
+    if (!pending || processingBp || pending.claim || Date.now() - pending.createdAt >= 15000 || !window.drawAibpRoomCard) return;
+    if (window.getAibpRoomProjection?.()?.apostle !== state.board?.apostle) return;
+    processingBp = true;
+    const claim = crypto.randomUUID();
+    const battleNumber = state.squad?.battleNumber;
+    try {
+      await request(id + '/action', { id: claim, type: 'bp-claim', request: pending.id, battleNumber });
+      let projection;
+      try { projection = window.drawAibpRoomCard('BP', state.board?.apostle); }
+      finally {
+        accept(await request(id + '/action', { id: crypto.randomUUID(), type: 'bp-result',
+          request: pending.id, claim, projection, battleNumber }));
+      }
+      if (!projection?.bpPending) say('未能揭示 BP，请检查房主 AIBP 的部位牌堆。');
+    } catch (error) {
+      if (!(error instanceof RejectedAction)) say(error.message);
+    } finally { processingBp = false; }
   }
 
   function roomProjection() {
@@ -962,6 +1009,8 @@
     const selection = focus >= 0 && active.name;
     renderMarkup(summary, '<div class="battle-room-head"><div><h2>' + escape(state.title) + '</h2><p>第 ' + state.round
       + ' 轮' + (state.closed ? ' · 已结束' : '') + '</p></div><div>' + controls + '</div></div>' + links);
+    const goal = state.battleGoal ? '<section class="room-battle-goal"><h3>战斗目标</h3><p>'
+      + escape(state.battleGoal) + '</p></section>' : '';
     const poolSection = '<section class="battle-room-pool"><header><h3>克拉托斯池</h3>' + clearPool + '</header><div>' + pool + '</div></section>';
     const poolByDice = edit && (personal || !!own || rollMode === 'power');
     const dicePanel = diceForm(poolByDice ? poolSection : '');
@@ -969,7 +1018,7 @@
       : (poolByDice ? '' : poolSection) + dicePanel + own
         + (role === 'viewer' ? roomProjection() : '') + argoAbilities() + roomTrauma()
         + (edit ? rollLog + teamActivity() : '');
-    renderMarkup(content, primary + (role !== 'player' ? '<h3 class="battle-room-heading">状态总览</h3>' : '') + overview
+    renderMarkup(content, goal + primary + (role !== 'player' ? '<h3 class="battle-room-heading">状态总览</h3>' : '') + overview
       + (edit ? '' : rollLog) + (state.squad && role !== 'viewer' ? '<p><a href="' + escape(squadLink.link('/aibp/squad', id)) + '">返回联机小队</a></p>' : ''));
     renderTools();
     renderTurn();
@@ -1114,7 +1163,22 @@
     }
   });
 
-  window.addEventListener('aibp-room-projection', syncProjection);
+  window.addEventListener('aibp-room-projection', () => {
+    syncProjection();
+    if (actor?.role === 'host') void processBpRequest();
+  });
+  content.addEventListener('click', event => {
+    const button = event.target.closest('[data-bp-request]');
+    if (!button || button.disabled || !state || state.closed) return;
+    button.disabled = true;
+    if (actor.role === 'host' && window.drawAibpRoomCard) {
+      const projection = window.drawAibpRoomCard('BP', state.board?.apostle);
+      if (projection?.bpPending) syncProjection();
+      else { button.disabled = false; say('请检查 AIBP 的部位牌堆。'); }
+      return;
+    }
+    send({ id: crypto.randomUUID(), type: 'bp-request', seat: Number(button.dataset.bpRequest), round: state.round });
+  });
   window.addEventListener('online', () => { syncProjection(); void refreshRoomState(); });
 
   document.addEventListener('ato-battle-assets', () => {
@@ -1276,22 +1340,38 @@
           available = battleConfig.availability(lobbyCampaign, abilityDictionary);
         }
       } catch { /* An invited host still has the squad's saved configuration. */ }
-      content.innerHTML = '<h2>' + escape(data.room.title) + '</h2><p>在 AIBP 选择骇物和等级后开战。</p>'
-        + '<form data-prepare-battle>' + (available ? configFields(available) : '')
+      await window.refreshAibpRecordLevels?.();
+      content.innerHTML = '<h2>' + escape(data.room.title) + '</h2>'
+        + '<ol><li>按战斗段落要求更新<a href="../record/" target="_blank" rel="noopener">阿尔戈号记录表</a>，在 AIBP 核对骇物与等级。</li>'
+        + '<li>让队员在备战页确认泰坦、装备及旧忆。三曲盘沿用剧情数值。</li>'
+        + '<li>核对本场的阿尔戈能力、AI／BP 牌堆、地形、站位及战斗目标。</li></ol>'
+        + '<p data-prep-apostle aria-live="polite"></p><form data-prepare-battle>'
+        + '<label>战斗目标<textarea name="goal" maxlength="1200" rows="3" placeholder="按故事书填写胜利条件、回合上限等"></textarea></label>'
+        + (available ? configFields(available) : '')
+        + '<label><input name="confirmed" type="checkbox" required>已核对配装、牌堆和本场特殊设置</label>'
         + (data.room.squad.cycle === 'c1' ? '<label><input type="checkbox" name="tutorial"> 教程战</label> ' : '')
         + '<button type="submit">用当前骇物开战</button> <a href="' + escape(back) + '">返回小队</a></form>';
       const form = content.querySelector('[data-prepare-battle]');
+      const showBoss = () => {
+        const selected = window.getAibpRoomProjection?.();
+        const label = content.querySelector('[data-prep-apostle]');
+        if (label) label.textContent = selected
+          ? [selected.title, selected.level].filter(Boolean).join(' · ') : '请在 AIBP 选择骇物';
+      };
+      showBoss();
+      window.addEventListener('aibp-room-projection', showBoss);
       form.addEventListener('submit', async event => {
         event.preventDefault();
         event.stopPropagation();
         const button = form.querySelector('[type="submit"]');
         button.disabled = true;
         try {
+          await window.refreshAibpRecordLevels?.();
           const board = window.getAibpBoardSetup?.();
           if (!board) throw new Error('请先选择骇物。');
           await squadLink.request(squadId, 'action', credential.token, {
             id: crypto.randomUUID(), type: 'squad-start', battleNumber: data.room.squad.battleNumber,
-            board, projection: window.getAibpRoomProjection?.(), tutorial: form.elements.tutorial?.checked === true,
+            board, goal: form.elements.goal.value, projection: window.getAibpRoomProjection?.(), tutorial: form.elements.tutorial?.checked === true,
             ...(available && { battleConfig: readConfig(form) }),
           });
           const url = new URL(location.href);

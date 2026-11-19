@@ -473,6 +473,11 @@
       gap: 8px;
     }
 
+    .titan-options { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: .35rem; }
+    .titan-options > label:first-child, .titan-options > small { grid-column: 1 / -1; }
+    .titan-options > small:empty { display: none; }
+    .titan-details > a { display: flex; align-items: center; gap: .5rem; }
+    .titan-details > a[hidden], .titan-options [hidden] { display: none; }
     .titan-trauma { grid-column: 1 / -1; }
     .titan-trauma summary { cursor: pointer; }
     .titan-trauma > div { display: grid; grid-template-columns: repeat(auto-fit, minmax(105px, 1fr)); gap: .4rem; margin-block: .5rem; }
@@ -1896,7 +1901,8 @@
   <script src="./matrix-data.js?v=20261106-c123-fixes2"></script>
   <script src="../assets/cycle-symbols.js?v=20261115-module-logo"></script>
   <script src="../assets/campaign-session.js?v=20260917"></script>
-  <script src="../technology/gear-inventory.js?v=20261118-trauma"></script>
+  <script src="enemy-evolution.js?v=20261120"></script>
+  <script src="../technology/gear-inventory.js?v=20261120-titan-management"></script>
   <script src="../assets/campaign-notes.js?v=20261015"></script>
   <script src="../assets/record-attachments.js?v=20261009"></script>
   <script src="./note-attachments.js?v=20261009-rename3"></script>
@@ -1943,44 +1949,7 @@
         crew: [6, 5, 4, 3, 2, 1, 0],
         initialHull: "4",
         initialCrew: "5",
-        enemies: [
-          {
-            key: "hekaton",
-            zh: "百臂巨人",
-            en: "Hekaton",
-            stages: [
-              { id: "0", label: "0" },
-              { id: "1a", label: "I" },
-              { id: "1b", label: "I", sharedWith: ["hekaton", "labyrinthauros"] },
-              { id: "2a", label: "II" },
-              { id: "2b", label: "II", sharedWith: ["hekaton", "labyrinthauros"] },
-              { id: "2c", label: "III", sharedWith: ["hekaton", "labyrinthauros"] },
-              { id: "3", label: "III" },
-              { id: "4a", label: "IV" },
-              { id: "4b", label: "IV" },
-              { id: "4c", label: "IV", sharedWith: ["hekaton", "labyrinthauros"] },
-            ],
-          },
-          {
-            key: "labyrinthauros",
-            zh: "迷宫机牛",
-            en: "Labyrinthauros",
-            stages: [
-              { id: "spacer", label: "", marker: "spacer" },
-              { id: "1a", label: "I" },
-              { id: "1b", label: "I", sharedWith: ["hekaton", "labyrinthauros"] },
-              { id: "2a", label: "II" },
-              { id: "2b", label: "II", sharedWith: ["hekaton", "labyrinthauros"] },
-              { id: "2c", label: "III", sharedWith: ["hekaton", "labyrinthauros"] },
-              { id: "3", label: "III" },
-              { id: "4a", label: "IV" },
-              { id: "4b", label: "IV" },
-              { id: "4c", label: "IV", sharedWith: ["hekaton", "labyrinthauros"] },
-            ],
-          },
-          { key: "temenos", zh: "吞域兽", en: "Temenos", stages: ["1", "2", "3", "4"] },
-          { key: "pursuer", zh: "赫尔墨斯追击者", en: "Hermesian Pursuer", stages: ["1", "2", "3", "4", "5"], hasTriangle: true },
-        ],
+        enemies: window.ATO_ENEMY_EVOLUTION.tracks.c1,
         adventures: [
           ["宿命的谜题", "Fated Conundrum", "five"],
           ["人民的困境", "Plight of the People", "five"],
@@ -2026,42 +1995,7 @@
         crew: [9, 8, 7, 6, 5, 4, 3, 2, 1, 0],
         initialHull: "5",
         initialCrew: "5",
-        enemies: [
-          {
-            key: "cyclonus",
-            zh: "独眼巨人",
-            en: "Cyclonus",
-            stages: [
-              { id: "1a", label: "I" },
-              { id: "1b", label: "I", sharedWith: ["cyclonus", "chimera"] },
-              { id: "2a", label: "II" },
-              { id: "2b", label: "II", sharedWith: ["cyclonus", "chimera"] },
-              { id: "3a", label: "III", sharedWith: ["cyclonus", "chimera"] },
-              { id: "3b", label: "III" },
-              { id: "4a", label: "IV" },
-              { id: "4b", label: "IV" },
-              { id: "4c", label: "IV", sharedWith: ["cyclonus", "chimera"] },
-            ],
-          },
-          {
-            key: "chimera",
-            zh: "蠕变奇美拉",
-            en: "Chimera Metastasios",
-            stages: [
-              { id: "1a", label: "I" },
-              { id: "1b", label: "I", sharedWith: ["cyclonus", "chimera"] },
-              { id: "2a", label: "II" },
-              { id: "2b", label: "II", sharedWith: ["cyclonus", "chimera"] },
-              { id: "3a", label: "III", sharedWith: ["cyclonus", "chimera"] },
-              { id: "3b", label: "III" },
-              { id: "4a", label: "IV" },
-              { id: "4b", label: "IV" },
-              { id: "4c", label: "IV", sharedWith: ["cyclonus", "chimera"] },
-            ],
-          },
-          { key: "nietzschean", zh: "尼采超人", en: "Nietzschean", stages: ["1", "2", "3", "4"] },
-          { key: "adversary", zh: "重担", en: "The Burden", stages: ["1", "2", "3", "4", "5"] },
-        ],
+        enemies: window.ATO_ENEMY_EVOLUTION.tracks.c2,
         adventures: [
           ["凝视蝼蚁", "Consider the Ant"],
           ["另一场温泉关之战", "The Other Thermopylae"],
@@ -2111,44 +2045,7 @@
         crew: [10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0],
         initialHull: "5",
         initialCrew: "5",
-        enemies: [
-          {
-            key: "oracle",
-            zh: "超时光先知",
-            en: "Hypertime Oracle",
-            stages: [
-              { id: "1a", label: "I" },
-              { id: "1b", label: "I", sharedWith: ["oracle", "harpy"] },
-              { id: "2a", label: "II" },
-              { id: "2b", label: "II", sharedWith: ["oracle", "harpy"] },
-              { id: "2c", label: "III", sharedWith: ["oracle", "harpy"] },
-              { id: "3", label: "III" },
-              { id: "4a", label: "IV" },
-              { id: "4b", label: "IV" },
-              { id: "4c", label: "IV" },
-              { id: "5", label: "V", sharedWith: ["oracle", "harpy"] },
-            ],
-          },
-          {
-            key: "harpy",
-            zh: "伊卡洛斯哈尔皮",
-            en: "Icarian Harpy",
-            stages: [
-              { id: "1a", label: "I" },
-              { id: "1b", label: "I", sharedWith: ["oracle", "harpy"] },
-              { id: "2a", label: "II" },
-              { id: "2b", label: "II", sharedWith: ["oracle", "harpy"] },
-              { id: "2c", label: "III", sharedWith: ["oracle", "harpy"] },
-              { id: "3", label: "III" },
-              { id: "4a", label: "IV" },
-              { id: "4b", label: "IV" },
-              { id: "4c", label: "IV" },
-              { id: "5", label: "V", sharedWith: ["oracle", "harpy"] },
-            ],
-          },
-          { key: "sunDescendant", zh: "坠落太阳", en: "Sun Descendant", stages: ["1", "2", "3", "4", "5"] },
-          { key: "adversary", zh: "重担", en: "The Burden", stages: ["1", "2", "3", "4", "5"] },
-        ],
+        enemies: window.ATO_ENEMY_EVOLUTION.tracks.c3,
         adventures: [
           ["鲜为人知的路", "Road Less Traveled", "five"],
           ["太阳之子", "Children of the Sun", "five"],
@@ -2204,52 +2101,7 @@
         crew: [6, 5, 4, 3, 2, 1, 0],
         initialHull: "5",
         initialCrew: "6",
-        enemies: [
-          {
-            key: "midascore",
-            zh: "迈达狮",
-            en: "Midascore",
-            stages: [
-              { id: "1a", label: "I" },
-              { id: "1b", label: "I", sharedWith: ["midascore", "demidjinn"] },
-              { id: "2a", label: "II" },
-              { id: "2b", label: "II", sharedWith: ["midascore", "demidjinn"] },
-              { id: "3a", label: "III", sharedWith: ["midascore", "demidjinn"] },
-              { id: "3b", label: "III" },
-              { id: "4a", label: "IV" },
-              { id: "4b", label: "IV" },
-              { id: "4c", label: "IV", sharedWith: ["midascore", "demidjinn"] },
-              { id: "5a", label: "V" },
-              { id: "5b", label: "V", sharedWith: ["midascore", "demidjinn"] },
-              { id: "5c", label: "V" },
-              { id: "5d", label: "V", sharedWith: ["midascore", "demidjinn"] },
-              { id: "6", label: "VI", marker: "counter", sharedWith: ["midascore", "demidjinn"] },
-            ],
-          },
-          {
-            key: "demidjinn",
-            zh: "半神迪精",
-            en: "Demidjinn",
-            stages: [
-              { id: "1a", label: "I" },
-              { id: "1b", label: "I", sharedWith: ["midascore", "demidjinn"] },
-              { id: "2a", label: "II" },
-              { id: "2b", label: "II", sharedWith: ["midascore", "demidjinn"] },
-              { id: "3a", label: "III", sharedWith: ["midascore", "demidjinn"] },
-              { id: "3b", label: "III" },
-              { id: "4a", label: "IV" },
-              { id: "4b", label: "IV" },
-              { id: "4c", label: "IV", sharedWith: ["midascore", "demidjinn"] },
-              { id: "5a", label: "V" },
-              { id: "5b", label: "V", sharedWith: ["midascore", "demidjinn"] },
-              { id: "5c", label: "V" },
-              { id: "5d", label: "V", sharedWith: ["midascore", "demidjinn"] },
-              { id: "6", label: "VI", marker: "counter", sharedWith: ["midascore", "demidjinn"] },
-            ],
-          },
-          { key: "babelianLunacy", zh: "巴比伦疯塔", en: "Babelian Lunacy", stages: ["1", "2", "3", "4", "5", "6"] },
-          { key: "dahaka", zh: "达哈卡", en: "Dahaka", stages: ["1", "2", "3", "4", "5", "6", "7", "8"], hasTriangle: true },
-        ],
+        enemies: window.ATO_ENEMY_EVOLUTION.tracks.c4,
         adventures: [
           ["盐路", "The Salt Road", "five"],
           ["亚里士多德的承诺", "Aristotle’s Promise", "five"],
@@ -2304,42 +2156,7 @@
         crew: [6, 5, 4, 3, 2, 1, 0],
         initialHull: "6",
         initialCrew: "4",
-        enemies: [
-          {
-            key: "dragonOfPhobos",
-            zh: "深海惧龙",
-            en: "Dragon of Phobos",
-            stages: [
-              { id: "1a", label: "I" },
-              { id: "1b", label: "I", sharedWith: ["dragonOfPhobos", "meduketos"] },
-              { id: "2a", label: "II" },
-              { id: "2b", label: "II", sharedWith: ["dragonOfPhobos", "meduketos"] },
-              { id: "3a", label: "III", sharedWith: ["dragonOfPhobos", "meduketos"] },
-              { id: "3b", label: "III" },
-              { id: "4a", label: "IV" },
-              { id: "4b", label: "IV" },
-              { id: "4c", label: "IV", sharedWith: ["dragonOfPhobos", "meduketos"] },
-            ],
-          },
-          {
-            key: "meduketos",
-            zh: "须目刻托斯",
-            en: "Meduketos",
-            stages: [
-              { id: "1a", label: "I" },
-              { id: "1b", label: "I", sharedWith: ["dragonOfPhobos", "meduketos"] },
-              { id: "2a", label: "II" },
-              { id: "2b", label: "II", sharedWith: ["dragonOfPhobos", "meduketos"] },
-              { id: "3a", label: "III", sharedWith: ["dragonOfPhobos", "meduketos"] },
-              { id: "3b", label: "III" },
-              { id: "4a", label: "IV" },
-              { id: "4b", label: "IV" },
-              { id: "4c", label: "IV", sharedWith: ["dragonOfPhobos", "meduketos"] },
-            ],
-          },
-          { key: "urFleece", zh: "乌尔-弗里斯", en: "Ur-Fleece", stages: ["1", "2", "3", "4", "5"] },
-          { key: "titanX", zh: "泰坦 X", en: "Titan X", stages: ["1", "2", "3", "4", "5", "6", "7", "8", "9"], hasTriangle: true },
-        ],
+        enemies: window.ATO_ENEMY_EVOLUTION.tracks.c5,
         adventures: [
           ["部分与整体", "Pieces and Wholes"],
           ["宁为玉碎，不为瓦全", "Death Before Dishonor", "five"],
@@ -3164,6 +2981,10 @@
             id: String(item.id || `titan-${Date.now()}-${Math.random().toString(16).slice(2)}`),
             name: String(item.name || "泰坦"),
             ...window.ATO_GEAR_INVENTORY.titanTypeFields(item),
+            ...(Object.hasOwn(item, "panelId") && {
+              panelId: window.ATO_GEAR_INVENTORY.DREAMWALKER_PANELS.find(panel => panel.id === item.panelId)?.id || "",
+            }),
+            ...window.ATO_GEAR_INVENTORY.titanPatternFields(item),
             traumaTrack: window.ATO_GEAR_INVENTORY.traumaTrack(item.traumaTrack),
             notes: typeof item.notes === "string" ? item.notes.trim().slice(0, 500) : "",
             count: Math.max(1, Math.floor(Number(item.count || 1))),
@@ -3731,7 +3552,9 @@
       state.titans = normalizeTitanList(state.titans);
       const crippledByDetails = new Map();
       state.titans = state.titans.filter((titan) => {
-        if (!titan.crippled) return true;
+        if (!titan.crippled || titan.panelId
+            || (titan.name !== "泰坦" && titan.name !== window.ATO_GEAR_INVENTORY.titanType(titan)?.name)
+            || Object.values(window.ATO_GEAR_INVENTORY.titanPatternFields(titan)).some(Boolean)) return true;
         const key = JSON.stringify([titan.name, titan.typeId || titan.type, titan.notes, titan.traumaTrack]);
         const existing = crippledByDetails.get(key);
         if (existing) {
@@ -3782,6 +3605,7 @@
         countInput.min = "1";
         countInput.step = "1";
         countInput.value = titan.count;
+        countInput.readOnly = titan.count === 1 && titan.name !== "泰坦" && titan.name !== titan.type;
         countInput.title = "当前数量";
         countInput.setAttribute("aria-label", `${titan.name || "泰坦"} 数量`);
         countInput.addEventListener("input", () => {
@@ -3847,12 +3671,22 @@
         const preview = document.createElement("a");
         preview.target = "_blank";
         preview.rel = "noopener";
+        const thumbnail = document.createElement("img");
+        thumbnail.width = 56;
+        thumbnail.height = 48;
+        thumbnail.style.objectFit = "contain";
+        thumbnail.loading = "lazy";
+        const previewLabel = document.createElement("span");
+        preview.append(thumbnail, previewLabel);
         const refreshPreview = () => {
           const art = window.ATO_GEAR_INVENTORY.titanArtwork(state.titans[index]);
           preview.hidden = !art;
           if (art) {
             preview.href = "../" + art.path;
-            preview.textContent = art.label;
+            const panel = window.ATO_GEAR_INVENTORY.dreamwalkerPanel(state.titans[index]);
+            thumbnail.src = panel ? "../aibp/images/titan-portraits/" + panel.id + ".jpg" : preview.href;
+            thumbnail.alt = art.name;
+            previewLabel.textContent = art.name;
           }
         };
         type.element.addEventListener("change", refreshPreview);
@@ -3870,10 +3704,78 @@
         notes.append("备注", notesInput);
         const trauma = createTitanTraumaField(titan);
         type.element.addEventListener("change", trauma.refresh);
-        details.append(type.element, notes, preview, trauma.element);
+        const options = createTitanOptionsField(titan, refreshPreview, trauma.refresh);
+        type.element.addEventListener("change", options.refresh);
+        details.append(preview, type.element, options.element, notes, trauma.element);
         row.append(nameInput, countField, crippledLabel, removeButton, details);
         elements.titanList.appendChild(row);
       });
+    }
+
+    function createTitanOptionsField(titan, refreshPreview, refreshTrauma) {
+      const inventory = window.ATO_GEAR_INVENTORY;
+      const element = document.createElement("div");
+      element.className = "titan-options";
+      const panelLabel = document.createElement("label");
+      const panel = document.createElement("select");
+      panel.setAttribute("aria-label", "梦行者面板");
+      panel.add(new Option("自动识别 / 通用面板", ""));
+      for (const item of inventory.DREAMWALKER_PANELS) panel.add(new Option(item.name, item.id));
+      panel.value = titan.panelId;
+      panel.addEventListener("change", () => {
+        titan.panelId = panel.value;
+        refreshPreview();
+        queueSave();
+      });
+      panelLabel.append("梦行者面板", panel);
+      element.append(panelLabel);
+      const selectors = Object.entries(inventory.PATTERN_FIELDS).map(([field, title]) => {
+        const label = document.createElement("label");
+        const select = document.createElement("select");
+        select.setAttribute("aria-label", title);
+        const hint = document.createElement("small");
+        const card = document.createElement("a");
+        card.target = "_blank";
+        card.rel = "noopener";
+        const image = document.createElement("img");
+        image.width = 45;
+        image.loading = "lazy";
+        card.append(image);
+        select.addEventListener("change", () => {
+          titan[field] = select.value;
+          refresh();
+          refreshTrauma();
+          queueSave();
+        });
+        label.append(title, select);
+        element.append(label, card, hint);
+        return { field, select, card, image, hint };
+      });
+      function refresh() {
+        panelLabel.hidden = inventory.titanType(titan)?.id !== "dreamwalker";
+        if (panelLabel.hidden && titan.panelId) titan.panelId = panel.value = "";
+        for (const { field, select, card, image, hint } of selectors) {
+          const choices = inventory.TITAN_PATTERNS.filter(pattern =>
+            Boolean(pattern.track) === (field === "traumaPatternId")
+            && inventory.loadoutPatterns({ ...titan, [field]: pattern.id }, null, state.cycle).some(item => item.id === pattern.id));
+          select.replaceChildren(new Option("无", ""), ...choices.map(pattern => new Option(pattern.name, pattern.id)));
+          const legacy = Object.values(state.loadouts || {}).filter(kit => kit?.titanId === titan.id)
+            .map(kit => kit[field]).filter(Boolean);
+          const legacyId = titan.count === 1 && new Set(legacy).size === 1 ? legacy[0] : "";
+          select.value = titan[field] || "";
+          hint.textContent = !Object.hasOwn(titan, field) && legacyId
+            ? "旧配装：" + (choices.find(item => item.id === legacyId)?.name || legacyId) : "";
+          const pattern = choices.find(item => item.id === select.value);
+          card.hidden = !pattern;
+          if (pattern) {
+            card.href = "../" + pattern.art;
+            image.src = card.href;
+            image.alt = pattern.name;
+          }
+        }
+      }
+      refresh();
+      return { element, refresh };
     }
 
     function createTitanTraumaField(titan) {
@@ -3889,6 +3791,7 @@
         const select = document.createElement("select");
         const options = Object.entries(inventory.TRAUMA_DECKS);
         select.add(new Option("请选择", ""));
+        select.add(new Option("不抽取", "none"));
         for (const [id, name] of options) select.add(new Option(name, id));
         label.append("凶险 " + (index + 1), select);
         grid.append(label);
@@ -3903,10 +3806,13 @@
       const status = document.createElement("small");
       status.setAttribute("role", "status");
       function refresh() {
-        const values = titan.traumaTrack || inventory.defaultTraumaTrack(titan);
+        const pattern = inventory.loadoutPatterns(titan, null, state.cycle).find(item => item.track);
+        const values = pattern?.track || titan.traumaTrack || inventory.defaultTraumaTrack(titan);
+        selectors.forEach(select => { select.disabled = Boolean(pattern); });
+        save.disabled = Boolean(pattern);
         selectors.forEach((select, index) => { select.value = values?.[index] || ""; });
-        reset.disabled = !titan.traumaTrack;
-        status.textContent = titan.traumaTrack ? "使用泰坦自定义表" : values ? "使用种类默认表" : "尚无创伤表";
+        reset.disabled = Boolean(pattern) || !titan.traumaTrack;
+        status.textContent = pattern ? pattern.name + "创伤表" : titan.traumaTrack ? "使用泰坦自定义表" : values ? "使用种类默认表" : "尚无创伤表";
       }
       save.onclick = () => {
         const values = inventory.traumaTrack(selectors.map(select => select.value));
@@ -3969,11 +3875,13 @@
 
     function addTitan() {
       const name = elements.titanNameInput.value.trim() || "泰坦";
-      const count = Math.max(1, Math.floor(Number(elements.titanCountInput.value || 1)));
+      const type = newTitanTypeField.read();
+      const named = name !== "泰坦" && name !== type.type;
+      const count = named ? 1 : Math.max(1, Math.floor(Number(elements.titanCountInput.value || 1)));
       state.titans.push({
         id: `titan-${Date.now()}-${Math.random().toString(16).slice(2)}`,
         name,
-        ...newTitanTypeField.read(),
+        ...type,
         notes: elements.titanNotesInput.value.trim(),
         count,
         crippled: elements.titanCrippledInput.checked,

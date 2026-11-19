@@ -41,6 +41,7 @@ function setup(cycle) {
     escapeHtml: (text) => text,
     normalizeAdventureTitle: (text) => text.toLowerCase(),
   });
+  vm.runInContext('globalThis.window = {};\n' + read('record/enemy-evolution.js'), context);
   vm.runInContext(cycleLiteral + '\nfunction currentCycle() { return cycleData[state.cycle]; }\n'
     + ['renderAdventures', 'markAdventureFromSurvey'].map((name) => extractFunction(recordSource, name)).join('\n')
     + '\n' + extractFunction(dashboardSource, 'recordAdventureMiddleSlots'), context);

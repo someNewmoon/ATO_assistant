@@ -2439,7 +2439,7 @@
   <script src="../assets/mobile/layout.js?v=20261028-apk-portrait1" defer></script>
   <script src="../assets/mobile/play.js?v=20261114-theatre-return" defer></script>
   <link rel="stylesheet" href="room-recap.css">
-  <link rel="stylesheet" href="battle-room.css?v=20261120-titan-patterns">
+  <link rel="stylesheet" href="battle-room.css?v=20261120-battle-prep">
   <script src="theatre-battle.js?v=2"></script>
   <script src="../theatre/terms.js?v=2"></script>
 </head>
@@ -2949,9 +2949,10 @@
   <script src="../technology/battle-config.js" defer></script>
   <script src="room-dice.js?v=20261119-battle-turn" defer></script>
   <script src="squad-link.js?v=7" defer></script>
+  <script src="../record/enemy-evolution.js?v=20261120"></script>
   <script src="kratos-tables.js?v=20261120-titan-patterns" defer></script>
-  <script src="battle-room.js?v=20261120-titan-patterns" defer></script>
-  <script src="../technology/gear-inventory.js?v=20261120-titan-patterns"></script>
+  <script src="battle-room.js?v=20261120-battle-prep" defer></script>
+  <script src="../technology/gear-inventory.js?v=20261120-battle-prep"></script>
   <script src="../assets/campaign-notes.js?v=20261015-aibp-summary1"></script>
   <script src="../assets/cycle-symbols.js?v=20261115-module-logo"></script>
   <script src="cycle-theme.js?v=20261001"></script>
@@ -3843,6 +3844,7 @@
           : window.AIBP_BOSS_SEARCH?.entries.find(entry => entry.id === currentApostle)?.names.official || boss.title,
         ai: publicCardSnapshot(revealed("AI")),
         bp: publicCardSnapshot(revealed("BP")),
+        aiPending: Boolean(pending("AI")),
         bpPending: Boolean(pending("BP")),
         aiDeck: publicDeckSnapshot(state, "AI"),
         bpDeck: publicDeckSnapshot(state, "BP"),
@@ -4657,48 +4659,13 @@
       localStorage.setItem(apostleLevelOverrideKey, JSON.stringify(apostleLevelOverrides));
     }
 
-    function parseApostleLevel(value) {
-      const text = String(value || "").toUpperCase();
-      const arabic = text.match(/(?:^|[^0-9])([1-9])(?:[^0-9]|$)/);
-      if (arabic) return Number(arabic[1]);
-      const roman = text.match(/(?:^|[^IVX])(VIII|VII|III|IX|VI|IV|II|V|I)(?:[^IVX]|$)/);
-      return roman
-        ? ({ I: 1, II: 2, III: 3, IV: 4, V: 5, VI: 6, VII: 7, VIII: 8, IX: 9 }[roman[1]] || 0)
-        : 0;
-    }
-
-    function recordLevelForTrack(recordState, track) {
-      if (Array.isArray(track)) {
-        return track.reduce((max, item) => Math.max(max, recordLevelForTrack(recordState, item)), 0);
-      }
-      if (!recordState?.enemies || !track) return 0;
-      const nemesis = ["pursuer", "adversary", "dahaka", "titanX"].includes(track.key);
-      const nemesisPrefix = `nemesis:${track.key}:`;
-      const hasSharedNemesis = nemesis && Object.keys(recordState.enemies).some((key) => key.startsWith(nemesisPrefix));
-      let level = hasSharedNemesis ? 0 : parseApostleLevel(recordState.enemies[track.key]);
-      Object.entries(recordState.enemies).forEach(([key, active]) => {
-        if (!active || key.endsWith(":triangle")) return;
-        if (hasSharedNemesis) {
-          if (key.startsWith(nemesisPrefix)) level = Math.max(level, parseApostleLevel(key.slice(nemesisPrefix.length)));
-          return;
-        }
-        if (!key.startsWith(`${track.cycle}:`) && !(nemesis && /^c[1-5]:/.test(key))) return;
-        const parts = key.split(":");
-        const isDirect = parts[1] === track.key;
-        const isShared = parts[1] === "shared" && (parts[2] || "").split("+").includes(track.key);
-        if (!isDirect && !isShared) return;
-        level = Math.max(level, parseApostleLevel(parts.at(-1)));
-      });
-      return level;
-    }
-
     function recordStateFromCampaign(campaign) {
       const dashboard = campaign?.sections?.dashboard;
       const activeProfileId = dashboard?.activeProfileId || "default";
       const recordSection = campaign?.sections?.record;
       if (!recordSection) return null;
-      return recordSection?.users?.[activeProfileId]
-        || (recordSection?.users ? null : recordSection);
+      const profiles = recordSection.users || recordSection.accounts;
+      return profiles ? profiles[activeProfileId] || null : recordSection;
     }
 
     function activeDashboardCycleFromCampaign(campaign) {
@@ -4921,20 +4888,23 @@
       }
     }
 
+    let recordLevelRequest = 0;
     async function refreshRecordApostleLevels() {
       if (theatreRequest) return;
+      const request = ++recordLevelRequest;
       try {
-        const previousLevel = currentApostleLevel();
-        const response = await fetch(recordStorageUrl, { cache: "no-store" });
+        const response = await fetch(recordStorageUrl, { cache: "no-store", signal: AbortSignal.timeout(8000) });
         if (!response.ok) return;
         const payload = await response.json();
+        if (request !== recordLevelRequest) return;
+        const previousLevel = currentApostleLevel();
         applyCampaignMapFactionState(payload?.campaign, payload?.user);
         const recordState = recordStateFromCampaign(payload?.campaign);
         if (!recordState) return;
         recordApostleLevels = Object.fromEntries(
           Object.entries(apostleRecordTracks).map(([apostle, track]) => [
             apostle,
-            recordLevelForTrack(recordState, track)
+            window.ATO_ENEMY_EVOLUTION.levelFor(recordState, track)
           ])
         );
         renderApostleTitle();
@@ -4944,6 +4914,7 @@
         renderExtraCards();
         renderAibpCards();
         renderPanelTokens();
+        battleMapControl?.render();
       } catch {
         // 离线或 file:// 打开时继续使用手动等级。
       }
@@ -5020,7 +4991,15 @@
       savePiles();
     }
 
+    let roomBattleLevel;
+    window.setAibpRoomBattleLevel = (apostle, level) => {
+      if (!Number.isInteger(level) || roomBattleLevel?.apostle === apostle && roomBattleLevel.level === level) return;
+      roomBattleLevel = { apostle, level };
+      renderApostle(apostle);
+    };
+
     function apostleLevelFor(name) {
+      if (roomBattleLevel?.apostle === name) return roomBattleLevel.level;
       if (theatreBattle?.boss === name) return theatreLevelOverride ?? theatreBattle.level;
       const override = Number(apostleLevelOverrides[name]);
       const upperLevel = name === "HELIOS" ? 10 : maxApostleLevel;
@@ -5028,7 +5007,8 @@
         && window.AIBP_BOSS_LEVEL_DATA?.bosses?.[name]?.levels?.["0"]) return 0;
       if (override >= 1 && override <= upperLevel) return override;
       if (fixedLevelOneApostles.has(name)) return 1;
-      const recordLevel = Number(recordApostleLevels[name]);
+      const recordLevel = recordApostleLevels[name];
+      if (recordLevel === 0 && window.AIBP_BOSS_LEVEL_DATA?.bosses?.[name]?.levels?.["0"]) return 0;
       if (recordLevel >= 1 && recordLevel <= maxApostleLevel) return Math.min(recordLevel, upperLevel);
       return 1;
     }
@@ -5122,12 +5102,12 @@
           || Number(apostleLevelOverrides[currentApostle]) <= 10)
         ? String(apostleLevelOverrides[currentApostle])
         : "";
-      const recordLevel = Number(recordApostleLevels[currentApostle]) || 0;
+      const recordLevel = recordApostleLevels[currentApostle];
       apostleLevelSelect.options[0].textContent = currentApostle === "HELIOS"
         ? "默认 C4 · Old Haunt"
         : fixedAtOne
         ? "固定等级 I"
-        : recordLevel
+        : recordLevel != null
           ? `跟随记录表（${levelRoman[recordLevel] || recordLevel}）`
           : "跟随记录表（未读取）";
     }
@@ -9689,6 +9669,12 @@
       renderPanelTokens();
       battleMapControl?.render();
     });
+    window.refreshAibpRecordLevels = refreshRecordApostleLevels;
+    window.drawAibpRoomCard = (type, apostle) => {
+      if (apostle !== currentApostle || !["AI", "BP"].includes(type)) return null;
+      if (type === "AI") drawAi(); else drawBp();
+      return window.getAibpRoomProjection();
+    };
     window.getAibpBoardSetup = () => currentApostle ? {
       apostle: currentApostle, level: currentApostleLevel() === 0 ? 0 : window.BattleTerrain.levelNumber(currentApostleLevel()),
       map: piles[currentApostle]?.battleMap,
@@ -9881,6 +9867,10 @@
     promoteBpButton.addEventListener("click", promoteBpByRemovingLowest);
     window.addEventListener("resize", updateViewerScale);
     window.addEventListener("focus", refreshRecordApostleLevels);
+    if (typeof BroadcastChannel === "function") {
+      const recordUpdates = new BroadcastChannel("ato-record-sync-v1");
+      recordUpdates.addEventListener("message", refreshRecordApostleLevels);
+    }
     document.addEventListener("visibilitychange", () => {
       if (!document.hidden) {
         refreshRecordApostleLevels();

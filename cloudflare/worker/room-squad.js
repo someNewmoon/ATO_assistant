@@ -16,6 +16,8 @@ export function createSquad(record, roster, language, cycle, gearName) {
   const titans = inventory.loadoutTitans(record).map(titan => ({
     id: String(titan.id), name: text(titan.name, 80), ...inventory.titanTypeFields(titan),
     count: Math.max(1, Math.min(999, Number(titan.count) || 1)), crippled: Boolean(titan.crippled),
+    ...(Object.hasOwn(titan, 'panelId') && { panelId: text(titan.panelId, 40) }),
+    ...inventory.titanPatternFields(titan),
     traumaTrack: inventory.traumaTrack(titan.traumaTrack),
   }));
   const rosterLabels = roster.map(hero => ({ id: hero.id, name: heroCatalog.heroDisplayName(hero), argonaut: hero.argonaut }));
@@ -28,7 +30,31 @@ export function createSquad(record, roster, language, cycle, gearName) {
   const gearNames = Object.fromEntries([...new Set([...Object.keys(arsenal), ...Object.values(loadouts).flatMap(kit => Object.keys(kit.gear))])]
     .filter(key => !key.startsWith('T:')).map(key => [key, gearName(key)]));
   return { phase: 'story', cycle, language,
-    battleNumber: 0, hostSeat: null, checks: [], stock: { arsenal, titans, loadouts, roster: rosterLabels }, gearNames };
+    battleNumber: 0, hostSeat: null, checks: [], campaignLoadouts: structuredClone(loadouts), stock: { arsenal, titans, loadouts, roster: rosterLabels }, gearNames };
+}
+
+export function syncCampaignStock(room, fresh) {
+  if (!fresh || room.squad.phase === 'battle') return false;
+  const squad = room.squad;
+  const latest = fresh.stock.loadouts;
+  const baseline = squad.campaignLoadouts;
+  const merged = { ...latest };
+  for (const { id } of room.heroes) {
+    const draft = squad.stock.loadouts[id];
+    if (!draft) continue;
+    const unchanged = baseline && JSON.stringify(latest[id]) === JSON.stringify(baseline[id]);
+    if (unchanged || (!baseline && !Object.hasOwn(latest, id))) merged[id] = draft;
+  }
+  const names = { ...fresh.gearNames };
+  for (const kit of Object.values(merged)) {
+    for (const id of Object.keys(kit.gear || {})) names[id] ??= squad.gearNames[id] || id;
+  }
+  const stock = { ...fresh.stock, loadouts: merged };
+  const changed = JSON.stringify(stock) !== JSON.stringify(squad.stock)
+    || JSON.stringify(names) !== JSON.stringify(squad.gearNames)
+    || JSON.stringify(latest) !== JSON.stringify(baseline);
+  if (changed) Object.assign(squad, { stock, gearNames: names, campaignLoadouts: latest });
+  return changed;
 }
 
 export function squadSkills(hero) {
@@ -98,7 +124,7 @@ function refreshCombatKit(room) {
       patternIds: inventory.loadoutPatterns(titan, kit, room.squad.cycle).map(pattern => pattern.id),
     } : null;
     hero.gear = Object.entries(kit.gear).map(([id, count]) => ({ id, name: gearNames[id] || id, count, used: 0 }));
-    hero.stats = { danger: 0, rage: 0, fate: 0 };
+    hero.stats = { ...squadStats(hero.storyStats) };
     delete hero.markers;
     hero.condition = 'standing';
     hero.mnemos = hero.mnemos.map(({ state, ...card }) => card);
@@ -108,31 +134,6 @@ function refreshCombatKit(room) {
 function sameTitanPanel(titan, kit, other) {
   return Boolean(titan) && kit.titanId === other.titanId
     && inventory.loadoutTitan(titan, kit.titanPanelId).panelId === inventory.loadoutTitan(titan, other.titanPanelId).panelId;
-}
-
-export function syncLoadoutTitanOptions(stock, tracks) {
-  let changed = false;
-  for (const [id, source] of Object.entries(tracks || {})) {
-    if (!Object.hasOwn(stock.loadouts, id)) continue;
-    const kit = stock.loadouts[id];
-    const titan = stock.titans.find(entry => entry.id === kit.titanId);
-    if (!titan || kit.titanId !== source.titanId) continue;
-    const validPatterns = inventory.loadoutPatterns(titan, source);
-    for (const field of Object.keys(inventory.PATTERN_FIELDS)) {
-      const value = validPatterns.find(pattern => pattern.id === source[field])?.id;
-      if (kit[field] === value) continue;
-      if (value) kit[field] = value;
-      else delete kit[field];
-      changed = true;
-    }
-    if (!sameTitanPanel(titan, kit, source)) continue;
-    const track = inventory.traumaTrack(source.traumaTrack);
-    if (JSON.stringify(kit.traumaTrack || null) === JSON.stringify(track)) continue;
-    if (track) kit.traumaTrack = track;
-    else delete kit.traumaTrack;
-    changed = true;
-  }
-  return changed;
 }
 
 export function applySquad(room, actor, body, randomInt) {
@@ -159,6 +160,23 @@ export function applySquad(room, actor, body, randomInt) {
   if (body.type === 'squad-start') {
     if (squad.phase !== 'prep' || body.battleNumber !== squad.battleNumber) fail('请先进入备战，或刷新小队状态。', 409);
     const board = setupRoomBoard(body.board, room.heroes.length);
+    const missing = room.heroes.filter(hero => {
+      const kit = squad.stock.loadouts[hero.id];
+      return kit?.titanId && !squad.stock.titans.some(titan => titan.id === kit.titanId);
+    });
+    if (missing.length) fail('请重新选定泰坦：' + missing.map(hero => hero.name).join('、'), 409);
+    const selected = room.heroes.map(hero => squad.stock.loadouts[hero.id]).filter(Boolean);
+    for (const [id, name] of Object.entries(squad.gearNames)) {
+      const count = selected.reduce((sum, kit) => sum + (kit.gear?.[id] || 0), 0);
+      if (count > (squad.stock.arsenal?.[id]?.quantity || 0)) fail('请调整库存不足的装备：' + name, 409);
+    }
+    for (const titan of squad.stock.titans) {
+      if (selected.filter(kit => kit.titanId === titan.id).length > titan.count) {
+        fail('请调整超出库存的泰坦：' + titan.name, 409);
+      }
+    }
+    room.battleGoal = text(body.goal, 1200);
+    delete room.bpRequest;
     const trauma = createTrauma(squad.cycle, body.tutorial === true, randomInt);
     if (latestBattleRoll(room)) squad.lastBattleRoll = latestBattleRoll(room);
     refreshCombatKit(room);
@@ -196,7 +214,7 @@ export function applySquad(room, actor, body, randomInt) {
   if ((host ? squad.hostSeat : actor.seat) !== seat) fail('只能操作自己认领的英雄。', 403);
 
   if (body.type === 'squad-kit') {
-    if (squad.phase !== 'prep') fail('只有备战时可以更改配装。', 409);
+    if (squad.phase === 'battle') fail('请在读剧情或备战时更改配装。', 409);
     const { stock } = squad;
     const current = inventory.normalizeLoadout(stock.loadouts[hero.id]);
     const next = inventory.normalizeLoadout({

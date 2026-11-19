@@ -69,10 +69,10 @@ try {
   assert.equal((await action('squad-phase', { phase: 'prep' })).status, 200);
   const next = await action('squad-start', { board: { apostle: 'HEKATON', level: 1 } });
   assert.equal(next.status, 200); assert.equal(next.body.room.squad.battleNumber, 2);
-  assert.equal(next.body.room.heroes[0].stats.danger, 0); assert.equal(next.body.room.trauma.drawn.length, 0);
+  assert.equal(next.body.room.heroes[0].stats.danger, 9); assert.equal(next.body.room.trauma.drawn.length, 0);
   assert.equal(next.body.room.pool.opening, 0);
   assert.equal((await action('pool', { key: 'opening', delta: 1 })).status, 409);
-  console.log('Passed HTTP/WebSocket battle lifecycle, cross-transport idempotency, zero-danger draw, overflow, viewer permissions and stale-battle rejection.');
+  console.log('Passed HTTP/WebSocket battle lifecycle, cross-transport idempotency, carried Triskelion, zero-danger draw, overflow, viewer permissions and stale-battle rejection.');
 } finally {
   if (squad) await action('squad-disband').catch(() => {});
 }

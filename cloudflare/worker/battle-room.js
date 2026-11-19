@@ -14,7 +14,7 @@ import { ApiError, activeCycle, errorResponse, object, response } from './campai
 import { applyRoomBoard, priorityTarget, setupRoomBoard } from './board.js';
 
 import { applyTrauma, createTrauma, traumaView } from './room-trauma.js';
-import { applySquad, createSquad, syncLoadoutTitanOptions, latestBattleRoll, squadSkills, squadStats, squadView } from './room-squad.js';
+import { applySquad, createSquad, syncCampaignStock, latestBattleRoll, squadSkills, squadStats, squadView } from './room-squad.js';
 
 export const roomIdPattern = /^[a-f0-9]{32}$/;
 const secretPattern = /^[a-f0-9]{64}$/;
@@ -68,26 +68,15 @@ export function squadAbilityOptions(campaign) {
   return { limit, reserveLimit, cards };
 }
 
-export function squadRosterForCampaign(campaign) {
-  return heroCatalog.activeHeroes(campaign).map(hero => ({
-    id: hero.id, name: clean(heroCatalog.heroDisplayName(hero)), argonaut: hero.argonaut,
-  }));
-}
-
 export function squadHeroStats(campaign) {
   return Object.fromEntries(heroCatalog.activeHeroes(campaign).map(hero => [hero.id, hero.triskelion || {}]));
 }
 
-export function squadTitanTrauma(campaign) {
+export function squadCampaignStock(campaign) {
   const { record } = battleConfig.availability(campaign, techDictionary);
-  const titanTracks = Object.fromEntries(inventory.loadoutTitans(record)
-    .map(titan => [String(titan.id), inventory.traumaTrack(titan.traumaTrack)]));
-  const loadoutTracks = Object.fromEntries(inventory.assignedLoadouts(record, heroCatalog.activeHeroes(campaign))
-    .map(([id, raw]) => {
-      const { titanId, titanPanelId, traumaTrack, traumaPatternId, kratosPatternId } = inventory.normalizeLoadout(raw);
-      return [id, { titanId: inventory.titanIdFor(record, titanId), titanPanelId, traumaTrack, traumaPatternId, kratosPatternId }];
-    }));
-  return { titanTracks, loadoutTracks };
+  const { stock, gearNames } = createSquad(record, heroCatalog.activeHeroes(campaign),
+    'official', activeCycle(campaign), equipmentName);
+  return { stock, gearNames };
 }
 
 export async function createBattleRoom(env, campaign, payload, owner) {
@@ -268,7 +257,7 @@ export class BattleRoom extends DurableObject {
   }
 
   async linkOwner(request) {
-    const { account, profile, saveName, keys, abilityOptions, storyStats, titanTracks, loadoutTracks, roster } = await request.json();
+    const { account, profile, saveName, keys, abilityOptions, storyStats, campaignStock } = await request.json();
     const token = request.headers.get('Authorization')?.match(/^Bearer (.+)$/)?.[1];
     const [host, invite, viewer] = await Promise.all([token, keys?.invite, keys?.viewer].map(hash));
     const room = this.load();
@@ -278,18 +267,8 @@ export class BattleRoom extends DurableObject {
     const name = clean(saveName, 80) || '默认存档';
     const libraryAnchor = this.storyAnchor(room);
     const validKeys = invite === room.secrets.invite && viewer === room.secrets.viewer;
-    const rosterChanged = Array.isArray(roster) && JSON.stringify(roster) !== JSON.stringify(room.squad.stock.roster);
-    if (rosterChanged) room.squad.stock.roster = roster;
-    let tracksChanged = false;
-    for (const titan of room.squad.stock.titans) {
-      if (!titanTracks || !Object.hasOwn(titanTracks, titan.id)) continue;
-      const track = inventory.traumaTrack(titanTracks[titan.id]);
-      if (JSON.stringify(titan.traumaTrack || null) === JSON.stringify(track)) continue;
-      titan.traumaTrack = track;
-      tracksChanged = true;
-    }
-    if (syncLoadoutTitanOptions(room.squad.stock, loadoutTracks)) tracksChanged = true;
-    if (tracksChanged || rosterChanged || !room.owner || room.owner.saveName !== name || JSON.stringify(room.squad.abilityOptions) !== JSON.stringify(abilityOptions)) {
+    const stockChanged = syncCampaignStock(room, campaignStock);
+    if (stockChanged || !room.owner || room.owner.saveName !== name || JSON.stringify(room.squad.abilityOptions) !== JSON.stringify(abilityOptions)) {
       room.owner = { account, profile, saveName: name, libraryAnchor };
       room.squad.abilityOptions = abilityOptions;
       for (const hero of room.heroes) hero.storyStats ??= squadStats(storyStats[hero.id]);
@@ -488,6 +467,33 @@ export class BattleRoom extends DurableObject {
     if (['turn-phase', 'turn-take', 'turn-finish'].includes(body.type)) return applyTurn(room, actor, body);
     if (typeof body.type === 'string' && body.type.startsWith('trauma-')) return applyTrauma(room, actor, body, randomInt);
     if (typeof body.type === "string" && body.type.startsWith("board-")) return applyRoomBoard(room, actor, body);
+    if (body.type === 'bp-request') {
+      const seat = actor.role === 'player' ? actor.seat : body.seat;
+      if (actor.role === 'viewer' || !room.heroes[seat] || room.heroes[seat].condition === 'dead') reject('请选择正在攻击的泰坦。', 403);
+      if (body.round !== room.round || room.turn?.phase === 'apostle'
+          || (room.turn?.seat != null && room.turn.seat !== seat)
+          || room.turn?.finished.includes(seat)) reject('请在自己的泰坦回合揭示 BP。', 409);
+      if (room.projection?.bpPending) return;
+      if (room.bpRequest && room.bpRequest.round === room.round && Date.now() - room.bpRequest.createdAt < 15000) return;
+      claimTurn(room, seat);
+      room.bpRequest = { id: body.id, seat, round: room.round, createdAt: Date.now() };
+      return;
+    }
+    if (body.type === 'bp-claim' || body.type === 'bp-result') {
+      if (actor.role !== 'host') reject('由房主的 AIBP 处理抽牌请求。', 403);
+      const pending = room.bpRequest;
+      if (!pending || pending.id !== body.request || pending.round !== room.round) reject('抽牌请求已处理。', 409);
+      if (body.type === 'bp-claim') {
+        if (pending.claim) reject('正在处理这次抽牌。', 409);
+        pending.claim = body.id;
+      } else {
+        if (pending.claim !== body.claim) reject('抽牌请求已更新。', 409);
+        const projection = roomProjection(body.projection, room.board?.apostle);
+        if (projection?.bpPending) room.projection = projection;
+        delete room.bpRequest;
+      }
+      return;
+    }
     if (body.type === 'room-projection') {
       if (actor.role !== 'host') reject('战况由房主同步。', 403);
       const projection = roomProjection(body.projection, room.board?.apostle);
@@ -511,6 +517,7 @@ export class BattleRoom extends DurableObject {
           reject('还有泰坦尚未结束回合。', 409);
         }
         room.round++;
+        delete room.bpRequest;
         setTurnPhase(room, 'apostle');
       } else if (room.squad) {
         if (body.damage !== undefined && (!Array.isArray(body.damage) || body.damage.length !== room.heroes.length
@@ -519,6 +526,7 @@ export class BattleRoom extends DurableObject {
         }
         room.squad.recap = battleRecap(room, body.damage, randomInt);
         if (latestBattleRoll(room)) room.squad.lastBattleRoll = latestBattleRoll(room);
+        for (const hero of room.heroes) hero.storyStats = squadStats(hero.stats);
         room.squad.phase = 'story';
       }
       else room.closed = true;

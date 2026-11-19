@@ -430,3 +430,8 @@ body.aibp-room-only > .app > main > :not(#battleRoom) { display: none !important
 .room-kratos-reminder .room-kratos-latest { border-inline-start: 3px solid #9c3f26; }
 .room-kratos-reminder .battle-room-marker img { width: 1.45rem; height: 1.45rem; object-fit: contain; }
 .room-kratos-reminder summary { cursor: pointer; }
+
+.room-battle-goal { margin: .75rem 0; padding: .65rem .85rem; border: 1px solid var(--line); border-radius: 8px; }
+.room-battle-goal p { margin: .35rem 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+[data-prepare-battle] textarea { display: block; width: min(100%, 34rem); font: inherit; }
+.room-power-card [data-bp-request] { display: block; margin-top: .5rem; }

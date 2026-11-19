@@ -88,6 +88,7 @@ function renderedRecord(cycle, record) {
     // ReferenceError，让整组用例在 record 侧加字段时莫名其妙地红掉。
     'normalizeNemesisSelections', 'migrateNemesisProgress', 'normalizeNemesisResourceHistory',
     'evolutionStages', 'getEvolutionStage'];
+  vm.runInContext("globalThis.window ??= {};\n" + require("node:fs").readFileSync(require("node:path").join(__dirname, "../record/enemy-evolution.js"), "utf8"), c);
   vm.runInContext(recordSource.slice(recordSource.indexOf('    const cycleData = '), recordSource.indexOf('    const elements = '))
     + '\n' + names.map(name => extract(recordSource, name)).join('\n'), c);
   c.state = c.normalizeState(c.state);

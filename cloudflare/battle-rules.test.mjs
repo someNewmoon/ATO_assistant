@@ -11,7 +11,7 @@ import { pathToFileURL } from 'node:url';
 const bundled = await build({
   stdin: { contents: `export { BattleRoom } from './worker/battle-room.js';
     export { createTrauma, applyTrauma, traumaView } from './worker/room-trauma.js';
-    export { applySquad, syncLoadoutTitanOptions } from './worker/room-squad.js';
+    export { applySquad, syncCampaignStock } from './worker/room-squad.js';
     export { setupRoomBoard } from './worker/board.js';`, resolveDir: import.meta.dirname },
   bundle: true, write: false, platform: 'node', format: 'esm',
   plugins: [{ name: 'cloudflare-test-base', setup(builder) {
@@ -26,7 +26,7 @@ try {
   await writeFile(target, bundled.outputFiles[0].text);
   api = await import(pathToFileURL(target));
 } finally { await rm(temporary, { recursive: true, force: true }); }
-const { BattleRoom, createTrauma, applyTrauma, traumaView, applySquad, syncLoadoutTitanOptions } = api;
+const { BattleRoom, createTrauma, applyTrauma, traumaView, applySquad, syncCampaignStock } = api;
 const host = { role: 'host' }, player = { role: 'player', seat: 0 };
 const random = max => max - 1;
 const room = (danger = 0) => ({
@@ -115,38 +115,37 @@ test('从备战开始下一场：重置战斗状态，保留剧情三曲盘', ()
   applySquad(r, host, { type: 'squad-start', battleNumber: 1, board: { apostle: 'HEKATON', level: 1 } }, random);
   assert.equal(r.squad.phase, 'battle'); assert.equal(r.squad.battleNumber, 2); assert.equal(r.round, 1);
   assert.equal(r.pool.opening, 0); assert.deepEqual(r.rolls, []); assert.deepEqual(r.argoAbilities, {});
-  assert.equal(r.heroes[0].condition, 'standing'); assert.equal(r.heroes[0].stats.danger, 0);
+  assert.equal(r.heroes[0].condition, 'standing');
+  assert.deepEqual(r.heroes[0].stats, { danger: 2, rage: 3, fate: 4 });
   assert.equal(r.trauma.highestDanger, 0); assert.equal(r.trauma.drawn.length, 0);
   assert.deepEqual(r.heroes[0].storyStats, { danger: 2, rage: 3, fate: 4 });
 });
 
-test('军械库配装创伤表同步到相同泰坦面板，备战保存后按该表抽取', () => {
+test('读剧情保存配装，备战刷新库存时保存未被军械库改动的个人配装', () => {
   const r = room();
-  const inherited = Array(9).fill('light');
-  const custom = ['heavy', ...inherited.slice(1)];
-  const kit = titanPanelId => ({ player: '', titanId: 't', titanPanelId, gear: {} });
-  r.squad = { phase: 'prep', battleNumber: 0, cycle: 'c1', gearNames: {}, stock: {
-    arsenal: {}, titans: [{ id: 't', count: 2, typeId: 'dreamwalker', traumaTrack: inherited }],
-    loadouts: { h0: kit('solon'), h1: kit('herodotus') },
+  const kit = { player: '', titanId: 't', gear: {} };
+  const titans = [{ id: 't', count: 2, typeId: 'dreamwalker' }];
+  const stock = { arsenal: {}, titans, loadouts: { h0: kit, h1: kit } };
+  r.squad = { phase: 'story', battleNumber: 0, cycle: 'c1', gearNames: {}, stock,
+    campaignLoadouts: structuredClone(stock.loadouts) };
+  applySquad(r, player, { type: 'squad-kit', seat: 0, base: kit,
+    kit: { ...kit, titanPanelId: 'solon' } }, random);
+  const fresh = { gearNames: { AJ0001: '测试装备' }, stock: { ...stock,
+    arsenal: { AJ0001: { quantity: 1 } },
+    titans: [{ ...titans[0], traumaPatternId: 'AW0285', panelId: 'ulyssia' }],
+    loadouts: { h0: kit, h1: { ...kit, gear: { AJ0001: 1 } } },
   } };
-  const { stock } = r.squad;
-  const tracks = { h0: { ...kit('solon'), traumaTrack: custom }, h1: { ...kit('solon'), traumaTrack: custom } };
-  assert.equal(syncLoadoutTitanOptions(stock, tracks), true);
-  assert.equal(syncLoadoutTitanOptions(stock, tracks), false);
-  assert.equal(stock.loadouts.h1.traumaTrack, undefined);
-  applySquad(r, player, { type: 'squad-kit', seat: 0, base: stock.loadouts.h0, kit: kit('herodotus') }, random);
-  assert.equal(r.squad.stock.loadouts.h0.traumaTrack, undefined);
-  applySquad(r, player, { type: 'squad-kit', seat: 0, base: r.squad.stock.loadouts.h0, kit: kit('solon') }, random);
-  assert.equal(syncLoadoutTitanOptions(r.squad.stock, tracks), true);
-  applySquad(r, player, { type: 'squad-kit', seat: 0, base: r.squad.stock.loadouts.h0, kit: kit('solon') }, random);
-  applySquad(r, host, { type: 'squad-start', battleNumber: 0, board: { apostle: 'HEKATON', level: 1 } }, random);
-  assert.deepEqual(traumaView(r, player).tracks, [custom, inherited]);
-  r.heroes[0].stats.danger = 1;
-  draw(r);
-  assert.equal(traumaView(r, player).latest.card.deck, 'heavy');
-  assert.equal(syncLoadoutTitanOptions(r.squad.stock, { h0: kit('solon') }), true);
-  assert.equal(r.squad.stock.loadouts.h0.traumaTrack, undefined);
-  assert.deepEqual(traumaView(r, player).tracks[0], custom);
+  assert.equal(syncCampaignStock(r, fresh), true);
+  assert.equal(syncCampaignStock(r, fresh), false);
+  assert.equal(r.squad.stock.loadouts.h0.titanPanelId, 'solon');
+  assert.equal(r.squad.stock.loadouts.h1.gear.AJ0001, 1);
+  applySquad(r, host, { type: 'squad-phase', phase: 'prep' }, random);
+  applySquad(r, host, { type: 'squad-start', battleNumber: 0, board: { apostle: 'HEKATON', level: 1 },
+    goal: '在三轮内撤离' }, random);
+  assert.equal(r.battleGoal, '在三轮内撤离');
+  assert.deepEqual(r.heroes.map(hero => hero.titan.panelId), ['ulyssia', 'ulyssia']);
+  assert.deepEqual(r.heroes[0].titan.patternIds, ['AW0285']);
+  assert.equal(syncCampaignStock(r, { stock: { ...stock }, gearNames: {} }), false);
 });
 
 test('创伤样式覆盖旧配装，受击到凶险 1 时更新凶险并跳过抽取', () => {
@@ -157,7 +156,7 @@ test('创伤样式覆盖旧配装，受击到凶险 1 时更新凶险并跳过�
     loadouts: { h0: kit, h1: { ...kit } },
   } };
   const chosen = { ...kit, traumaPatternId: 'AW0285', kratosPatternId: 'AW0286' };
-  assert.equal(syncLoadoutTitanOptions(r.squad.stock, { h0: chosen }), true);
+  r.squad.stock.loadouts.h0 = chosen;
   applySquad(r, player, { type: 'squad-kit', seat: 0, base: r.squad.stock.loadouts.h0,
     kit: { titanId: 't', titanPanelId: 'solon', gear: {} } }, random);
   applySquad(r, host, { type: 'squad-start', battleNumber: 0, board: { apostle: 'HEKATON', level: 1 } }, random);
@@ -188,6 +187,25 @@ test('创伤样式按凶险逐格读取，不合并非连续的轻微创伤档�
     picked.push(traumaView(r, player).latest.card.deck);
   }
   assert.deepEqual(picked, ['heavy', 'light', 'heavy']);
+});
+
+test('投掷者能请求揭示 BP，只有房主领取一次，推出的牌更新同步状态', () => {
+  const r = room();
+  r.board = api.setupRoomBoard({ apostle: 'HEKATON', level: 1 }, 2);
+  r.turn = { phase: 'apostle', seat: null, finished: [] };
+  const action = { type: 'bp-request', round: 1, id: 'request' };
+  assert.throws(() => reducer.apply(r, player, action), /泰坦回合/);
+  r.turn.phase = 'titans';
+  reducer.apply(r, player, action);
+  assert.equal(r.turn.seat, 0);
+  const claim = { type: 'bp-claim', request: 'request', id: 'claim' };
+  assert.throws(() => reducer.apply(r, player, claim), /房主/);
+  reducer.apply(r, host, claim);
+  assert.throws(() => reducer.apply(r, host, { ...claim, id: 'another' }), /正在处理/);
+  reducer.apply(r, host, { type: 'bp-result', request: 'request', claim: 'claim',
+    projection: { apostle: 'HEKATON', bpPending: true, bp: { src: 'ps/HEKATON/HEKATON_BP_I_001.jpg' } } });
+  assert.equal(r.projection.bpPending, true);
+  assert.equal(r.bpRequest, undefined);
 });
 
 test('骇物允许落到泰坦和地形所在格，路线只走正交步', () => {

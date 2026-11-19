@@ -22,6 +22,7 @@ function harness(state) {
     document: { querySelector: () => null, createElement: () => ({}) },
     cycleScopedBindKeys: new Set(['counters', 'notes']),
   });
+  vm.runInContext("globalThis.window ??= {};\n" + require("node:fs").readFileSync(require("node:path").join(__dirname, "../record/enemy-evolution.js"), "utf8"), c);
   vm.runInContext(source.slice(source.indexOf('    const cycleData = '), source.indexOf('    const elements = ')), c);
   vm.runInContext([
     'isPlainObject', 'cloneJson', 'jsonEqual', 'currentCycle', 'currentCycleStats', 'getCycleStat', 'setCycleStat',

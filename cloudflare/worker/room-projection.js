@@ -34,6 +34,7 @@ export function roomProjection(value, apostle) {
     panel: image(value.panel),
     ai: card(value.ai),
     bp: card(value.bp),
+    ...(typeof value.aiPending === "boolean" && { aiPending: value.aiPending }),
     ...(typeof value.bpPending === "boolean" && { bpPending: value.bpPending }),
     aiDeck: deck(value.aiDeck),
     bpDeck: deck(value.bpDeck),

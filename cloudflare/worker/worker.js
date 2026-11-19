@@ -2,7 +2,7 @@ import { storyScanKey } from './story-scans.js';
 import { DurableObject } from 'cloudflare:workers';
 import inventory from '../../technology/gear-inventory.js';
 import { ascensionIdentity, ascendCampaignGear } from './gear-ascension.js';
-import { battleRequest, createBattleRoom, squadAbilityOptions, squadHeroStats, squadTitanTrauma, squadRosterForCampaign } from './battle-room.js';
+import { battleRequest, createBattleRoom, squadAbilityOptions, squadHeroStats, squadCampaignStock } from './battle-room.js';
 export { BattleRoom, BattleDirectory } from './battle-room.js';
 import {
   ApiError, activeCycle, appendNotes, checkAccount, defaultCampaign, errorResponse,
@@ -244,7 +244,7 @@ export class CampaignAccount extends DurableObject {
       const result = await roomStub(id).fetch('https://battle-room.internal/link-owner', {
         method: 'POST', headers: { Authorization: 'Bearer ' + credentials.token },
         body: JSON.stringify({ account: user.id, profile, saveName, keys: credentials.keys, abilityOptions: squadAbilityOptions(campaign),
-          storyStats: squadHeroStats(campaign), ...squadTitanTrauma(campaign), roster: squadRosterForCampaign(campaign) }),
+          storyStats: squadHeroStats(campaign), campaignStock: squadCampaignStock(campaign) }),
       });
       if (!result.ok) return result;
       const linked = await result.json();

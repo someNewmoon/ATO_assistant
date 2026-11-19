@@ -6,7 +6,6 @@ const vm = require('node:vm');
 
 const read = file => fs.readFileSync(path.join(__dirname, '..', file), 'utf8').replace(/\r\n/g, '\n');
 const source = read('record/index.html');
-const aibpSource = read('aibp/index.html');
 const lootSource = read('aibp/bp_loot_calculator_addon.js');
 const clone = value => JSON.parse(JSON.stringify(value));
 function fn(text, name) {
@@ -39,6 +38,7 @@ function harness(saved = {}) {
     makeTrackTitle: (zh, en) => Object.assign(element(), { zh, en }), queueSave() {}, renderResources() {},
     atomicMergePaths: new Set(['crewBoxes', 'maxUnlocked']),
   });
+  vm.runInContext("globalThis.window ??= {};\n" + require("node:fs").readFileSync(require("node:path").join(__dirname, "../record/enemy-evolution.js"), "utf8"), ctx);
   vm.runInContext(source.slice(source.indexOf('    const cycleData = '), source.indexOf('    const elements = ')), ctx);
   const functions = [
     'isPlainObject', 'cloneJson', 'jsonEqual', 'normalizeState', 'migrateEnemyStages',
@@ -221,8 +221,10 @@ function aibpContext() {
     lootSource.slice(lootSource.indexOf('  const APOSTLE_RECORD_CORE_KEY = '), lootSource.indexOf('  const LEVEL_ORDER = ')),
     'const BURDEN_APOSTLE = "THE_BURDEN"; const RECORD_DEFAULT_CYCLE = "c2";',
     fn(lootSource, 'isPlainObject'), fn(lootSource, 'recordStageLevel'), fn(lootSource, 'recordEnemyLevel'),
-    fn(lootSource, 'recordCycleForLoot'), fn(aibpSource, 'parseApostleLevel'), fn(aibpSource, 'recordLevelForTrack'),
+    fn(lootSource, 'recordCycleForLoot'),
   ].join('\n'), ctx);
+  vm.runInContext('globalThis.window = {};\n' + read('record/enemy-evolution.js'), ctx);
+  ctx.recordLevelForTrack = (record, track) => ctx.window.ATO_ENEMY_EVOLUTION.levelFor(record, track) ?? 0;
   return ctx;
 }
 
@@ -318,4 +320,12 @@ test('点「切换」弹出候选、选中后换宿敌并收起', () => {
   assert.equal(ctx.currentNemesis().key, 'dahaka');
   assert.equal(selected(ctx), 'dahaka');
   assert.equal(menu(ctx).hidden, true, '换完宿敌这一行会重建，菜单要回到收起状态');
+});
+
+test('共享进化格的印刷等级优先于内部编号，0 级保留', () => {
+  const ctx = aibpContext();
+  const hekaton = { cycle: 'c1', key: 'hekaton' };
+  assert.equal(ctx.recordLevelForTrack({ enemies: { 'c1:shared:hekaton+labyrinthauros:2c': true } }, hekaton), 3);
+  assert.equal(ctx.window.ATO_ENEMY_EVOLUTION.levelFor({ enemies: { 'c1:hekaton:0': true } }, hekaton), 0);
+  assert.equal(ctx.window.ATO_ENEMY_EVOLUTION.levelFor({ enemies: { 'c1:hekaton:0': false } }, hekaton), null);
 });

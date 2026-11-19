@@ -273,6 +273,16 @@
   quick.className = 'room-primary-nav';
   quick.setAttribute('aria-label', '常用操作');
   quick.innerHTML = '<a href="#room-movement">移动</a><a href="#room-dice">掷骰</a><a href="#room-equipment">装备</a>';
+  const movementShortcut = quick.querySelector('a[href="#room-movement"]');
+  function forcedMovementSeat() {
+    const seat = personalSeat();
+    return state.turn?.phase === 'apostle' && !state.closed && Number.isInteger(seat)
+      && state.heroes[seat]?.condition !== 'dead' ? seat : null;
+  }
+  movementShortcut.addEventListener('click', event => {
+    const seat = forcedMovementSeat();
+    if (seat !== null && roomBoard?.openForcedMovement(seat)) event.preventDefault();
+  });
   dock.prepend(quick);
   toolsDialog.querySelector('[data-close-tools]').addEventListener('click', () => toolsDialog.close());
   toolsDialog.addEventListener('close', () => {
@@ -351,7 +361,12 @@
     root.classList.toggle('battle-room-personal', personal);
     dock.hidden = !personal;
     if (!personal && toolsDialog.open) toolsDialog.close();
-    quick.querySelector('a[href="#room-movement"]').hidden = !state.board;
+    movementShortcut.hidden = !state.board;
+    const forced = forcedMovementSeat() !== null;
+    if (forced !== (movementShortcut.dataset.forced === 'true')) {
+      movementShortcut.dataset.forced = String(forced);
+      movementShortcut.textContent = forced ? '非主动移动' : '移动';
+    }
     quick.querySelector('a[href="#room-equipment"]').hidden = !state.heroes[seat];
     if (!personal || !activeTool) return;
     const markup = {
@@ -610,6 +625,15 @@
       + '" required aria-label="' + escape(label) + '">' + button(1, '+') + '</span></label>';
   }
 
+  function powerPartCard() {
+    const projection = state.projection;
+    const bp = projection?.bp;
+    const caption = bp?.src ? projection.bpPending === true ? '当前部位牌' : '最后揭示的部位牌' : '部位牌';
+    return '<aside class="room-power-card"><h4>' + caption + '</h4>'
+      + (bp?.src ? cardImage('/aibp/' + bp.src, bp.label || '部位牌')
+        : '<small>' + (projection ? '尚未揭示' : '等待房主同步') + '</small>') + '</aside>';
+  }
+
   function diceForm(powerPool) {
     if (state.closed || actor.role === 'viewer') return '';
     const seat = actor.role === 'host' ? rollSeat : actor.seat;
@@ -630,13 +654,13 @@
       dodge: '先结算闪避，根据结果决定是否投掷防御红骰。',
       power: '先揭示部位卡牌。重掷和转换潜力后，对照永世力场选结果，再按牌面结算骇物响应、伤口和激化。结算后清空克拉托斯池，再进入第二能力时段。',
     };
+    const form = '<form data-roll class="battle-room-dice"><div>' + fields + followup
+      + '<button type="submit">投掷' + dice.modes[rollMode].name + '</button></div></form>';
     return '<section class="room-dice-panel" id="room-dice"><h3>掷骰</h3>' + (options ? '<label>英雄 <select data-roll-seat>' + options + '</select></label>' : '')
       + '<div class="room-dice-modes" role="group" aria-label="投掷用途">' + Object.entries(dice.modes)
         .map(([key, entry]) => '<button type="button" data-roll-mode="' + key + '" aria-pressed="' + (key === rollMode) + '">'
           + (key === 'dodge' ? '<img src="room-dice-art/dodge.webp" alt="">' : '') + entry.name + '</button>').join('') + '</div>'
-      + (rollMode === 'power' && state.board ? '<button type="button" data-open-bp>查看已揭示的部位卡牌</button>' : '')
-      + '<form data-roll class="battle-room-dice"><div>' + fields + followup
-      + '<button type="submit">投掷' + dice.modes[rollMode].name + '</button></div></form>' + latestResult
+      + (rollMode === 'power' ? '<div class="room-power-workspace">' + powerPartCard() + form + '</div>' : form) + latestResult
       + (notes[rollMode] ? '<p class="room-dice-help">' + notes[rollMode] + '</p>' : '') + powerPool + '</section>';
   }
 
@@ -1016,11 +1040,6 @@
       if (rollFollowup && toolsDialog.open) toolsDialog.close();
       render();
       content.querySelector('[data-roll] input')?.focus();
-      return;
-    }
-    if (button.hasAttribute('data-open-bp')) {
-      dock.querySelector('[data-tool="apostle"]').click();
-      toolsBody.querySelector('[data-projection-deck="BP"]')?.scrollIntoView({ block: 'nearest' });
       return;
     }
     if (action === 'roll-wounds') {

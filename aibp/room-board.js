@@ -1,6 +1,6 @@
 (function () {
   function create(mount, send) {
-    let room, actor, control, map, stamp = "", overlayStamp = "";
+    let room, actor, control, panel, map, stamp = "", overlayStamp = "";
     const reference = document.getElementById("battleMapControl")
       || document.getElementById("battleRoomBoardTemplate")?.content.querySelector("#battleMapControl");
     const open = document.createElement("button");
@@ -37,13 +37,23 @@
       active, mode, selectedTitan, weaponControls, titanSpeeds, forced, elevated,
     });
 
+    const finishTurn = document.createElement("button");
+    finishTurn.type = "button";
+    finishTurn.dataset.boardFinishTurn = "";
+    finishTurn.textContent = "结束回合";
+    finishTurn.addEventListener("click", () => {
+      if (finishTurn.hidden) return;
+      send({ type: "turn-finish", seat: room.turn.seat, round: room.round, phase: room.turn.phase });
+    });
+
     function setup() {
-      const panel = reference.cloneNode(true);
+      panel = reference.cloneNode(true);
       panel.id = "roomBattleMapControl";
       panel.querySelector("[data-battle-map-los-control]").hidden = true;
       for (const node of panel.querySelectorAll("[data-board-host-only], .battle-map-head-actions")) {
         if (!canEdit()) node.hidden = true;
       }
+      panel.querySelector(".battle-movement-actions").append(finishTurn);
       mount.append(panel);
       const cards = panel.querySelector(".battle-map-cards");
       const details = document.createElement("details");
@@ -119,6 +129,7 @@
       sync(nextRoom, nextActor) {
         const previous = room?.board;
         const previousBattle = room?.squad?.battleNumber;
+        const previousSeat = room?.turn?.seat;
         room = nextRoom;
         actor = nextActor;
         mount.hidden = !room.board && !canEdit();
@@ -126,6 +137,8 @@
         open.hidden = !canEdit();
         if (open.parentNode !== mount) mount.append(open);
         if (!room.board) { toolbar.hidden = true; return; }
+        const seat = room.turn?.seat;
+        finishTurn.hidden = room.turn?.phase !== "titans" || !Number.isInteger(seat) || !canMove(seat);
         const stateKey = JSON.stringify([room.board, actor.role, room.closed, room.turn?.phase, room.priorityTarget, room.heroes.map(hero => hero.condition)]);
         if (stateKey === stamp) return;
         stamp = stateKey;
@@ -149,6 +162,20 @@
           control.applyTacticalSnapshot(snapshot);
           overlayStamp = JSON.stringify(overlayConfig(control.getLosSnapshot({ keepTactics: true })));
         }
+        if (existing && Number.isInteger(previousSeat) && room.turn?.finished.includes(previousSeat)) {
+          control.closeFinishedMovement(previousSeat);
+        }
+      },
+      openForcedMovement(seat) {
+        if (!control || room.turn?.phase !== "apostle" || !canMove(seat) || !control.openTitanMovement(seat)) return false;
+        const speed = panel.querySelector("[data-board-speed]");
+        if (speed.disabled) panel.querySelector("[data-board-tactics-info]").scrollIntoView({ block: "center" });
+        else {
+          speed.scrollIntoView({ block: "center" });
+          speed.focus({ preventScroll: true });
+          speed.select();
+        }
+        return true;
       },
       render() {
         if (control) control.render();

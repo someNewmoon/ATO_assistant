@@ -1219,6 +1219,15 @@
 
     return {
       render() { renderMap(); },
+      openTitanMovement(seat) {
+        if (!tactics || options.allowTacticalControls === false || options.canMoveTitan?.(seat) === false) return false;
+        losState.selectedTitan = seat;
+        setTacticalMode("titan-move");
+        return true;
+      },
+      closeFinishedMovement(seat) {
+        if (losState.mode === "titan-move" && losState.selectedTitan === seat && !forcedMove()) setTacticalMode("");
+      },
       // 第二屏要画同样的标注，但 losState 不属于 battleMap（不该写进存档），所以单独
       // 导出一份可序列化快照，由 index.html 塞进第二屏 payload 的 los 字段。
       applyTacticalSnapshot(snapshot = {}) {

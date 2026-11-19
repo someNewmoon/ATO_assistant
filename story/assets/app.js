@@ -3623,8 +3623,13 @@
     retry.id = 'squadStoryRetry';
     retry.textContent = '重试';
     retry.hidden = true;
-    panel.append(back, status, retry);
-    document.body.prepend(panel);
+    const jump = document.createElement('button');
+    jump.type = 'button';
+    jump.className = 'squad-story-jump';
+    jump.textContent = '跳转段落';
+    jump.onclick = () => searchInput.focus();
+    panel.append(back, status, retry, jump);
+    storyText.closest('.reader').prepend(panel);
     if (secondScreenStoryModeLabel) secondScreenStoryModeLabel.hidden = true;
   }
 
@@ -4021,7 +4026,7 @@
     }
   }
 
-  function showEntry(entry, pushHistory) {
+  function showEntry(entry, pushHistory, revealOnMobile = pushHistory) {
     if (pushHistory && activeEntry && activeEntry.key !== entry.key) {
       historyStack.push({
         bookId: entryBookId(activeEntry),
@@ -4048,7 +4053,11 @@
     window.setTimeout(() => {
       ensureStoryAudioManifest().then(() => prewarmLinkedEntries(entry));
     }, 200);
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    if (revealOnMobile && hostedStory && window.matchMedia("(max-width: 820px)").matches) {
+      storyText.closest(".reader").scrollIntoView({ block: "start" });
+    } else {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
   }
 
   function jumpToId(id, options = {}) {
@@ -4104,7 +4113,7 @@
     encounterSelect.value = previous.encounterKey || "all";
     updateChapterSummary();
     const entry = activeBook.entries.find((item) => item.key === previous.entryKey);
-    if (entry) showEntry(entry, false);
+    if (entry) showEntry(entry, false, true);
   }
 
   function showFirstInScope() {
@@ -4832,7 +4841,7 @@
     if (deepLinkTarget.query) searchInput.value = deepLinkTarget.query;
     const requestedEntry = entryFromDeepLink(activeBook, deepLinkTarget);
     if (requestedEntry) {
-      showEntry(requestedEntry, false);
+      showEntry(requestedEntry, false, true);
     } else {
       showFirstInScope();
     }

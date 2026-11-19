@@ -1,3 +1,4 @@
+import { storyScanKey, storyScanPrefix } from './story-scans.js';
 import { DurableObject } from 'cloudflare:workers';
 import heroCatalog from '../../hero/hero-catalog.js';
 import inventory from '../../technology/gear-inventory.js';
@@ -147,7 +148,7 @@ export async function createBattleRoom(env, campaign, payload, owner) {
 export async function battleRequest(env, request, url) {
   const parts = url.pathname.split('/');
   if (parts.length !== 5 || !roomIdPattern.test(parts[3])) reject('战斗室不存在。', 404);
-  if (!['state', 'lobby', 'join', 'action', 'socket', 'library'].includes(parts[4])) reject('战斗室接口不存在。', 404);
+  if (!['state', 'lobby', 'join', 'action', 'socket', 'library', 'story-scan'].includes(parts[4])) reject('战斗室接口不存在。', 404);
   const origin = request.headers.get('Origin');
   if ((origin && origin !== url.origin) || request.headers.get('Sec-Fetch-Site') === 'cross-site') {
     reject('请从本站加入战斗室。', 403);
@@ -337,7 +338,7 @@ export class BattleRoom extends DurableObject {
         server.send(JSON.stringify(this.view(room, actor)));
         return new Response(null, { status: 101, webSocket: client, headers: { 'Sec-WebSocket-Protocol': protocol } });
       }
-      const expectedMethod = ['state', 'library'].includes(route) ? 'GET' : 'POST';
+      const expectedMethod = ['state', 'library', 'story-scan'].includes(route) ? 'GET' : 'POST';
       if (request.method !== expectedMethod) reject('请求方法不支持。', 405);
       const secretHash = await hash(request.headers.get('Authorization')?.match(/^Bearer (.+)$/)?.[1]);
       const body = expectedMethod === 'POST' ? await this.payload(request, route === 'action' ? 98304 : 4096) : null;
@@ -358,6 +359,13 @@ export class BattleRoom extends DurableObject {
       }
       const actor = this.actor(room, secretHash);
       if (route === 'state') return response(this.view(room, actor));
+      if (route === 'story-scan') {
+        const file = url.searchParams.get('file');
+        const isLibraryHost = actor.role === 'host' && Boolean(this.storyAnchor(room));
+        const isShared = room.squad?.story?.images?.includes(storyScanPrefix + file);
+        if (!room.squad || room.closed || (!isLibraryHost && !isShared)) reject('该扫描图未投屏。', 403);
+        return await storyScanKey(this.storyLibrary, file);
+      }
       if (route === 'library') {
         if (actor.role !== 'host' || !room.squad || room.closed) reject('请用小队房主权限打开故事书。', 403);
         if (!this.storyLibrary) reject('线上故事正文尚未导入。', 503);

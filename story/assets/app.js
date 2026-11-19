@@ -1675,6 +1675,9 @@
     if (!pageViewer || pageViewer.hidden) return;
     pageViewer.hidden = true;
     pageViewerState.pointerId = null;
+    for (const { src } of pageViewerState.images) {
+      if (src.startsWith('blob:')) URL.revokeObjectURL(src);
+    }
     pageViewerState.images = [];
     // 原书扫描图可能有几千万像素；关掉后立即断开引用，别让解码后的位图跟着页面一直占内存。
     pageViewer.querySelector(".page-viewer-image")?.removeAttribute("src");
@@ -1789,6 +1792,7 @@
   function openPageViewerImages(images, index = 0) {
     if (!images.length) return;
     ensurePageViewer();
+    closePageViewer();
     pageViewerState.images = images.map((image) => ({
       src: image.currentSrc || image.src,
       alt: image.alt || "原书扫描页",
@@ -3446,7 +3450,7 @@
 
   async function openOfficialScan(button) {
     if (!button || button.disabled) return;
-    const src = button.dataset.officialScanSrc;
+    let src = button.dataset.officialScanSrc;
     const alt = button.dataset.officialScanAlt || "官方扫描图";
     const block = button.closest("[data-supplement-scan]");
     const scanKey = block?.getAttribute("data-supplement-scan") || "";
@@ -3457,8 +3461,18 @@
     button.classList.add("is-loading");
     if (hint) hint.textContent = "正在加载原书页…";
     try {
+      if (src.startsWith('/story/scans/')) src = await window.ATO_STORY_SCANS.open(src, { id: squadId, token: squadCredentials?.token });
       await preloadStoryImage(src);
     } catch {
+      if (src.startsWith('blob:')) URL.revokeObjectURL(src);
+      if (src.startsWith('/story/scans/') || src.startsWith('blob:')) {
+        if (button.isConnected) {
+          button.disabled = false;
+          button.classList.remove("is-loading");
+          if (hint) hint.textContent = "扫描图加载失败，点击重试";
+        }
+        return;
+      }
       if (scanKey) missingOfficialScans.add(scanKey);
       if (block) block.outerHTML = officialScanHintHtml(scanKey, MISSING_OFFICIAL_SCAN_HINT);
       refreshSecondScreenStoryContentToggle(Boolean(secondScreenStoryModeToggle?.checked));
@@ -3466,7 +3480,10 @@
       return;
     }
     // 加载期间用户可能已经跳到别的条目；不要拿旧图盖住新页面。
-    if (!button.isConnected) return;
+    if (!button.isConnected) {
+      if (src.startsWith('blob:')) URL.revokeObjectURL(src);
+      return;
+    }
     openPageViewerImages([{ src, alt }], 0);
     button.disabled = false;
     button.classList.remove("is-loading");
@@ -3656,7 +3673,14 @@
   }
 
   async function loadCloudBook(cycle) {
-    const { fan, official } = await cloudStory.load(cycle);
+    const [{ fan, official }, index] = await Promise.all([cloudStory.load(cycle), window.ATO_STORY_SCANS?.index()]);
+    const scans = index?.[cycle];
+    if (scans) {
+      for (const entry of official.entries) {
+        const scan = Object.hasOwn(scans, entry.key) && scans[entry.key];
+        if (scan) entry.officialScan = { src: window.ATO_STORY_SCANS.prefix + scan.file, status: scan.status };
+      }
+    }
     const other = book => book.id !== cycle;
     const existing = fanData.books.map(book => book.id === cycle ? fan : book);
     fanData = { ...fanData, books: existing };
@@ -3701,6 +3725,7 @@
       url.searchParams.set('book', cycle);
       window.history.replaceState(null, '', url);
       squadPhase = access.phase || 'story';
+      if (secondScreenStoryModeToggle) secondScreenStoryModeToggle.checked = Boolean(squadId && squadPhase === 'story');
       squadLink.language(access.language);
       if (squadId && squadCredentials?.token) connectSquadStory();
       setCloudStatus(squadStatusText());
@@ -3727,6 +3752,9 @@
       if (!room?.squad || (room.squad.phase === squadPhase && room.closed === squadProjectionClosed)) return;
       squadPhase = room.squad.phase;
       squadProjectionClosed = room.closed;
+      const storyMode = squadPhase === 'story' && !squadProjectionClosed;
+      if (secondScreenStoryModeToggle) secondScreenStoryModeToggle.checked = storyMode;
+      refreshSecondScreenStoryContentToggle(storyMode);
       document.querySelector('#squadStoryStatus').textContent = squadStatusText();
       if (room.closed) stopSquadStory?.();
     });

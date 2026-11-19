@@ -1,3 +1,4 @@
+import { storyScanFilename, storyScanPrefix } from './story-scans.js';
 import inventory from '../../technology/gear-inventory.js';
 import heroCatalog from '../../hero/hero-catalog.js';
 import { ApiError } from './campaign.js';
@@ -72,9 +73,11 @@ function cleanStory(raw) {
   const story = Object.fromEntries(['id', 'title', 'bookTitle', 'bookId', 'entryKey', 'section'].map(key => [key, text(raw[key], 240)]));
   story.text = text(raw.text, 24000);
   story.fallbackText = text(raw.fallbackText, 24000);
-  story.images = Array.isArray(raw.images) ? raw.images.filter(src => typeof src === 'string'
-    && /^\/story\/data\/ato-storybook-key-scans\/[\w%./-]+\.(?:jpg|jpeg|webp|png)$/i.test(src)
-    && !src.includes('..') && src.length < 500).slice(0, 4) : [];
+  story.images = Array.isArray(raw.images) ? raw.images.filter(src => typeof src === 'string' && (
+    (src.startsWith(storyScanPrefix) && storyScanFilename.test(src.slice(storyScanPrefix.length)))
+    || (/^\/story\/data\/ato-storybook-key-scans\/[\w%./-]+\.(?:jpg|jpeg|webp|png)$/i.test(src)
+      && !src.includes('..') && src.length < 500)
+  )).slice(0, 4) : [];
   story.imagesOnly = raw.imagesOnly === true && story.images.length > 0;
   const media = raw.mixedMedia;
   if (media?.schema === 1 && /^c[1-5]$/.test(media.bookId) && ['official','fan'].includes(media.variant)) {

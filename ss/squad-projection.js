@@ -157,7 +157,7 @@
       if (!fight.hidden) fight.removeAttribute('src');
       fight.hidden = true;
       prep.hidden = phase !== 'prep';
-      openStory({ story, cycleId: cycle });
+      openStory({ story, cycleId: cycle, scanCredentials: { id, token } });
     }
   }
 

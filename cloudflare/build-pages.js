@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { aibpImageIndex, collectHostedArt, roomCardArt } from './hosted-card-art.js';
 import { buildBattleRoom } from './build-battle-room.js';
 import { buildHostedStory } from './build-hosted-story.js';
+import { storyScanFilename } from './worker/story-scans.js';
 
 const directory = fileURLToPath(new URL('.', import.meta.url));
 const repo = join(directory, '..');
@@ -74,10 +75,29 @@ try {
           await writeFile(join(dest, cycle + '-' + part + '.bin'), encrypted.subarray(part * size, (part + 1) * size));
         }
       }
-      if (sourceFiles.size + 9 + Object.values(parts).reduce((sum, count) => sum + count, 0) > 20000) {
+      const scanRoot = process.env.ATO_STORY_SCAN_DIR || join(dirname(storyRoot), '官方扫描图库');
+      const scanIndex = await readFile(join(scanRoot, 'index.json')).catch(error => {
+        if (!process.env.ATO_STORY_SCAN_DIR && error.code === 'ENOENT') return null;
+        throw error;
+      });
+      const scans = new Set();
+      if (scanIndex) {
+        for (const book of Object.values(JSON.parse(scanIndex))) {
+          for (const { file } of Object.values(book)) {
+            if (!storyScanFilename.test(file)) throw new Error('Invalid story scan name.');
+            scans.add(file);
+          }
+        }
+        const scanDest = join(staging, 'story/scans');
+        await mkdir(scanDest, { recursive: true });
+        for (const file of scans) await copyFile(join(scanRoot, file), join(scanDest, file));
+        await writeFile(join(scanDest, 'index.json'), scanIndex);
+        console.log('官方扫描图 · ' + scans.size);
+      }
+      if (sourceFiles.size + 10 + scans.size + Object.values(parts).reduce((sum, count) => sum + count, 0) > 20000) {
         throw new Error('Pages 免费版文件数上限为 20,000。');
       }
-      await buildHostedStory(staging, { version, parts });
+      await buildHostedStory(staging, { version, parts, scanIndex: Boolean(scanIndex) });
     }
   }
   await buildBattleRoom(staging, repo);

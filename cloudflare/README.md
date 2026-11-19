@@ -51,7 +51,14 @@ ATO_CARD_ART_DIR="/path/to/图片" npm run build:pages
 npm run deploy:pages
 ```
 
-图片按项目相对路径发布。构建为 AIBP 和战斗室生成卡图索引，并检查单个文件和总文件数。补充泰坦卡图可放在 `aibp/images/titan-cards/<泰坦名称>.webp`，旧忆卡图可放在 `aibp/images/mnemos/<卡号>.jpg`。故事书整页扫描留在本地图片目录。
+图片按项目相对路径发布。构建为 AIBP 和战斗室生成卡图索引，并检查单个文件和总文件数。补充泰坦卡图可放在 `aibp/images/titan-cards/<泰坦名称>.webp`，旧忆卡图可放在 `aibp/images/mnemos/<卡号>.jpg`。故事书扫描图从原安装包的段落索引导出，单独加密。准备线上扫描图库时，在 `cloudflare` 目录执行：
+
+```sh
+node pack-story-scans.mjs "/path/to/extracted/app/story/data" "/path/to/线上故事加密库" "/path/to/官方扫描图库"
+ATO_CARD_ART_DIR="/path/to/图片" ATO_STORY_SCAN_DIR="/path/to/官方扫描图库" npm run build:pages
+```
+
+构建默认查找「线上故事加密库」同级的「官方扫描图库」。房主可用登录账号打开原书页，投屏凭证只能读取当前共享的扫描图。
 
 首次发布创建 Pages 项目，更新时跳过创建命令。先通过 `*.pages.dev` 地址验证页面和 `/api/health`、注册、登录及配装保存。确认准备切换域名后，在 Pages 添加 `moon.xuzizi.cn`，再在新网将 `moon` 的 CNAME 改到该 Pages 项目的默认地址。
 

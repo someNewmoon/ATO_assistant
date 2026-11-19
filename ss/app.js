@@ -363,7 +363,8 @@ function storyScanImages(story) {
       ? url.pathname.slice("/android_asset/web".length)
       : url.pathname;
     // 路径大小写不敏感：扫描图文件名的大小写由本地导出决定，别因此漏掉第二屏配图。
-    if (!relative.toLowerCase().includes("/story/data/ato-storybook-key-scans/")) continue;
+    if (!relative.toLowerCase().includes("/story/data/ato-storybook-key-scans/")
+      && !window.ATO_STORY_SCANS?.isEncrypted(relative)) continue;
     scans.push(new URL(relative, base).href);
   }
   return scans;
@@ -461,38 +462,48 @@ function openStory(screen) {
     return;
   }
   storyRendered = true;
+  elements.storyBookTitle.textContent = story.bookTitle || "ATO 故事书";
+  elements.storySection.textContent = story.section || "";
+  elements.storyTitle.textContent = story.title || "当前故事文本";
+  elements.storyEntryId.textContent = story.id || "";
   elements.storyView.classList.toggle("images-only", imagesOnly);
   if (imagesOnly) {
     elements.storyBody.replaceChildren();
     // 图仍然可能取不到：老快照里的 APK 内部路径、或者 APK 里根本没有这张图。
     // 一张都加载不出来时不能把屏幕留空——退回快照另存的正文。
     let failedImages = 0;
+    const isCurrent = () => storyRenderKey === renderKey && mixedGeneration === mixedStoryGeneration && activeMode === "story";
+    const failImage = () => {
+      if (!isCurrent() || ++failedImages < scans.length) return;
+      elements.storyView.classList.toggle("images-only", false);
+      elements.storyBody.replaceChildren();
+      renderMixedStoryBody(story, story.fallbackText || "官方扫描图加载失败，请回到故事页重新选择该条目。");
+      fitStoryTextToViewport();
+    };
     for (const src of scans) {
       const image = document.createElement("img");
-      image.src = src;
       image.alt = "官方故事书扫描图";
-      image.addEventListener?.("error", () => {
-        if (storyRenderKey !== renderKey || mixedGeneration !== mixedStoryGeneration || activeMode !== "story") return;
-        failedImages += 1;
-        if (failedImages < scans.length) return;
-        elements.storyView.classList.toggle("images-only", false);
-        elements.storyBookTitle.textContent = story.bookTitle || "ATO 故事书";
-        elements.storySection.textContent = story.section || "";
-        elements.storyTitle.textContent = story.title || "当前故事文本";
-        elements.storyEntryId.textContent = story.id || "";
-        elements.storyBody.replaceChildren();
-        renderMixedStoryBody(story, story.fallbackText || "官方扫描图加载失败，请回到故事页重新选择该条目。");
-        fitStoryTextToViewport();
-      });
+      image.addEventListener?.("error", failImage);
+      const scanPath = new URL(src).pathname;
+      if (window.ATO_STORY_SCANS?.isEncrypted(scanPath)) {
+        window.ATO_STORY_SCANS.open(scanPath, screen.scanCredentials).then(blob => {
+          const release = () => URL.revokeObjectURL(blob);
+          if (!isCurrent()) {
+            release();
+            return;
+          }
+          image.addEventListener("load", release, { once: true });
+          image.addEventListener("error", release, { once: true });
+          image.src = blob;
+        }, failImage);
+      } else {
+        image.src = src;
+      }
       elements.storyBody.append(image);
     }
     elements.storyBody.scrollTop = 0;
     return;
   }
-  elements.storyBookTitle.textContent = story.bookTitle || "ATO 故事书";
-  elements.storySection.textContent = story.section || "";
-  elements.storyTitle.textContent = story.title || "当前故事文本";
-  elements.storyEntryId.textContent = story.id || "";
   renderMixedStoryBody(story, story.text || story.fallbackText
     || (story.imagesOnly ? "该条目暂无对应的官方扫描图与正文。" : "该条目暂无正文文本。"));
   fitStoryTextToViewport();

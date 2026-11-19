@@ -1,3 +1,4 @@
+import { storyScanKey } from './story-scans.js';
 import { DurableObject } from 'cloudflare:workers';
 import inventory from '../../technology/gear-inventory.js';
 import { ascensionIdentity, ascendCampaignGear } from './gear-ascension.js';
@@ -88,7 +89,7 @@ export default {
         return env.ROOM_DIRECTORY.getByName('active').fetch('https://directory.internal/list');
       }
       const createRoom = url.pathname === '/api/battle-room/create';
-      const squadHome = ['/api/battle-room/home', '/api/battle-room/story-library'].includes(url.pathname);
+      const squadHome = ['/api/battle-room/home', '/api/battle-room/story-library', '/api/battle-room/story-scan'].includes(url.pathname);
       if (url.pathname.startsWith('/api/battle-room/') && !createRoom && !squadHome) return await battleRequest(env, request, url);
       if (createRoom && (request.method !== 'POST' || url.search)) throw new ApiError(405, '创建小队需要 POST。');
       if (!createRoom && !squadHome && url.pathname !== '/api/campaign-state.php') {
@@ -195,6 +196,10 @@ export class CampaignAccount extends DurableObject {
     const profile = dashboard?.activeProfileId || 'default';
     const saveName = dashboard?.profiles?.[profile]?.name || '默认存档';
     const registered = () => this.sql.exec('SELECT room, credentials FROM owned_squads WHERE profile = ?', profile).toArray()[0];
+    if (url.pathname.endsWith('/story-scan')) {
+      if (request.method !== 'GET') throw new ApiError(405, '需要 GET。');
+      return storyScanKey(this.roomEnv.ATO_STORY_LIBRARY, url.searchParams.get('file'));
+    }
     if (url.pathname.endsWith('/story-library')) {
       if (request.method !== 'GET') throw new ApiError(405, '需要 GET。');
       if (!this.roomEnv.ATO_STORY_LIBRARY) throw new ApiError(503, '线上故事正文尚未导入。');

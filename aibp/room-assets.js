@@ -3,13 +3,19 @@
   const box = document.getElementById('battleRoomImage');
   const image = box.querySelector('img');
   const error = box.querySelector('[data-art-error]');
+  const toggle = box.querySelector('[data-art-switch]');
   let hosted = { equipment: {}, titans: [], titanScans: {}, mnemos: {}, thumbs: {}, ...window.ATO_ROOM_ART };
 
-  function display(path, name) {
+  function display(path, name, related = null) {
     if (!path) return;
     error.hidden = true;
     image.alt = name;
     image.src = path;
+    toggle.hidden = !related;
+    if (related) {
+      toggle.textContent = related.label;
+      toggle.onclick = () => display(related.src, related.label, { src: path, label: name });
+    } else toggle.onclick = null;
     if (!box.open) box.showModal();
   }
 

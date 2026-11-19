@@ -157,29 +157,71 @@ function publicSquadLoadouts(room) {
 }
 
 const activityLabels = {
-  'turn-take': '开始英雄回合', 'turn-finish': '结束英雄回合',
+  'turn-phase': '切换轮次', 'turn-take': '开始英雄回合', 'turn-finish': '结束英雄回合',
   'board-move': '移动泰坦', 'board-undo-move': '撤回上一步', 'board-apostle-move': '移动骇物',
   'board-apostle-undo': '撤回骇物移动', 'board-face': '调整骇物朝向', 'priority-target': '调整首要目标', round: '开启新一轮',
   stat: '调整三曲盘', 'titan-marker': '调整泰坦标记', condition: '调整泰坦状态', gear: '使用装备', 'gear-card': '调整装备卡', 'gear-ready-all': '回正所有横置装备',
   'mnemos-card': '调整旧忆卡', 'argo-use': '使用阿尔戈能力', 'argo-undo': '撤回阿尔戈能力',
   'trauma-draw': '抽取创伤或结算受击', 'trauma-resolve': '结算创伤', 'pool-clear': '清空克拉托斯池',
-  reroll: '重掷骰子', convert: '转换威力骰', 'roll-wounds': '记录击破结果',
+  roll: '掷骰', pool: '调整克拉托斯池', end: '结束战斗', reroll: '重掷骰子', convert: '转换威力骰', 'roll-wounds': '记录击破结果',
 };
 
-function recordBattleActivity(room, actor, body) {
-  if (!Object.hasOwn(activityLabels, body.type)) return;
-  const seat = Number.isInteger(body.seat) && room.heroes[body.seat] ? body.seat : null;
+function recordBattleActivity(room, actor, body, previousProjection, previousBp) {
+  let label = Object.hasOwn(activityLabels, body.type) ? activityLabels[body.type] : '';
+  let seat = Number.isInteger(body.seat) && room.heroes[body.seat] ? body.seat : null;
   const hero = room.heroes[seat];
   let detail = '';
+  const projection = room.projection;
+  if (body.type === 'room-projection' || body.type === 'bp-result') {
+    if (body.type === 'bp-result' && previousBp?.card && previousBp.id === room.secondAbility?.id) {
+      label = '结算部位牌';
+      seat = previousBp.seat;
+      detail = [projection.bp.label, ['失败', '伤口', '暴击'][previousBp.outcome], '进入第二能力时段'].filter(Boolean).join(' · ');
+    } else {
+      const changes = ['ai', 'bp'].flatMap(key => {
+        if (!projection?.[key + 'Pending'] || (previousProjection?.[key + 'Pending']
+            && previousProjection[key]?.src === projection[key]?.src)) return [];
+        return [key.toUpperCase() + (projection[key]?.label ? ' ' + projection[key].label : '')];
+      });
+      if (changes.length) {
+        label = '揭示卡牌';
+        if (body.type === 'bp-result') seat = previousBp?.seat ?? null;
+        detail = changes.join('、');
+      } else if (previousProjection?.aiPending && !projection?.aiPending
+          && projection?.aiDeck.discard > previousProjection.aiDeck.discard) {
+        label = '弃置 AI';
+        detail = previousProjection.ai?.label;
+      }
+    }
+  }
+  if (!label) return;
   if (body.type === 'gear' || body.type === 'gear-card') detail = hero?.gear.find(item => item.id === body.key)?.name;
   if (body.type === 'mnemos-card') detail = hero?.mnemos.find(item => item.id === body.key)?.name;
   if (body.type === 'stat') detail = ({ rage: '怒气', fate: '命运', danger: '凶险' }[body.key]) + (body.delta > 0 ? ' +1' : ' −1');
   if (body.type === 'titan-marker') detail = titanMarkerNames[body.key] + (body.delta > 0 ? ' +1' : ' −1');
   if (body.type === 'roll-wounds') detail = roomDice.woundResults[body.value];
-  if (body.type === 'board-move') detail = String.fromCharCode(64 + body.point.row) + body.point.column;
+  if (body.type === 'board-move' || body.type === 'board-apostle-move') {
+    const { row, column } = body.point;
+    detail = Number.isInteger(row) ? String.fromCharCode(64 + row) + column : '落点（列 ' + column + ' · 行 ' + row + '）';
+  }
+  if (body.type === 'board-face') detail = { 0: '朝上', 90: '朝右', 180: '朝下', 270: '朝左' }[body.facing];
+  if (body.type === 'priority-target') detail = body.locked ? '锁定' : '未锁定';
+  if (body.type === 'condition') detail = { standing: '站立', down: '倒地', rising: '起身', dead: '死亡' }[hero.condition];
+  if (body.type === 'turn-phase') detail = room.turn.phase === 'titans' ? '泰坦轮次' : '骇物轮次';
+  if (body.type === 'roll' || body.type === 'reroll' || body.type === 'convert') {
+    const roll = room.rolls.find(entry => entry.id === (body.type === 'roll' ? body.id : body.roll));
+    if (!roll) return;
+    seat = roll.seat;
+    detail = [roomDice.modes[roll.mode]?.name, roomDice.rollSummary(roll)].filter(Boolean).join(' · ');
+  }
+  if (body.type === 'trauma-draw' && room.trauma?.latest?.id !== body.id) {
+    detail = hero ? '凶险 ' + hero.stats.danger : '';
+  } else if (body.type === 'trauma-draw') {
+    detail = traumaView(room, actor).latest?.card?.name;
+  }
   const by = actor.role === 'host' ? '房主' : room.heroes[actor.seat]?.player || room.heroes[actor.seat]?.name;
-  room.activity = [{ kind: body.type, label: activityLabels[body.type], by, seat, detail, round: room.round },
-    ...(room.activity || [])].slice(0, 20);
+  room.activity = [{ id: body.id, kind: body.type, label, by, seat, detail, round: room.round },
+    ...(room.activity || [])].slice(0, 80);
 }
 
 export class BattleRoom extends DurableObject {
@@ -439,8 +481,10 @@ export class BattleRoom extends DurableObject {
       return response(this.view(room, actor));
     }
     if (room.closed) reject(room.squad ? '小队已解散。' : '本场战斗已结束。', 409);
+    const previousProjection = room.projection;
+    const previousBp = room.bpRequest;
     this.apply(room, actor, body);
-    recordBattleActivity(room, actor, body);
+    recordBattleActivity(room, actor, body, previousProjection, previousBp);
     room.revision++;
     this.ctx.storage.transactionSync(() => {
       this.save(room);
@@ -467,16 +511,24 @@ export class BattleRoom extends DurableObject {
     if (['turn-phase', 'turn-take', 'turn-finish'].includes(body.type)) return applyTurn(room, actor, body);
     if (typeof body.type === 'string' && body.type.startsWith('trauma-')) return applyTrauma(room, actor, body, randomInt);
     if (typeof body.type === "string" && body.type.startsWith("board-")) return applyRoomBoard(room, actor, body);
-    if (body.type === 'bp-request') {
+    if (body.type === 'bp-request' || body.type === 'bp-settle') {
       const seat = actor.role === 'player' ? actor.seat : body.seat;
       if (actor.role === 'viewer' || !room.heroes[seat] || room.heroes[seat].condition === 'dead') reject('请选择正在攻击的泰坦。', 403);
       if (body.round !== room.round || room.turn?.phase === 'apostle'
           || (room.turn?.seat != null && room.turn.seat !== seat)
           || room.turn?.finished.includes(seat)) reject('请在自己的泰坦回合揭示 BP。', 409);
-      if (room.projection?.bpPending) return;
+      const settle = body.type === 'bp-settle';
+      if (settle && (!room.projection?.bpPending || room.projection.bp?.src !== body.card
+          || ![0, 1, 2].includes(body.value))) reject('请先揭示并核对当前部位牌。', 409);
+      if (!settle && room.projection?.bpPending) return;
       if (room.bpRequest && room.bpRequest.round === room.round && Date.now() - room.bpRequest.createdAt < 15000) return;
+      const roll = settle && room.rolls.find(entry => entry.seat === seat && entry.round === room.round && entry.mode === 'power');
+      if (settle && (!roll || roll.id !== body.roll || roll.bpOutcome !== undefined)) {
+        reject('只能结算这次攻击最新的威力投掷。', 409);
+      }
       claimTurn(room, seat);
-      room.bpRequest = { id: body.id, seat, round: room.round, createdAt: Date.now() };
+      room.bpRequest = { id: body.id, seat, round: room.round, createdAt: Date.now(),
+        ...(settle && { card: body.card, roll: roll.id, outcome: body.value, damageBefore: room.projection.damage.total }) };
       return;
     }
     if (body.type === 'bp-claim' || body.type === 'bp-result') {
@@ -489,7 +541,16 @@ export class BattleRoom extends DurableObject {
       } else {
         if (pending.claim !== body.claim) reject('抽牌请求已更新。', 409);
         const projection = roomProjection(body.projection, room.board?.apostle);
-        if (projection?.bpPending) room.projection = projection;
+        if (pending.card && projection && !projection.bpPending && projection.bp?.src === pending.card) {
+          const roll = room.rolls.find(entry => entry.id === pending.roll);
+          if (roll) {
+            const damage = Math.max(0, projection.damage.total - pending.damageBefore);
+            setRollWounds(room, roll, damage);
+            roll.bpOutcome = pending.outcome;
+            room.secondAbility = { id: pending.id, roll: roll.id, seat: pending.seat, round: room.round };
+          }
+          room.projection = projection;
+        } else if (!pending.card && projection?.bpPending) room.projection = projection;
         delete room.bpRequest;
       }
       return;
@@ -518,6 +579,7 @@ export class BattleRoom extends DurableObject {
         }
         room.round++;
         delete room.bpRequest;
+        delete room.secondAbility;
         setTurnPhase(room, 'apostle');
       } else if (room.squad) {
         if (body.damage !== undefined && (!Array.isArray(body.damage) || body.damage.length !== room.heroes.length
@@ -660,6 +722,7 @@ export class BattleRoom extends DurableObject {
       case 'roll-wounds': {
         const roll = room.rolls.find(entry => entry.id === body.roll && entry.seat === seat && entry.mode === 'power');
         if (!roll || !Number.isInteger(body.value) || !Object.hasOwn(roomDice.woundResults, body.value)) reject('击破结果无效。');
+        if (roll.bpOutcome !== undefined) reject('部位牌已结算。', 409);
         setRollWounds(room, roll, body.value);
         break;
       }

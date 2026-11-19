@@ -46,6 +46,10 @@
   const selectedDice = new Map();
   let rollMode = 'attack';
   let rollSeat = 0;
+  let equipmentSeat = 0;
+  const equipmentTabs = new Map();
+  let lastSecondAbility;
+
   let parentRoll = '';
   let armedCard = '';
   let pending = false;
@@ -120,7 +124,7 @@
     const wasFighting = state?.squad?.phase === 'battle';
     state = data.room;
     actor = data.actor;
-    if (first && actor.role === 'host') rollSeat = personalSeat() ?? 0;
+    if (first && actor.role === 'host') equipmentSeat = rollSeat = personalSeat() ?? 0;
     const language = state.squad?.language || state.language;
     if (language && language !== roomLanguage) { roomLanguage = language; squadLink?.language(language); }
     if (state.squad && (state.closed || state.squad.phase !== 'battle')) {
@@ -138,6 +142,15 @@
     if (actor.role === 'host' && state.board) window.setAibpRoomBattleLevel?.(state.board.apostle, state.board.level);
     roomBoard?.sync(state, actor);
     render();
+    const second = state.secondAbility;
+    const mySecond = second && second.id !== lastSecondAbility
+      && (actor.role === 'player' ? actor.seat === second.seat : actor.role === 'host' && rollSeat === second.seat);
+    if (mySecond && !first) {
+      const target = content.querySelector('#room-kratos-pool');
+      target?.scrollIntoView({ block: 'start' });
+      target?.focus({ preventScroll: true });
+    }
+    lastSecondAbility = second?.id;
     if (actor.role === 'host') { syncProjection(); void processBpRequest(); }
     clearTimeout(bpRetryTimer);
     const retryIn = state.bpRequest?.createdAt + 15000 - Date.now();
@@ -409,13 +422,17 @@
       movementShortcut.dataset.forced = String(forced);
       movementShortcut.textContent = forced ? '非主动移动' : '移动';
     }
-    quick.querySelector('a[href="#room-equipment"]').hidden = !state.heroes[seat];
+    quick.querySelector('a[href="#room-equipment"]').hidden = !state.heroes[actor.role === 'host' ? equipmentSeat : seat];
     if (!personal || !activeTool) return;
     const markup = {
       rolls: latestHeroRolls,
       apostle: () => roomProjection() || '<p>骇物面板尚未准备。</p>',
       argo: () => argoAbilities() || '<p>本场尚未准备阿尔戈能力。</p>',
-      trauma: () => roomTrauma() + (state.heroes[seat] ? traumaControls(state.heroes[seat], seat, true) : '') || '<p>创伤牌库尚未准备。</p>',
+      trauma: () => {
+        const traumaSeat = seat ?? (actor.role === 'host' ? equipmentSeat : null);
+        return roomTrauma() + (state.heroes[traumaSeat] ? traumaControls(state.heroes[traumaSeat], traumaSeat, true) : '')
+          || '<p>创伤牌库尚未准备。</p>';
+      },
     }[activeTool]();
     if (markup !== toolsMarkup) {
       const focused = toolsBody.contains(document.activeElement) ? document.activeElement : null;
@@ -521,7 +538,7 @@
   }
 
   function heroCard(hero, seat) {
-    const own = seat === personalSeat();
+    const own = seat === (actor.role === 'host' ? equipmentSeat : personalSeat());
     const editable = !state.closed && (actor.role === 'host' || (actor.role === 'player' && actor.seat === seat));
     const art = window.ATO_BATTLE_ASSETS;
     const titan = hero.titan ? escape(window.ATO_GEAR_INVENTORY.titanLabel(hero.titan)) : '未分配泰坦';
@@ -552,16 +569,24 @@
     const summary = last && (!own || !editable) ? '<p class="battle-room-result">最近一次掷骰 · ' + rollSummary(last) + '</p>' : '';
     const readyGear = editable && hero.gear.length ? '<button type="button" data-action="gear-ready-all" data-seat="' + seat
       + '"' + (hero.gear.some(item => findGearSlot(item, 'exhausted') >= 0) ? '' : ' disabled') + '>一键回正装备</button>' : '';
+    const category = equipmentTabs.get(seat) || 'gear';
+    const sections = {
+      gear: gear ? '<ul class="battle-room-card-list">' + gear + '</ul>' : '<p>未分配装备</p>',
+      mnemos: mnemos ? '<ul class="battle-room-card-list">' + mnemos + '</ul>' : '<p>暂无旧忆卡牌</p>',
+      patterns: patterns ? '<ul class="battle-room-card-list">' + patterns + '</ul>' : '<p>暂无样式卡牌</p>',
+    };
+    const tabs = Object.entries({ gear: '装备', mnemos: '旧忆', patterns: '样式卡牌' }).map(([value, title]) =>
+      '<button type="button" data-equipment-tab="' + value + '" data-seat="' + seat
+      + '" aria-pressed="' + (value === category) + '">' + title + '</button>').join('');
     return '<article class="battle-room-hero" data-hero-seat="' + seat + '"><header><div class="battle-room-identity">'
       + avatar + '<div><h3>' + escape(hero.name) + '</h3><small>' + escape(hero.player || '待认领') + '</small></div></div>'
       + titanImage + '<div class="battle-room-titan-status"><span>' + titan + '</span>' + condition + '</div></header>'
       + '<div class="battle-room-stats" role="group" aria-label="三曲盘">' + stats + '</div>'
       + '<div class="battle-room-stats room-titan-markers" role="group" aria-label="泰坦状态标记">' + markers + '</div>'
-      + ((own && editable) ? '' : traumaControls(hero, seat, editable))
-      + '<div class="room-equipment-head"' + (own ? ' id="room-equipment"' : '') + '><h4>装备</h4>' + readyGear + '</div>'
-      + (gear ? '<ul class="battle-room-card-list">' + gear + '</ul>' : '<p>未分配装备</p>')
-      + (patterns ? '<h4>样式卡牌</h4><ul class="battle-room-card-list">' + patterns + '</ul>' : '')
-      + '<h4>旧忆</h4>' + (mnemos ? '<ul class="battle-room-card-list">' + mnemos + '</ul>' : '<p>暂无旧忆卡牌</p>')
+      + traumaControls(hero, seat, editable)
+      + '<div class="room-equipment-head"' + (own ? ' id="room-equipment"' : '') + '><div class="room-seat-tabs" role="group" aria-label="卡牌类别">'
+      + tabs + '</div>' + (category === 'gear' ? readyGear : '') + '</div>'
+      + sections[category]
       + summary + '</article>';
   }
 
@@ -608,7 +633,7 @@
   }
 
   function teamActivity() {
-    const recent = state.activity || [];
+    const recent = (state.activity || []).slice(0, 20);
     if (actor.role === 'viewer' || !recent.length) return '';
     return '<section class="battle-room-rolls room-team-activity"><h3>队友操作</h3><ol>'
       + recent.map(entry => '<li>' + (entry.seat === null ? '' : rollAvatar(entry.seat))
@@ -640,9 +665,19 @@
     }).join('');
     const followup = roll.defenseCount && !roll.defenseRoll;
     const wounds = roll.wounds ?? 0;
+    const pendingBp = state.projection?.bpPending && state.projection.bp?.src;
+    const latestPower = state.rolls.find(entry => entry.seat === roll.seat && entry.round === state.round && entry.mode === 'power');
+    const canSettle = editable && latestPower?.id === roll.id && roll.bpOutcome === undefined && canRequestBp(roll.seat);
+    const outcome = ['失败', '伤口', '暴击'];
     const result = roll.mode === 'power' ? '<div class="room-wound-result">'
-      + '<span>击破结果 · ' + dice.woundResults[wounds] + (roll.wounds === undefined ? '（默认）' : '') + '</span>'
-      + (editable ? '<div role="group" aria-label="击破结果">' + dice.woundResults.map((label, value) =>
+      + '<span>击破结果 · ' + (roll.bpOutcome === undefined ? dice.woundResults[wounds] : outcome[roll.bpOutcome])
+      + (roll.wounds === undefined ? '（待确认）' : '') + '</span>'
+      + (canSettle ? '<div class="room-bp-actions">'
+        + (pendingBp ? cardImage('/aibp/' + pendingBp, state.projection.bp.label || '部位牌') + outcome.map((label, value) =>
+          '<button type="button" data-bp-settle="' + value + '"' + attrs
+          + (waitingBp() ? ' disabled' : '') + '>' + label + '</button>').join('') : bpDrawButton(roll.seat))
+        + '</div>' : '')
+      + (editable && !state.projection && !pendingBp ? '<div role="group" aria-label="记录伤口">' + dice.woundResults.map((label, value) =>
           '<button type="button" data-action="roll-wounds" data-value="' + value + '"' + attrs
           + ' aria-pressed="' + (roll.wounds === value) + '">' + label + '</button>').join('') + '</div>' : '')
       + '</div>' : '';
@@ -676,19 +711,29 @@
       + '" required aria-label="' + escape(label) + '">' + button(1, '+') + '</span></label>';
   }
 
+  function canRequestBp(seat) {
+    const turn = state.turn;
+    return Boolean(state.heroes[seat]) && state.heroes[seat].condition !== 'dead' && turn?.phase !== 'apostle'
+      && (turn?.seat == null || turn.seat === seat) && !turn?.finished.includes(seat);
+  }
+
+  function waitingBp() {
+    return state.bpRequest && Date.now() - state.bpRequest.createdAt < 15000;
+  }
+
+  function bpDrawButton(seat) {
+    return '<button type="button" data-bp-request="' + seat + '"'
+      + (waitingBp() ? ' disabled>等待房主 AIBP' : '>揭示 BP') + '</button>';
+  }
+
   function powerPartCard(seat) {
     const projection = state.projection;
     const bp = projection?.bp;
     const caption = bp?.src ? projection.bpPending === true ? '当前部位牌' : '最后揭示的部位牌' : '部位牌';
-    const turn = state.turn;
-    const canRequest = state.heroes[seat]?.condition !== 'dead' && turn?.phase !== 'apostle'
-      && (turn?.seat == null || turn.seat === seat) && !turn?.finished.includes(seat);
-    const waiting = state.bpRequest && Date.now() - state.bpRequest.createdAt < 15000;
     return '<aside class="room-power-card"><h4>' + caption + '</h4>'
       + (bp?.src ? cardImage('/aibp/' + bp.src, bp.label || '部位牌')
         : '<small>' + (projection ? '尚未揭示' : '等待房主同步') + '</small>')
-      + (!projection?.bpPending && canRequest ? '<button type="button" data-bp-request="' + seat + '"'
-        + (waiting ? ' disabled>等待房主 AIBP' : '>揭示 BP') + '</button>' : '') + '</aside>';
+      + (!projection?.bpPending && canRequestBp(seat) ? bpDrawButton(seat) : '') + '</aside>';
   }
 
   function kratosReminder(hero) {
@@ -699,23 +744,18 @@
     const unlocked = table.rows.filter(([threshold]) => threshold <= rage);
     const next = table.rows.find(([threshold]) => threshold > rage);
     function rowMarkup([threshold, options]) {
-      return '<li><strong>怒气 ' + threshold + '</strong><div>' + options.map(effects =>
+      return '<li' + (threshold === unlocked.at(-1)?.[0] ? ' class="room-kratos-latest"' : '') + '><strong>怒气 ' + threshold + '</strong><div>' + options.map(effects =>
         '<span>' + effects.map(effect => {
           const icon = kratos.icons[effect];
           const label = escape(kratos.labels[effect]);
           return icon ? marker('images/' + icon, label) : label;
         }).join(' + ') + '</span>').join('<small>或</small>') + '</div></li>';
     }
-    const latest = unlocked.at(-1);
-    const old = unlocked.slice(0, -1);
-    const open = content.querySelector('.room-kratos-reminder details')?.open;
     return '<section class="room-kratos-reminder" aria-label="克拉托斯表能力">'
       + '<h4>克拉托斯表 · ' + escape(table.name) + '</h4><p aria-live="polite">当前怒气 ' + rage
       + ' · 解锁 ' + unlocked.length + ' 档' + (next ? ' · 下一档怒气 ' + next[0] : ' · 全部档位已解锁') + '</p>'
-      + (latest ? '<ul class="room-kratos-latest">' + rowMarkup(latest) + '</ul>' : '')
-      + (old.length ? '<details' + (open ? ' open' : '') + '><summary>较低怒气档位（仍可用）</summary><ul>'
-        + old.map(rowMarkup).join('') + '</ul></details>' : '')
-      + (latest ? '<small>每档选一项，带「+」的效果一起结算。放入池中的标记请按能力时段手动添加。</small>' : '')
+      + (unlocked.length ? '<ul>' + unlocked.map(rowMarkup).join('') + '</ul>'
+        + '<small>每档选一项，带「+」的效果一起结算。按能力时段手动放置标记。</small>' : '')
       + '</section>';
   }
 
@@ -808,7 +848,8 @@
   let bpRetryTimer;
   async function processBpRequest() {
     const pending = state?.bpRequest;
-    if (!pending || processingBp || pending.claim || Date.now() - pending.createdAt >= 15000 || !window.drawAibpRoomCard) return;
+    if (!pending || processingBp || pending.claim || Date.now() - pending.createdAt >= 15000
+        || !(pending.card ? window.resolveAibpRoomBp : window.drawAibpRoomCard)) return;
     if (window.getAibpRoomProjection?.()?.apostle !== state.board?.apostle) return;
     processingBp = true;
     const claim = crypto.randomUUID();
@@ -816,12 +857,17 @@
     try {
       await request(id + '/action', { id: claim, type: 'bp-claim', request: pending.id, battleNumber });
       let projection;
-      try { projection = window.drawAibpRoomCard('BP', state.board?.apostle); }
+      try {
+        projection = pending.card ? window.resolveAibpRoomBp(state.board?.apostle, pending.card, pending.outcome)
+          : window.drawAibpRoomCard('BP', state.board?.apostle);
+      }
       finally {
         accept(await request(id + '/action', { id: crypto.randomUUID(), type: 'bp-result',
           request: pending.id, claim, projection, battleNumber }));
       }
-      if (!projection?.bpPending) say('未能揭示 BP，请检查房主 AIBP 的部位牌堆。');
+      if (pending.card ? projection?.bpPending !== false : !projection?.bpPending) {
+        say('请检查房主 AIBP 的当前部位牌与牌堆。');
+      }
     } catch (error) {
       if (!(error instanceof RejectedAction)) say(error.message);
     } finally { processingBp = false; }
@@ -830,7 +876,7 @@
   function roomProjection() {
     const projection = state.projection;
     if (!projection) return state.board ? '<section class="room-projection"><h3>骇物战况</h3><p>等待房主同步 AIBP 战况。</p></section>' : '';
-    const { title, level, panel, ai, bp, aiDeck, bpDeck, damage } = projection;
+    const { title, level, panel, signature, ai, bp, aiDeck, bpDeck, damage } = projection;
     const bossArt = (src, label) => src ? cardImage('/aibp/' + src, label) : '';
     function deckCards(type, card, deck) {
       const face = bossArt(card?.src, card?.label || type) || '<p>尚未揭示</p>';
@@ -847,7 +893,8 @@
       + (damage.damage1 == null ? '' : '（' + damage.damage1 + ' + ' + damage.damage2 + '）');
     return '<section class="room-projection"><h3>骇物战况</h3><p>' + escape([title, level].filter(Boolean).join(' · ')) + '</p>'
       + '<div class="room-projection-cards">' + deckCards('AI', ai, aiDeck) + deckCards('BP', bp, bpDeck)
-      + '<div class="room-projection-panel"><h4>骇物面板</h4>' + (bossArt(panel, title) || '<p>暂无面板图</p>') + '</div></div>'
+      + '<div class="room-projection-panel"><h4>骇物面板</h4>' + (bossArt(panel, title) || '<p>暂无面板图</p>') + '</div>'
+      + (signature ? '<div class="room-projection-panel"><h4>招牌技</h4>' + bossArt(signature, '招牌技') + '</div>' : '') + '</div>'
       + '<dl class="room-projection-counts"><div><dt>损伤</dt><dd>' + damageText + '</dd></div>'
       + deckCounts('AI 牌堆', aiDeck) + deckCounts('BP 牌堆', bpDeck) + '</dl></section>';
   }
@@ -970,8 +1017,59 @@
     renderedMarkup.set(target, { markup, sources, nodes: [...target.childNodes] });
   }
 
+  function screenHero(hero, seat) {
+    const stats = Object.entries(statNames).map(([key, label]) => '<span>'
+      + marker('../hero/assets/tri_' + key + '.png', label) + '<strong>' + hero.stats[key] + '</strong></span>').join('');
+    const markers = Object.entries(titanMarkerNames).filter(([key]) => hero.markers?.[key])
+      .map(([key, label]) => label + ' ' + hero.markers[key]);
+    const condition = hero.condition !== 'standing' && conditionNames[hero.condition];
+    const trauma = traumaCardList(seat, false);
+    const titan = hero.titan && window.ATO_GEAR_INVENTORY.titanLabel(hero.titan);
+    return '<article class="room-screen-hero"><header>' + rollAvatar(seat) + '<div><h4>' + escape(hero.name)
+      + '</h4>' + (titan ? '<small>' + escape(titan) + '</small>' : '') + '</div></header>'
+      + '<div class="room-screen-stats">' + stats + '</div>'
+      + ([condition, ...markers].filter(Boolean).length ? '<p>' + [condition, ...markers].filter(Boolean).join(' · ') + '</p>' : '')
+      + (trauma ? '<ul class="room-screen-trauma">' + trauma + '</ul>' : '') + '</article>';
+  }
+
+  function renderViewer() {
+    document.body.classList.add('room-viewer');
+    turnWindow.hidden = true;
+    dock.hidden = true;
+    const active = state.turn?.seat == null ? '' : state.heroes[state.turn.seat]?.name;
+    const phase = state.turn?.phase === 'apostle' ? '骇物轮次' : state.turn?.phase === 'titans' ? '泰坦轮次' : '';
+    const heading = ['第 ' + state.round + ' 轮', phase, active, state.closed && '已结束'].filter(Boolean).join(' · ');
+    renderMarkup(summary, '<header class="battle-room-head"><h2>' + escape(state.title) + '</h2><p>'
+      + escape(heading) + '</p></header>');
+    if (!content.querySelector('.room-screen-layout')) {
+      content.innerHTML = '<div class="room-screen-layout"><section><h3>队伍状态</h3><div data-screen-heroes></div></section>'
+        + '<section><h3>战斗面板</h3><div data-screen-fight></div><div data-screen-board></div>'
+        + '<div data-screen-projection></div></section>'
+        + '<section><h3>战斗简报</h3><ol class="room-screen-log" tabindex="0" aria-label="按时间排列的战斗简报"></ol></section></div>';
+      content.querySelector('[data-screen-board]').append(boardMount);
+    }
+    renderMarkup(content.querySelector('[data-screen-heroes]'), state.heroes.map(screenHero).join(''));
+    const pool = Object.entries(poolNames).map(([key, label]) => '<span>'
+      + marker('images/battle-markers/' + key + '.webp', label) + '<strong>' + state.pool[key] + '</strong></span>').join('');
+    renderMarkup(content.querySelector('[data-screen-fight]'), (state.battleGoal ? '<p class="room-screen-goal"><strong>战斗目标</strong> '
+      + escape(state.battleGoal) + '</p>' : '') + '<div class="room-screen-stats" aria-label="克拉托斯池">' + pool + '</div>');
+    renderMarkup(content.querySelector('[data-screen-projection]'), roomProjection());
+
+    const log = content.querySelector('.room-screen-log');
+    const latest = log.scrollHeight - log.scrollTop - log.clientHeight < 12;
+    const items = [...(state.activity || [])].reverse().map(entry => {
+      const hero = entry.seat == null ? '' : state.heroes[entry.seat]?.name;
+      return '<li><small>第 ' + entry.round + ' 轮</small><p><strong>' + escape(hero || entry.by || '房主')
+        + '</strong> · ' + escape(entry.label) + (entry.detail ? ' · ' + escape(entry.detail) : '') + '</p></li>';
+    }).join('');
+    renderMarkup(log, items || '<li>等待战斗操作。</li>');
+    if (latest) log.scrollTop = log.scrollHeight;
+    updateStatus();
+  }
+
   function render() {
     const { role } = actor;
+    if (role === 'viewer') return renderViewer();
     const seat = personalSeat();
     const host = role === 'host';
     const edit = role !== 'viewer' && !state.closed;
@@ -986,8 +1084,13 @@
     const clearPool = edit ? '<button type="button" data-action="pool-clear"'
       + (Object.values(state.pool).every(value => value === 0) ? ' disabled' : '') + '>一键清空</button>' : '';
     const heroes = state.heroes.map(heroCard);
-    const own = heroes[seat] ? '<h3 class="battle-room-heading">我的英雄</h3>' + heroes[seat] : '';
-    const teammates = heroes.filter((_, index) => index !== seat);
+    const shownSeat = host ? equipmentSeat : seat;
+    const heroTabs = host ? '<div class="room-seat-tabs" role="group" aria-label="选择英雄装备">'
+      + state.heroes.map((hero, index) => '<button type="button" data-equipment-seat="' + index + '" aria-pressed="'
+        + (index === shownSeat) + '">' + rollAvatar(index) + escape(hero.name) + '</button>').join('') + '</div>' : '';
+    const own = heroes[shownSeat] ? '<h3 class="battle-room-heading">' + (host ? '泰坦与装备' : '我的英雄')
+      + '</h3>' + heroTabs + heroes[shownSeat] : '';
+    const teammates = heroes.filter((_, index) => index !== shownSeat);
     const overview = role === 'player'
       ? '<details class="battle-room-team"' + (content.querySelector('.battle-room-team')?.open ? ' open' : '')
         + '><summary>队伍状态</summary><div class="battle-room-grid">' + teammates.join('') + '</div></details>'
@@ -1011,15 +1114,20 @@
       + ' 轮' + (state.closed ? ' · 已结束' : '') + '</p></div><div>' + controls + '</div></div>' + links);
     const goal = state.battleGoal ? '<section class="room-battle-goal"><h3>战斗目标</h3><p>'
       + escape(state.battleGoal) + '</p></section>' : '';
-    const poolSection = '<section class="battle-room-pool"><header><h3>克拉托斯池</h3>' + clearPool + '</header><div>' + pool + '</div></section>';
+    const second = state.secondAbility;
+    const poolSection = '<section class="battle-room-pool" id="room-kratos-pool" tabindex="-1"><header><h3>克拉托斯池</h3>'
+      + clearPool + '</header>' + (second && second.round === state.round
+        ? '<p class="room-second-ability"><strong>第二能力时段 · ' + escape(state.heroes[second.seat]?.name)
+          + '</strong> · 先结算响应与激化，再清空旧标记（按卡文保留例外），之后加入本次标记。</p>' : '')
+      + '<div>' + pool + '</div></section>';
     const poolByDice = edit && (personal || !!own || rollMode === 'power');
     const dicePanel = diceForm(poolByDice ? poolSection : '');
     const primary = personal ? dicePanel + own + teamActivity()
       : (poolByDice ? '' : poolSection) + dicePanel + own
-        + (role === 'viewer' ? roomProjection() : '') + argoAbilities() + roomTrauma()
+        + argoAbilities() + roomTrauma()
         + (edit ? rollLog + teamActivity() : '');
     renderMarkup(content, goal + primary + (role !== 'player' ? '<h3 class="battle-room-heading">状态总览</h3>' : '') + overview
-      + (edit ? '' : rollLog) + (state.squad && role !== 'viewer' ? '<p><a href="' + escape(squadLink.link('/aibp/squad', id)) + '">返回联机小队</a></p>' : ''));
+      + (edit ? '' : rollLog) + (state.squad ? '<p><a href="' + escape(squadLink.link('/aibp/squad', id)) + '">返回联机小队</a></p>' : ''));
     renderTools();
     renderTurn();
     if (focus >= 0) {
@@ -1188,6 +1296,18 @@
   root.addEventListener('click', async event => {
     const button = event.target.closest('button');
     if (!button || (!summary.contains(button) && !content.contains(button) && !toolsBody.contains(button))) return;
+    if (button.dataset.equipmentSeat !== undefined || button.dataset.equipmentTab) {
+      if (button.dataset.equipmentSeat !== undefined) equipmentSeat = Number(button.dataset.equipmentSeat);
+      else equipmentTabs.set(Number(button.dataset.seat), button.dataset.equipmentTab);
+      render();
+      return;
+    }
+    if (button.dataset.bpSettle !== undefined) {
+      if (waitingBp() || actions.some(action => action.type === 'bp-settle')) return;
+      send({ id: crypto.randomUUID(), type: 'bp-settle', seat: Number(button.dataset.seat),
+        round: state.round, roll: button.dataset.rollId, value: Number(button.dataset.bpSettle), card: state.projection?.bp?.src });
+      return;
+    }
     if (button.hasAttribute('data-save-config')) {
       void saveConfig(button.form);
       return;
@@ -1244,7 +1364,10 @@
     }
     if (button.hasAttribute('data-room-art')) {
       const image = button.querySelector('img');
-      window.ATO_BATTLE_ASSETS?.zoom(button.dataset.roomArt, image.alt);
+      const { panel, signature } = state.projection || {};
+      const related = signature && button.dataset.roomArt === '/aibp/' + panel
+        ? { src: '/aibp/' + signature, label: '招牌技' } : null;
+      window.ATO_BATTLE_ASSETS?.zoom(button.dataset.roomArt, image.alt, related);
     } else if (roomCopy) {
       const url = roomLink(roomCopy, credentials.keys[roomCopy]);
       try {

@@ -746,15 +746,27 @@
         ["min", attacking && losState.weapon.kind === "ranged"], ["max", attacking && losState.weapon.kind !== "melee"],
         ["facing", editBoard()],
       ]) control(`${name}-field`).hidden = !visible;
-      const select = control("titan");
-      select.replaceChildren(...pieces.titans.map((piece, index) => {
-        const option = document.createElement("option");
-        option.value = String(index);
-        option.disabled = options.deadSeats?.().includes(index) === true;
-        option.textContent = (names[index] || `泰坦 ${index + 1}`) + " · " + coordinateLabel(piece.row, piece.column);
-        return option;
-      }));
-      select.value = String(losState.selectedTitan);
+      const seats = control("titan");
+      const portraits = options.heroPortraits?.() || [];
+      const oldSeat = seats.contains(document.activeElement) ? document.activeElement.dataset.boardTitanSeat : null;
+      const buttons = pieces.titans.map((piece, index) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.dataset.boardTitanSeat = index;
+        button.disabled = options.deadSeats?.().includes(index) === true || options.canMoveTitan?.(index) === false;
+        button.setAttribute("aria-pressed", String(index === losState.selectedTitan));
+        button.title = coordinateLabel(piece.row, piece.column);
+        if (portraits[index]) {
+          const image = document.createElement("img");
+          image.src = portraits[index];
+          image.alt = "";
+          button.append(image);
+        }
+        button.append(names[index] || `泰坦 ${index + 1}`);
+        return button;
+      });
+      seats.replaceChildren(...buttons);
+      if (oldSeat != null && !buttons[oldSeat]?.disabled) buttons[oldSeat]?.focus({ preventScroll: true });
       const movement = moving ? titanMovement(losState.selectedTitan, map) : null;
       const speed = movement?.speed ?? titanSpeed(losState.selectedTitan);
       const remaining = movement?.remaining ?? speed;
@@ -856,6 +868,8 @@
         });
       }
       tactics.addEventListener("click", event => {
+        const seat = event.target.closest("[data-board-titan-seat]");
+        if (seat && !seat.disabled) return selectTitan(Number(seat.dataset.boardTitanSeat));
         const button = event.target.closest("[data-board-face]");
         if (!button || !editBoard()) return;
         const facing = Number(button.dataset.boardFace);
@@ -872,7 +886,6 @@
       });
       tactics.addEventListener("change", event => {
         const field = event.target;
-        if (field.matches("[data-board-titan]")) return selectTitan(Number(field.value));
         const numeric = Number(field.value);
         if (field.matches("[data-board-forced]")) losState.forced = field.checked;
         if (field.matches("[data-board-speed]") && !titanMovement(losState.selectedTitan)) {

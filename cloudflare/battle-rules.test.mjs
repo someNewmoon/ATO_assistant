@@ -208,6 +208,37 @@ test('投掷者能请求揭示 BP，只有房主领取一次，推出的牌更�
   assert.equal(r.bpRequest, undefined);
 });
 
+test('部位牌的三个结果只结算当前威力投掷，开启第二能力时段并保留克拉托斯标记', () => {
+  for (const [outcome, damage] of [[0, 0], [1, 1], [2, 2], [2, 1]]) {
+    const r = room();
+    r.board = api.setupRoomBoard({ apostle: 'HEKATON', level: 1 }, 2);
+    r.turn = { phase: 'titans', seat: 0, finished: [] };
+    r.pool = { opening: 3 };
+    r.rolls = [{ id: 'power', mode: 'power', seat: 0, round: 1 }];
+    const card = 'ps/HEKATON/HEKATON_BP_I_001.jpg';
+    const signature = 'ps/HEKATON/HEKATON_SIGNATURE_X_001.jpg';
+    const projection = { apostle: 'HEKATON', bp: { src: card }, bpPending: true, signature, damage: { total: 1 } };
+    reducer.apply(r, host, { type: 'room-projection', projection });
+    const settle = { type: 'bp-settle', id: 'settle', round: 1, card, roll: 'power', value: outcome };
+    assert.throws(() => reducer.apply(r, player, { ...settle, roll: 'stale' }), /最新/);
+    assert.throws(() => reducer.apply(r, player, { ...settle, card: 'another-card' }), /核对/);
+    assert.throws(() => reducer.apply(r, { role: 'player', seat: 1 }, settle), /自己的泰坦回合/);
+    reducer.apply(r, player, settle);
+    reducer.apply(r, host, { type: 'bp-claim', request: settle.id, id: 'claim' });
+    reducer.apply(r, host, { type: 'bp-result', request: settle.id, claim: 'claim',
+      projection: { ...projection, bpPending: false, damage: { total: 1 + damage } } });
+    assert.equal(r.projection.bp.src, card);
+    assert.equal(r.projection.bpPending, false);
+    assert.equal(r.projection.signature, signature);
+    assert.equal(r.rolls[0].bpOutcome, outcome);
+    assert.equal(r.rolls[0].wounds, damage);
+    assert.equal(r.battleStats[0].damage, damage);
+    assert.equal(r.pool.opening, 3);
+    assert.deepEqual(r.secondAbility, { id: 'settle', roll: 'power', seat: 0, round: 1 });
+    assert.throws(() => reducer.apply(r, player, { type: 'roll-wounds', roll: 'power', value: 2, seat: 0 }), /已结算/);
+  }
+});
+
 test('骇物允许落到泰坦和地形所在格，路线只走正交步', () => {
   const r = room();
   r.board = api.setupRoomBoard({ apostle: 'HEKATON', level: 1 }, 2);

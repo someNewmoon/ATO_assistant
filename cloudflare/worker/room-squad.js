@@ -177,6 +177,7 @@ export function applySquad(room, actor, body, randomInt) {
     }
     room.battleGoal = text(body.goal, 1200);
     delete room.bpRequest;
+    delete room.secondAbility;
     const trauma = createTrauma(squad.cycle, body.tutorial === true, randomInt);
     if (latestBattleRoll(room)) squad.lastBattleRoll = latestBattleRoll(room);
     refreshCombatKit(room);

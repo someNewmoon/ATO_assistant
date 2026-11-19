@@ -32,6 +32,7 @@ export function roomProjection(value, apostle) {
     title: text(value.title, 100),
     level: text(value.level, 12),
     panel: image(value.panel),
+    signature: image(value.signature),
     ai: card(value.ai),
     bp: card(value.bp),
     ...(typeof value.aiPending === "boolean" && { aiPending: value.aiPending }),

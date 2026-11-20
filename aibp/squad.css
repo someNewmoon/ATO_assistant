@@ -53,3 +53,14 @@ button,.squad-action{cursor:pointer}button:disabled{opacity:.52;cursor:default}.
 .trauma-library-cards img[data-gear-image] { aspect-ratio:5/7; }
 .trauma-library-cards label { cursor:pointer; }
 .trauma-library-cards input[type="checkbox"] { min-height:0; }
+
+.squad-player-kit > .squad-hero { margin-block: 8px 13px; }
+.squad-kit-titan { display:grid; grid-template-columns:minmax(0, 1fr) auto; gap:12px; align-items:center; }
+.squad-kit-titan > div { display:grid; gap:8px; }
+.squad-kit-titan > img { max-width:min(32vw, 10rem); max-height:9rem; object-fit:contain; border-radius:7px; }
+.squad-reference-cards { display:flex; gap:8px; overflow:auto; }
+.squad-reference-cards figure { flex:0 0 6rem; margin:0; font-size:.78rem; }
+.squad-reference-cards img { display:block; width:100%; border-radius:6px; }
+.squad-player-kit [data-gear-group] > h4 { margin:12px 0 4px; }
+.squad-player-kit .squad-gear { max-height:none; }
+.squad-player-kit [type=submit] { position:sticky; bottom:.7rem; z-index:1; }

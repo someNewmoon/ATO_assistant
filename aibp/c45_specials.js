@@ -2012,6 +2012,13 @@
     getRoster() {
       return clonePileState(activeRoster());
     },
+    roomDeckFlags() {
+      return {
+        bpBottom: titanXDrawsFromBottom(),
+        ...(currentApostle === "TITAN_X" && window.TitanXAwakeningConfig && { awakening: window.TitanXAwakeningConfig.card() }),
+        ...(currentApostle === "DEMIDJINN" && { lastWish: specialAiCard("DEMIDJINN_TR_IV_001.jpg", "IV", "demidjinn-iv") }),
+      };
+    },
     recordBpWound(amount) {
       if (currentApostle === "TITAN_X" && titanXGroup()) {
         if (resolvingGroupBp) return false;

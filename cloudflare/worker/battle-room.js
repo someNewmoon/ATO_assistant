@@ -5,6 +5,7 @@ import inventory from '../../technology/gear-inventory.js';
 import cardState from '../../aibp/room-card-state.js';
 import roomDice from '../../aibp/room-dice.js';
 import { roomProjection } from './room-projection.js';
+import { prepareRoomDeck, revealRoomBp, roomDeckProjection, settleRoomBp } from './room-deck.js';
 import { applyTurn, claimTurn, setTurnPhase } from './room-turn.js';
 import { battleRecap, battleStats, countReaction, setRollWounds } from './room-recap.js';
 import battleConfig from '../../technology/battle-config.js';
@@ -14,7 +15,7 @@ import { ApiError, activeCycle, errorResponse, object, response } from './campai
 import { applyRoomBoard, priorityTarget, setupRoomBoard } from './board.js';
 
 import { applyTrauma, createTrauma, savedTraumaConfig, traumaView } from './room-trauma.js';
-import { applySquad, createSquad, syncCampaignStock, latestBattleRoll, squadSkills, squadStats, squadView } from './room-squad.js';
+import { applySquad, createSquad, syncCampaignStock, latestBattleRoll, roomGearCategory, squadSkills, squadStats, squadView } from './room-squad.js';
 
 export const roomIdPattern = /^[a-f0-9]{32}$/;
 const secretPattern = /^[a-f0-9]{64}$/;
@@ -160,38 +161,39 @@ const activityLabels = {
   'turn-phase': '切换轮次', 'turn-take': '开始英雄回合', 'turn-finish': '结束英雄回合',
   'board-move': '移动泰坦', 'board-undo-move': '撤回上一步', 'board-apostle-move': '移动骇物',
   'board-apostle-undo': '撤回骇物移动', 'board-face': '调整骇物朝向', 'priority-target': '调整首要目标', round: '开启新一轮',
-  stat: '调整三曲盘', 'titan-marker': '调整泰坦标记', condition: '调整泰坦状态', gear: '使用装备', 'gear-card': '调整装备卡', 'gear-ready-all': '回正所有横置装备',
-  'mnemos-card': '调整旧忆卡', 'argo-use': '使用阿尔戈能力', 'argo-undo': '撤回阿尔戈能力',
-  'trauma-draw': '抽取创伤或结算受击', 'trauma-resolve': '结算创伤', 'pool-clear': '清空克拉托斯池',
+  stat: '调整三曲盘', 'titan-marker': '调整泰坦标记', condition: '调整泰坦状态', gear: '使用装备', 'gear-card': '调整装备卡', 'gear-ready-all': '回正所有横置卡牌',
+  'mnemos-card': '调整旧忆卡', 'pattern-card': '调整样式卡牌', 'argo-use': '使用阿尔戈能力', 'argo-undo': '撤回阿尔戈能力',
+  'bp-settle': '结算部位牌', 'bp-request': '揭示部位牌', 'trauma-draw': '抽取创伤或结算受击', 'trauma-resolve': '结算创伤', 'pool-clear': '清空克拉托斯池',
   roll: '掷骰', pool: '调整克拉托斯池', end: '结束战斗', reroll: '重掷骰子', convert: '转换威力骰', 'roll-wounds': '记录击破结果',
 };
 
-function recordBattleActivity(room, actor, body, previousProjection, previousBp) {
+function recordBattleActivity(room, actor, body, previousProjection) {
   let label = Object.hasOwn(activityLabels, body.type) ? activityLabels[body.type] : '';
   let seat = Number.isInteger(body.seat) && room.heroes[body.seat] ? body.seat : null;
   const hero = room.heroes[seat];
   let detail = '';
   const projection = room.projection;
-  if (body.type === 'room-projection' || body.type === 'bp-result') {
-    if (body.type === 'bp-result' && previousBp?.card && previousBp.id === room.secondAbility?.id) {
-      label = '结算部位牌';
-      seat = previousBp.seat;
-      detail = [projection.bp.label, ['失败', '伤口', '暴击'][previousBp.outcome], '进入第二能力时段'].filter(Boolean).join(' · ');
-    } else {
-      const changes = ['ai', 'bp'].flatMap(key => {
-        if (!projection?.[key + 'Pending'] || (previousProjection?.[key + 'Pending']
-            && previousProjection[key]?.src === projection[key]?.src)) return [];
-        return [key.toUpperCase() + (projection[key]?.label ? ' ' + projection[key].label : '')];
-      });
-      if (changes.length) {
-        label = '揭示卡牌';
-        if (body.type === 'bp-result') seat = previousBp?.seat ?? null;
-        detail = changes.join('、');
-      } else if (previousProjection?.aiPending && !projection?.aiPending
-          && projection?.aiDeck.discard > previousProjection.aiDeck.discard) {
-        label = '弃置 AI';
-        detail = previousProjection.ai?.label;
-      }
+  if (body.type === 'bp-request') {
+    if (previousProjection?.bpPending || !projection?.bpPending) return;
+    seat = room.battleDeck.bpSeat ?? seat;
+    detail = projection.bp?.label;
+  } else if (body.type === 'bp-settle') {
+    if (room.secondAbility?.id !== body.id) return;
+    seat = room.secondAbility.seat;
+    detail = [projection.bp?.label, ['失败', '伤口', '暴击'][body.value], '进入第二能力时段'].filter(Boolean).join(' · ');
+  } else if (body.type === 'room-projection') {
+    const changes = ['ai', 'bp'].flatMap(key => {
+      if (!projection?.[key + 'Pending'] || (previousProjection?.[key + 'Pending']
+          && previousProjection[key]?.src === projection[key]?.src)) return [];
+      return [key.toUpperCase() + (projection[key]?.label ? ' ' + projection[key].label : '')];
+    });
+    if (changes.length) {
+      label = '揭示卡牌';
+      detail = changes.join('、');
+    } else if (previousProjection?.aiPending && !projection?.aiPending
+        && projection?.aiDeck.discard > previousProjection.aiDeck.discard) {
+      label = '弃置 AI';
+      detail = previousProjection.ai?.label;
     }
   }
   if (!label) return;
@@ -258,8 +260,12 @@ export class BattleRoom extends DurableObject {
   }
 
   view(room, actor) {
-    const { secrets, trauma, squad, owner, battleStats, ...state } = room;
-    return { ok: true, room: { ...state, priorityTarget: priorityTarget(room), trauma: traumaView(room, actor),
+    const { secrets, trauma, squad, owner, battleStats, battleDeck, bpRequest, ...state } = room;
+    return { ok: true, room: { ...state, heroes: room.heroes.map(hero => ({ ...hero, gear: hero.gear.map(item => ({
+      ...item, category: roomGearCategory(item.id),
+    })) })), priorityTarget: priorityTarget(room), trauma: traumaView(room, actor),
+      ...(battleDeck && { deckRevision: battleDeck.revision, bpSeat: battleDeck.bpSeat ?? null }),
+      ...(battleDeck && actor.role === 'host' && { hostBattleDeck: battleDeck }),
       ...(squad && { squad: squadView(room, actor), damageBySeat: room.heroes.map((_, seat) => battleStats?.[seat]?.damage ?? 0) }) },
       actor: { role: actor.role, ...(actor.role === 'player' && { seat: actor.seat }) } };
   }
@@ -503,9 +509,8 @@ export class BattleRoom extends DurableObject {
     }
     if (room.closed) reject(room.squad ? '小队已解散。' : '本场战斗已结束。', 409);
     const previousProjection = room.projection;
-    const previousBp = room.bpRequest;
     this.apply(room, actor, body, savedTrauma);
-    recordBattleActivity(room, actor, body, previousProjection, previousBp);
+    recordBattleActivity(room, actor, body, previousProjection);
     room.revision++;
     this.ctx.storage.transactionSync(() => {
       this.save(room);
@@ -539,49 +544,35 @@ export class BattleRoom extends DurableObject {
       if (body.round !== room.round || room.turn?.phase === 'apostle'
           || (room.turn?.seat != null && room.turn.seat !== seat)
           || room.turn?.finished.includes(seat)) reject('请在自己的泰坦回合揭示 BP。', 409);
-      const settle = body.type === 'bp-settle';
-      if (settle && (!room.projection?.bpPending || room.projection.bp?.src !== body.card
-          || ![0, 1, 2].includes(body.value))) reject('请先揭示并核对当前部位牌。', 409);
-      if (!settle && room.projection?.bpPending) return;
-      if (room.bpRequest && room.bpRequest.round === room.round && Date.now() - room.bpRequest.createdAt < 15000) return;
-      const roll = settle && room.rolls.find(entry => entry.seat === seat && entry.round === room.round && entry.mode === 'power');
-      if (settle && (!roll || roll.id !== body.roll || roll.bpOutcome !== undefined)) {
-        reject('只能结算这次攻击最新的威力投掷。', 409);
-      }
+      const deck = room.battleDeck;
+      if (!deck) reject('请由房主打开本场 AIBP，先同步牌堆。', 409);
+      if (body.type === 'bp-settle') {
+        const roll = room.rolls.find(entry => entry.seat === seat && entry.round === room.round && entry.mode === 'power');
+        if (!roll || roll.id !== body.roll || roll.bpOutcome !== undefined) reject('只能结算这次攻击最新的威力投掷。', 409);
+        if (![0, 1, 2].includes(body.value)) reject('请选择有效的部位牌结算结果。');
+        setRollWounds(room, roll, settleRoomBp(deck, { seat, card: body.card, value: body.value }, randomInt));
+        roll.bpOutcome = body.value;
+        room.secondAbility = { id: body.id, roll: roll.id, seat, round: room.round };
+      } else if (!revealRoomBp(deck, seat, randomInt)) return;
       claimTurn(room, seat);
-      room.bpRequest = { id: body.id, seat, round: room.round, createdAt: Date.now(),
-        ...(settle && { card: body.card, roll: roll.id, outcome: body.value, damageBefore: room.projection.damage.total }) };
-      return;
-    }
-    if (body.type === 'bp-claim' || body.type === 'bp-result') {
-      if (actor.role !== 'host') reject('由房主的 AIBP 处理抽牌请求。', 403);
-      const pending = room.bpRequest;
-      if (!pending || pending.id !== body.request || pending.round !== room.round) reject('抽牌请求已处理。', 409);
-      if (body.type === 'bp-claim') {
-        if (pending.claim) reject('正在处理这次抽牌。', 409);
-        pending.claim = body.id;
-      } else {
-        if (pending.claim !== body.claim) reject('抽牌请求已更新。', 409);
-        const projection = roomProjection(body.projection, room.board?.apostle);
-        if (pending.card && projection && !projection.bpPending && projection.bp?.src === pending.card) {
-          const roll = room.rolls.find(entry => entry.id === pending.roll);
-          if (roll) {
-            const damage = Math.max(0, projection.damage.total - pending.damageBefore);
-            setRollWounds(room, roll, damage);
-            roll.bpOutcome = pending.outcome;
-            room.secondAbility = { id: pending.id, roll: roll.id, seat: pending.seat, round: room.round };
-          }
-          room.projection = projection;
-        } else if (!pending.card && projection?.bpPending) room.projection = projection;
-        delete room.bpRequest;
-      }
+      deck.revision++;
+      deck.operation = body.id;
+      room.projection = roomDeckProjection(deck, room.projection);
       return;
     }
     if (body.type === 'room-projection') {
       if (actor.role !== 'host') reject('战况由房主同步。', 403);
       const projection = roomProjection(body.projection, room.board?.apostle);
       if (!projection) reject('战况与房间骇物不一致。', 409);
-      room.projection = projection;
+      if (body.deck) {
+        const previous = room.battleDeck;
+        if ((previous?.revision || 0) !== body.deckRevision) reject('牌堆已更新，请核对最新牌面后再操作。', 409);
+        const next = prepareRoomDeck(body.deck, room.board?.apostle, (previous?.revision || 0) + 1, body.id);
+        if (previous?.bpSeat !== undefined && projection.bpPending) next.bpSeat = previous.bpSeat;
+        room.battleDeck = next;
+        delete room.bpRequest;
+      }
+      room.projection = room.battleDeck ? roomDeckProjection(room.battleDeck, projection) : projection;
       return;
     }
     if (body.type === 'public-lobby') {
@@ -602,6 +593,7 @@ export class BattleRoom extends DurableObject {
         room.round++;
         delete room.bpRequest;
         delete room.secondAbility;
+        if (room.battleDeck) delete room.battleDeck.bpSeat;
         setTurnPhase(room, 'apostle');
       } else if (room.squad) {
         if (body.damage !== undefined && (!Array.isArray(body.damage) || body.damage.length !== room.heroes.length
@@ -720,6 +712,10 @@ export class BattleRoom extends DurableObject {
             if (cardState.gearState(item, slot) === 'exhausted') cardState.setGearState(item, slot, 'ready');
           }
         }
+        for (const card of hero.mnemos) if (card.state === 'exhausted') card.state = 'ready';
+        for (const [id, value] of Object.entries(hero.patternCards || {})) {
+          if (value === 'exhausted') delete hero.patternCards[id];
+        }
         break;
       case 'gear-card': {
         const item = hero.gear.find(entry => entry.id === body.key);
@@ -736,6 +732,14 @@ export class BattleRoom extends DurableObject {
         if (!card || !cardState.states.includes(body.value)) reject('旧忆卡操作无效。');
         if (card.state === 'discarded' && body.value !== 'discarded') reject('该卡牌已弃除。', 409);
         card.state = body.value;
+        break;
+      }
+      case 'pattern-card': {
+        if (!hero.titan?.patternIds?.includes(body.key) || !cardState.states.includes(body.value)) reject('样式卡牌操作无效。');
+        const states = hero.patternCards ||= {};
+        if (states[body.key] === 'discarded' && body.value !== 'discarded') reject('该卡牌已弃除。', 409);
+        if (body.value === 'ready') delete states[body.key];
+        else states[body.key] = body.value;
         break;
       }
       case 'roll':

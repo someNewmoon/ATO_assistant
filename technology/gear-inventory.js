@@ -375,8 +375,19 @@
     return { ...record, loadouts };
   }
 
+  const gearGroups = { arm: '武器', armor: '防具', attachment: '附件', aid: '助具', other: '其他装备' };
+  function groupGear(items, category) {
+    return Object.entries(gearGroups).flatMap(([key, label]) => {
+      const matches = items.filter(item => {
+        const kind = category(item)?.split('_')[0];
+        return (Object.hasOwn(gearGroups, kind) ? kind : 'other') === key;
+      });
+      return matches.length ? [{ key, label, items: matches }] : [];
+    });
+  }
+
   return {
-    ascensionEnabled, baseGearId, ascendedCycle, nextCycle, ascend, loadoutTemplates,
+    gearGroups, groupGear, ascensionEnabled, baseGearId, ascendedCycle, nextCycle, ascend, loadoutTemplates,
     TITAN_NAMES_ZH, TITAN_TYPES, DREAMWALKER_PANELS, TRAUMA_DECKS, traumaTrack, defaultTraumaTrack, loadoutTraumaTrack,
     TITAN_PATTERNS, PATTERN_FIELDS, loadoutPatterns, titanPatternFields, traumaDeckLabel,
     dreamwalkerPanel, loadoutTitan, titanType, titanTypeFields, titanLabel, titanArtwork,

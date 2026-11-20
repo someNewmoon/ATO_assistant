@@ -12,7 +12,8 @@ const bundled = await build({
   stdin: { contents: `export { BattleRoom } from './worker/battle-room.js';
     export { createTrauma, applyTrauma, traumaView } from './worker/room-trauma.js';
     export { applySquad, syncCampaignStock } from './worker/room-squad.js';
-    export { setupRoomBoard } from './worker/board.js';`, resolveDir: import.meta.dirname },
+    export { setupRoomBoard } from './worker/board.js';
+    export { prepareRoomDeck, roomDeckProjection } from './worker/room-deck.js';`, resolveDir: import.meta.dirname },
   bundle: true, write: false, platform: 'node', format: 'esm',
   plugins: [{ name: 'cloudflare-test-base', setup(builder) {
     builder.onResolve({ filter: /^cloudflare:workers$/ }, () => ({ path: 'workers', namespace: 'test' }));
@@ -189,53 +190,56 @@ test('创伤样式按凶险逐格读取，不合并非连续的轻微创伤档�
   assert.deepEqual(picked, ['heavy', 'light', 'heavy']);
 });
 
-test('投掷者能请求揭示 BP，只有房主领取一次，推出的牌更新同步状态', () => {
+test('旧战斗没有牌堆快照时，需要由房主初始化，玩家不能自行导入', () => {
   const r = room();
   r.board = api.setupRoomBoard({ apostle: 'HEKATON', level: 1 }, 2);
   r.turn = { phase: 'apostle', seat: null, finished: [] };
-  const action = { type: 'bp-request', round: 1, id: 'request' };
-  assert.throws(() => reducer.apply(r, player, action), /泰坦回合/);
+  const reveal = { type: 'bp-request', round: 1, id: 'request' };
+  assert.throws(() => reducer.apply(r, player, reveal), /泰坦回合/);
   r.turn.phase = 'titans';
-  reducer.apply(r, player, action);
-  assert.equal(r.turn.seat, 0);
-  const claim = { type: 'bp-claim', request: 'request', id: 'claim' };
-  assert.throws(() => reducer.apply(r, player, claim), /房主/);
-  reducer.apply(r, host, claim);
-  assert.throws(() => reducer.apply(r, host, { ...claim, id: 'another' }), /正在处理/);
-  reducer.apply(r, host, { type: 'bp-result', request: 'request', claim: 'claim',
-    projection: { apostle: 'HEKATON', bpPending: true, bp: { src: 'ps/HEKATON/HEKATON_BP_I_001.jpg' } } });
-  assert.equal(r.projection.bpPending, true);
-  assert.equal(r.bpRequest, undefined);
+  assert.throws(() => reducer.apply(r, player, reveal), /先同步牌堆/);
+  assert.throws(() => reducer.apply(r, player, { type: 'room-projection' }), /由房主同步/);
 });
 
-test('部位牌的三个结果只结算当前威力投掷，开启第二能力时段并保留克拉托斯标记', () => {
-  for (const [outcome, damage] of [[0, 0], [1, 1], [2, 2], [2, 1]]) {
+test('Worker 独立揭示、结算部位牌并激化，完整牌堆只对房主可见', () => {
+  const face = (type, level, index) => {
+    const src = `ps/HEKATON/HEKATON_${type}_${level}_00${index}.jpg`;
+    return { type, level, index, _room: { face: { src, label: type + ' ' + level },
+      back: { src: src.replace('.jpg', '_BACK.jpg') }, tier: level } };
+  };
+  for (const [outcome, level, damage] of [[0, 'I', 0], [1, 'I', 1], [2, 'II', 1], [1, 'III', 2], [2, 'III', 2]]) {
     const r = room();
     r.board = api.setupRoomBoard({ apostle: 'HEKATON', level: 1 }, 2);
-    r.turn = { phase: 'titans', seat: 0, finished: [] };
+    r.turn = { phase: 'titans', seat: null, finished: [] };
     r.pool = { opening: 3 };
     r.rolls = [{ id: 'power', mode: 'power', seat: 0, round: 1 }];
-    const card = 'ps/HEKATON/HEKATON_BP_I_001.jpg';
-    const signature = 'ps/HEKATON/HEKATON_SIGNATURE_X_001.jpg';
-    const projection = { apostle: 'HEKATON', bp: { src: card }, bpPending: true, signature, damage: { total: 1 } };
-    reducer.apply(r, host, { type: 'room-projection', projection });
-    const settle = { type: 'bp-settle', id: 'settle', round: 1, card, roll: 'power', value: outcome };
-    assert.throws(() => reducer.apply(r, player, { ...settle, roll: 'stale' }), /最新/);
-    assert.throws(() => reducer.apply(r, player, { ...settle, card: 'another-card' }), /核对/);
-    assert.throws(() => reducer.apply(r, { role: 'player', seat: 1 }, settle), /自己的泰坦回合/);
-    reducer.apply(r, player, settle);
-    reducer.apply(r, host, { type: 'bp-claim', request: settle.id, id: 'claim' });
-    reducer.apply(r, host, { type: 'bp-result', request: settle.id, claim: 'claim',
-      projection: { ...projection, bpPending: false, damage: { total: 1 + damage } } });
-    assert.equal(r.projection.bp.src, card);
+    const hidden = face('BP', 'I', 2);
+    const current = face('BP', level, 1);
+    const data = { apostle: 'HEKATON', lastRevealed: {}, tokens: [],
+      AI: { deck: [face('AI', 'I', 1)], discard: [], removed: [], supply: { II: [face('AI', 'II', 1)], III: [] } },
+      BP: { deck: [current, hidden], discard: [], removed: [], damage: [],
+        supply: { II: [face('BP', 'II', 1)], III: [face('BP', 'III', 2), face('BP', 'III', 3)] } } };
+    r.battleDeck = api.prepareRoomDeck(data, 'HEKATON');
+    r.projection = api.roomDeckProjection(r.battleDeck, {});
+    reducer.apply(r, player, { type: 'bp-request', id: 'reveal', round: 1 });
+    assert.equal(r.projection.bp.src, current._room.face.src);
+    assert.equal(r.projection.bpDeck.back.src, hidden._room.back.src);
+    const viewer = reducer.view(r, { role: 'viewer' }).room;
+    assert.equal(viewer.hostBattleDeck, undefined);
+    assert.ok(!JSON.stringify(viewer).includes('HEKATON_BP_I_002.jpg'));
+    assert.throws(() => reducer.apply(r, host, { type: 'room-projection', deckRevision: 1, deck: data, projection: r.projection }), /牌堆已更新/);
+    reducer.apply(r, player, { type: 'bp-settle', id: 'settled', round: 1, roll: 'power', value: outcome, card: current._room.face.src });
     assert.equal(r.projection.bpPending, false);
-    assert.equal(r.projection.signature, signature);
+    assert.equal(r.projection.damage.total, damage);
     assert.equal(r.rolls[0].bpOutcome, outcome);
     assert.equal(r.rolls[0].wounds, damage);
-    assert.equal(r.battleStats[0].damage, damage);
+    assert.equal(r.secondAbility.id, 'settled');
     assert.equal(r.pool.opening, 3);
-    assert.deepEqual(r.secondAbility, { id: 'settle', roll: 'power', seat: 0, round: 1 });
-    assert.throws(() => reducer.apply(r, player, { type: 'roll-wounds', roll: 'power', value: 2, seat: 0 }), /已结算/);
+    assert.equal(r.battleDeck.revision, 3);
+    if (!outcome) assert.deepEqual(r.battleDeck.data.BP.discard, [current]);
+    if (level === 'I' && outcome) assert.equal(r.battleDeck.data.AI.deck[0].level, 'II');
+    if (level === 'III' && outcome === 1) assert.equal(r.battleDeck.data.BP.deck.at(-1), current);
+    if (level === 'III' && outcome === 2) assert.equal(r.battleDeck.data.BP.damage[0], current);
   }
 });
 
@@ -383,10 +387,13 @@ test('只有房主能释放队员席位，英雄和配装留在小队', () => {
   assert.deepEqual(r.squad.stock.loadouts.h0, { titanId: 't' });
 });
 
-test('一键回正只改变本英雄横置的装备，兼容旧存档的已用数量', () => {
+test('一键回正本英雄横置的装备、旧忆和样式，弃除牌保留', () => {
   const r = room();
   r.heroes[0].gear = [{ id: 'gear', count: 4, used: 2 }];
-  r.heroes[0].mnemos = [{ id: 'memory', state: 'exhausted' }];
+  r.heroes[0].mnemos = [{ id: 'memory', state: 'exhausted' }, { id: 'used', state: 'discarded' }];
+  r.heroes[0].titan.patternIds = ['pattern', 'used-pattern'];
+  reducer.apply(r, player, { type: 'pattern-card', seat: 0, key: 'pattern', value: 'exhausted' });
+  reducer.apply(r, player, { type: 'pattern-card', seat: 0, key: 'used-pattern', value: 'discarded' });
   r.heroes[1].gear = [{ id: 'other', count: 1, used: 1 }];
   reducer.apply(r, player, { type: 'gear-card', seat: 0, key: 'gear', slot: 0, value: 'discarded' });
   reducer.apply(r, player, { type: 'gear-card', seat: 0, key: 'gear', slot: 2, value: 'exhausted' });
@@ -394,7 +401,9 @@ test('一键回正只改变本英雄横置的装备，兼容旧存档的已用�
   reducer.apply(r, player, { type: 'gear-ready-all', seat: 0 });
   reducer.apply(r, player, { type: 'gear-ready-all', seat: 0 });
   assert.deepEqual(r.heroes[0].gear[0], { id: 'gear', count: 4, used: 1, legacyUsed: 2, cards: { 0: 'discarded', 1: 'ready' } });
-  assert.equal(r.heroes[0].mnemos[0].state, 'exhausted');
+  assert.equal(r.heroes[0].mnemos[0].state, 'ready');
+  assert.equal(r.heroes[0].mnemos[1].state, 'discarded');
+  assert.deepEqual(r.heroes[0].patternCards, { 'used-pattern': 'discarded' });
   assert.equal(r.heroes[1].gear[0].used, 1);
 });
 

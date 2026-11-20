@@ -33,6 +33,7 @@
       fetch('../technology/gear_card_images.json').then(res => res.ok ? res.json() : {}).catch(() => ({})),
     ]).then(([hosted, fallback]) => {
       gearArt = { ...hosted, equipment: { ...fallback.images, ...hosted.equipment } };
+      syncFields();
       updatePrepStock();
     });
   }
@@ -123,11 +124,13 @@
   function prepForm(seat) {
     const squad = room.squad;
     const kit = squad.loadouts[seat];
+    const hero = room.heroes[seat];
     const options = squad.titans.map(titan => '<option value="' + e(titan.id) + '"' + (titan.id === kit.titanId ? ' selected' : '')
       + '>' + e(inventory.titanLabel(titan)) + ' · 库存 ' + titan.count + (titan.crippled ? ' · 残废' : '') + '</option>').join('');
     const panels = inventory.DREAMWALKER_PANELS.map(panel => '<option value="' + e(panel.id) + '"'
       + (panel.id === kit.titanPanelId ? ' selected' : '') + '>' + e(panel.name) + '</option>').join('');
-    const gear = squad.gear.filter(item => item.count || kit.gear[item.id] || item.holders?.length).map(item => {
+    const equipment = squad.gear.filter(item => item.count || kit.gear[item.id] || item.holders?.length);
+    const gearCard = item => {
       const count = kit.gear[item.id] || 0;
       return '<article class="squad-gear-card"><label><input type="checkbox" name="gear:' + e(item.id)
         + '"' + (count ? ' checked' : '') + '>'
@@ -135,19 +138,35 @@
         + '<small class="squad-sub" data-stock="' + e(item.id) + '"></small>'
         + '<span class="squad-gear-owners"></span><label hidden>数量 <input data-gear-count type="number" min="1"'
         + ' value="' + (count || 1) + '"></label></article>';
-    }).join('');
-    return '<section class="squad-panel"><h2>' + (squad.phase === 'prep' ? '我的备战' : '我的配装') + '</h2><form data-form="kit" class="squad-form" data-base="' + e(JSON.stringify(kit))
-      + '"><label>泰坦 <select name="titanId"><option value="">未分配</option>' + options + '</select></label>'
+    };
+    const gear = inventory.groupGear(equipment, item => item.category).map(group => '<section data-gear-group><h4>' + group.label
+      + '</h4><div class="squad-gear">' + group.items.map(gearCard).join('') + '</div></section>').join('');
+    const memories = hero.mnemos.map(item => '<figure data-prep-memory="' + e(item.id) + '"><img alt="" loading="lazy" hidden>'
+      + '<figcaption>' + e(item.name) + '</figcaption></figure>').join('');
+    return '<section class="squad-panel squad-player-kit"><h2>' + (squad.phase === 'prep' ? '我的备战' : '我的配装')
+      + '</h2><div class="squad-hero">' + portrait(hero) + '<strong>' + e(hero.name) + '</strong></div><form data-form="kit" class="squad-form" data-base="' + e(JSON.stringify(kit))
+      + '"><div class="squad-kit-titan"><div><label>泰坦 <select name="titanId"><option value="">未分配</option>' + options + '</select></label>'
       + '<label data-titan-panel>梦行者面板 <select name="titanPanelId"><option value="">默认</option>' + panels + '</select></label>'
-      + '<p class="squad-sub" data-prep-patterns></p>'
-      + '<details open><summary>选择装备</summary><div class="squad-gear">' + (gear || '<p>军械库暂无装备。</p>') + '</div></details>'
-      + '<p class="squad-sub">旧忆沿用英雄记录。保存后的配装供本小队下一场战斗使用。</p><button type="submit">保存配装</button></form></section>';
+      + '</div><img data-prep-titan alt="" hidden></div>'
+      + (memories ? '<section><h3>旧忆</h3><div class="squad-reference-cards">' + memories + '</div></section>' : '')
+      + '<section data-prep-patterns hidden><h3>样式卡牌</h3><div class="squad-reference-cards"></div></section>'
+      + '<section><h3>装备 <span class="squad-sub" data-equipped-count></span></h3>'
+      + '<label>搜索装备<input type="search" data-kit-search placeholder="按名称或编号查找"></label>'
+      + (gear || '<p>军械库暂无装备。</p>') + '</section>'
+      + '<button type="submit">保存配装</button></form></section>';
   }
 
   function updatePrepStock() {
     const form = content.querySelector('[data-form="kit"]');
     if (!form) return;
     loadGearArt();
+    for (const figure of form.querySelectorAll('[data-prep-memory]')) {
+      const path = gearArt.mnemos?.[figure.dataset.prepMemory];
+      const image = figure.querySelector('img');
+      if (path && image.getAttribute('src') !== '../' + path) image.src = '../' + path;
+      image.hidden = !path;
+    }
+    filterPrepGear(form);
     const seat = ownSeat();
     const heroId = room.heroes[seat].id;
     const quantity = room.squad.loadouts[seat].gear;
@@ -297,10 +316,36 @@
       kit.querySelector('[data-titan-panel]').hidden = !configurablePanel;
       kit.elements.titanPanelId.disabled = !configurablePanel;
       const saved = JSON.parse(kit.dataset.base);
-      const patterns = saved.titanId === selected?.id ? inventory.loadoutPatterns(selected, saved, room.squad.cycle) : [];
-      kit.querySelector('[data-prep-patterns]').textContent = patterns.length
-        ? '样式卡牌 · ' + patterns.map(pattern => pattern.name).join('、') : '';
+      const titan = inventory.loadoutTitan(selected, configurablePanel ? kit.elements.titanPanelId.value : '');
+      const art = titan && inventory.titanArtwork(titan, gearArt);
+      const preview = kit.querySelector('[data-prep-titan]');
+      preview.hidden = !art;
+      if (art) {
+        preview.alt = art.name + '面板';
+        if (preview.getAttribute('src') !== '../' + art.path) preview.src = '../' + art.path;
+      }
+      const patterns = inventory.loadoutPatterns(titan, saved.titanId === selected?.id ? saved : {}, room.squad.cycle);
+      const panel = kit.querySelector('[data-prep-patterns]');
+      const markup = patterns.map(pattern => '<figure><img src="../' + e(pattern.art) + '" loading="lazy" alt=""><figcaption>'
+        + e(pattern.name) + '</figcaption></figure>').join('');
+      const images = panel.querySelector('.squad-reference-cards');
+      if (images.innerHTML !== markup) images.innerHTML = markup;
+      panel.hidden = !patterns.length;
     }
+  }
+
+  function filterPrepGear(form) {
+    const query = form.querySelector('[data-kit-search]')?.value.trim().toLowerCase() || '';
+    for (const group of form.querySelectorAll('[data-gear-group]')) {
+      const cards = [...group.querySelectorAll('.squad-gear-card')];
+      for (const card of cards) {
+        const check = card.querySelector('input[type="checkbox"]');
+        card.hidden = ![check.name.slice(5), card.querySelector('label span')?.textContent].join(' ').toLowerCase().includes(query);
+      }
+      group.hidden = !cards.some(card => !card.hidden);
+    }
+    const count = form.querySelectorAll('input[name^="gear:"]:checked').length;
+    form.querySelector('[data-equipped-count]').textContent = '已选择 ' + count + ' 种';
   }
 
   function accept(data) {
@@ -344,6 +389,9 @@
     });
   }
 
+  content.addEventListener('input', event => {
+    if (event.target.matches('[data-kit-search]')) filterPrepGear(event.target.form);
+  });
   content.addEventListener('change', () => {
     syncFields();
     updatePrepStock();

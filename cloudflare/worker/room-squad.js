@@ -1,10 +1,12 @@
 import { storyScanFilename, storyScanPrefix } from './story-scans.js';
 import inventory from '../../technology/gear-inventory.js';
+import gearParts from '../../technology/gear_part_labels.json';
 import heroCatalog from '../../hero/hero-catalog.js';
 import { ApiError } from './campaign.js';
 import { priorityTarget, setupRoomBoard } from './board.js';
 import { createTrauma } from './room-trauma.js';
 import { roomProjection } from './room-projection.js';
+import { prepareRoomDeck, roomDeckProjection } from './room-deck.js';
 import { setTurnPhase } from './room-turn.js';
 
 const skills = { courage: '勇气', wisdom: '智慧', will: '意志', endurance: '耐力', cunning: '狡黠', fury: '力量' };
@@ -77,6 +79,10 @@ export function latestBattleRoll(room) {
   return room.rolls?.find(roll => roll.id === room.lastBattleRollId) || room.rolls?.[0] || null;
 }
 
+export function roomGearCategory(id) {
+  return gearParts.labels[inventory.baseGearId(id).replace(/^1x/, '').toUpperCase()] || 'other';
+}
+
 export function squadView(room, actor) {
   const squad = room.squad;
   if (!squad) return null;
@@ -89,7 +95,7 @@ export function squadView(room, actor) {
     const roster = new Map(Object.keys(stock.loadouts).map(id => [id, { id, name: '其他英雄' }]));
     for (const { id, name, argonaut } of [...(stock.roster || []), ...room.heroes]) roster.set(id, { id, name, argonaut });
     const reservations = inventory.gearReservations(stock, [...roster.values()]);
-    result.gear = Object.entries(gearNames).map(([id, name]) => ({ id, name, count: stock.arsenal[id]?.quantity || 0, holders: reservations.get(id) || [] }));
+    result.gear = Object.entries(gearNames).map(([id, name]) => ({ id, name, category: roomGearCategory(id), count: stock.arsenal[id]?.quantity || 0, holders: reservations.get(id) || [] }));
   }
   return result;
 }
@@ -123,6 +129,7 @@ function refreshCombatKit(room) {
       traumaTrack: inventory.loadoutTraumaTrack(titan, kit),
       patternIds: inventory.loadoutPatterns(titan, kit, room.squad.cycle).map(pattern => pattern.id),
     } : null;
+    delete hero.patternCards;
     hero.gear = Object.entries(kit.gear).map(([id, count]) => ({ id, name: gearNames[id] || id, count, used: 0 }));
     hero.stats = { ...squadStats(hero.storyStats) };
     delete hero.markers;
@@ -186,7 +193,9 @@ export function applySquad(room, actor, body, randomInt, savedTrauma) {
     room.activity = [];
     delete room.battleStats;
     delete room.boardPing;
-    Object.assign(room, { board, trauma, projection: roomProjection(body.projection, board.apostle), round: 1,
+    const battleDeck = prepareRoomDeck(body.deck, board.apostle);
+    const projection = roomProjection(body.projection, board.apostle);
+    Object.assign(room, { board, trauma, battleDeck, projection: battleDeck ? roomDeckProjection(battleDeck, projection) : projection, round: 1,
       rolls: [], lastBattleRollId: null, argoAbilities: {}, pool: Object.fromEntries(Object.keys(room.pool).map(key => [key, 0])) });
     setTurnPhase(room, 'apostle');
     squad.phase = 'battle';

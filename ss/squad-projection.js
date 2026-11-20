@@ -120,8 +120,10 @@
 
   function battleRoll(roll, heroes, hostSeat) {
     if (!roll || !dice) return null;
+    const outcome = ['失败', '伤口', '暴击'][roll.bpOutcome];
+    const wounds = outcome || dice.woundResults[roll.wounds ?? 0];
     return { hero: heroes[roll.seat], faces: roll.dice, title: roll.hero + ' · ' + (dice.modes[roll.mode]?.name || '掷骰') + ' · 第 ' + roll.round + ' 轮',
-      result: dice.rollSummary(roll) + (roll.mode === 'power' ? ' · ' + dice.woundResults[roll.wounds ?? 0] : ''), reactions: dice.reactionGroups(roll, heroes, hostSeat) };
+      result: dice.rollSummary(roll) + (roll.mode === 'power' && wounds ? ' · ' + wounds : ''), reactions: dice.reactionGroups(roll, heroes, hostSeat) };
   }
 
   function update({ room, actor }) {

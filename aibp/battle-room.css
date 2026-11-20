@@ -490,3 +490,10 @@ body.room-viewer > .app > main { padding: 8px; }
   .room-screen-layout .room-projection-cards:not(:has(.room-projection-panel:nth-child(4))) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .room-screen-layout .room-projection-panel { grid-column: auto; }
 }
+
+#room-status, #room-equipment { scroll-margin-top: 4.25rem; }
+.room-hero-status, .room-card-groups { display: grid; gap: 8px; }
+.room-card-group h5 { margin: 7px 0 4px; font-size: .8rem; }
+.room-equipment-head, .room-reroll-controls, .room-reroll-fate { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.room-equipment-head { justify-content: space-between; }
+.room-reroll-fate .battle-room-marker img { width: 1.25rem; height: 1.25rem; }

@@ -2439,7 +2439,7 @@
   <script src="../assets/mobile/layout.js?v=20261028-apk-portrait1" defer></script>
   <script src="../assets/mobile/play.js?v=20261114-theatre-return" defer></script>
   <link rel="stylesheet" href="room-recap.css">
-  <link rel="stylesheet" href="battle-room.css?v=20261120-combat-display">
+  <link rel="stylesheet" href="battle-room.css?v=20261120-player-panel">
   <script src="theatre-battle.js?v=2"></script>
   <script src="../theatre/terms.js?v=2"></script>
 </head>
@@ -2951,8 +2951,8 @@
   <script src="squad-link.js?v=20261120-live-recovery" defer></script>
   <script src="../record/enemy-evolution.js?v=20261120"></script>
   <script src="kratos-tables.js?v=20261120-titan-patterns" defer></script>
-  <script src="battle-room.js?v=20261120-live-recovery" defer></script>
-  <script src="../technology/gear-inventory.js?v=20261120-battle-prep"></script>
+  <script src="battle-room.js?v=20261120-worker-bp" defer></script>
+  <script src="../technology/gear-inventory.js?v=20261120-player-kit"></script>
   <script src="../assets/campaign-notes.js?v=20261015-aibp-summary1"></script>
   <script src="../assets/cycle-symbols.js?v=20261115-module-logo"></script>
   <script src="cycle-theme.js?v=20261001"></script>
@@ -3852,6 +3852,53 @@
         bpDeck: publicDeckSnapshot(state, "BP"),
         damage: { ...currentBpDamageSummary(), wounds: currentBossWounds() },
       };
+    };
+
+    window.getAibpRoomBattleDeck = () => {
+      const state = piles[currentApostle];
+      if (!state?.AI || !state.BP) return null;
+      function withArt(card) {
+        if (!card) return card;
+        const face = publicCardSnapshot(card);
+        const backSrc = cardBackImageSrc(card, face.src);
+        return { ...card, _room: { face, back: backSrc ? { src: backSrc, label: "未揭示的牌背" } : null,
+          tier: cardBackDisplayLevel(card), ...(isChimera() && { phase: chimeraPhaseForCard(card) }) } };
+      }
+      function pack(pile) {
+        const result = { ...pile, pending: withArt(pile.pending) };
+        for (const key of ["deck", "discard", "removed", "damage", "damage1", "damage2"]) {
+          if (pile[key]) result[key] = pile[key].map(withArt);
+        }
+        result.supply = Object.fromEntries(Object.entries(pile.supply || {}).map(([key, cards]) => [key, cards.map(withArt)]));
+        return result;
+      }
+      const flags = window.C45Specials?.roomDeckFlags?.() || {};
+      const position = currentCriticalMassPosition();
+      return { apostle: currentApostle, AI: pack(state.AI),
+        ...(state.AI === state.BP ? { shared: true } : { BP: pack(state.BP) }),
+        lastRevealed: Object.fromEntries(Object.entries(state.lastRevealed || {}).map(([key, card]) => [key, withArt(card)])),
+        lastPendingType: state.lastPendingType, tokens: state.tokens || [], special: state.special,
+        chimeraPhase: state.chimeraPhase, aiExhaustedBonusIndex: state.aiExhaustedBonusIndex,
+        flags: { ...flags, aiBottom: currentApostle === "BLACKBEAK" || flags.bpBottom,
+          ...(flags.lastWish && { lastWish: withArt(flags.lastWish) }),
+          ...(flags.awakening && { awakening: withArt(flags.awakening) }),
+          ...(["HEKATON", "CYCLONUS", "HYPERTIME_ORACLE"].includes(currentApostle) && currentApostleLevel() >= 2
+            && { criticalMass: { file: criticalMassTokenFile, ...position } }) },
+      };
+    };
+
+    window.setAibpRoomBattleDeck = data => {
+      if (data?.apostle !== currentApostle || !piles[currentApostle]) return false;
+      const { AI, BP, shared, lastRevealed, lastPendingType, tokens, special, chimeraPhase, aiExhaustedBonusIndex } = clonePileState(data);
+      const state = piles[currentApostle];
+      Object.assign(state, { AI, BP: shared ? AI : BP, lastRevealed, lastPendingType, tokens,
+        ...(special && { special }), chimeraPhase, aiExhaustedBonusIndex });
+      if (shared) state.aibp = AI;
+      undoStacks[currentApostle] = [];
+      currentBpView = currentBpDamageView();
+      renderAibpCards();
+      renderPanelTokens();
+      return true;
     };
 
     if (new URLSearchParams(location.search).has("battle") || new URLSearchParams(location.search).has("squad")) {
@@ -6928,6 +6975,7 @@
     }
 
     function drawOrShuffle(type) {
+      if (type === "BP" && window.submitAibpRoomBp?.()) return;
       const pile = emptyDrawPile(type);
       if (pile) {
         rememberUndo(currentApostle, type);
@@ -9170,7 +9218,7 @@
       window.AibpCardKeywords?.showDraw(cardSrc(drawnCard));
     }
 
-    function drawBp(showZoom = true) {
+    function drawBp() {
       ensurePiles(currentApostle);
       const bp = piles[currentApostle].BP;
       if (bp.pending) return;
@@ -9197,14 +9245,12 @@
       piles[currentApostle].lastPendingType = "BP";
       savePiles();
       renderAibpCards();
-      if (showZoom) {
-        openImageZoom(cardSrc(bp.pending), "抽取的 BP", null, {
-          bpActions: true,
-          cardTokens: currentPanelCardTokens("BP"),
-          noticeImages: currentBpNoticeImages()
-        });
-        window.AibpCardKeywords?.showDraw(cardSrc(bp.pending));
-      }
+      openImageZoom(cardSrc(bp.pending), "抽取的 BP", null, {
+        bpActions: true,
+        cardTokens: currentPanelCardTokens("BP"),
+        noticeImages: currentBpNoticeImages()
+      });
+      window.AibpCardKeywords?.showDraw(cardSrc(bp.pending));
     }
 
     function removePendingFromDeck(type) {
@@ -9564,7 +9610,7 @@
       const button = event.target.closest("[data-bp-zoom-action]");
       if (!button || button.disabled) return;
       const action = button.dataset.bpZoomAction;
-      resolveBp(action);
+      if (!window.submitAibpRoomBp?.(action)) resolveBp(action);
       closeImageZoom();
     });
     imageZoomAiComboActions.addEventListener("click", (event) => {
@@ -9675,17 +9721,8 @@
     });
     window.refreshAibpRecordLevels = refreshRecordApostleLevels;
     window.drawAibpRoomCard = (type, apostle) => {
-      if (apostle !== currentApostle || !["AI", "BP"].includes(type)) return null;
-      if (type === "AI") drawAi(); else drawBp(false);
-      return window.getAibpRoomProjection();
-    };
-    window.resolveAibpRoomBp = (apostle, card, outcome) => {
-      const projection = window.getAibpRoomProjection();
-      if (apostle !== currentApostle || !projection?.bpPending || projection.bp?.src !== card) return null;
-      const mode = ["discard", "defeat", "critical"][outcome];
-      if (!mode) return null;
-      resolveBp(mode);
-      if (imageZoomOverlay.classList.contains("show") && imageZoomImg.getAttribute("src") === window.HeliosAssets.resolve(card)) closeImageZoom();
+      if (apostle !== currentApostle || type !== "AI") return null;
+      drawAi();
       return window.getAibpRoomProjection();
     };
     window.getAibpBoardSetup = () => currentApostle ? {
@@ -9854,7 +9891,7 @@
       }
     });
     undoBpButton.addEventListener("click", () => undoLastAibp("BP"));
-    discardBpButton.addEventListener("click", () => resolveBp("discard"));
+    discardBpButton.addEventListener("click", () => window.submitAibpRoomBp?.("discard") || resolveBp("discard"));
     returnBpTopButton.addEventListener("click", () => resolveBp("return-top"));
     bpCombinedTotal.addEventListener("change", () => {
       updateCombinedBpTotal(bpCombinedTotal.value);
@@ -9866,8 +9903,8 @@
       const total = piles[currentApostle]?.BP?.combinedAttack?.total || 0;
       updateCombinedBpTotal(action === "clear" ? 0 : total + Number(action));
     });
-    defeatBpButton.addEventListener("click", () => resolveBp("defeat"));
-    criticalBpButton.addEventListener("click", () => resolveBp("critical"));
+    defeatBpButton.addEventListener("click", () => window.submitAibpRoomBp?.("defeat") || resolveBp("defeat"));
+    criticalBpButton.addEventListener("click", () => window.submitAibpRoomBp?.("critical") || resolveBp("critical"));
     deathblowBpButton.addEventListener("click", resolveBossDeathblow);
     healBpButton.addEventListener("click", healBp);
     addSwButton.addEventListener("click", () => addBpSpecialDamage("SW"));
@@ -9928,7 +9965,7 @@
   <script src="ps/other/resouce/bp_resource_map.js?v=20261017a" defer></script>
   <script src="ps/other/resouce/bp_resource_map_c1_c3.js?v=20261017a" defer></script>
   <script src="ps/other/resouce/bp_resource_map_c4_c5.js?v=20261018a" defer></script>
-  <script src="c45_specials.js?v=20261118-battle-recap" defer></script>
+  <script src="c45_specials.js?v=room-bp-20261118-battle-recap" defer></script>
   <script src="bp_loot_calculator_addon.js?v=20261118-battle-recap" defer></script>
   <script src="../story/data/english-source-data.js?v=20261011-english4" defer></script>
   <script src="../assets/ato-terms.js?v=20261110-loop-terms" defer></script>

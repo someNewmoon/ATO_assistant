@@ -32,6 +32,8 @@
   let state = null;
   let lastProjectionSent = '';
   let projectionRetry;
+  let hostDeckRevision = 0;
+  let projectionAction;
   let readingState = false;
   let lobbyCampaign;
   let abilityDictionary;
@@ -46,7 +48,6 @@
   let rollMode = 'attack';
   let rollSeat = 0;
   let equipmentSeat = 0;
-  const equipmentTabs = new Map();
   let lastSecondAbility;
 
   let parentRoll = '';
@@ -157,10 +158,7 @@
       target?.focus({ preventScroll: true });
     }
     lastSecondAbility = second?.id;
-    if (actor.role === 'host') { syncProjection(); void processBpRequest(); }
-    clearTimeout(bpRetryTimer);
-    const retryIn = state.bpRequest?.createdAt + 15000 - Date.now();
-    if (retryIn > 0) bpRetryTimer = setTimeout(() => { if (state?.squad?.phase === 'battle') render(); }, retryIn + 10);
+    if (actor.role === 'host' && (first || !lastProjectionSent || (state.deckRevision || 0) !== hostDeckRevision)) syncProjection();
   }
 
   function lostSeat() {
@@ -335,7 +333,7 @@
   const quick = document.createElement('nav');
   quick.className = 'room-primary-nav';
   quick.setAttribute('aria-label', '常用操作');
-  quick.innerHTML = '<a href="#room-movement">移动</a><a href="#room-dice">掷骰</a><a href="#room-equipment">装备</a>';
+  quick.innerHTML = '<a href="#room-movement">移动</a><a href="#room-dice">掷骰</a><a href="#room-status">状态</a><a href="#room-equipment">装备</a>';
   const movementShortcut = quick.querySelector('a[href="#room-movement"]');
   function forcedMovementSeat() {
     const seat = personalSeat();
@@ -444,7 +442,9 @@
       movementShortcut.dataset.forced = String(forced);
       movementShortcut.textContent = forced ? '非主动移动' : '移动';
     }
-    quick.querySelector('a[href="#room-equipment"]').hidden = !state.heroes[actor.role === 'host' ? equipmentSeat : seat];
+    for (const href of ['#room-equipment', '#room-status']) {
+      quick.querySelector('a[href="' + href + '"]').hidden = !state.heroes[actor.role === 'host' ? equipmentSeat : seat];
+    }
     if (!personal || !activeTool) return;
     const markup = {
       rolls: latestHeroRolls,
@@ -565,15 +565,19 @@
     const art = window.ATO_BATTLE_ASSETS;
     const titan = hero.titan ? escape(window.ATO_GEAR_INVENTORY.titanLabel(hero.titan)) : '未分配泰坦';
     const titanArt = hero.titan && art?.titanArt(hero.titan);
-    const patterns = window.ATO_GEAR_INVENTORY.TITAN_PATTERNS.filter(pattern => hero.titan?.patternIds?.includes(pattern.id))
-      .map(pattern => '<li>' + cardImage('../' + pattern.art, pattern.name) + '<span>' + escape(pattern.name) + '</span></li>').join('');
+    const inventory = window.ATO_GEAR_INVENTORY;
+    const patterns = inventory.TITAN_PATTERNS.filter(pattern => hero.titan?.patternIds?.includes(pattern.id));
+    const patternCards = patterns.map(item => playableCard({ item, type: 'pattern-card', seat,
+      value: hero.patternCards?.[item.id] || 'ready', src: '../' + item.art, editable })).join('');
     const titanImage = titanArt ? cardImage(titanArt.src, titanArt.name, 'battle-room-titan-art', art.thumbSrc(titanArt.name)) : '';
     const portrait = heroPortrait(hero);
     const avatar = portrait ? '<img class="battle-room-avatar" src="../hero/assets/' + portrait + '" alt="">' : '';
-    const gear = hero.gear.map(item => Array.from({ length: Math.min(item.count, 48) }, (_, slot) => playableCard({
+    const gearCards = item => Array.from({ length: Math.min(item.count, 48) }, (_, slot) => playableCard({
       item, type: 'gear-card', seat, slot, value: gearState(item, slot),
       src: art?.gearSrc(item.id, roomLanguage), thumb: art?.gearThumbSrc(item.id, roomLanguage), editable, detail: item.count > 1 ? String(slot + 1) + '/' + item.count : '',
-    })).join('') + (item.count > 48 ? '<li>' + escape(item.name) + ' 另有 ' + (item.count - 48) + ' 件</li>' : '')).join('');
+    })).join('') + (item.count > 48 ? '<li>' + escape(item.name) + ' 另有 ' + (item.count - 48) + ' 件</li>' : '');
+    const gear = inventory.groupGear(hero.gear, item => item.category).map(group => '<div class="room-card-group"><h5>'
+      + group.label + '</h5><ul class="battle-room-card-list">' + group.items.map(gearCards).join('') + '</ul></div>').join('');
     const mnemos = hero.mnemos.map(item => playableCard({
       item, type: 'mnemos-card', seat, value: item.state || 'ready', src: art?.mnemosSrc(item.id), thumb: art?.thumbSrc(item.id),
       memory: memoryCatalog.get(item.id), editable, detail: item.fated ? '命业旧忆' : item.progress + '/' + item.limit,
@@ -589,26 +593,23 @@
       + '</select>' : '<small>' + conditionNames[hero.condition] + '</small>';
     const last = state.rolls.find(roll => roll.seat === seat);
     const summary = last && (!own || !editable) ? '<p class="battle-room-result">最近一次掷骰 · ' + rollSummary(last) + '</p>' : '';
-    const readyGear = editable && hero.gear.length ? '<button type="button" data-action="gear-ready-all" data-seat="' + seat
-      + '"' + (hero.gear.some(item => findGearSlot(item, 'exhausted') >= 0) ? '' : ' disabled') + '>一键回正装备</button>' : '';
-    const category = equipmentTabs.get(seat) || 'gear';
-    const sections = {
-      gear: gear ? '<ul class="battle-room-card-list">' + gear + '</ul>' : '<p>未分配装备</p>',
-      mnemos: mnemos ? '<ul class="battle-room-card-list">' + mnemos + '</ul>' : '<p>暂无旧忆卡牌</p>',
-      patterns: patterns ? '<ul class="battle-room-card-list">' + patterns + '</ul>' : '<p>暂无样式卡牌</p>',
-    };
-    const tabs = Object.entries({ gear: '装备', mnemos: '旧忆', patterns: '样式卡牌' }).map(([value, title]) =>
-      '<button type="button" data-equipment-tab="' + value + '" data-seat="' + seat
-      + '" aria-pressed="' + (value === category) + '">' + title + '</button>').join('');
+    const hasExhausted = hero.gear.some(item => findGearSlot(item, 'exhausted') >= 0)
+      || hero.mnemos.some(card => card.state === 'exhausted') || Object.values(hero.patternCards || {}).includes('exhausted');
+    const readyGear = editable && (hero.gear.length || hero.mnemos.length || patterns.length)
+      ? '<button type="button" data-action="gear-ready-all" data-seat="' + seat
+        + '"' + (hasExhausted ? '' : ' disabled') + '>一键回正</button>' : '';
+    const deck = (name, cards) => cards ? '<section class="room-card-group"><h4>' + name + '</h4>'
+      + '<ul class="battle-room-card-list">' + cards + '</ul></section>' : '';
     return '<article class="battle-room-hero" data-hero-seat="' + seat + '"><header><div class="battle-room-identity">'
       + avatar + '<div><h3>' + escape(hero.name) + '</h3><small>' + escape(hero.player || '待认领') + '</small></div></div>'
       + titanImage + '<div class="battle-room-titan-status"><span>' + titan + '</span>' + condition + '</div></header>'
+      + '<section class="room-hero-status"' + (own ? ' id="room-status"' : '') + '><h4>状态</h4>'
       + '<div class="battle-room-stats" role="group" aria-label="三曲盘">' + stats + '</div>'
       + '<div class="battle-room-stats room-titan-markers" role="group" aria-label="泰坦状态标记">' + markers + '</div>'
-      + traumaControls(hero, seat, editable)
-      + '<div class="room-equipment-head"' + (own ? ' id="room-equipment"' : '') + '><div class="room-seat-tabs" role="group" aria-label="卡牌类别">'
-      + tabs + '</div>' + (category === 'gear' ? readyGear : '') + '</div>'
-      + sections[category]
+      + traumaControls(hero, seat, editable) + '</section>'
+      + '<section class="room-card-groups"' + (own ? ' id="room-equipment"' : '') + '><div class="room-equipment-head"><h4>战斗卡牌</h4>'
+      + readyGear + '</div>' + deck('旧忆', mnemos) + deck('样式卡牌', patternCards)
+      + '<section class="room-card-group"><h4>装备</h4>' + (gear || '<p>未分配装备</p>') + '</section></section>'
       + summary + '</article>';
   }
 
@@ -689,7 +690,7 @@
     const wounds = roll.wounds ?? 0;
     const pendingBp = state.projection?.bpPending && state.projection.bp?.src;
     const latestPower = state.rolls.find(entry => entry.seat === roll.seat && entry.round === state.round && entry.mode === 'power');
-    const canSettle = editable && latestPower?.id === roll.id && roll.bpOutcome === undefined && canRequestBp(roll.seat);
+    const canSettle = state.deckRevision && editable && latestPower?.id === roll.id && roll.bpOutcome === undefined && canRequestBp(roll.seat);
     const outcome = ['失败', '伤口', '暴击'];
     const result = roll.mode === 'power' ? '<div class="room-wound-result">'
       + '<span>击破结果 · ' + (roll.bpOutcome === undefined ? dice.woundResults[wounds] : outcome[roll.bpOutcome])
@@ -697,7 +698,7 @@
       + (canSettle ? '<div class="room-bp-actions">'
         + (pendingBp ? cardImage('/aibp/' + pendingBp, state.projection.bp.label || '部位牌') + outcome.map((label, value) =>
           '<button type="button" data-bp-settle="' + value + '"' + attrs
-          + (waitingBp() ? ' disabled' : '') + '>' + label + '</button>').join('') : bpDrawButton(roll.seat))
+          + '>' + label + '</button>').join('') : bpDrawButton(roll.seat))
         + '</div>' : '')
       + (editable && !state.projection && !pendingBp ? '<div role="group" aria-label="记录伤口">' + dice.woundResults.map((label, value) =>
           '<button type="button" data-action="roll-wounds" data-value="' + value + '"' + attrs
@@ -711,8 +712,11 @@
       + (followup ? '<p class="room-dice-help">已配置 ' + roll.defenseCount + ' 枚防御红骰，请按闪避结果确认是否投掷。</p>' : '')
       + (editable && (roll.mode === 'attack' || followup) ? '<button type="button" data-roll-followup="'
         + (followup ? 'defense' : 'power') + '"' + attrs + '>' + (followup ? '准备投掷防御红骰' : '命中后准备投掷威力骰') + '</button>' : '')
-      + (editable && roll.dice.some(dice.canReroll) ? '<button type="button" data-action="reroll"' + attrs
-        + (selection?.size ? '' : ' disabled') + '>重掷所选骰子' + (selection?.size ? '（' + selection.size + '）' : '') + '</button>' : '')
+      + (editable && roll.dice.some(dice.canReroll) ? '<div class="room-reroll-controls"><button type="button" data-action="reroll"' + attrs
+        + (selection?.size ? '' : ' disabled') + '>重掷所选骰子' + (selection?.size ? '（' + selection.size + '）' : '') + '</button>'
+        + (['attack', 'dodge'].includes(roll.mode) ? '<div class="room-reroll-fate">'
+          + marker('../hero/assets/tri_fate.png', '命运') + buttons('stat', 'fate', state.heroes[roll.seat].stats.fate, roll.seat, '命运', 30, true)
+          + '</div>' : '') + '</div>' : '')
       + result + (quickFeedback ? '' : feedback) + '</li>';
   }
 
@@ -736,16 +740,12 @@
   function canRequestBp(seat) {
     const turn = state.turn;
     return Boolean(state.heroes[seat]) && state.heroes[seat].condition !== 'dead' && turn?.phase !== 'apostle'
-      && (turn?.seat == null || turn.seat === seat) && !turn?.finished.includes(seat);
-  }
-
-  function waitingBp() {
-    return state.bpRequest && Date.now() - state.bpRequest.createdAt < 15000;
+      && (state.bpSeat == null || state.bpSeat === seat) && (turn?.seat == null || turn.seat === seat) && !turn?.finished.includes(seat);
   }
 
   function bpDrawButton(seat) {
     return '<button type="button" data-bp-request="' + seat + '"'
-      + (waitingBp() ? ' disabled>等待房主 AIBP' : '>揭示 BP') + '</button>';
+      + (state.deckRevision ? '>揭示 BP' : ' disabled>等待初始化牌堆') + '</button>';
   }
 
   function powerPartCard(seat) {
@@ -858,42 +858,45 @@
 
   function syncProjection() {
     if (actor?.role !== 'host' || state.closed || !state.board || (state.squad && state.squad.phase !== 'battle')) return;
+    const authoritative = state.hostBattleDeck;
+    if (authoritative && authoritative.revision !== hostDeckRevision) {
+      if (authoritative.operation !== projectionAction
+          && !window.setAibpRoomBattleDeck?.(authoritative.data)) return;
+      hostDeckRevision = authoritative.revision;
+      if (authoritative.operation !== projectionAction) {
+        lastProjectionSent = JSON.stringify([window.getAibpRoomProjection?.(), window.getAibpRoomBattleDeck?.()]);
+      }
+    }
+    if (projectionAction) return;
     const projection = window.getAibpRoomProjection?.();
     if (!projection || projection.apostle !== state.board.apostle) return;
-    const key = JSON.stringify(projection);
+    const deck = state.squad && window.getAibpRoomBattleDeck?.();
+    const key = JSON.stringify([projection, deck]);
     if (key === lastProjectionSent) return;
     lastProjectionSent = key;
-    send({ id: crypto.randomUUID(), type: 'room-projection', projection });
+    projectionAction = crypto.randomUUID();
+    send({ id: projectionAction, type: 'room-projection', projection, ...(deck && { deck, deckRevision: hostDeckRevision }) });
   }
 
-  let processingBp = false;
-  let bpRetryTimer;
-  async function processBpRequest() {
-    const pending = state?.bpRequest;
-    if (!pending || processingBp || pending.claim || Date.now() - pending.createdAt >= 15000
-        || !(pending.card ? window.resolveAibpRoomBp : window.drawAibpRoomCard)) return;
-    if (window.getAibpRoomProjection?.()?.apostle !== state.board?.apostle) return;
-    processingBp = true;
-    const claim = crypto.randomUUID();
-    const battleNumber = state.squad?.battleNumber;
-    try {
-      await request(id + '/action', { id: claim, type: 'bp-claim', request: pending.id, battleNumber });
-      let projection;
-      try {
-        projection = pending.card ? window.resolveAibpRoomBp(state.board?.apostle, pending.card, pending.outcome)
-          : window.drawAibpRoomCard('BP', state.board?.apostle);
-      }
-      finally {
-        accept(await request(id + '/action', { id: crypto.randomUUID(), type: 'bp-result',
-          request: pending.id, claim, projection, battleNumber }));
-      }
-      if (pending.card ? projection?.bpPending !== false : !projection?.bpPending) {
-        say('请检查房主 AIBP 的当前部位牌与牌堆。');
-      }
-    } catch (error) {
-      if (!(error instanceof RejectedAction)) say(error.message);
-    } finally { processingBp = false; }
-  }
+  window.submitAibpRoomBp = mode => {
+    if (actor?.role !== 'host' || !state.deckRevision || state.closed || state.squad?.phase !== 'battle') return false;
+    const seat = state.bpSeat ?? state.turn?.seat ?? rollSeat;
+    if (!canRequestBp(seat)) { say('请在对应的泰坦回合操作部位牌。'); return true; }
+    if (!mode) {
+      send({ id: crypto.randomUUID(), type: 'bp-request', seat, round: state.round });
+      return true;
+    }
+    const value = ['discard', 'defeat', 'critical'].indexOf(mode);
+    if (value < 0) return false;
+    const roll = state.rolls.find(entry => entry.seat === seat && entry.round === state.round && entry.mode === 'power');
+    if (!roll || roll.bpOutcome !== undefined) {
+      if (mode === 'discard' && !state.projection?.bpPending) return false;
+      say('请先完成这名泰坦的威力投掷。');
+      return true;
+    }
+    send({ id: crypto.randomUUID(), type: 'bp-settle', seat, round: state.round, roll: roll.id, value, card: state.projection?.bp?.src });
+    return true;
+  };
 
   function roomProjection() {
     const projection = state.projection;
@@ -1225,6 +1228,7 @@
         say(error.message);
         if (action.type === 'room-projection') {
           lastProjectionSent = '';
+          if (error.status === 409) await refreshRoomState();
           if (!(error instanceof RejectedAction)) {
             clearTimeout(projectionRetry);
             projectionRetry = setTimeout(syncProjection, 3000);
@@ -1241,6 +1245,11 @@
             if (!document.hidden && navigator.onLine) retryFailedAction();
           }, actionRetryDelay);
           actionRetryDelay = Math.min(actionRetryDelay * 2, 15000);
+        }
+      } finally {
+        if (action.id === projectionAction) {
+          projectionAction = null;
+          if (lastProjectionSent) syncProjection();
         }
       }
     }
@@ -1313,20 +1322,10 @@
     }
   });
 
-  window.addEventListener('aibp-room-projection', () => {
-    syncProjection();
-    if (actor?.role === 'host') void processBpRequest();
-  });
+  window.addEventListener('aibp-room-projection', syncProjection);
   content.addEventListener('click', event => {
     const button = event.target.closest('[data-bp-request]');
     if (!button || button.disabled || !state || state.closed) return;
-    if (actor.role === 'host' && window.drawAibpRoomCard) {
-      if (window.getAibpRoomProjection?.()?.bpPending) return;
-      const projection = window.drawAibpRoomCard('BP', state.board?.apostle);
-      if (projection?.bpPending) syncProjection();
-      else say('请检查 AIBP 的部位牌堆。');
-      return;
-    }
     send({ id: crypto.randomUUID(), type: 'bp-request', seat: Number(button.dataset.bpRequest), round: state.round });
   });
   function resumeConnection() {
@@ -1348,14 +1347,13 @@
   root.addEventListener('click', async event => {
     const button = event.target.closest('button');
     if (!button || (!summary.contains(button) && !content.contains(button) && !toolsBody.contains(button))) return;
-    if (button.dataset.equipmentSeat !== undefined || button.dataset.equipmentTab) {
-      if (button.dataset.equipmentSeat !== undefined) equipmentSeat = Number(button.dataset.equipmentSeat);
-      else equipmentTabs.set(Number(button.dataset.seat), button.dataset.equipmentTab);
+    if (button.dataset.equipmentSeat !== undefined) {
+      equipmentSeat = Number(button.dataset.equipmentSeat);
       render();
       return;
     }
     if (button.dataset.bpSettle !== undefined) {
-      if (waitingBp() || actions.some(action => action.type === 'bp-settle')) return;
+      if (actions.some(action => action.type === 'bp-settle')) return;
       send({ id: crypto.randomUUID(), type: 'bp-settle', seat: Number(button.dataset.seat),
         round: state.round, roll: button.dataset.rollId, value: Number(button.dataset.bpSettle), card: state.projection?.bp?.src });
       return;
@@ -1435,7 +1433,7 @@
       render();
     } else if (action === 'gear-ready-all') {
       send({ id: crypto.randomUUID(), type: action, seat: Number(seat) });
-    } else if (action === 'gear-card' || action === 'mnemos-card') {
+    } else if (['gear-card', 'mnemos-card', 'pattern-card'].includes(action)) {
       if (value === 'discarded') armedCard = '';
       void send({ id: crypto.randomUUID(), type: action, key, seat: Number(seat), slot: Number(slot), value });
       render();
@@ -1541,9 +1539,10 @@
           await window.refreshAibpRecordLevels?.();
           const board = window.getAibpBoardSetup?.();
           if (!board) throw new Error('请先选择骇物。');
+          await window.AibpCardBacks?.ready().catch(() => {});
           await squadLink.request(squadId, 'action', credential.token, {
             id: crypto.randomUUID(), type: 'squad-start', battleNumber: data.room.squad.battleNumber,
-            board, goal: form.elements.goal.value, projection: window.getAibpRoomProjection?.(), tutorial: form.elements.tutorial?.checked === true,
+            board, goal: form.elements.goal.value, projection: window.getAibpRoomProjection?.(), deck: window.getAibpRoomBattleDeck?.(), tutorial: form.elements.tutorial?.checked === true,
             ...(available && { battleConfig: readConfig(form) }),
           });
           const url = new URL(location.href);

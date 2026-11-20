@@ -70,30 +70,84 @@
     }
     return data;
   }
+  function watchSocket(socket, disconnect) {
+    let timer;
+    function activity() {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        if (socket.readyState !== WebSocket.OPEN) return disconnect();
+        try { socket.send('{"type":"ping"}'); }
+        catch { return disconnect(); }
+        timer = setTimeout(disconnect, 10000);
+      }, 25000);
+    }
+    socket.addEventListener('message', activity);
+    activity();
+    return () => {
+      clearTimeout(timer);
+      socket.removeEventListener('message', activity);
+    };
+  }
+
   function connect(id, token, receive, status, { timeout: connectTimeout = 12000 } = {}) {
     const url = new URL('/api/battle-room/' + id + '/socket', location.href);
     url.protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-    let socket, timer, stopped = false, delay = 1000;
+    let socket, timer, close, stopped = false, delay = 1000;
     function open() {
-      socket = new WebSocket(url, ['ato-battle-v1', token]);
-      const timeout = setTimeout(() => socket.close(), connectTimeout);
-      socket.onopen = () => { clearTimeout(timeout); delay = 1000; status?.(''); };
-      socket.onmessage = event => receive(JSON.parse(event.data));
-      socket.onclose = event => {
+      if (stopped || socket) return;
+      const current = new WebSocket(url, ['ato-battle-v1', token]);
+      socket = current;
+      let unwatch, ready = false;
+      const timeout = setTimeout(() => disconnect(), connectTimeout);
+      function disconnect(code) {
+        if (socket !== current) return;
+        socket = null;
         clearTimeout(timeout);
+        unwatch?.();
+        if (current.readyState < WebSocket.CLOSING) current.close();
         if (stopped) return;
-        if (event.code === 4001) {
-          stopped = true;
-          status?.('你的英雄席位已释放或被接管，请重新加入小队。', event.code);
+        if (code === 4001) {
+          stop();
+          status?.('你的英雄席位已释放或被接管，请重新加入小队。', code);
           return;
         }
         status?.('连接中断，正在重连…');
         timer = setTimeout(open, delay);
         delay = Math.min(delay * 2, 15000);
+      }
+      close = disconnect;
+      current.onmessage = event => {
+        if (socket !== current) return;
+        const data = JSON.parse(event.data);
+        if (!data.room) return;
+        clearTimeout(timeout);
+        delay = 1000;
+        if (data.socketHeartbeat && !unwatch) unwatch = watchSocket(current, disconnect);
+        receive(data);
+        if (!ready && socket === current) {
+          ready = true;
+          status?.('');
+        }
       };
+      current.onclose = event => disconnect(event.code);
     }
-    if (validId(id) && validKey(token)) open();
-    return () => { stopped = true; clearTimeout(timer); socket?.close(); };
+    function reconnect() {
+      clearTimeout(timer);
+      if (socket?.readyState >= WebSocket.CLOSING) close();
+      clearTimeout(timer);
+      open();
+    }
+    function stop() {
+      stopped = true;
+      clearTimeout(timer);
+      close?.();
+      window.removeEventListener('online', reconnect);
+    }
+    if (validId(id) && validKey(token)) {
+      window.addEventListener('online', reconnect);
+      open();
+    }
+    return stop;
   }
   function language(value) {
     const apply = () => window.ATO_LANGUAGE?.set(value, false);
@@ -118,5 +172,5 @@
       }).join('') + '</ul></section>';
   }
 
-  window.ATO_SQUAD_LINK = { read, save, forget, recentHost, listedHost, home, link, request, connect, language, validId, validKey, sharedOrigin, recapMarkup };
+  window.ATO_SQUAD_LINK = { read, save, forget, recentHost, listedHost, home, link, request, connect, watchSocket, language, validId, validKey, sharedOrigin, recapMarkup };
 })();

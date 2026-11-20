@@ -19,8 +19,12 @@ function socketAction(token, action) {
     const timer = setTimeout(() => { socket.close(); reject(new Error('WebSocket confirmation timed out.')); }, 5000);
     socket.onmessage = event => {
       const packet = JSON.parse(event.data);
-      if (packet.socketActions) socket.send(JSON.stringify({ type: 'action', action }));
-      else if (packet.type === 'action-result') {
+      if (packet.socketActions) {
+        assert.equal(packet.socketHeartbeat, true);
+        socket.send('{"type":"ping"}');
+      } else if (packet.type === 'pong') {
+        socket.send(JSON.stringify({ type: 'action', action }));
+      } else if (packet.type === 'action-result') {
         clearTimeout(timer);
         socket.close();
         resolve(packet);
@@ -66,6 +70,7 @@ try {
   assert.deepEqual(socketFirst.data.actor, { role: 'host' });
   assert.equal((await socketAction(squad.keys.viewer, { ...socketMove, id: crypto.randomUUID() })).status, 403);
   assert.equal((await action('pool', { key: 'opening', delta: 1 }, squad.keys.viewer)).status, 403);
+  assert.equal((await action('pool', { key: 'opening', delta: 1, expectedRound: 0 })).status, 409);
   const zero = await action('trauma-draw', { seat: 0, mode: 'draw', deck: 'auto' });
   assert.equal(zero.status, 200); assert.equal(zero.body.room.trauma.drawn.length, 0);
   const draw = await action('trauma-draw', { seat: 0, mode: 'hit', amount: 14, deck: 'auto' });

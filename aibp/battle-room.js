@@ -41,7 +41,6 @@
   let socketActions = false;
   let socketAction = null;
   let reconnectTimer;
-  let connectionTimer;
   let reconnectDelay = 1000;
   const selectedDice = new Map();
   let rollMode = 'attack';
@@ -55,6 +54,8 @@
   let pending = false;
   let writing = false;
   let failedAction = null;
+  let actionRetry;
+  let actionRetryDelay = 1500;
   const actions = [];
   let connection = '正在连接';
   let message = '';
@@ -99,7 +100,12 @@
     updateStatus();
   }
 
-  class RejectedAction extends Error {}
+  class RejectedAction extends Error {
+    constructor(message, status) {
+      super(message);
+      this.status = status;
+    }
+  }
 
   async function request(path, body, token = credentials?.token) {
     const url = new URL(path, base);
@@ -113,7 +119,7 @@
     let data;
     try { data = await response.json(); } catch { throw new TypeError('无法连接在线战斗室。'); }
     if (response.status >= 500) throw new TypeError(data.error || '战斗室暂时不可用。');
-    if (!response.ok) throw new RejectedAction(data.error || '战斗室请求失败。');
+    if (!response.ok) throw new RejectedAction(data.error || '战斗室请求失败。', response.status);
     return data;
   }
 
@@ -157,12 +163,22 @@
     if (retryIn > 0) bpRetryTimer = setTimeout(() => { if (state?.squad?.phase === 'battle') render(); }, retryIn + 10);
   }
 
+  function lostSeat() {
+    if (actor?.role !== 'player' || !state?.squad || !credentials) return false;
+    credentials = null;
+    const url = new URL(squadLink.link('/aibp/squad', id));
+    if (state.publicLobby) url.searchParams.set('quick', '1');
+    squadLink.forget(id);
+    location.replace(url.href);
+    return true;
+  }
+
   async function refreshRoomState() {
     if (!state || state.closed || readingState || !credentials?.token || document.hidden
         || (state.squad && state.squad.phase !== 'battle')) return;
     readingState = true;
     try { accept(await request(id + '/state')); }
-    catch { /* The socket and the next refresh continue recovery. */ }
+    catch (error) { if (error.status === 401) lostSeat(); }
     finally { readingState = false; }
   }
 
@@ -170,21 +186,38 @@
     if (activeTool === 'apostle' || socket?.readyState !== WebSocket.OPEN) void refreshRoomState();
   }, 5000);
 
+  let disconnectSocket;
   function connect() {
     if (!credentials?.token || socket) return;
     const url = new URL(id + '/socket', base);
     url.protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-    socket = new WebSocket(url, ['ato-battle-v1', credentials.token]);
+    const current = new WebSocket(url, ['ato-battle-v1', credentials.token]);
+    socket = current;
     socketActions = false;
-    const current = socket;
-    connectionTimer = setTimeout(() => current.close(), 12000);
-    current.onopen = () => {
+    let unwatch, ready = false;
+    const connectionTimer = setTimeout(() => disconnect(), 12000);
+    function disconnect(code) {
+      if (socket !== current) return;
+      socket = null;
       clearTimeout(connectionTimer);
-      reconnectDelay = 1000;
-      connection = '已连接 · 自动保存';
+      unwatch?.();
+      socketActions = false;
+      if (socketAction?.socket === current) {
+        clearTimeout(socketAction.timer);
+        socketAction.reject(new TypeError('战斗连接已断开。'));
+        socketAction = null;
+      }
+      if (current.readyState < WebSocket.CLOSING) current.close();
+      if (code === 4001 && lostSeat()) return;
+      connection = '连接已断开，正在重连';
       updateStatus();
-    };
+      clearTimeout(reconnectTimer);
+      reconnectTimer = setTimeout(connect, reconnectDelay);
+      reconnectDelay = Math.min(reconnectDelay * 2, 15000);
+    }
+    disconnectSocket = disconnect;
     current.onmessage = event => {
+      if (current !== socket) return;
       const data = JSON.parse(event.data);
       if (data.type === 'action-result') {
         if (socketAction?.id !== data.id || socketAction.socket !== current) return;
@@ -192,36 +225,25 @@
         socketAction = null;
         clearTimeout(pending.timer);
         if (data.status >= 500) pending.reject(new TypeError(data.data.error || '战斗室暂时不可用。'));
-        else if (!data.data.ok) pending.reject(new RejectedAction(data.data.error || '战斗室请求失败。'));
+        else if (!data.data.ok) pending.reject(new RejectedAction(data.data.error || '战斗室请求失败。', data.status));
         else pending.resolve(data.data);
         return;
       }
+      if (!data.room) return;
+      const reconnected = !ready;
+      if (reconnected) {
+        ready = true;
+        clearTimeout(connectionTimer);
+        reconnectDelay = 1000;
+        connection = '已连接 · 自动保存';
+        updateStatus();
+        if (data.socketHeartbeat) unwatch = squadLink?.watchSocket?.(current, disconnect);
+      }
       if (data.socketActions === true) socketActions = true;
       accept(data);
+      if (reconnected) retryFailedAction();
     };
-    current.onclose = event => {
-      if (current !== socket) return;
-      clearTimeout(connectionTimer);
-      socketActions = false;
-      if (socketAction?.socket === current) {
-        clearTimeout(socketAction.timer);
-        socketAction.reject(new TypeError('战斗连接已断开。'));
-        socketAction = null;
-      }
-      socket = null;
-      if (event.code === 4001 && actor?.role === 'player' && state?.squad) {
-        squadLink.forget(id);
-        const url = new URL(squadLink.link('/aibp/squad', id));
-        if (state.publicLobby) url.searchParams.set('quick', '1');
-        location.replace(url.href);
-        return;
-      }
-      connection = '连接已断开，正在重连';
-      updateStatus();
-      clearTimeout(reconnectTimer);
-      reconnectTimer = setTimeout(connect, reconnectDelay);
-      reconnectDelay = Math.min(reconnectDelay * 2, 15000);
-    };
+    current.onclose = event => disconnect(event.code);
   }
 
   function buttons(type, key, count, seat, label, limit, enabled) {
@@ -1139,6 +1161,7 @@
   }
 
   function appendRetry() {
+    if (content.querySelector('[data-room-retry]')) return;
     const button = document.createElement('button');
     button.type = 'button';
     button.dataset.roomRetry = '';
@@ -1146,8 +1169,19 @@
     content.append(button);
   }
 
+  function retryFailedAction() {
+    if (!failedAction || writing || !credentials?.token || state.closed
+        || (state.squad && state.squad.phase !== 'battle')) return;
+    clearTimeout(actionRetry);
+    actions.unshift(failedAction);
+    failedAction = null;
+    content.querySelector('[data-room-retry]')?.remove();
+    void writeActions();
+  }
+
   function send(action) {
-    actions.push(state?.squad ? { ...action, battleNumber: state.squad.battleNumber } : action);
+    actions.push({ ...action, ...(state.squad && { battleNumber: state.squad.battleNumber }),
+      ...(action.type !== 'room-projection' && { expectedRound: state.round }) });
     void writeActions();
   }
 
@@ -1158,7 +1192,7 @@
         return await new Promise((resolve, reject) => {
           const timer = setTimeout(() => {
             socketAction = null;
-            current.close();
+            disconnectSocket?.();
             reject(new TypeError('战斗操作确认超时。'));
           }, 8000);
           socketAction = { id: action.id, socket: current, timer, resolve, reject };
@@ -1185,6 +1219,7 @@
       const action = actions.shift();
       try {
         accept(await submitAction(action));
+        actionRetryDelay = 1500;
         say('');
       } catch (error) {
         say(error.message);
@@ -1195,10 +1230,17 @@
             projectionRetry = setTimeout(syncProjection, 3000);
           }
         } else if (error instanceof RejectedAction) {
+          if (error.status === 401 && lostSeat()) break;
           if (!state.squad || state.squad.phase === 'battle') render();
         } else {
           failedAction = action;
+          say('操作未确认，恢复连接后会自动重试。');
           appendRetry();
+          clearTimeout(actionRetry);
+          actionRetry = setTimeout(() => {
+            if (!document.hidden && navigator.onLine) retryFailedAction();
+          }, actionRetryDelay);
+          actionRetryDelay = Math.min(actionRetryDelay * 2, 15000);
         }
       }
     }
@@ -1278,16 +1320,26 @@
   content.addEventListener('click', event => {
     const button = event.target.closest('[data-bp-request]');
     if (!button || button.disabled || !state || state.closed) return;
-    button.disabled = true;
     if (actor.role === 'host' && window.drawAibpRoomCard) {
+      if (window.getAibpRoomProjection?.()?.bpPending) return;
       const projection = window.drawAibpRoomCard('BP', state.board?.apostle);
       if (projection?.bpPending) syncProjection();
-      else { button.disabled = false; say('请检查 AIBP 的部位牌堆。'); }
+      else say('请检查 AIBP 的部位牌堆。');
       return;
     }
     send({ id: crypto.randomUUID(), type: 'bp-request', seat: Number(button.dataset.bpRequest), round: state.round });
   });
-  window.addEventListener('online', () => { syncProjection(); void refreshRoomState(); });
+  function resumeConnection() {
+    if (document.hidden || !credentials?.token || !state || state.closed) return;
+    if (socket?.readyState >= WebSocket.CLOSING) disconnectSocket?.();
+    clearTimeout(reconnectTimer);
+    connect();
+    syncProjection();
+    void refreshRoomState();
+    retryFailedAction();
+  }
+  window.addEventListener('online', resumeConnection);
+  document.addEventListener('visibilitychange', resumeConnection);
 
   document.addEventListener('ato-battle-assets', () => {
     if (state) { roomBoard?.render(); render(); }
@@ -1377,10 +1429,7 @@
         window.prompt('复制玩家邀请链接', url);
       }
     } else if ('roomRetry' in button.dataset && failedAction) {
-      actions.unshift(failedAction);
-      failedAction = null;
-      button.remove();
-      void writeActions();
+      retryFailedAction();
     } else if (armCard) {
       armedCard = armedCard === armCard ? '' : armCard;
       render();

@@ -229,6 +229,7 @@ export class BattleRoom extends DurableObject {
     super(ctx, env);
     this.storyLibrary = env.ATO_STORY_LIBRARY;
     this.campaigns = env.CAMPAIGNS;
+    ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair('{"type":"ping"}', '{"type":"pong"}'));
     this.directory = env.ROOM_DIRECTORY?.getByName("active");
     this.sql = ctx.storage.sql;
     this.sql.exec('CREATE TABLE IF NOT EXISTS room (singleton INTEGER PRIMARY KEY CHECK(singleton = 1), data TEXT NOT NULL)');
@@ -359,7 +360,7 @@ export class BattleRoom extends DurableObject {
         const [client, server] = Object.values(new WebSocketPair());
         this.ctx.acceptWebSocket(server);
         server.serializeAttachment({ ...actor, secretHash });
-        server.send(JSON.stringify({ ...this.view(room, actor), socketActions: true }));
+        server.send(JSON.stringify({ ...this.view(room, actor), socketActions: true, socketHeartbeat: true }));
         return new Response(null, { status: 101, webSocket: client, headers: { 'Sec-WebSocket-Protocol': protocol } });
       }
       const expectedMethod = ['state', 'library', 'story-scan'].includes(route) ? 'GET' : 'POST';
@@ -453,6 +454,10 @@ export class BattleRoom extends DurableObject {
     return result;
   }
 
+  webSocketClose(socket) {
+    if (socket.readyState === WebSocket.CLOSING) socket.close();
+  }
+
   async webSocketMessage(socket, message) {
     let id;
     let result;
@@ -524,6 +529,7 @@ export class BattleRoom extends DurableObject {
     if (typeof body.type === 'string' && body.type.startsWith('squad-')) return applySquad(room, actor, body, randomInt, savedTrauma);
     if (room.squad && body.type !== 'public-lobby'
       && (room.squad.phase !== 'battle' || body.battleNumber !== room.squad.battleNumber)) reject('当前战斗已结束或已经切换。', 409);
+    if (body.expectedRound !== undefined && body.expectedRound !== room.round) reject('轮次已更新，请重新操作。', 409);
     if (['turn-phase', 'turn-take', 'turn-finish'].includes(body.type)) return applyTurn(room, actor, body);
     if (typeof body.type === 'string' && body.type.startsWith('trauma-')) return applyTrauma(room, actor, body, randomInt);
     if (typeof body.type === "string" && body.type.startsWith("board-")) return applyRoomBoard(room, actor, body);

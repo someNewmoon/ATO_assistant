@@ -3,9 +3,9 @@
   if (!gate || !root) return;
   const list = root.querySelector('[data-quick-rooms]'), status = root.querySelector('[data-quick-status]');
   const refresh = root.querySelector('[data-quick-refresh]');
-  const hub = document.querySelector('[data-online-squads]');
+  const tools = document.querySelectorAll('[data-online-squads], [data-online-trauma]');
   void fetch('/api/health', { cache: 'no-store', signal: AbortSignal.timeout(5000) }).then(async response => {
-    if (response.ok && (await response.json()).backend === 'cloudflare' && hub) hub.hidden = false;
+    if (response.ok && (await response.json()).backend === 'cloudflare') tools.forEach(link => { link.hidden = false; });
   }).catch(() => {});
   let pending = false, loaded = false;
   async function load() {

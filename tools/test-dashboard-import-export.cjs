@@ -135,6 +135,7 @@ async function main() {
     const serverSections = {
       dashboard: { activeProfileId: 'p', profiles: { p: { note: 'server-new' } } },
       map: { users: {} }, record: {}, technology: {}, heroes: {},
+      trauma: { users: { p: { cycles: { c1: { included: [], excluded: ['light_bleeding'] } } } } },
       aibp: { mirror: 'synthetic battle' }, story: { bookId: 'synthetic story' },
     };
     const ctx = vm.createContext({
@@ -159,11 +160,12 @@ async function main() {
     // 备份必须带全服务端支持的 section（含 aibp / story）
     assert.deepEqual(
       Object.keys(captured.sections).sort(),
-      ['aibp', 'dashboard', 'heroes', 'map', 'record', 'story', 'technology'],
+      ['aibp', 'dashboard', 'heroes', 'map', 'record', 'story', 'technology', 'theatre', 'trauma'],
       '完整存档必须包含服务端支持的全部 section'
     );
     assert.equal(captured.sections.aibp.mirror, 'synthetic battle');
     assert.equal(captured.sections.story.bookId, 'synthetic story');
+    assert.equal(captured.sections.trauma.users.p.cycles.c1.excluded[0], 'light_bleeding');
   });
 
   // --- 保存没能完成时导出：改用内存快照，但三份仍然一致并标出未同步 ---

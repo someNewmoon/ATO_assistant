@@ -493,11 +493,11 @@
       + '</details>' : '';
     return '<section class="room-trauma-summary"><h3>创伤牌库</h3><small>故事集 ' + escape(cycle.slice(1)) + (tutorial ? ' · 教程' : '')
       + ' · ' + Object.entries(counts).map(([deck, count]) => traumaDecks[deck] + ' ' + count).join(' · ') + '</small>'
-      + (actor.role === 'host' && !state.closed ? '<button type="button" data-trauma-dialog="manage">管理牌库</button>' : '') + latest + '</section>';
+      + (actor.role === 'host' && !state.closed ? '<button type="button" data-trauma-dialog="manage">调整本场牌库</button> <a href="/aibp/trauma" target="_blank" rel="noopener">存档牌库</a>' : '') + latest + '</section>';
   }
 
   function openTraumaDialog(mode, seat) {
-    const title = { setup: '准备创伤牌库', manage: '调整创伤牌库', hit: '结算受击', draw: '抽创伤', gain: '获得凶险' }[mode];
+    const title = { setup: '准备创伤牌库', manage: '调整本场创伤牌库', hit: '结算受击', draw: '抽创伤', gain: '获得凶险' }[mode];
     const name = state.heroes[seat]?.name;
     let fields = '';
     if (mode === 'setup') {
@@ -508,7 +508,7 @@
       const catalog = state.trauma.catalog;
       const options = catalog.filter(card => !card.held).map(card =>
         '<option value="' + escape(card.id) + '">' + escape(card.name) + (catalog.filter(item => item.name === card.name).length > 1 ? ' [' + escape(card.id.split('_').pop().toUpperCase()) + ']' : '') + ' · ' + traumaDecks[card.deck] + (card.inPlay ? ' · 已加入' : ' · 未加入') + '</option>').join('');
-      fields = '<p>按科技或事件指示操作。觉醒版和哈迪斯版会替换原牌；哈迪斯版仍在凶险达到 21 时入库。</p>'
+      fields = '<p>本场调整随战斗结束清除。长期变更请到存档牌库设置。</p><p>按科技或事件指示操作。觉醒版和哈迪斯版会替换原牌；哈迪斯版仍在凶险达到 21 时入库。</p>'
         + '<button type="submit" name="awakening" value="1" formnovalidate>应用觉醒牌库变化（加入觉醒并替换你已死亡）</button>'
         + '<label>卡牌 <select name="card" required>' + options + '</select></label>'
         + '<label>操作 <select name="operation"><option value="add">加入或替换</option><option value="remove">移出牌库</option></select></label>';
@@ -1467,7 +1467,7 @@
       content.innerHTML = '<h2>' + escape(data.room.title) + '</h2>'
         + '<ol><li>按战斗段落要求更新<a href="../record/" target="_blank" rel="noopener">阿尔戈号记录表</a>，在 AIBP 核对骇物与等级。</li>'
         + '<li>让队员在备战页确认泰坦、装备及旧忆。三曲盘沿用剧情数值。</li>'
-        + '<li>核对本场的阿尔戈能力、AI／BP 牌堆、地形、站位及战斗目标。</li></ol>'
+        + '<li>核对本场的阿尔戈能力、AI／BP 牌堆、地形、站位及战斗目标。</li><li>创伤牌库沿用<a href="/aibp/trauma" target="_blank" rel="noopener">存档配置</a>。</li></ol>'
         + '<p data-prep-apostle aria-live="polite"></p><form data-prepare-battle>'
         + '<label>战斗目标<textarea name="goal" maxlength="1200" rows="3" placeholder="按故事书填写胜利条件、回合上限等"></textarea></label>'
         + (available ? configFields(available) : '')

@@ -13,7 +13,7 @@ import gearProduction from '../../technology/ato_gear_production.json';
 import { ApiError, activeCycle, errorResponse, object, response } from './campaign.js';
 import { applyRoomBoard, priorityTarget, setupRoomBoard } from './board.js';
 
-import { applyTrauma, createTrauma, traumaView } from './room-trauma.js';
+import { applyTrauma, createTrauma, savedTraumaConfig, traumaView } from './room-trauma.js';
 import { applySquad, createSquad, syncCampaignStock, latestBattleRoll, squadSkills, squadStats, squadView } from './room-squad.js';
 
 export const roomIdPattern = /^[a-f0-9]{32}$/;
@@ -120,7 +120,7 @@ export async function createBattleRoom(env, campaign, payload, owner) {
   try { configuration = battleConfig.prepare(selectedConfig, availableAbilities); }
   catch (error) { reject(error.message); }
   const cycle = activeCycle(campaign);
-  const trauma = createTrauma(cycle, payload.traumaTutorial === true, randomInt);
+  const trauma = createTrauma(cycle, payload.traumaTutorial === true, randomInt, savedTraumaConfig(campaign, profile, cycle));
   const termLanguage = campaign.sections.dashboard?.profiles?.[profile]?.termLanguage;
   const language = ['official','fan','en'].includes(payload.language) ? payload.language
     : ['official','fan','en'].includes(termLanguage) ? termLanguage : 'official';
@@ -228,6 +228,7 @@ export class BattleRoom extends DurableObject {
   constructor(ctx, env) {
     super(ctx, env);
     this.storyLibrary = env.ATO_STORY_LIBRARY;
+    this.campaigns = env.CAMPAIGNS;
     this.directory = env.ROOM_DIRECTORY?.getByName("active");
     this.sql = ctx.storage.sql;
     this.sql.exec('CREATE TABLE IF NOT EXISTS room (singleton INTEGER PRIMARY KEY CHECK(singleton = 1), data TEXT NOT NULL)');
@@ -432,7 +433,22 @@ export class BattleRoom extends DurableObject {
   }
 
   async submitAction(room, actor, body) {
-    const result = this.action(room, actor, body, room.secrets.players.slice());
+    let savedTrauma;
+    if (actor.role === 'host' && room.owner && this.campaigns && !room.closed
+        && body.type === 'squad-start' && room.squad?.phase === 'prep' && body.battleNumber === room.squad.battleNumber) {
+      const url = new URL('https://campaign.internal/trauma-config');
+      url.searchParams.set('profile', room.owner.profile);
+      const result = await this.campaigns.getByName(room.owner.account).fetch(url);
+      if (!result.ok) reject('暂时无法读取存档的创伤牌库，请重试。', 503);
+      savedTrauma = await result.json();
+      const { owner, revision } = room;
+      room = this.load();
+      if (room.owner?.account !== owner.account || room.owner?.profile !== owner.profile
+          || room.revision !== revision) {
+        reject('小队状态已更新，请确认备战后重试。', 409);
+      }
+    }
+    const result = this.action(room, actor, body, room.secrets.players.slice(), savedTrauma);
     if (["public-lobby", "end", "round", "squad-phase", "squad-start", "squad-host-seat", "squad-remove-player", "squad-disband"].includes(body.type)) await this.syncDirectory(room);
     return result;
   }
@@ -474,7 +490,7 @@ export class BattleRoom extends DurableObject {
     return response(this.view(room, { role: 'player', seat }));
   }
 
-  action(room, actor, body, previousPlayers) {
+  action(room, actor, body, previousPlayers, savedTrauma) {
     if (actor.role === 'viewer') reject('投屏页面只能查看。', 403);
     if (typeof body.id !== 'string' || !/^[a-f0-9-]{36}$/.test(body.id)) reject('操作编号无效。');
     if (this.sql.exec('SELECT 1 FROM actions WHERE id = ?', body.id).toArray().length) {
@@ -483,7 +499,7 @@ export class BattleRoom extends DurableObject {
     if (room.closed) reject(room.squad ? '小队已解散。' : '本场战斗已结束。', 409);
     const previousProjection = room.projection;
     const previousBp = room.bpRequest;
-    this.apply(room, actor, body);
+    this.apply(room, actor, body, savedTrauma);
     recordBattleActivity(room, actor, body, previousProjection, previousBp);
     room.revision++;
     this.ctx.storage.transactionSync(() => {
@@ -498,14 +514,14 @@ export class BattleRoom extends DurableObject {
     return response(this.view(room, actor));
   }
 
-  apply(room, actor, body) {
+  apply(room, actor, body, savedTrauma) {
     if (body.type === 'squad-start' && actor.role === 'host' && room.squad?.phase === 'prep' && body.battleConfig) {
       const available = room.squad.abilityOptions;
       if (!available) reject('此小队沿用已保存的战斗配置。', 409);
       try { room.configuration = battleConfig.prepare(body.battleConfig, available); }
       catch (error) { reject(error.message); }
     }
-    if (typeof body.type === 'string' && body.type.startsWith('squad-')) return applySquad(room, actor, body, randomInt);
+    if (typeof body.type === 'string' && body.type.startsWith('squad-')) return applySquad(room, actor, body, randomInt, savedTrauma);
     if (room.squad && body.type !== 'public-lobby'
       && (room.squad.phase !== 'battle' || body.battleNumber !== room.squad.battleNumber)) reject('当前战斗已结束或已经切换。', 409);
     if (['turn-phase', 'turn-take', 'turn-finish'].includes(body.type)) return applyTurn(room, actor, body);

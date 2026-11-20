@@ -136,7 +136,7 @@ function sameTitanPanel(titan, kit, other) {
     && inventory.loadoutTitan(titan, kit.titanPanelId).panelId === inventory.loadoutTitan(titan, other.titanPanelId).panelId;
 }
 
-export function applySquad(room, actor, body, randomInt) {
+export function applySquad(room, actor, body, randomInt, savedTrauma) {
   const squad = room.squad;
   if (!squad) fail('此房间不是常驻小队。', 409);
   const host = actor.role === 'host';
@@ -178,7 +178,8 @@ export function applySquad(room, actor, body, randomInt) {
     room.battleGoal = text(body.goal, 1200);
     delete room.bpRequest;
     delete room.secondAbility;
-    const trauma = createTrauma(squad.cycle, body.tutorial === true, randomInt);
+    if (savedTrauma) squad.cycle = savedTrauma.cycle;
+    const trauma = createTrauma(squad.cycle, body.tutorial === true && squad.cycle === 'c1', randomInt, savedTrauma?.configuration);
     if (latestBattleRoll(room)) squad.lastBattleRoll = latestBattleRoll(room);
     refreshCombatKit(room);
     room.priorityTarget = priorityTarget({ heroes: room.heroes });

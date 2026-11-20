@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>创伤牌库 · ATO Assistant</title>
+  <link rel="stylesheet" href="./squad.css?v=3">
+  <script src="../technology/gear-inventory.js" defer></script>
+  <script src="./trauma-library.js" defer></script>
+</head>
+<body>
+  <main>
+    <header class="squad-head"><a href="/">主控台</a><h1>创伤牌库</h1></header>
+    <p id="squadStatus" role="status">正在读取存档…</p>
+    <button type="button" data-reload hidden>重新读取</button>
+    <section class="squad-panel squad-stack" data-library aria-label="开战牌库" hidden>
+      <h2 data-save-name></h2>
+      <p class="squad-sub">每场战斗按此配置准备创伤牌库。变更自动存档，从下场战斗生效。战斗中抽取、保留或临时加入的牌随本场结算。</p>
+      <div class="squad-row" data-decks role="group" aria-label="险情等级"></div>
+      <div class="squad-gear trauma-library-cards" data-cards></div>
+    </section>
+  </main>
+</body>
+</html>

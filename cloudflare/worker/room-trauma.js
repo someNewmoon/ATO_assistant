@@ -14,18 +14,65 @@ function shuffle(pile, randomInt) {
   }
 }
 
-export function createTrauma(cycle, tutorial, randomInt) {
+export function createTrauma(cycle, tutorial, randomInt, configuration) {
   if (!cycles.includes(cycle) || (tutorial && cycle !== 'c1')) fail('请选择有效的故事集和教程设置。');
+  const config = normalizeTraumaConfig(configuration, cycle);
   const piles = Object.fromEntries(decks.map(deck => [deck, []]));
   for (const card of cardList) {
-    if (card.base && allowed(card, cycle) && !(tutorial && card.tutorialExcluded)) piles[card.deck].push(card.id);
+    if (!allowed(card, cycle) || config.excluded.includes(card.id) || (tutorial && card.tutorialExcluded)) continue;
+    if (card.base || (config.included.includes(card.id) && card.id !== 'AM0360')) piles[card.deck].push(card.id);
   }
   Object.values(piles).forEach(pile => shuffle(pile, randomInt));
-  return { cycle, tutorial, piles, drawn: [], tracks: {}, excluded: [], highestDanger: 0 };
+  return { cycle, tutorial, piles, drawn: [], tracks: {}, excluded: config.excluded, highestDanger: 0,
+    ...(config.included.includes('AM0360') && { hades: true }) };
 }
 
 function allowed(card, cycle) {
   return !card.cycles || card.cycles.includes(cycle);
+}
+
+function persistentCard(card, cycle) {
+  return card && allowed(card, cycle) && card.return !== 'temporary';
+}
+
+export function normalizeTraumaConfig(value, cycle) {
+  const included = cardList.filter(card => persistentCard(card, cycle) && !card.base && !card.threshold
+    && Array.isArray(value?.included) && value.included.includes(card.id));
+  const exclude = Array.isArray(value?.excluded) ? value.excluded : [];
+  return {
+    included: included.map(card => card.id),
+    excluded: cardList.filter(card => persistentCard(card, cycle)
+      && (included.some(variant => variant.replaces === card.id)
+        || (card.base && exclude.includes(card.id)))).map(card => card.id),
+  };
+}
+
+export function adjustTraumaConfig(value, cycle, id, enabled) {
+  const card = cards.get(id);
+  if (!persistentCard(card, cycle) || card.threshold || typeof enabled !== 'boolean') fail('这张牌不能用于当前故事集的创伤牌库。');
+  const config = normalizeTraumaConfig(value, cycle);
+  if (enabled) {
+    config.included = config.included.filter(other => cards.get(other).replaces !== id);
+    config.included.push(id);
+    config.excluded = config.excluded.filter(other => other !== id);
+  } else {
+    config.included = config.included.filter(other => other !== id);
+    config.excluded = config.excluded.filter(other => other !== card.replaces);
+    config.excluded.push(id);
+  }
+  return normalizeTraumaConfig(config, cycle);
+}
+
+export function traumaConfigView(value, cycle) {
+  const { included, excluded } = normalizeTraumaConfig(value, cycle);
+  return cardList.filter(card => persistentCard(card, cycle)).map(card => ({
+    ...card, enabled: included.includes(card.id) || ((card.base || Boolean(card.threshold)) && !excluded.includes(card.id)),
+  }));
+}
+
+export function savedTraumaConfig(campaign, profile, cycle) {
+  const perProfile = campaign.sections.trauma?.users?.[profile] || campaign.sections.trauma?.accounts?.[profile];
+  return perProfile?.cycles?.[cycle] ?? null;
 }
 
 function trackFor(room, seat) {

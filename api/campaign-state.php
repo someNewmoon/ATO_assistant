@@ -42,7 +42,7 @@ session_start();
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store');
 
-$allowedSections = ['dashboard', 'map', 'record', 'technology', 'heroes', 'aibp', 'story', 'theatre'];
+$allowedSections = ['dashboard', 'map', 'record', 'technology', 'heroes', 'aibp', 'story', 'theatre', 'trauma'];
 $usersFile = $dataDir . DIRECTORY_SEPARATOR . 'ato-users.json';
 $secondScreensFile = $dataDir . DIRECTORY_SEPARATOR . 'ato-second-screens.json';
 // 必须比 php.ini 的 post_max_size（默认 8M）小：请求体一旦超过 post_max_size，
@@ -111,6 +111,7 @@ function default_campaign(): array {
       'aibp' => null,
       'story' => null,
       'theatre' => null,
+      'trauma' => null,
     ],
     'sectionRevisions' => [
       'dashboard' => 0,
@@ -121,6 +122,7 @@ function default_campaign(): array {
       'aibp' => 0,
       'story' => 0,
       'theatre' => 0,
+      'trauma' => 0,
     ],
   ];
 }

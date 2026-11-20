@@ -2627,6 +2627,7 @@
         <a class="record-card-link" href="./map/index.html" data-cycle-link><span class="nav-icon" aria-hidden="true" style="--nav-icon-w:16px;--nav-icon-h:16px;--icon-src:url(../assets/icons/map.svg?v=apk-ui-a72da92bdf63)"></span>地图</a>
         <a class="record-card-link" href="./story/index.html" data-cycle-link data-story-book-link><span class="nav-icon" aria-hidden="true" style="--nav-icon-w:16px;--nav-icon-h:16px;--icon-src:url(../assets/icons/story.svg?v=apk-ui-a72da92bdf63)"></span>故事书</a>
         <a id="theatreLink" class="record-card-link" href="./theatre/index.html" data-cycle-link hidden><span class="nav-icon" aria-hidden="true" style="--nav-icon-w:15px;--nav-icon-h:17px;--icon-src:url(../assets/icons/theatre-nav.svg?v=apk117)"></span><span data-term-variant="fan" data-language-ignore>忆识剧场</span><span data-term-variant="official" data-language-ignore hidden>幻忆剧场</span><span data-term-variant="en" data-language-ignore hidden>Mnestis Theatre</span></a>
+        <a class="record-card-link" href="./aibp/trauma" data-online-trauma hidden>创伤牌库</a>
         <a class="record-card-link" href="./aibp/squads" data-online-squads hidden><span class="nav-icon" aria-hidden="true" style="--nav-icon-w:18px;--nav-icon-h:18px;--icon-src:url(../assets/icons/argonauts.svg?v=apk-ui-a72da92bdf63)"></span>联机小队</a>
       </nav>
       <label class="title-cycle-control">
@@ -14242,7 +14243,7 @@
     // top-level profiles/legacyDashboard copies of the same file. This is the
     // server-side state only: data that lives purely in the browser (for example
     // the AIBP piles kept in localStorage) is deliberately not part of it.
-    const backupSectionIds = ["dashboard", "map", "record", "technology", "heroes", "aibp", "story", "theatre"];
+    const backupSectionIds = ["dashboard", "map", "record", "technology", "heroes", "aibp", "story", "theatre", "trauma"];
 
     // 固定使用北京时间，不受浏览器或服务器所在时区影响；保留明确的 UTC+8 偏移。
     function beijingTimestamp(value = Date.now()) {
@@ -14862,6 +14863,6 @@
   <script src="./assets/term-language.js?v=20261114-picker-label1"></script>
   <script src="./assets/update/app-version.js?v=3.8.6-rc.1"></script>
   <script src="./assets/update/update-check.js?v=3"></script>
-<script src="./assets/quick-battle.js?v=20261118-hub" defer></script>
+<script src="./assets/quick-battle.js?v=20261120-trauma" defer></script>
 </body>
 </html>

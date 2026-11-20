@@ -106,6 +106,7 @@
       + (squad.phase !== 'battle' ? button('visibility', room.publicLobby ? '关闭快速加入' : '开放快速加入', !room.publicLobby) : '')
       + (squad.phase === 'story' ? anchor(storyURL(), '打开故事书') + button('phase', '开启备战', 'prep') : '')
       + (prep ? anchor(api.link('/aibp/', id), '选择骇物并开战') + button('phase', '返回读剧情', 'story') : '')
+      + anchor('/aibp/trauma', '创伤牌库', ' target="_blank" rel="noopener"')
       + (squad.phase === 'battle' ? anchor(battleURL(actor.role), '打开战斗主控台') : '')
       + button('disband', '解散小队') + '</div>'
       + (squad.phase === 'story' ? '<details data-story-input><summary>手动投屏段落</summary><form data-form="story" class="squad-form">'

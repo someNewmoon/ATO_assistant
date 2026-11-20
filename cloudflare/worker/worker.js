@@ -4,6 +4,7 @@ import inventory from '../../technology/gear-inventory.js';
 import { ascensionIdentity, ascendCampaignGear } from './gear-ascension.js';
 import { battleRequest, createBattleRoom, squadAbilityOptions, squadHeroStats, squadCampaignStock } from './battle-room.js';
 export { BattleRoom, BattleDirectory } from './battle-room.js';
+import { adjustTraumaConfig, normalizeTraumaConfig, savedTraumaConfig, traumaConfigView } from './room-trauma.js';
 import {
   ApiError, activeCycle, appendNotes, checkAccount, defaultCampaign, errorResponse,
   importSections, object, response, sections, writeSection,
@@ -15,7 +16,7 @@ const sessionLifetime = 60 * 60 * 24 * 14;
 const maximumSave = 6 * 1024 * 1024;
 const encoder = new TextEncoder();
 const authActions = new Set(['login', 'register']);
-const campaignActions = new Set(['me', 'logout', 'import-sections', 'ascend-gear']);
+const campaignActions = new Set(['me', 'logout', 'import-sections', 'ascend-gear', 'trauma-library']);
 
 function toHex(bytes) {
   return Array.from(new Uint8Array(bytes), byte => byte.toString(16).padStart(2, '0')).join('');
@@ -159,6 +160,12 @@ export class CampaignAccount extends DurableObject {
     const id = request.headers.get('x-ato-account');
     const user = { id, username: id };
     try {
+      if (url.origin === 'https://campaign.internal' && url.pathname === '/trauma-config' && request.method === 'GET') {
+        const profile = url.searchParams.get('profile');
+        const campaign = this.loadCampaign();
+        const cycle = this.traumaCycle(campaign, profile);
+        return response({ cycle, configuration: normalizeTraumaConfig(savedTraumaConfig(campaign, profile, cycle), cycle) });
+      }
       if (authActions.has(action)) return await this.authenticate(request, url, action, user);
       const token = tokenFrom(request);
       const hash = token ? await sessionHash(token) : '';
@@ -171,6 +178,7 @@ export class CampaignAccount extends DurableObject {
       if (!authenticated) throw new ApiError(401, 'Please log in first.', { code: 'AUTH_REQUIRED' });
 
       if (url.pathname.startsWith('/api/battle-room/')) return await this.squadHome(request, url, user);
+      if (action === 'trauma-library') return await this.traumaLibrary(request, user);
       if (action === 'second-screen' && url.searchParams.get('preview') === 'aibp') {
         if (request.method !== 'GET') throw new ApiError(405, '投屏需要 GET。');
         const state = this.loadCampaign();
@@ -256,6 +264,44 @@ export class CampaignAccount extends DurableObject {
     } finally {
       this.pendingSquads.delete(profile);
     }
+  }
+
+  traumaCycle(campaign, profile) {
+    const cycle = campaign.sections.dashboard?.profiles?.[profile]?.activeCycleId;
+    return /^c[1-5]$/.test(cycle) ? cycle : 'c1';
+  }
+
+  storeTrauma(campaign, profile, cycle, configuration) {
+    const current = campaign.sections.trauma?.users?.[profile] || campaign.sections.trauma?.accounts?.[profile];
+    writeSection(campaign, 'trauma', { cycles: { ...current?.cycles, [cycle]: configuration } }, profile, new Set());
+    const updatedAt = new Date().toISOString();
+    this.sql.exec('INSERT OR REPLACE INTO saves VALUES (?, ?, ?)', 'trauma',
+      JSON.stringify(campaign.sections.trauma), campaign.sectionRevisions.trauma);
+    this.sql.exec("INSERT OR REPLACE INTO metadata VALUES ('updatedAt', ?)", updatedAt);
+  }
+
+  async traumaLibrary(request, user) {
+    if (!['GET', 'POST'].includes(request.method)) throw new ApiError(405, '需要 GET 或 POST。');
+    let campaign = this.loadCampaign();
+    const profile = campaign.sections.dashboard?.activeProfileId || 'default';
+    const cycle = this.traumaCycle(campaign, profile);
+    if (request.method === 'POST') {
+      const payload = await readPayload(request, 4096);
+      checkAccount(user, payload);
+      campaign = this.storage.transactionSync(() => {
+        const current = this.loadCampaign();
+        if ((current.sections.dashboard?.activeProfileId || 'default') !== profile || this.traumaCycle(current, profile) !== cycle
+            || payload.profile !== profile || payload.cycle !== cycle || payload.revision !== current.sectionRevisions.trauma) {
+          throw new ApiError(409, '存档或牌库已更新，请重新读取后再调整。');
+        }
+        const config = adjustTraumaConfig(savedTraumaConfig(current, profile, cycle), cycle, payload.card, payload.enabled);
+        this.storeTrauma(current, profile, cycle, config);
+        return current;
+      });
+    }
+    return response({ ok: true, profile, cycle, saveName: campaign.sections.dashboard?.profiles?.[profile]?.name || '默认存档',
+      account: user.id, revision: campaign.sectionRevisions.trauma,
+      catalog: traumaConfigView(savedTraumaConfig(campaign, profile, cycle), cycle) });
   }
 
   async authenticate(request, url, action, user) {

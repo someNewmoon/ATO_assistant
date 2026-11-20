@@ -1,4 +1,4 @@
-export const sections = ['dashboard', 'map', 'record', 'technology', 'heroes', 'aibp', 'story', 'theatre'];
+export const sections = ['dashboard', 'map', 'record', 'technology', 'heroes', 'aibp', 'story', 'theatre', 'trauma'];
 const cycleIds = new Set(['c1', 'c2', 'c3', 'c4', 'c5']);
 const notesSections = new Set(['record', 'technology', 'heroes', 'aibp', 'story']);
 

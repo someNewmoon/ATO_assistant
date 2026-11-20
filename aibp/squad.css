@@ -47,3 +47,9 @@ button,.squad-action{cursor:pointer}button:disabled{opacity:.52;cursor:default}.
 .squad-gear .squad-gear-card input { width:auto; }
 .squad-gear .squad-gear-card input[type="number"] { width:4.2rem; }
 .squad-roster [data-action="remove-player"] { margin:.35rem 0; }
+
+[data-decks] button[aria-pressed="true"] { background:var(--accent); color:var(--action-ink); }
+.trauma-library-cards { max-height:none; }
+.trauma-library-cards img[data-gear-image] { aspect-ratio:5/7; }
+.trauma-library-cards label { cursor:pointer; }
+.trauma-library-cards input[type="checkbox"] { min-height:0; }

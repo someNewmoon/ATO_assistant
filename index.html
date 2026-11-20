@@ -1998,7 +1998,8 @@
       margin: 0 0 0 auto;
     }
 
-    .step-actions a {
+    .step-actions a,
+    .step-actions .adventure-roll {
       min-height: 30px;
       display: inline-flex;
       align-items: center;
@@ -2015,7 +2016,8 @@
       text-align: center;
     }
 
-    .step-actions a:hover {
+    .step-actions a:hover,
+    .step-actions .adventure-roll:enabled:hover {
       border-color: var(--accent);
       color: var(--accent);
     }
@@ -2675,6 +2677,7 @@
             <div>
               <h2>日期轨</h2>
               <span id="dateTrackMeta" class="date-track-meta"></span>
+              <button id="addPharosEvent" class="secondary" type="button" hidden>添加航标梦境</button>
             </div>
           </div>
           <div id="dateTrackList" class="panel-body date-track-list"></div>
@@ -3924,6 +3927,7 @@
       surveyConstantsTouchedDay: null,
       latestSurveyAdventureAction: null,
       latestSimpleAdventureAction: null,
+      pharosTimeline: {},
       pharosDreams: null,
       pharosDreamsDay: null,
       pharosDreamsActive: null,
@@ -3999,6 +4003,7 @@
       resourcePackButton: document.querySelector("#resourcePackButton"),
       resourcePackStatus: document.querySelector("#resourcePackStatus"),
       dateTrackMeta: document.querySelector("#dateTrackMeta"),
+      addPharosEvent: document.querySelector("#addPharosEvent"),
       dateTrackList: document.querySelector("#dateTrackList"),
       acclimationReminder: document.querySelector("#acclimationReminder"),
       acclimationReminderText: document.querySelector("#acclimationReminderText"),
@@ -5202,6 +5207,7 @@
         surveyConstantsTouchedDay,
         latestSurveyAdventureAction: isPlainObject(value.latestSurveyAdventureAction) ? value.latestSurveyAdventureAction : null,
         latestSimpleAdventureAction: isPlainObject(value.latestSimpleAdventureAction) ? value.latestSimpleAdventureAction : null,
+        pharosTimeline: isPlainObject(value.pharosTimeline) ? cloneJson(value.pharosTimeline) : {},
         pharosDreams: isPlainObject(value.pharosDreams) ? value.pharosDreams : null,
         pharosDreamsDay,
         pharosDreamsActive: value.pharosDreams?.[value.pharosDreamsActive] ? String(value.pharosDreamsActive) : null,
@@ -7583,6 +7589,7 @@
     function validSurveyRrTarget(data, target) {
       if (!target?.itemId) return null;
       if (!state.surveyConstants.rr?.[target.itemId]) return null;
+      if (target.boxId && !state.surveyConstants.rr[target.boxId]) return null;
       return data?.rr?.some(([id]) => id === target.itemId) ? target : null;
     }
 
@@ -7636,7 +7643,7 @@
         title: row ? `${row[0]} · ${row[1]}` : "",
         href: getStoryHref({
           chapter: "rr-adventures",
-          entry: target.itemId,
+          entry: target.boxId === `${target.itemId}-goto` ? row?.[2]?.goTo || target.itemId : target.itemId,
         }),
       };
     }
@@ -7864,6 +7871,7 @@
         day: action.day,
         adventure: hub.title,
         box: action.boxId,
+        recordSlot: action.recordSlot,
         setAt: Math.max(0, Number(action.setAt || 0)),
       };
     }
@@ -8022,14 +8030,18 @@
     }
 
     async function syncAdventureActionToArgoRecord(action) {
-      if (!action) return;
+      if (!action) return false;
+      const profileId = archive.activeProfileId;
+      const accountId = sessionUser?.id || "";
+      const epoch = campaignSessionEpoch;
+      const sameAccount = () => epoch === campaignSessionEpoch && profileId === archive.activeProfileId;
 
       const localRecord = readLocalArgoRecord();
       let serverAvailable = false;
       let serverRecord = null;
       let serverRevision = 0;
       try {
-        const server = await readServerArgoRecord();
+        const server = await readServerArgoRecord(profileId);
         serverAvailable = server.available;
         serverRecord = server.record;
         serverRevision = server.revision || serverRevision;
@@ -8054,12 +8066,13 @@
       if (serverAvailable) {
         try {
           for (let attempt = 0; attempt < 3; attempt += 1) {
-            const writeResult = await writeServerArgoRecord(record, serverRevision);
+            if (!sameAccount()) return false;
+            const writeResult = await writeServerArgoRecord(record, serverRevision, profileId, accountId);
             if (!writeResult.conflict) {
               recordSyncChannel?.postMessage({ revision: writeResult.revision });
-              break;
+              return true;
             }
-            const latest = await readServerArgoRecord();
+            const latest = await readServerArgoRecord(profileId);
             serverRevision = latest.revision || serverRevision;
             record = applyAction(latest.record);
           }
@@ -8067,6 +8080,7 @@
           console.warn(error);
         }
       }
+      return false;
     }
 
     function syncSurveyAdventureToArgoRecord() {
@@ -8130,6 +8144,8 @@
       const explicitSlots = new Set(["alpha", "beta", "gamma", "delta", "epsilon", "lambda", "omicron", "sigma", "psi", "omega"]);
       if (action.recordSlot && explicitSlots.has(action.recordSlot)) {
         slot = action.recordSlot;
+      } else if (recordAdventureMiddleSlots(action.cycle, index).includes(action.recordSlot)) {
+        slot = action.recordSlot;
       } else if (action.box === "alpha" || action.box === "omega") {
         slot = action.box;
       } else {
@@ -8137,6 +8153,7 @@
         slot = middleSlots.find((candidate) => !record.adventures[`${prefix}-${candidate}`]) || "";
       }
       if (!slot) return "";
+      if (action.recordSlot && record.adventures[`${prefix}-${slot}`]) return "";
       delete record.adventures[prefix];
       record.adventures[`${prefix}-${slot}`] = true;
       return slot;
@@ -8255,7 +8272,7 @@
       });
     }
 
-    function restoreSurveyConstantHubSelection(itemId, boxId, interactionVersion, cycleId, dayKey) {
+    function restoreSurveyConstantHubSelection(itemId, boxId, interactionVersion, cycleId, dayKey, recordSlot = "") {
       if (!surveyConstantInteractionIsCurrent("hubs", itemId, boxId, interactionVersion)
           || currentCycleConfig().id !== cycleId || surveyConstantsDayKey() !== dayKey) return false;
       ensureTodaySurveyConstants();
@@ -8268,6 +8285,7 @@
         day: normalizeCampaignDay(state.day, cycleId),
         itemId,
         boxId,
+        ...(recordSlot && { recordSlot }),
         setAt: Date.now(),
       };
       setNextBattleTerrainFromHub(itemId, boxId);
@@ -8276,7 +8294,7 @@
       return true;
     }
 
-    function setSurveyConstant(groupId, itemId, boxId, checked) {
+    function setSurveyConstant(groupId, itemId, boxId, checked, recordSlot = "") {
       ensureTodaySurveyConstants();
       const interactionVersion = beginSurveyConstantInteraction(groupId, itemId, boxId);
       state.surveyConstantsTouchedDay = surveyConstantsDayKey();
@@ -8284,9 +8302,10 @@
         const key = surveyRrBoxKey(itemId, boxId);
         if (checked) {
           state.surveyConstants.rr[key] = true;
-          if (key === itemId) state.surveyConstants.activeRr = { itemId };
+          state.surveyConstants.activeRr = key === itemId ? { itemId } : { itemId, boxId: key };
         } else {
           delete state.surveyConstants.rr[key];
+          if (state.surveyConstants.activeRr?.boxId === key) state.surveyConstants.activeRr = { itemId };
           if (key === itemId) {
             // 追踪标写的是「若已标记，标记第二个框」：取消第一格时第二格不再成立，一并清掉。
 
@@ -8306,6 +8325,7 @@
             day: normalizeCampaignDay(state.day, currentCycleConfig().id),
             itemId,
             boxId,
+            ...(recordSlot && { recordSlot }),
             setAt: Date.now(),
           };
           setNextBattleTerrainFromHub(itemId, boxId);
@@ -8324,7 +8344,7 @@
       renderFlow();
       if (groupId !== "rr" && checked) {
         recordSyncChannel?.postMessage({ source: "dashboard-constant-pending" });
-        void syncSurveyAdventureToArgoRecord();
+        if (!recordSlot) void syncSurveyAdventureToArgoRecord();
         // Apply mnemos tag to hero record
         const surveyData = getCurrentSurveyConstantData();
         const hub = findSurveyHub(surveyData, itemId);
@@ -8340,7 +8360,7 @@
                 // A focus/visibility sync or a late server response can replace
                 // `state` while the prompt is open. Reapply this exact checkbox
                 // only if the user has not toggled it again in the meantime.
-                restoreSurveyConstantHubSelection(itemId, boxId, interactionVersion, cycleId, dayKey);
+                restoreSurveyConstantHubSelection(itemId, boxId, interactionVersion, cycleId, dayKey, recordSlot);
                 finishSurveyConstantMnemosSync();
               });
           }
@@ -8481,6 +8501,203 @@
         recordSyncChannel?.postMessage({ source: "dashboard-constant-pending" });
         void syncAdventureActionToArgoRecord(action);
       }
+    }
+
+    function adventureRollFaces(range) {
+      const match = /^(10|[1-9])(?:[-–](10|[1-9]))?$/.exec(String(range).trim());
+      if (!match) return [];
+      const first = Number(match[1]);
+      return Array.from({ length: Math.max(0, Number(match[2] || first) - first + 1) }, (_, i) => first + i);
+    }
+
+    function pickAdventureD10(rows, random = Math.random) {
+      // Keep one entry per die face, including each face of a range. Sampling
+      // the eligible faces is equivalent to rerolling until one is available.
+      const table = rows.flatMap(row => adventureRollFaces(row.range).map(() => row));
+      if (table.length !== 10 || new Set(rows.flatMap(row => adventureRollFaces(row.range))).size !== 10) return null;
+      const eligible = table.filter(row => row.available);
+      const choices = eligible.length ? eligible : table;
+      return { row: choices[Math.floor(random() * choices.length)], reset: !eligible.length };
+    }
+
+    function pickPharosDreamRoll(data, values, random = Math.random) {
+      const rows = data.boxes.map(row => {
+        const slots = simpleConstantSlotIds(row);
+        const slot = slots.find((id, i) => !values[id] && !(i === 0 && values[row[0]]));
+        return { range: row[1], slot: slot || slots[0], available: Boolean(slot), entry: row[3]?.entry || row[0] };
+      });
+      return pickAdventureD10(rows, random);
+    }
+
+    function pickRestAdventure(data, values, random = Math.random) {
+      return pickAdventureD10(data.rr.map(([id, , extra]) => {
+        const followUp = values[id] && extra?.goTo && !values[`${id}-goto`];
+        return {
+          range: id, id, slot: followUp ? `${id}-goto` : id,
+          entry: followUp ? extra.goTo : id, available: !values[id] || Boolean(followUp),
+        };
+      }), random);
+    }
+
+    function pickBranchAdventure(data, column, cycle, record, values, random = Math.random) {
+      const branches = data.summary.map(({ hubId, story }) => {
+        const index = data.hubs.findIndex(hub => hub.id === hubId);
+        const slots = ["alpha", ...recordAdventureMiddleSlots(cycle, index), "omega"];
+        const recordSlot = slots.find(slot => !record.adventures?.[`${cycle}-${index}-${slot}`]);
+        return { range: story[column], hub: data.hubs[index], recordSlot, available: Boolean(recordSlot) };
+      });
+      const branch = pickAdventureD10(branches, random);
+      if (!branch || branch.reset) return null;
+      const { hub, recordSlot } = branch.row;
+      const boxes = hub.boxes.filter(([, range]) => adventureRollFaces(range).length);
+      if (recordSlot === "alpha" || recordSlot === "omega") return { hub, recordSlot, slot: recordSlot, reset: [] };
+      const result = pickAdventureD10(boxes.map(([id, range]) => ({
+        range, id, available: !values.hubs?.[hub.id]?.[id],
+      })), random);
+      return result && { hub, recordSlot, slot: result.row.id, reset: result.reset ? boxes.map(([id]) => id) : [] };
+    }
+
+    let adventureRollBusy = false;
+    let pendingAdventureRoll = null;
+
+    function adventureRollContext() {
+      return JSON.stringify([campaignSessionEpoch, archive.activeProfileId, currentCycleConfig().id, state.day]);
+    }
+
+    async function runAdventureRoll(key, prepare) {
+      if (adventureRollBusy || !ownsDashboardWriteLease()) return;
+      const context = adventureRollContext();
+      const stillCurrent = () => adventureRollContext() === context && ownsDashboardWriteLease();
+      adventureRollBusy = true;
+      try {
+        if (pendingAdventureRoll?.context === context && pendingAdventureRoll.key !== key) return;
+        if (pendingAdventureRoll?.context !== context) {
+          const plan = await prepare();
+          if (!plan || !stillCurrent()) return;
+          pendingAdventureRoll = { key, context, link: plan.link, sync: plan.sync };
+          plan.mark();
+        }
+        renderFlow();
+        if (!await flushCampaignSave() || !stillCurrent()) return;
+        const pending = pendingAdventureRoll;
+        if (pending.sync && !await pending.sync()) {
+          if (stillCurrent()) window.alert("阿尔戈号冒险记录尚未保存，请重试打开同一段落。");
+          return;
+        }
+        if (!stillCurrent()) return;
+        const { href, bgm } = pending.link;
+        pendingAdventureRoll = null;
+        window.ATO_BGM?.setScene?.(bgm);
+        if (window.ATO_PAGE_ROUTER?.focusOrNavigate) await window.ATO_PAGE_ROUTER.focusOrNavigate(href);
+        else window.location.href = href;
+      } catch (error) {
+        if (stillCurrent()) window.alert(error?.message || String(error));
+      } finally {
+        adventureRollBusy = false;
+        renderFlow();
+        renderDateTrack();
+      }
+    }
+
+    function rollRestAdventure() {
+      return runAdventureRoll("rest", () => {
+        const data = getCurrentSurveyConstantData();
+        const values = ensureTodaySurveyConstants().rr;
+        const result = pickRestAdventure(data, values);
+        if (!result) return;
+        const { id, slot, entry } = result.row;
+        return {
+          link: { bgm: "rest", href: getStoryHref({ chapter: "rr-adventures", entry: result.reset ? id : entry }) },
+          mark() {
+            if (result.reset) for (const [rowId] of data.rr) {
+              delete values[rowId];
+              delete values[`${rowId}-goto`];
+            }
+            setSurveyConstant("rr", id, result.reset ? id : slot, true);
+          },
+        };
+      });
+    }
+
+    function rollBranchAdventure() {
+      return runAdventureRoll("branch", async () => {
+        const data = getCurrentSurveyConstantData();
+        const column = surveyStoryColumnIndex(data, currentStoryCardLabel());
+        if (column < 0) throw new Error("请先在剧情卡牌进度中设置当前卡面。");
+        const cycle = currentCycleConfig().id;
+        const result = await readServerArgoRecord();
+        if (!result.available) throw new Error("请连接阿尔戈号记录表后再掷骰。");
+        const values = ensureTodaySurveyConstants();
+        const selection = pickBranchAdventure(data, column, cycle, result.record, values);
+        if (!selection) throw new Error("当前剧情卡牌可用的分支已用完，请核对冒险记录轨。");
+        const { hub, recordSlot, slot, reset } = selection;
+        const action = { cycle, day: normalizeCampaignDay(state.day, cycle), adventure: hub.title, box: slot, recordSlot };
+        return {
+          sync: () => syncAdventureActionToArgoRecord(action),
+          link: { bgm: "hub", href: getStoryHref({ chapter: surveyHubChapterKey(data, hub.id), entry: surveyStoryEntryId(slot) }) },
+          mark() {
+            for (const id of reset) delete values.hubs[hub.id][id];
+            setSurveyConstant("hubs", hub.id, slot, true, recordSlot);
+          },
+        };
+      });
+    }
+
+    function addPharosTimelineEvent() {
+      if (!ownsDashboardWriteLease() || currentPharosDreamConstants()?.module !== "dreams-of-pharos") return;
+      const cycle = currentCycleConfig().id;
+      const input = window.prompt("哪一天发生航标梦境？", String(state.day))?.trim().toUpperCase();
+      if (input == null) return;
+      if (!(/^\d+$/.test(input) && Number.isSafeInteger(Number(input))) &&
+          !dateTrackData[cycle]?.entries.some(entry => entry.day === input)) {
+        window.alert("请输入有效的时间线日期。");
+        return;
+      }
+      const day = normalizeCampaignDay(input, cycle);
+      state.pharosTimeline ||= {};
+      state.pharosTimeline[crypto.randomUUID()] = { day };
+      saveState();
+      renderFlow();
+      renderDateTrack();
+    }
+
+    function pharosTimelineForDay(day) {
+      return Object.entries(state.pharosTimeline || {}).filter(([, event]) => String(event?.day) === String(day));
+    }
+
+    function rollPharosDream(id) {
+      return runAdventureRoll(`pharos:${id}`, () => {
+        const event = state.pharosTimeline?.[id];
+        const data = currentPharosDreamConstants();
+        if (!event || String(event.day) !== String(state.day) || data?.module !== "dreams-of-pharos") return;
+        const values = ensureTodayPharosDreams();
+        const result = event.entry ? null : pickPharosDreamRoll(data, values);
+        const entry = event.entry || result?.row.entry;
+        if (!entry) return;
+        return {
+          link: { bgm: "pharos", href: getStoryHref({ chapter: data.module, entry }) },
+          mark() {
+            if (!result) return;
+            if (result.reset) for (const row of data.boxes) {
+              delete values[row[0]];
+              for (const slot of simpleConstantSlotIds(row)) delete values[slot];
+            }
+            event.entry = entry;
+            setPharosDreamConstant(result.row.slot, true);
+          },
+        };
+      });
+    }
+
+    function createAdventureRollButton(key, label, action) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "adventure-roll";
+      const pending = pendingAdventureRoll?.context === adventureRollContext() ? pendingAdventureRoll : null;
+      button.textContent = pending?.key === key ? (adventureRollBusy ? "正在保存定数框…" : "保存并打开段落") : label;
+      button.disabled = adventureRollBusy || !ownsDashboardWriteLease() || Boolean(pending && pending.key !== key);
+      button.addEventListener("click", () => { void action(); });
+      return button;
     }
 
     function setMainStoryConstant(boxId, checked) {
@@ -8975,6 +9192,18 @@
         });
         const actions = document.createElement("div");
         actions.className = "step-actions";
+        if (step.id === "survey" && getCurrentSurveyConstantData()) {
+          actions.append(
+            createAdventureRollButton("rest", "休整冒险 · 掷 1d10", rollRestAdventure),
+            createAdventureRollButton("branch", "分支冒险 · 掷 1d10", rollBranchAdventure),
+          );
+        }
+        if (step.id === "story" && currentPharosDreamConstants()?.module === "dreams-of-pharos") {
+          for (const [id, event] of pharosTimelineForDay(state.day)) {
+            actions.appendChild(createAdventureRollButton(`pharos:${id}`,
+              event.entry ? "继续阅读航标梦境" : "航标梦境 · 掷 1d10 并打开", () => rollPharosDream(id)));
+          }
+        }
         getStepLinks(step).forEach((link) => {
           const anchor = document.createElement("a");
           anchor.href = link.href;
@@ -13096,7 +13325,8 @@
       const technologyEvents = typeof structureTechEvents === "function" ? structureTechEvents().filter(event => !event.skipTimeline) : [];
       const loop = state.timeLoop;
       const loopEnds = loop?.settledEndDays ?? loop?.settledDays ?? [];
-      const extraDays = new Set([state.day, loopEndDay, ...loopEnds, ...technologyEvents.flatMap((event) => [event.dueDay,
+      const pharosDays = Object.values(state.pharosTimeline || {}).map(event => event?.day);
+      const extraDays = new Set([state.day, loopEndDay, ...loopEnds, ...pharosDays, ...technologyEvents.flatMap((event) => [event.dueDay,
         Number(event.cooldownUntilDay) > Number(event.createdDay) ? event.cooldownUntilDay : null])]
         .filter((day) => day !== null && day !== "" && Number.isSafeInteger(Number(day)) && Number(day) > lastNumericDay)
         .map(Number));
@@ -13729,6 +13959,12 @@
       const config = currentCycleConfig();
       const track = dateTrackData[config.id];
       elements.dateTrackList.innerHTML = "";
+      const addPharos = elements.addPharosEvent;
+      if (addPharos) {
+        addPharos.hidden = currentPharosDreamConstants()?.module !== "dreams-of-pharos";
+        addPharos.disabled = !ownsDashboardWriteLease();
+        addPharos.onclick = addPharosTimelineEvent;
+      }
       if (!track) {
         elements.dateTrackMeta.textContent = "此循环暂无记录表日期轨。";
         elements.dateTrackList.innerHTML = '<div class="empty">暂无日期轨。</div>';
@@ -13774,6 +14010,25 @@
           ${eventText ? `<span class="date-track-event">${escapeHtml(eventText)}</span>` : ""}
           ${noteText ? `<span class="date-track-note" data-term-ignore data-user-content>${escapeHtml(noteText)}</span>` : ""}
         `;
+        if (entry.day != null && state.pharosTimeline) for (const [id, event] of pharosTimelineForDay(entry.day)) {
+          const label = document.createElement("span");
+          label.className = "date-track-event";
+          label.textContent = event.entry ? "航标梦境 · 已选段落" : "航标梦境 · 待结算";
+          item.appendChild(label);
+          if (!event.entry) {
+            const remove = document.createElement("button");
+            remove.type = "button";
+            remove.className = "secondary";
+            remove.textContent = "移除航标梦境";
+            remove.disabled = !ownsDashboardWriteLease();
+            remove.onclick = () => {
+              if (!ownsDashboardWriteLease() || state.pharosTimeline?.[id]?.entry) return;
+              delete state.pharosTimeline[id];
+              saveState(); renderFlow(); renderDateTrack();
+            };
+            item.appendChild(remove);
+          }
+        }
         if (technologyItems.length) {
           const schedule = document.createElement("div");
           schedule.className = "date-track-tech-events";

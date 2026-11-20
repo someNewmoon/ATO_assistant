@@ -29,6 +29,7 @@ function setup(extra = {}) {
     currentCycleConfig: () => ({id: 'c4'}),
     archive: { activeProfileId: 'default' }, campaignSessionEpoch: 1, campaignRestoreInFlight: false,
     ownsDashboardWriteLease: () => true, flushCampaignSave: async () => true,
+    todaySettlementItems: () => [],
     elements: { appShell: { inert: false } }, window: { alert: message => { throw new Error(message); } },
     ...extra,
   });

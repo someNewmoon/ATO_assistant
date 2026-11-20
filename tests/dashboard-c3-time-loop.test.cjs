@@ -63,6 +63,7 @@ function harness() {
     readLocalArgoRecord: () => ({}), readServerArgoRecord: async () => ({ record: copy(record()) }),
     mergeArgoRecords: value => value, jsonEqual: (a, b) => JSON.stringify(a) === JSON.stringify(b),
     currentCycleConfig: () => ({ id: 'c3' }), ownsDashboardWriteLease: () => true,
+    todaySettlementItems: () => [],
     dateTrackData: { c3: { entries: [] } },
     elements: { appShell: { inert: false } },
     document: { createElement: node, createTextNode: textContent => ({ textContent }) },

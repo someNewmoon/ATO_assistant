@@ -12,6 +12,7 @@ function harness() {
   const c = vm.createContext({
     state: copy(server), archive: { activeProfileId: 'p' }, campaignSessionEpoch: 1,
     campaignRestoreInFlight: false, ownsDashboardWriteLease: () => true,
+    todaySettlementItems: () => [],
     currentCycleConfig: () => ({ id: 'c1' }), dateTrackData: { c1: { entries: [{ day: 1 }, { day: 2 }, { day: 3 }] } },
     elements: { appShell: { inert: false } }, window: { alert: text => alerts.push(text) },
     saveState() {}, syncInputs() {}, renderFlow() {}, renderDateTrack() {},
@@ -50,6 +51,19 @@ test('failed closing-day save preserves the day and completion flags', async () 
   assert.deepEqual(h.settlementDays, []);
   assert.equal(h.alerts.length, 1);
   assert.equal(h.c.elements.appShell.inert, false);
+});
+
+test('declining to advance with pending settlement leaves the day untouched', async () => {
+  const h = harness();
+  h.c.todaySettlementItems = () => [{ step: 'story', label: '剧情末尾 · 1 段内部之旅待结算' }];
+  let warning = '';
+  h.c.window.confirm = message => { warning = message; return false; };
+  h.c.flushCampaignSave = async () => { assert.fail('cancelled transition saved'); };
+  assert.equal(await h.c.nextDay(), false);
+  assert.match(warning, /内部之旅待结算/);
+  assert.equal(h.c.state.day, 1);
+  assert.equal(h.c.elements.appShell.inert, false);
+  assert.deepEqual(h.settlementDays, []);
 });
 
 test('rapid duplicate clicks wait for both saves and cannot skip an unarchived day', async () => {

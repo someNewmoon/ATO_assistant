@@ -186,6 +186,7 @@ function adventureRollHarness() {
     state: { day: 4, pharosTimeline: { today: { day: 4 }, later: { day: 5 } }, pharosDreams: {} },
     archive: { activeProfileId: 'test' }, campaignSessionEpoch: 1,
     currentCycleConfig: () => ({ id: 'c1' }), ownsDashboardWriteLease: () => true,
+    chooseAdventureRoll: async () => 'confirm',
     renderFlow: noop, renderDateTrack: noop, getStoryHref: ({ chapter, entry }) => chapter + '/' + entry,
     window: { ATO_PAGE_ROUTER: { focusOrNavigate: href => opened.push(href) } },
   });
@@ -203,6 +204,7 @@ test('休整：已标第一格的特殊结果打开第二段，整表标完才�
   const second = ctx.pickRestAdventure(table, { 1: true }, () => 0);
   assert.equal(second.row.slot, '1-goto');
   assert.equal(second.row.entry, '11');
+  assert.equal(second.face, 1);
   assert.equal(ctx.pickRestAdventure(table, { 1: true, '1-goto': true }, () => 0).row.id, '2');
   const full = Object.fromEntries(table.rr.flatMap(([id, , extra]) =>
     [[id, true], ...(extra?.goTo ? [[id + '-goto', true]] : [])]));
@@ -220,6 +222,7 @@ test('分支：按当前剧情列选分支，冒险记录轨决定 α、普通�
   const middle = select({ 'c1-0-alpha': true }, { hubs: { 'fated-conundrum': { '1-2': true } } });
   assert.equal(middle.recordSlot, 'mid1');
   assert.equal(middle.slot, '3-4');
+  assert.deepEqual(clone(middle.faces), [1, 3]);
   const marked = Object.fromEntries(['alpha', 'mid1', 'mid2', 'mid3'].map(id => ['c1-0-' + id, true]));
   assert.equal(select(marked).slot, 'omega');
   assert.equal(select({ ...marked, 'c1-0-omega': true }).hub.id, 'plight-of-the-people');
@@ -229,7 +232,7 @@ test('分支：按当前剧情列选分支，冒险记录轨决定 α、普通�
   assert.equal(select({}, {}, 0, () => 0.30).hub.id, 'plight-of-the-people');
 });
 
-test('航标梦境：今日事件保存标记后才跳转，失败重试和继续阅读都复用原段落', async () => {
+test('航标梦境：确认并保存骰点后打开，失败重试和继续阅读都复用原段落', async () => {
   const { ctx, opened } = adventureRollHarness();
   let marks = 0, save = false;
   ctx.setPharosDreamConstant = id => { ctx.state.pharosDreams[id] = true; marks++; };
@@ -242,11 +245,39 @@ test('航标梦境：今日事件保存标记后才跳转，失败重试和继�
   assert.equal(marks, 1);
   assert.ok(ctx.state.pharosDreams[entry]);
   assert.deepEqual(opened, []);
+  const result = clone(ctx.state.latestAdventureRoll);
+  assert.ok(result.faces[0] >= 1 && result.faces[0] <= 10);
+  assert.equal(result.route.entry, entry);
   save = true;
   await ctx.rollPharosDream('today');
+  assert.deepEqual(opened, ['dreams-of-pharos/' + entry]);
   await ctx.rollPharosDream('today');
   assert.equal(marks, 1);
   assert.deepEqual(opened, ['dreams-of-pharos/' + entry, 'dreams-of-pharos/' + entry]);
+  assert.deepEqual(clone(ctx.state.latestAdventureRoll), result);
+});
+
+test('D10 只标记确认的结果，重骰与取消不改动记录', async () => {
+  const { ctx, opened } = adventureRollHarness();
+  const actions = ['reroll', 'confirm', 'cancel'];
+  const shown = [], marked = [];
+  ctx.chooseAdventureRoll = async result => {
+    shown.push(result.faces[0]);
+    return actions.shift();
+  };
+  ctx.flushCampaignSave = async () => true;
+  let die = 3;
+  const prepare = () => {
+    const face = die++;
+    return { result: { faces: [face], title: String(face) }, route: { chapter: 'branch', entry: face },
+      mark: () => marked.push(face) };
+  };
+  await ctx.runAdventureRoll('branch', prepare);
+  await ctx.runAdventureRoll('branch', prepare);
+  assert.deepEqual(shown, [3, 4, 5]);
+  assert.deepEqual(marked, [4]);
+  assert.deepEqual(opened, ['branch/4']);
+  assert.equal(ctx.state.latestAdventureRoll.faces[0], 4);
 });
 
 test('航标梦境：跳过已满点数，整表已满时可重新抽选', () => {

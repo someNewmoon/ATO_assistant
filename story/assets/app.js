@@ -3366,6 +3366,7 @@
     // 做完字符定位（prepareHTML 校验的是源文字符数），改 DOM 才不会让图片挂不上。
     window.ATO_STORY_MARKS?.decorate?.(storyText);
     annotateEntityTextNodes(storyText);
+    window.ATO_STORY_RULE_HIGHLIGHTS?.decorate(storyText);
     refreshSecondScreenStoryContentToggle(Boolean(secondScreenStoryModeToggle?.checked));
   }
 

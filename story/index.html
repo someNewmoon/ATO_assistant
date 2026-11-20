@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>ATO 故事书跳转器</title>
     <link rel="stylesheet" href="./assets/styles.css?v=20261115-module-logo" />
+    <link rel="stylesheet" href="./assets/quick-settlement.css?v=20261120-ledger" />
     <link rel="stylesheet" href="../api/cycle-theme.css" />
   <script src="../story/data/english-source-data.js?v=20261011-english4"></script>
   <script src="../assets/theme.js?v=20261114-light-sidebar1" defer></script>
@@ -115,6 +116,7 @@
             <input type="checkbox" id="secondScreenStoryContentToggle" checked />
             第二屏显示图片
           </label>
+          <button id="storyRulesToggle" type="button" class="tts-btn" aria-pressed="true">规则高亮</button>
           <button id="entityBioToggle" type="button" class="entity-bio-toggle" aria-pressed="false" title="显示或隐藏人物小传">人物小传：关</button>
           <button id="ttsButton" type="button" class="tts-btn" title="朗读">朗读</button>
           <button id="ttsPauseButton" type="button" class="tts-btn" title="暂停朗读" aria-pressed="false" hidden>暂停</button>
@@ -139,6 +141,27 @@
         <div id="linkPanel" class="link-panel"></div>
       </footer>
     </main>
+
+    <button id="storySettlementOpen" type="button" aria-haspopup="dialog">剧情结算</button>
+    <dialog id="storySettlement" aria-labelledby="storySettlementTitle">
+      <form novalidate>
+        <header>
+          <h2 id="storySettlementTitle">剧情结算</h2>
+          <button type="button" data-settlement-close autofocus>关闭</button>
+          <p id="storySettlementContext"></p>
+        </header>
+        <fieldset aria-label="剧情结算数值"></fieldset>
+        <footer>
+          <section id="storySettlementBill" aria-labelledby="storySettlementBillTitle" hidden>
+            <h3 id="storySettlementBillTitle">本次变更</h3>
+            <ul aria-live="polite"></ul>
+          </section>
+          <p role="status"></p>
+          <a id="storySettlementRecord" href="../record/index.html" target="_blank" rel="noopener">打开记录表</a>
+          <button type="submit" disabled>确认保存</button>
+        </footer>
+      </form>
+    </dialog>
 
     <script src="../assets/campaign-session.js?v=20260917"></script>
     <script src="../assets/campaign-notes.js?v=20261015"></script>
@@ -170,7 +193,11 @@
     <script src="../aibp/squad-link.js?v=4"></script>
     <script src="./assets/cloud-library.js?v=3"></script>
     <script src="./assets/cloud-scans.js?v=1"></script>
-    <script src="./assets/app.js?v=20261120-official-scans"></script>
+    <script src="../assets/exploration-card-effects.js?v=20261120-ledger"></script>
+    <script src="../assets/story-doom-card-data.js?v=20261014-card-face-audit2"></script>
+    <script src="./assets/quick-settlement.js?v=20261120-marker-tracks"></script>
+    <script src="./assets/rule-highlights.js?v=20261120"></script>
+    <script src="./assets/app.js?v=20261120-quick-settlement"></script>
     <script src="./assets/centimanes.js?v=20261020-record-live1"></script>
     <script src="./assets/cryptic/glyph-catalog.js?v=20261004-manual1"></script>
     <script src="./assets/cryptic/vendor/text-format.js?v=20261004-manual1"></script>

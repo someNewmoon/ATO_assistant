@@ -136,12 +136,14 @@ test('斯巴达要塞只在移动步骤提醒，已探索也显示且不提供�
 });
 
 test('旧存档默认空科技日程，结构化记录独立于每日事件和日期备注', () => {
-  const { context: c } = harness(['normalizeStructureTechAutomation', 'normalizeState'], {
+  const { context: c } = harness(['normalizeStructureTechAutomation', 'storyRewardCount', 'normalizeState'], {
     defaultState: { day: 1, events: [] }, normalizeCampaignDay: value => value ?? 1,
     normalizeExploration: value => value || {}, normalizeCardTracks: value => value || {},
     normalizeNextBattleTerrain: value => value || {}, normalizeSurveyConstants: value => value,
   });
   assert.deepEqual(clone(c.normalizeState({}).techAutomation), { version: 1, events: {} });
+  assert.deepEqual(clone(c.normalizeState({}).storyRewards), { hope: 0, doom: 0 });
+  assert.deepEqual(clone(c.normalizeState({ storyRewards: { hope: 3, doom: -1 } }).storyRewards), { hope: 3, doom: 0 });
   const original = { day: 12, dateNotes: { 10: '玩家备注' }, events: [{ id: 'daily', done: true }],
     techAutomation: { version: 1, events: { reward: event('reward') } } };
   const normalized = c.normalizeState(original);
@@ -203,6 +205,7 @@ test('无冷却的发展交换保留凭据但不生成虚假的冷却事项或�
 test('超表科技日期稀疏补行，nextDay 仍按官方日期轨推进并保留科技记录', async () => {
   const { context: c } = harness(['trackEntriesForRender', 'nextDay'], {
     dateTrackData: { c2: { entries: [{ day: 1 }, { day: 2 }, { day: 3 }] } },
+    todaySettlementItems: () => [],
     structureTechEvents: () => [event('reward', { dueDay: 1000, cooldownUntilDay: 1200 }), event('done', { dueDay: 900, status: 'completed' })],
     syncInputs() {},
     campaignRestoreInFlight: false, elements: { appShell: { inert: false } },

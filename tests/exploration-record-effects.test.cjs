@@ -340,3 +340,22 @@ test('compound C1 glyph changes and dynamic Dog Days plans apply and undo the ac
   resolved.record.strangers = '5';
   assert.equal(rules.revert(resolved.record, resolved.changes).strangers, '9', 'undo preserves a later +2 edit');
 });
+
+test('settlement adjusts only unassigned, unnamed base Dreamwalkers and keeps legacy Titans', () => {
+  const record = { titan: '2' };
+  rules.setBasicDreamwalkerCount(record, 3);
+  const basic = rules.basicDreamwalkers(record)[0];
+  assert.equal(record.titans.find(row => row.id === 'legacy-titan').count, 2);
+  assert.equal(basic.typeId, 'dreamwalker');
+  record.titans.push(
+    titan('named', 1, { name: '莱卡', typeId: 'dreamwalker' }),
+    titan('crippled', 1, { name: '梦行者', typeId: 'dreamwalker', crippled: true }),
+    titan('equipped', 1, { name: '梦行者', typeId: 'dreamwalker' }),
+    titan('spartan', 1, { name: '梦行者', typeId: 'spartan-dreamwalker' }),
+  );
+  record.loadouts = { equipped: { titanId: 'equipped' } };
+  rules.setBasicDreamwalkerCount(record, 1);
+  assert.equal(basic.count, 1);
+  rules.setBasicDreamwalkerCount(record, 0);
+  assert.deepEqual(record.titans.map(row => row.id), ['legacy-titan', 'named', 'crippled', 'equipped', 'spartan']);
+});

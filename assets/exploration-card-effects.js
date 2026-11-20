@@ -369,7 +369,7 @@
     if (activeCycle(record, cycleId)) record[key] = String(value);
   }
 
-  function changeStat(record, cycleId, type, delta, minimums = {}) {
+  function statBounds(record, cycleId, type, minimums = {}) {
     const counters = ["crew", "refugees"].includes(type) && cycleId === "c2" ? c2Counters(record) : null;
     const before = counters ? counters[type] : readStat(record, cycleId, type);
     const maximum = type === "fate" ? FATE_MAX : type === "paradox" ? PARADOX_MAX : type === "crew"
@@ -378,7 +378,12 @@
       : type === "nymphCharges" && record.nymphLimit !== undefined && record.nymphLimit !== null && record.nymphLimit !== "" ? count(record.nymphLimit)
       : type === "hull" ? HULL_MAX[cycleId] - (["c2", "c3"].includes(cycleId) && !record.maxUnlocked?.[`${cycleId}-hull`] ? 1 : 0) : Number.MAX_SAFE_INTEGER;
     const minimum = type === "humanity" ? -Number.MAX_SAFE_INTEGER : Number.isSafeInteger(minimums[type]) ? minimums[type] : 0;
-    const after = Math.max(minimum, Math.min(maximum, before + delta));
+    return { value: before, min: minimum, max: maximum, counters };
+  }
+
+  function changeStat(record, cycleId, type, delta, minimums) {
+    const { value: before, min, max, counters } = statBounds(record, cycleId, type, minimums);
+    const after = Math.max(min, Math.min(max, before + delta));
     if (after !== before) writeStat(record, cycleId, type, after, counters);
     return after - before;
   }
@@ -408,6 +413,46 @@
 
   function isDreamwalker(titan) {
     return /^(?:梦行者|dream\s*walker)$/i.test(String(titan?.name || "").trim());
+  }
+
+  function basicDreamwalkers(record) {
+    const assigned = new Set(Object.values(record.loadouts || {}).map(kit => kit?.titanId));
+    return (Array.isArray(record.titans) ? record.titans : []).filter(titan =>
+      (isDreamwalker(titan) || (titan?.name === "泰坦" && titan.typeId === "dreamwalker"))
+      && (!titan.typeId || titan.typeId === "dreamwalker")
+      && (!titan.type || /^(?:梦行者|dream\s*walker)$/i.test(String(titan.type).trim()))
+      && !titan.crippled && !titan.panelId && !titan.traumaPatternId && !titan.kratosPatternId
+      && !String(titan.notes || "").trim() && !titan.traumaTrack?.length && !assigned.has(titan.id));
+  }
+
+  function setBasicDreamwalkerCount(record, value) {
+    const rows = basicDreamwalkers(record);
+    const before = rows.reduce((total, row) => total + count(row.count), 0);
+    if (!Number.isSafeInteger(value) || value < 0) throw new Error("无效的基础梦行者数量。");
+    if (value > before) {
+      if (rows.length) {
+        rows[0].count = count(rows[0].count) + value - before;
+        rows[0].limit = Math.max(count(rows[0].limit), rows[0].count);
+      } else {
+        if (!Array.isArray(record.titans)) {
+          const legacy = count(record.titan);
+          record.titans = legacy ? [{ id: "legacy-titan", name: "泰坦", count: legacy, limit: legacy, crippled: false }] : [];
+        }
+        record.titans.push({
+          id: newTitanId(record.titans), name: "梦行者", typeId: "dreamwalker", type: "梦行者",
+          count: value, limit: value, crippled: false,
+        });
+      }
+    } else if (value < before) {
+      let remaining = before - value;
+      for (const row of rows) {
+        const removed = Math.min(remaining, count(row.count));
+        row.count -= removed;
+        remaining -= removed;
+      }
+      const empty = new Set(rows.filter(row => !row.count));
+      record.titans = record.titans.filter(row => !empty.has(row));
+    }
   }
 
   function dreamwalkerLosses(record, requested) {
@@ -535,5 +580,5 @@
     return next;
   }
 
-  return { parse, describe, combineManualReminders, apply, revert, iconType, iconIdentity, displayIcons, dreamwalkerLosses, automaticTitanLosses, version: 2 };
+  return { parse, describe, combineManualReminders, statBounds, apply, revert, iconType, iconIdentity, displayIcons, basicDreamwalkers, setBasicDreamwalkerCount, dreamwalkerLosses, automaticTitanLosses, version: 2 };
 });

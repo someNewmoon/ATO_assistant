@@ -260,42 +260,36 @@ function extractHtmlFunction(name) {
   return match[0];
 }
 
-test('主控台内蕴奥德赛入口把知识值夹到当循环可用段落', () => {
+test('内部之旅只链接待结算段落，按知识增长依次处理', () => {
   const ranges = extractLiteral('inwardOdysseyStoryRanges');
   const cases = [
-    ['c1', 0, 'inward-odyssey', '1', true],
-    ['c1', 1, 'inward-odyssey', '1', false],
-    ['c1', 12, 'inward-odyssey', '12', false],
-    ['c2', 25, 'inward-odyssey', '25', false],
-    ['c3', 40, 'inward-odyssey', '41', true],
-    ['c4', 90, 'inward-odyssey', '80', true],
-    ['c5', 80, 'inward-odyssey', '81', true],
+    ['c1', 0, 0, []],
+    ['c1', 2, 0, [1, 2]],
+    ['c1', 2, 1, [2]],
+    ['c2', 20, 20, []],
+    ['c2', 23, 21, [22, 23]],
+    ['c4', 90, 79, [80]],
+    ['c5', 86, undefined, []],
   ];
-
-  for (const [cycle, position, chapter, entry, clamped] of cases) {
+  for (const [cycle, position, resolved, expected] of cases) {
     const context = vm.createContext({
       URLSearchParams,
       currentCycleConfig: () => ({ id: cycle, storyBook: cycle }),
-      ensureCardTracks: () => ({ inwardOdyssey: { position, progress: 0 } }),
+      state: { inwardResolvedThrough: resolved, cardTracks: { inwardOdyssey: { position } } },
     });
     vm.runInContext([
       `const inwardOdysseyStoryRanges = ${JSON.stringify(ranges)};`,
       extractHtmlFunction('normalizeCounterValue'),
       extractHtmlFunction('getStoryHref'),
+      extractHtmlFunction('pendingInwardOdysseyEntries'),
       extractHtmlFunction('getInwardOdysseyStoryLink'),
     ].join('\n'), context);
-
-    const link = context.getInwardOdysseyStoryLink();
+    assert.deepEqual(Array.from(context.pendingInwardOdysseyEntries()), expected);
+    const link = context.getInwardOdysseyStoryLink(expected[0]);
     const url = new URL(link.href, 'http://localhost/story/');
     assert.equal(url.searchParams.get('book'), cycle);
-    assert.equal(url.searchParams.get('chapter'), chapter);
-    assert.equal(url.searchParams.get('entry'), entry, `${cycle} 知识 ${position} 应跳到 ${entry}`);
-    assert.match(link.title, new RegExp(`当前内蕴奥德赛 ${position}`));
-    assert.equal(
-      link.title.includes('跳转到可用段落'),
-      clamped,
-      `${cycle} 知识 ${position} 的夹取提示不对：${link.title}`,
-    );
+    assert.equal(url.searchParams.get('chapter'), 'inward-odyssey');
+    assert.equal(url.searchParams.get('entry'), expected.length ? String(expected[0]) : null);
   }
 });
 

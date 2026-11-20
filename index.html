@@ -1632,14 +1632,14 @@
       background: rgba(30, 38, 35, 0.42);
     }
 
-    #theatreRestoreDialog {
+    #theatreRestoreDialog, #adventureRollDialog {
       width: min(28rem, calc(100vw - 28px));
       padding: 18px;
     }
 
-    #theatreRestoreDialog h2 { margin: 0 0 8px; font-size: 20px; }
-    #theatreRestoreDialog p { margin: 0 0 16px; }
-    #theatreRestoreDialog .theatre-restore-actions {
+    #theatreRestoreDialog h2, #adventureRollDialog h2 { margin: 0 0 8px; font-size: 20px; }
+    #theatreRestoreDialog p, #adventureRollDialog p { margin: 0 0 16px; }
+    #theatreRestoreDialog .theatre-restore-actions, #adventureRollDialog .adventure-roll-actions {
       display: flex;
       flex-wrap: wrap;
       justify-content: end;
@@ -1990,6 +1990,27 @@
       line-height: 1.4;
     }
 
+    .today-preview, .inward-end, .story-reward-placement {
+      margin: 10px 0;
+      padding: 10px 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+    }
+
+    .today-preview summary { cursor: pointer; font-weight: 750; }
+    .today-preview ul { margin: 8px 0 0; padding: 0; list-style: none; }
+    .today-preview li, .inward-end-actions, .story-reward-actions {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
+      padding: 4px 0;
+    }
+
+    .today-preview li span { flex: 1 1 180px; }
+    .today-preview button, .inward-end button, .story-reward-actions button { padding: 4px 8px; font-size: 12px; }
+    .inward-end p, .story-reward-placement p { margin: 4px 0; }
+
     .step-actions {
       display: flex;
       flex-wrap: wrap;
@@ -2017,6 +2038,18 @@
     }
 
     .step-actions a:hover,
+    .adventure-roll-result {
+      display: inline-flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .adventure-roll-result strong {
+      color: var(--accent-strong);
+      font-size: 13px;
+    }
+
     .step-actions .adventure-roll:enabled:hover {
       border-color: var(--accent);
       color: var(--accent);
@@ -2726,6 +2759,10 @@
             </div>
           </section>
           <div id="structureTechDue" class="structure-tech-due" aria-live="polite" hidden></div>
+          <details id="todayPreview" class="today-preview" open>
+            <summary id="todayPreviewTitle">今日待结算</summary>
+            <ul id="todayPreviewItems"></ul>
+          </details>
           <div id="flowList" class="flow-list"></div>
         </div>
       </section>
@@ -2942,6 +2979,18 @@
         <button type="submit" value="cancel" class="secondary">取消导入</button>
         <button type="submit" value="restore" class="secondary">恢复备份剧场</button>
         <button type="submit" value="keep" autofocus>保留当前剧场</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="adventureRollDialog" class="card-track-dialog" aria-labelledby="adventureRollTitle" aria-describedby="adventureRollOutcome">
+    <form method="dialog">
+      <h2 id="adventureRollTitle">D10 掷骰结果</h2>
+      <p id="adventureRollOutcome"></p>
+      <div class="adventure-roll-actions">
+        <button type="submit" class="secondary" value="cancel">取消</button>
+        <button type="submit" class="secondary" value="reroll">重骰</button>
+        <button type="submit" value="confirm" autofocus>确认并打开段落</button>
       </div>
     </form>
   </dialog>
@@ -5224,6 +5273,8 @@
       const mainStoryConstantsDay = typeof value.mainStoryConstantsDay === "string" ? value.mainStoryConstantsDay : null;
       const mnemosBreakthroughConstantsDay = typeof value.mnemosBreakthroughConstantsDay === "string" ? value.mnemosBreakthroughConstantsDay : null;
       const specialEventConstantsDay = typeof value.specialEventConstantsDay === "string" ? value.specialEventConstantsDay : null;
+      const cardTracks = normalizeCardTracks(value.cardTracks, legacyCardCounters, value.cardTracks && value.cardTracksVersion !== 2, cycleId);
+      const knowledge = cardTracks.inwardOdyssey?.position ?? 0;
       return {
         ...defaultState,
         ...normalizedValue,
@@ -5269,6 +5320,7 @@
         surveyConstantsTouchedDay,
         latestSurveyAdventureAction: isPlainObject(value.latestSurveyAdventureAction) ? value.latestSurveyAdventureAction : null,
         latestSimpleAdventureAction: isPlainObject(value.latestSimpleAdventureAction) ? value.latestSimpleAdventureAction : null,
+        latestAdventureRoll: isPlainObject(value.latestAdventureRoll) ? cloneJson(value.latestAdventureRoll) : null,
         pharosTimeline: isPlainObject(value.pharosTimeline) ? cloneJson(value.pharosTimeline) : {},
         pharosDreams: isPlainObject(value.pharosDreams) ? value.pharosDreams : null,
         pharosDreamsDay,
@@ -5284,7 +5336,12 @@
         specialEventConstantsActive: value.specialEventConstants?.[value.specialEventConstantsActive] ? String(value.specialEventConstantsActive) : null,
         constantToolsOpen: isPlainObject(value.constantToolsOpen) ? cloneJson(value.constantToolsOpen) : {},
         exploration: normalizeExploration(value.exploration),
-        cardTracks: normalizeCardTracks(value.cardTracks, legacyCardCounters, value.cardTracks && value.cardTracksVersion !== 2, cycleId),
+        cardTracks,
+        storyRewards: { hope: storyRewardCount(value.storyRewards?.hope), doom: storyRewardCount(value.storyRewards?.doom) },
+        // Existing saves start from their current knowledge without reopening old paragraphs.
+        inwardResolvedThrough: Number.isSafeInteger(value.inwardResolvedThrough)
+          ? Math.max(0, Math.min(value.inwardResolvedThrough, knowledge))
+          : knowledge,
         cardTracksVersion: 2,
         unlockedTech: isPlainObject(value.unlockedTech) ? value.unlockedTech : null,
         events: Array.isArray(value.events) ? cloneJson(value.events) : [],
@@ -6953,19 +7010,19 @@
       };
     }
 
-    function ensureCardTracks() {
-      state.cardTracks = normalizeCardTracks(state.cardTracks, state.cardCounters, state.cardTracks && state.cardTracksVersion !== 2, currentCycleConfig().id);
-      state.cardTracksVersion = 2;
+    function ensureCardTracks(dashboardState = state) {
+      dashboardState.cardTracks = normalizeCardTracks(dashboardState.cardTracks, dashboardState.cardCounters, dashboardState.cardTracks && dashboardState.cardTracksVersion !== 2, currentCycleConfig().id);
+      dashboardState.cardTracksVersion = 2;
       const cycleData = activeStoryDoomData();
       cardTrackGroups.story.tracks.concat(cardTrackGroups.doom.tracks).forEach((def) => {
-        if (def.fixed || !state.cardTracks[def.key]) return;
+        if (def.fixed || !dashboardState.cardTracks[def.key]) return;
         const deck = Array.isArray(cycleData[def.source]) ? cycleData[def.source] : [];
-        if (deck.length && state.cardTracks[def.key].position > deck.length) {
-          state.cardTracks[def.key].position = deck.length;
-          state.cardTracks[def.key].progress = 0;
+        if (deck.length && dashboardState.cardTracks[def.key].position > deck.length) {
+          dashboardState.cardTracks[def.key].position = deck.length;
+          dashboardState.cardTracks[def.key].progress = 0;
         }
       });
-      return state.cardTracks;
+      return dashboardState.cardTracks;
     }
 
     function cardTrackCard(def, track, cycleData) {
@@ -7011,8 +7068,8 @@
         exceeded.length ? `已超过 ${exceeded.join(" / ")}` : ""].filter(Boolean).join("；");
     }
 
-    function cardTrackTokenState(key, field) {
-      const tracks = ensureCardTracks();
+    function cardTrackTokenState(key, field, dashboardState = state) {
+      const tracks = ensureCardTracks(dashboardState);
       const def = [...cardTrackGroups.story.tracks, ...cardTrackGroups.doom.tracks].find(value => value.key === key);
       const track = tracks[key] || { position: 0, progress: 0, doom: 0 };
       const cycleData = activeStoryDoomData();
@@ -7078,6 +7135,94 @@
       // Limits are reminders, never clamps or automatic story/knowledge settlement.
       if (refresh) refreshCardTokenViews();
       return true;
+    }
+
+    function storyRewardCount(value) {
+      return Number.isSafeInteger(value) && value > 0 ? value : 0;
+    }
+
+    async function placeStoryReward(type, key) {
+      if (elements.appShell.inert || !ownsDashboardWriteLease() || !storyRewardCount(state.storyRewards?.[type])) return;
+      const field = type === "hope" ? "progress" : "doom";
+      const initial = cardTrackTokenState(key, field);
+      if (!initial.allowed || (initial.gainMode === "remove" && !initial.count)) return;
+      if (initial.gainMode === "remove" && initial.gainCondition === "lastVisitedCity"
+        && !window.confirm("确认当前板块是「最后访问城市」标记所在的城市？将结算 1 枚希望并移除卡面上 1 枚进展。")) return;
+
+      const target = structureTechTarget();
+      const assertTarget = () => {
+        if (target.accountId !== sessionUser?.id || target.sessionEpoch !== campaignSessionEpoch
+          || !ownsDashboardWriteLease() || target.profileId !== archive.activeProfileId
+          || target.cycleId !== currentCycleConfig().id || String(target.day) !== String(state.day)) {
+          throw new Error("当前战役或日期已变化，请重新选择放置位置。");
+        }
+      };
+      elements.appShell.inert = true;
+      try {
+        saveState();
+        if (!await flushCampaignSave()) throw new Error("当前进度尚未保存，请恢复连接后重试。");
+        assertTarget();
+        const campaign = await loadFullCampaign();
+        assertTarget();
+        const dashboard = campaign?.sections?.dashboard;
+        const profile = dashboard?.profiles?.[target.profileId];
+        const savedState = profile?.cycles?.[target.cycleId]?.state;
+        const count = storyRewardCount(savedState?.storyRewards?.[type]);
+        if (dashboard?.activeProfileId !== target.profileId || profile?.activeCycleId !== target.cycleId
+          || String(savedState?.day) !== String(target.day) || !count) {
+          throw new Error("战役或待结算数量已更新，请重新选择。");
+        }
+        const current = cardTrackTokenState(key, field, savedState);
+        if (current.label !== initial.label || !current.allowed || (current.gainMode === "remove" && !current.count)) {
+          throw new Error("可放置的卡面已变化，请重新选择。");
+        }
+        const next = current.count + (current.gainMode === "remove" ? -1 : 1);
+        if (!Number.isSafeInteger(next)) throw new Error("卡面计数超出范围。");
+        savedState.cardTracks[key][field] = next;
+        savedState.storyRewards[type] = count - 1;
+        const result = await importCampaignSections({ dashboard }, { dashboard: campaign.sectionRevisions.dashboard });
+        campaign.sectionRevisions.dashboard = result.sections.dashboard;
+        await applyStructureTechCommit({ campaign }, target, { saveMessage: "标记已结算" });
+        campaignSyncChannel?.postMessage({ revision: result.sections.dashboard });
+      } catch (error) {
+        window.alert(error?.code === "SAVE_CONFLICT" ? "战役已在其他页面更新，请核对待结算数量后重试。" : error.message);
+        await syncDashboardFromExternalUpdate();
+      } finally {
+        elements.appShell.inert = false;
+      }
+    }
+
+    function createStoryRewardTools(type) {
+      const count = storyRewardCount(state.storyRewards?.[type]);
+      if (!count) return null;
+      const isHope = type === "hope";
+      const section = document.createElement("section");
+      section.className = "story-reward-placement";
+      const title = document.createElement("strong");
+      title.textContent = `${isHope ? "希望" : "灾厄"}待结算 · ${count} 枚`;
+      const actions = document.createElement("div");
+      actions.className = "story-reward-actions";
+      const destinations = isHope ? [["story", "主线"], ["inwardOdyssey", "内部之旅"]] : [["doom", "灾祸卡"]];
+      for (const [key, label] of destinations) {
+        const target = cardTrackTokenState(key, isHope ? "progress" : "doom");
+        const row = document.createElement("div");
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "secondary";
+        button.disabled = !target.allowed || (target.gainMode === "remove" && !target.count);
+        button.textContent = target.gainMode === "remove" ? `结算至${label}（移除 1 枚）` : `放置 1 枚至${label}`;
+        button.title = [target.statusText, target.note].filter(Boolean).join(" ");
+        button.addEventListener("click", () => void placeStoryReward(type, key));
+        row.appendChild(button);
+        if (button.disabled) {
+          const hint = document.createElement("p");
+          hint.textContent = target.note || "当前卡面不可结算。";
+          row.appendChild(hint);
+        }
+        actions.appendChild(row);
+      }
+      section.append(title, actions);
+      return section;
     }
 
     function setCardTrackProgress(key, value) {
@@ -7787,25 +7932,55 @@
       };
     }
 
-    function getInwardOdysseyStoryLink() {
-      const cycleId = currentCycleConfig().id;
-      const range = inwardOdysseyStoryRanges[cycleId];
-      const tracks = ensureCardTracks();
-      const rawPosition = normalizeCounterValue(tracks.inwardOdyssey?.position);
-      const entry = range
-        ? Math.min(range.max, Math.max(range.min, rawPosition || range.min))
-        : rawPosition;
+    function pendingInwardOdysseyEntries() {
+      const range = inwardOdysseyStoryRanges[currentCycleConfig().id];
+      if (!range) return [];
+      const knowledge = normalizeCounterValue(state.cardTracks?.inwardOdyssey?.position);
+      const resolved = state.inwardResolvedThrough ?? knowledge;
+      const first = Math.max(range.min, resolved + 1);
+      return Array.from({ length: Math.max(0, Math.min(knowledge, range.max) - first + 1) }, (_, index) => first + index);
+    }
+
+    function getInwardOdysseyStoryLink(entry) {
       return {
-        label: "内蕴奥德赛",
+        label: entry ? `打开第 ${entry} 段` : "打开内部之旅目录",
         bgm: "inward",
-        title: range && entry !== rawPosition
-          ? `当前内蕴奥德赛 ${rawPosition}，跳转到可用段落 ${entry}`
-          : `当前内蕴奥德赛 ${entry || "未设置"}`,
-        href: getStoryHref({
-          chapter: "inward-odyssey",
-          entry: entry || undefined,
-        }),
+        href: getStoryHref({ chapter: "inward-odyssey", entry }),
       };
+    }
+
+    function createInwardOdysseyEndTools() {
+      const entries = pendingInwardOdysseyEntries();
+      const entry = entries[0];
+      const section = document.createElement("section");
+      section.className = "inward-end";
+      const title = document.createElement("strong");
+      title.textContent = "剧情步骤末尾 · 内部之旅";
+      const status = document.createElement("p");
+      status.textContent = entry ? `待结算 ${entries.length} 段，先读第 ${entry} 段。` : "当前没有待结算段落。";
+      const actions = document.createElement("div");
+      actions.className = "inward-end-actions";
+      const link = document.createElement("a");
+      const story = getInwardOdysseyStoryLink(entry);
+      link.href = story.href;
+      link.textContent = story.label;
+      link.addEventListener("click", () => window.ATO_BGM?.setScene?.(story.bgm));
+      actions.appendChild(link);
+      if (entry) {
+        const done = document.createElement("button");
+        done.type = "button";
+        done.className = "secondary";
+        done.textContent = `第 ${entry} 段已结算`;
+        done.addEventListener("click", () => {
+          if (!ownsDashboardWriteLease() || pendingInwardOdysseyEntries()[0] !== entry) return;
+          state.inwardResolvedThrough = entry;
+          saveState();
+          renderFlow();
+        });
+        actions.appendChild(done);
+      }
+      section.append(title, status, actions);
+      return section;
     }
 
     function getSpecialEventLink() {
@@ -8579,27 +8754,27 @@
     function pickAdventureD10(rows, random = Math.random) {
       // Keep one entry per die face, including each face of a range. Sampling
       // the eligible faces is equivalent to rerolling until one is available.
-      const table = rows.flatMap(row => adventureRollFaces(row.range).map(() => row));
-      if (table.length !== 10 || new Set(rows.flatMap(row => adventureRollFaces(row.range))).size !== 10) return null;
-      const eligible = table.filter(row => row.available);
+      const table = rows.flatMap(row => adventureRollFaces(row.range).map(face => ({ row, face })));
+      if (table.length !== 10 || new Set(table.map(({ face }) => face)).size !== 10) return null;
+      const eligible = table.filter(({ row }) => row.available);
       const choices = eligible.length ? eligible : table;
-      return { row: choices[Math.floor(random() * choices.length)], reset: !eligible.length };
+      return { ...choices[Math.floor(random() * choices.length)], reset: !eligible.length };
     }
 
     function pickPharosDreamRoll(data, values, random = Math.random) {
       const rows = data.boxes.map(row => {
         const slots = simpleConstantSlotIds(row);
         const slot = slots.find((id, i) => !values[id] && !(i === 0 && values[row[0]]));
-        return { range: row[1], slot: slot || slots[0], available: Boolean(slot), entry: row[3]?.entry || row[0] };
+        return { range: row[1], title: row[2], slot: slot || slots[0], available: Boolean(slot), entry: row[3]?.entry || row[0] };
       });
       return pickAdventureD10(rows, random);
     }
 
     function pickRestAdventure(data, values, random = Math.random) {
-      return pickAdventureD10(data.rr.map(([id, , extra]) => {
+      return pickAdventureD10(data.rr.map(([id, title, extra]) => {
         const followUp = values[id] && extra?.goTo && !values[`${id}-goto`];
         return {
-          range: id, id, slot: followUp ? `${id}-goto` : id,
+          range: id, id, title, slot: followUp ? `${id}-goto` : id,
           entry: followUp ? extra.goTo : id, available: !values[id] || Boolean(followUp),
         };
       }), random);
@@ -8616,11 +8791,11 @@
       if (!branch || branch.reset) return null;
       const { hub, recordSlot } = branch.row;
       const boxes = hub.boxes.filter(([, range]) => adventureRollFaces(range).length);
-      if (recordSlot === "alpha" || recordSlot === "omega") return { hub, recordSlot, slot: recordSlot, reset: [] };
+      if (recordSlot === "alpha" || recordSlot === "omega") return { hub, recordSlot, slot: recordSlot, reset: [], faces: [branch.face] };
       const result = pickAdventureD10(boxes.map(([id, range]) => ({
         range, id, available: !values.hubs?.[hub.id]?.[id],
       })), random);
-      return result && { hub, recordSlot, slot: result.row.id, reset: result.reset ? boxes.map(([id]) => id) : [] };
+      return result && { hub, recordSlot, slot: result.row.id, reset: result.reset ? boxes.map(([id]) => id) : [], faces: [branch.face, result.face] };
     }
 
     let adventureRollBusy = false;
@@ -8628,6 +8803,21 @@
 
     function adventureRollContext() {
       return JSON.stringify([campaignSessionEpoch, archive.activeProfileId, currentCycleConfig().id, state.day]);
+    }
+
+    function adventureRollResultText(result) {
+      return [result.faces.map((face, index) => `${index ? "选段 " : ""}D10 = ${face}`).join(" · "), result.title]
+        .filter(Boolean).join(" · ");
+    }
+
+    function chooseAdventureRoll(result) {
+      const dialog = document.getElementById("adventureRollDialog");
+      document.getElementById("adventureRollOutcome").textContent = adventureRollResultText(result);
+      dialog.returnValue = "cancel";
+      dialog.showModal();
+      return new Promise(resolve => {
+        dialog.addEventListener("close", () => resolve(dialog.returnValue), { once: true });
+      });
     }
 
     async function runAdventureRoll(key, prepare) {
@@ -8638,21 +8828,34 @@
       try {
         if (pendingAdventureRoll?.context === context && pendingAdventureRoll.key !== key) return;
         if (pendingAdventureRoll?.context !== context) {
-          const plan = await prepare();
-          if (!plan || !stillCurrent()) return;
-          pendingAdventureRoll = { key, context, link: plan.link, sync: plan.sync };
-          plan.mark();
+          while (stillCurrent()) {
+            const rollState = state;
+            const plan = await prepare();
+            if (!plan || !stillCurrent() || state !== rollState) return;
+            if (plan.result) {
+              const choice = await chooseAdventureRoll(plan.result);
+              if (!stillCurrent() || state !== rollState) return;
+              if (choice === "reroll") continue;
+              if (choice !== "confirm") return;
+              state.latestAdventureRoll = { key, day: state.day, ...plan.result, route: plan.route };
+            }
+            pendingAdventureRoll = { key, context, route: plan.route, sync: plan.sync };
+            plan.mark();
+            break;
+          }
+          if (!stillCurrent()) return;
         }
         renderFlow();
         if (!await flushCampaignSave() || !stillCurrent()) return;
         const pending = pendingAdventureRoll;
         if (pending.sync && !await pending.sync()) {
-          if (stillCurrent()) window.alert("阿尔戈号冒险记录尚未保存，请重试打开同一段落。");
+          if (stillCurrent()) window.alert("阿尔戈号冒险记录尚未保存，请重试保存本次骰点。");
           return;
         }
         if (!stillCurrent()) return;
-        const { href, bgm } = pending.link;
         pendingAdventureRoll = null;
+        const { bgm, ...options } = pending.route;
+        const href = getStoryHref(options);
         window.ATO_BGM?.setScene?.(bgm);
         if (window.ATO_PAGE_ROUTER?.focusOrNavigate) await window.ATO_PAGE_ROUTER.focusOrNavigate(href);
         else window.location.href = href;
@@ -8671,9 +8874,11 @@
         const values = ensureTodaySurveyConstants().rr;
         const result = pickRestAdventure(data, values);
         if (!result) return;
-        const { id, slot, entry } = result.row;
+        const { id, slot, entry, title } = result.row;
+        const target = result.reset ? id : entry;
         return {
-          link: { bgm: "rest", href: getStoryHref({ chapter: "rr-adventures", entry: result.reset ? id : entry }) },
+          route: { bgm: "rest", chapter: "rr-adventures", entry: target },
+          result: { faces: [result.face], title: `${title} · 段落 ${target}` },
           mark() {
             if (result.reset) for (const [rowId] of data.rr) {
               delete values[rowId];
@@ -8696,11 +8901,12 @@
         const values = ensureTodaySurveyConstants();
         const selection = pickBranchAdventure(data, column, cycle, result.record, values);
         if (!selection) throw new Error("当前剧情卡牌可用的分支已用完，请核对冒险记录轨。");
-        const { hub, recordSlot, slot, reset } = selection;
+        const { hub, recordSlot, slot, reset, faces } = selection;
         const action = { cycle, day: normalizeCampaignDay(state.day, cycle), adventure: hub.title, box: slot, recordSlot };
         return {
           sync: () => syncAdventureActionToArgoRecord(action),
-          link: { bgm: "hub", href: getStoryHref({ chapter: surveyHubChapterKey(data, hub.id), entry: surveyStoryEntryId(slot) }) },
+          route: { bgm: "hub", chapter: surveyHubChapterKey(data, hub.id), entry: surveyStoryEntryId(slot) },
+          result: { faces, title: surveyHubTargetLabel(data, { itemId: hub.id, boxId: slot }) || hub.title },
           mark() {
             for (const id of reset) delete values.hubs[hub.id][id];
             setSurveyConstant("hubs", hub.id, slot, true, recordSlot);
@@ -8741,7 +8947,8 @@
         const entry = event.entry || result?.row.entry;
         if (!entry) return;
         return {
-          link: { bgm: "pharos", href: getStoryHref({ chapter: data.module, entry }) },
+          route: { bgm: "pharos", chapter: data.module, entry },
+          result: result && { faces: [result.face], title: [data.title, result.row.title, `段落 ${entry}`].filter(Boolean).join(" · ") },
           mark() {
             if (!result) return;
             if (result.reset) for (const row of data.boxes) {
@@ -8760,10 +8967,27 @@
       button.type = "button";
       button.className = "adventure-roll";
       const pending = pendingAdventureRoll?.context === adventureRollContext() ? pendingAdventureRoll : null;
-      button.textContent = pending?.key === key ? (adventureRollBusy ? "正在保存定数框…" : "保存并打开段落") : label;
+      button.textContent = pending?.key === key ? (adventureRollBusy ? "正在保存定数框…" : "重试保存") : label;
       button.disabled = adventureRollBusy || !ownsDashboardWriteLease() || Boolean(pending && pending.key !== key);
       button.addEventListener("click", () => { void action(); });
-      return button;
+      const result = state.latestAdventureRoll;
+      if (result?.key !== key || String(result.day) !== String(state.day) || !Array.isArray(result.faces)) return button;
+      const group = document.createElement("div");
+      group.className = "adventure-roll-result";
+      const output = document.createElement("strong");
+      output.dataset.adventureRollResult = key;
+      output.textContent = adventureRollResultText(result);
+      if (pending || !key.startsWith("pharos:")) group.appendChild(button);
+      group.appendChild(output);
+      const { bgm, chapter, entry } = result.route || {};
+      if (!pending && chapter && entry) {
+        const link = document.createElement("a");
+        link.href = getStoryHref({ chapter, entry });
+        link.textContent = "打开段落";
+        link.addEventListener("click", () => window.ATO_BGM?.setScene?.(bgm));
+        group.appendChild(link);
+      }
+      return group;
     }
 
     function setMainStoryConstant(boxId, checked) {
@@ -9323,6 +9547,8 @@
         const item = document.createElement("article");
         const checked = Boolean(state.completed[step.id]);
         item.className = `flow-step${checked ? " done" : ""}`;
+        item.id = `flow-step-${step.id}`;
+        item.tabIndex = -1;
 
         const checkbox = document.createElement("input");
         checkbox.type = "checkbox";
@@ -9379,7 +9605,7 @@
         if (step.id === "story" && currentPharosDreamConstants()?.module === "dreams-of-pharos") {
           for (const [id, event] of pharosTimelineForDay(state.day)) {
             actions.appendChild(createAdventureRollButton(`pharos:${id}`,
-              event.entry ? "继续阅读航标梦境" : "航标梦境 · 掷 1d10 并打开", () => rollPharosDream(id)));
+              event.entry ? "继续阅读航标梦境" : "航标梦境 · 掷 1d10", () => rollPharosDream(id)));
           }
         }
         getStepLinks(step).forEach((link) => {
@@ -9461,12 +9687,20 @@
           }
           constantTools.forEach((tools) => constantRow.appendChild(tools));
           if (constantRow.children.length) text.appendChild(constantRow);
+          const hopeTools = createStoryRewardTools("hope");
+          if (hopeTools) text.appendChild(hopeTools);
+          text.appendChild(createInwardOdysseyEndTools());
+        }
+        if (step.id === "doom") {
+          const doomTools = createStoryRewardTools("doom");
+          if (doomTools) text.appendChild(doomTools);
         }
         item.append(checkbox, text);
         fragment.appendChild(item);
       });
 
       elements.flowList.appendChild(fragment);
+      renderTodayPreview();
       renderStructureTechDue();
       renderProgress();
       updateRecordLinks();
@@ -13385,7 +13619,6 @@
       if (step.id === "story") {
         return currentCycleConfig().storyBook ? [
           getMnemosBreakthroughLink(),
-          getInwardOdysseyStoryLink(),
           getPharosDreamStoryLink(),
           getMainStoryLink(),
           getSpecialEventLink(),
@@ -13402,6 +13635,57 @@
       }
       if (step.id === "development") return [{ label: "科技", href: getTechnologyHref() }];
       return step.links || [];
+    }
+
+    function todaySettlementItems() {
+      const completed = state.completed || {};
+      const items = [];
+      if (!completed.survey) {
+        for (const reminder of getSurveyMapReminders()) {
+          const rest = reminder.tag?.label === "R&R";
+          items.push({ step: "survey", label: rest ? "勘察 · 确认休整冒险" : "勘察 · 确认冒险中枢" });
+        }
+      }
+      if (!completed.encounter && todayTrackIcons().some(icon => icon.className === "battle")) {
+        items.push({ step: "encounter", label: "遭遇 · 确认时间线战斗" });
+      }
+      const tech = structureTechEvents().filter(event => event.kind !== "cooldown" && event.status !== "completed" && event.due);
+      if (tech.length) items.push({ step: "development", label: `发展 · ${tech.length} 项科技时间线事项到期` });
+      const dreams = pharosTimelineForDay(state.day).filter(([, event]) => !event.entry);
+      if (dreams.length) items.push({ step: "story", label: `剧情 · ${dreams.length} 项航标梦境未掷骰` });
+      const inward = pendingInwardOdysseyEntries();
+      if (inward.length) items.push({ step: "story", label: `剧情末尾 · ${inward.length} 段内部之旅待结算` });
+      const hope = storyRewardCount(state.storyRewards?.hope);
+      if (hope) items.push({ step: "story", label: `剧情 · ${hope} 枚希望待结算` });
+      const doom = storyRewardCount(state.storyRewards?.doom);
+      if (doom) items.push({ step: "doom", label: `灾祸 · ${doom} 枚灾厄待结算` });
+      return items;
+    }
+
+    function renderTodayPreview() {
+      const title = document.getElementById("todayPreviewTitle");
+      const list = document.getElementById("todayPreviewItems");
+      const items = todaySettlementItems();
+      title.textContent = items.length ? `今日待结算 · ${items.length} 项` : "今日待结算 · 暂无提示";
+      list.replaceChildren();
+      for (const { step, label } of items) {
+        const row = document.createElement("li");
+        const text = document.createElement("span");
+        text.textContent = label;
+        const jump = document.createElement("button");
+        jump.type = "button";
+        jump.className = "secondary";
+        jump.dataset.dashboardReadonlyAllowed = "";
+        jump.textContent = "去步骤";
+        jump.setAttribute("aria-label", `去步骤：${label}`);
+        jump.addEventListener("click", () => {
+          const target = document.getElementById(`flow-step-${step}`);
+          target?.focus({ preventScroll: true });
+          target?.scrollIntoView({ block: "start" });
+        });
+        row.append(text, jump);
+        list.appendChild(row);
+      }
     }
 
     function renderProgress() {
@@ -14455,6 +14739,8 @@
 
     async function nextDay() {
       if (nextDay.busy || campaignRestoreInFlight || !ownsDashboardWriteLease()) return false;
+      const pending = todaySettlementItems();
+      if (pending.length && !window.confirm(`今天仍有这些事项待确认：\n\n${pending.map(item => item.label).join("\n")}\n\n仍要进入下一天吗？`)) return false;
       const profileId = archive.activeProfileId;
       const cycleId = currentCycleConfig().id;
       const currentDay = String(state.day);

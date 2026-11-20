@@ -20,7 +20,7 @@
   const buttons = [...tooltip.querySelectorAll("[data-tool]")];
   const style = document.createElement("link");
   style.rel = "stylesheet";
-  style.href = `${root}story/assets/quick-settlement.css?v=20261120-hero-state`;
+  style.href = `${root}story/assets/quick-settlement.css?v=20261120-hero-portrait`;
   if (!document.querySelector('link[href*="quick-settlement.css"]')) document.head.append(style);
 
   function load(path, api) {
@@ -60,7 +60,7 @@
       await Promise.all([
         session,
         load("hero/hero-catalog.js?v=20261117-battle-polish", "ATO_HERO_CATALOG"),
-        load("assets/campaign-hero-tool.js?v=20261120-hero-state", "ATO_MOUNT_HERO_TOOL"),
+        load("assets/campaign-hero-tool.js?v=20261120-hero-portrait", "ATO_MOUNT_HERO_TOOL"),
       ]);
       return openHeroes ||= window.ATO_MOUNT_HERO_TOOL(root, options);
     }

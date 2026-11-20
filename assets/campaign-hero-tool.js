@@ -1,6 +1,7 @@
 window.ATO_MOUNT_HERO_TOOL = function mountHeroTool(root, options) {
   const endpoint = `${root}api/campaign-state.php`;
   const session = window.ATO_CAMPAIGN_SESSION.create();
+  const { heroDisplayName, heroPortrait } = window.ATO_HERO_CATALOG;
   const sync = typeof BroadcastChannel === "function" ? new BroadcastChannel("ato-hero-mnemos-sync-v1") : null;
   const stats = [
     ["fury", "怒气", "tri_rage.png"],
@@ -52,10 +53,24 @@ window.ATO_MOUNT_HERO_TOOL = function mountHeroTool(root, options) {
   function render(heroes) {
     for (const hero of heroes) {
       const card = document.createElement("section");
+      const identity = document.createElement("header");
+      identity.className = "hero-tool-identity";
       const title = document.createElement("h3");
-      title.textContent = window.ATO_HERO_CATALOG.heroDisplayName(hero);
+      title.textContent = heroDisplayName(hero);
       if (hero.customName || hero.playerName && !hero.argonaut) title.dataset.userContent = "";
-      card.append(title);
+      const portrait = document.createElement("span");
+      portrait.className = "hero-tool-portrait";
+      portrait.setAttribute("aria-hidden", "true");
+      const artwork = heroPortrait(hero);
+      if (artwork) {
+        const image = document.createElement("img");
+        image.alt = "";
+        image.addEventListener("error", () => image.remove(), { once: true });
+        image.src = `${root}hero/assets/${artwork}`;
+        portrait.append(image);
+      }
+      identity.append(portrait, title);
+      card.append(identity);
       const grid = document.createElement("div");
       grid.className = "hero-tool-stats";
       for (const [key, label, file] of stats) {

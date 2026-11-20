@@ -2355,12 +2355,71 @@
       font-size: 12px;
     }
 
-    .argo-direction-pad {
+    .argo-nearby-layout {
+      width: 100%;
       display: flex;
-      align-items: center;
-      flex-wrap: nowrap;
+      flex-wrap: wrap;
+      align-items: flex-start;
+      gap: 12px;
+    }
+
+    .argo-nearby-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 5px;
+      width: min(100%, 270px);
+    }
+
+    .argo-nearby-cell {
+      display: grid;
+      align-content: center;
+      gap: 2px;
+      min-height: 54px;
+      padding: 4px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      color: var(--muted);
+      font-size: 11px;
+      text-align: center;
+    }
+
+    .argo-nearby-cell strong { font-size: 13px; }
+    button.argo-nearby-cell { border-color: var(--accent); color: var(--ink); }
+    .argo-nearby-cell.current { background: var(--line); color: var(--ink); }
+
+    .argo-reveal-preview {
+      display: grid;
+      grid-template-columns: minmax(96px, 148px) minmax(100px, 1fr);
+      align-items: start;
+      gap: 10px;
+      flex: 1 1 235px;
+      min-width: 0;
+    }
+
+    .argo-reveal-image,
+    .argo-reveal-art {
+      display: block;
+      width: 100%;
+      aspect-ratio: 1;
+      object-fit: contain;
+      background-position: center;
+      background-repeat: no-repeat;
+      background-size: contain;
+    }
+
+    .argo-reveal-elements {
+      display: flex;
+      flex-wrap: wrap;
       gap: 4px;
-      width: max-content;
+      margin-top: 6px;
+    }
+
+    .argo-reveal-elements span {
+      padding: 2px 6px;
+      border-radius: 5px;
+      border: 1px solid var(--line);
+      color: var(--ink);
+      font-size: 11px;
     }
 
     .map-command-status {
@@ -2924,6 +2983,9 @@
   <script src="./map/frozen-time-rules.js?v=20261110-silo6"></script>
   <script src="./map/map-data.js?v=20260730-cycle-labels"></script>
   <script src="./map/nemesis-path.js?v=20260924-shared"></script>
+  <script src="./map/nearby-navigation.js?v=20261120-nearby"></script>
+  <script src="./map/tile-artwork-data.js?v=20261108-rasterless1"></script>
+  <script src="./map/tile-artwork.js?v=20261026-dual-map-masks1"></script>
   <script src="./map/nemesis-battle.js?v=20261003-record"></script>
   <script src="./assets/exploration-pursuit.js?v=20261016-voyage3"></script>
   <script src="./assets/cycle-symbols.js?v=20261115-module-logo"></script>
@@ -6406,13 +6468,17 @@
       }
     }
 
-    function mapDirectionalTarget(cycle, cycleState, direction) {
-      const current = cycle.tiles.find((tile) => tile.id === cycleState.currentTile);
+    function mapDirectionalTarget(cycle, cycleState, selection) {
+      const [direction, from, expectedTarget] = String(selection).split(":");
+      const current = cycle.tiles.find(tile => tile.id === cycleState.currentTile);
       if (!current) throw new Error("请先在地图中设置阿尔戈号当前位置。");
-      const targetId = current.neighbors?.[direction] || "";
-      if (!targetId) throw new Error(`当前位置没有可向${({ up: "上", right: "右", down: "下", left: "左" })[direction]}移动的板块。`);
-      const target = cycle.tiles.find((tile) => tile.id === targetId);
-      if (!target) throw new Error("地图数据中找不到目标板块。");
+      const targetId = window.ATO_MAP_NAVIGATION.routeTarget(cycle, cycleState, current, direction);
+      if (from && (from !== current.id || expectedTarget !== targetId)) {
+        throw new Error("阿尔戈号位置或航道已更新，请重新选择附近板块。");
+      }
+      if (!targetId || !cycle.tiles.some(tile => tile.id === targetId)) {
+        throw new Error("当前位置没有通往该板块的航道。");
+      }
       return targetId;
     }
 
@@ -9049,23 +9115,135 @@
       return status;
     }
 
+    function dashboardNearbyMapState(cycleId) {
+      const map = getStructureTechContext()?.map;
+      const saved = map?.cycles?.[cycleId];
+      if (saved) {
+        const currentTile = saved.currentTile || saved.tokens?.AG;
+        return currentTile ? { ...saved, currentTile } : null;
+      }
+      const snapshot = state.mapSnapshot;
+      if (snapshot?.cycleId !== cycleId || !snapshot.currentTileId) return null;
+      const previewRevealed = Object.fromEntries((snapshot.revealedIds || []).map(id => [id, true]));
+      if (snapshot.currentTileIsLatestRevealed) previewRevealed[snapshot.currentTileId] = true;
+      return {
+        currentTile: snapshot.currentTileId,
+        previewRevealed,
+        latestRevealedTile: snapshot.latestRevealedTileId,
+        tileVariants: snapshot.currentTileFace === "B" ? { [snapshot.currentTileId]: "alternate" } : {},
+      };
+    }
+
+    function createRevealedMapPreview(cycle, mapState, tile) {
+      const navigation = window.ATO_MAP_NAVIGATION;
+      if (!navigation.revealed(mapState, tile.id)) return null;
+      const panel = document.createElement("section");
+      panel.className = "argo-reveal-preview";
+      const newReveal = mapState.latestRevealedTile === tile.id;
+      const label = `${newReveal ? "最新揭示" : "当前板块"} · ${tile.label || tile.id}`;
+      const source = navigation.revealedFace(cycle, mapState, tile);
+      const mapUrl = path => new URL(path, new URL("./map/", window.location.href)).href;
+      const artwork = window.ATO_MAP_ARTWORK;
+      if (source && artwork?.resolve(source)) {
+        const image = document.createElement("div");
+        image.className = "argo-reveal-art";
+        image.setAttribute("role", "img");
+        image.setAttribute("aria-label", label);
+        panel.appendChild(image);
+        void artwork.paintBackground(image, source, mapUrl);
+      } else if (source) {
+        const image = document.createElement("img");
+        image.className = "argo-reveal-image";
+        image.src = mapUrl(source);
+        image.alt = label;
+        panel.appendChild(image);
+      }
+      const details = document.createElement("div");
+      const title = document.createElement("strong");
+      title.textContent = label;
+      details.appendChild(title);
+      const entry = mapCommandTileEntry(cycle.id, tile.id, mapState);
+      const tags = new Map((window.ATO_MAP_TILE_TAGS?.tagDefinitions || []).map(tag => [tag.id, tag.label]));
+      const factions = mapFactionLabelsByCycle[cycle.id] || {};
+      const labels = [...new Set([...(entry.tags || []).map(id => tags.get(id) || id),
+        ...(entry.factions || []).map(id => factions[id] || id)])];
+      const elements = document.createElement("div");
+      elements.className = "argo-reveal-elements";
+      for (const label of labels.length ? labels : ["无已标注元素"]) {
+        const chip = document.createElement("span");
+        chip.textContent = label;
+        elements.appendChild(chip);
+      }
+      details.appendChild(elements);
+      panel.appendChild(details);
+      return panel;
+    }
+
+    function createNearbyMapPicker() {
+      const group = document.createElement("div");
+      group.className = "map-step-group";
+      const instruction = document.createElement("span");
+      instruction.className = "map-step-label";
+      const cycle = mapCycleDefinition();
+      const navigation = window.ATO_MAP_NAVIGATION;
+      const mapState = cycle && dashboardNearbyMapState(cycle.id);
+      const cells = navigation?.nearbyTiles(cycle, mapState) || [];
+      group.appendChild(instruction);
+      if (!cells.length) {
+        instruction.textContent = "请先在地图上设置阿尔戈号的位置。";
+        return group;
+      }
+
+      instruction.textContent = cells.some(cell => cell.available)
+        ? "请选择有航道的相邻板块。" : "附近没有可航行的板块。";
+      const layout = document.createElement("div");
+      layout.className = "argo-nearby-layout";
+      const grid = document.createElement("div");
+      grid.className = "argo-nearby-grid";
+      grid.setAttribute("aria-label", "阿尔戈号周围八格");
+      const currentTile = cells[4].tile;
+      for (const { direction, label, tile, available } of cells) {
+        const current = direction === "current";
+        const faceUp = tile && navigation.revealed(mapState, tile.id);
+        const cell = document.createElement(available ? "button" : "div");
+        cell.className = `argo-nearby-cell${current ? " current" : ""}${available ? " secondary" : ""}`;
+        if (available) {
+          cell.type = "button";
+          cell.dataset.mapDirection = `${direction}:${currentTile.id}:${tile.id}`;
+          cell.disabled = mapCommandBusy;
+          cell.setAttribute("aria-label", `向${label}移动至板块 ${tile.label || tile.id}${faceUp ? "" : "（未揭示）"}`);
+        }
+        const heading = document.createElement("strong");
+        heading.textContent = current ? `阿尔戈号 · ${tile.label || tile.id}`
+          : (tile && (faceUp || available) ? tile.label || tile.id : label);
+        const status = document.createElement("span");
+        status.textContent = current ? "当前位置" : available
+          ? (faceUp ? `${label} · 可选择` : `${label} · 未揭示`)
+          : (tile ? (faceUp ? "无航道" : "未揭示 · 无航道") : "—");
+        cell.append(heading, status);
+        grid.appendChild(cell);
+      }
+      layout.appendChild(grid);
+      const preview = createRevealedMapPreview(cycle, mapState, currentTile);
+      if (preview) layout.appendChild(preview);
+      group.appendChild(layout);
+      if (cells.some(({ tile, available }) => (tile === currentTile || available)
+          && Object.keys(window.ATO_NEMESIS_PATH.effectiveTile(cycle, mapState, tile).exits || {})
+            .some(exit => /^(TOP|BOTTOM|LEFT|RIGHT)_(TOP|BOTTOM|LEFT|RIGHT)$/.test(exit)))) {
+        const note = document.createElement("span");
+        note.className = "map-command-status";
+        note.textContent = "经过有 α／β 区段的板块时，请按板块箭头确认出入口。";
+        group.appendChild(note);
+      }
+      return group;
+    }
+
     function createMapStepTools(stepId) {
-      if (!secondScreenEnabled || !currentCycleConfig().map || stepId !== "move") return null;
+      if (!currentCycleConfig().map || stepId !== "move") return null;
       const wrapper = document.createElement("div");
       wrapper.className = "map-step-tools";
 
-      const group = document.createElement("div");
-      group.className = "map-step-group";
-      group.innerHTML = `
-        <span class="map-step-label">移动阿尔戈号</span>
-        <div class="argo-direction-pad" aria-label="阿尔戈号方向移动">
-          <button type="button" class="secondary" data-map-direction="up" aria-label="向上移动">↑</button>
-          <button type="button" class="secondary" data-map-direction="down" aria-label="向下移动">↓</button>
-          <button type="button" class="secondary" data-map-direction="left" aria-label="向左移动">←</button>
-          <button type="button" class="secondary" data-map-direction="right" aria-label="向右移动">→</button>
-        </div>
-      `;
-      wrapper.appendChild(group);
+      wrapper.appendChild(createNearbyMapPicker());
 
       if (currentCycleConfig().id === "c5") {
         const flipGroup = document.createElement("div");

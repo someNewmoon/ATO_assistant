@@ -289,3 +289,46 @@ test('changing profile, cycle or session during a map request never writes its s
     assert.equal(ctx.mapCommandBusy, false);
   }
 });
+
+function nearbyHarness() {
+  const { ctx } = harness();
+  for (const name of ['nemesis-path', 'nearby-navigation']) {
+    vm.runInContext(fs.readFileSync(path.join(root, 'map', name + '.js'), 'utf8'), ctx);
+  }
+  vm.runInContext(fn(html, 'mapDirectionalTarget'), ctx);
+  return ctx;
+}
+
+test('nearby view fills the eight surrounding cells and offers only printed routes', () => {
+  const ctx = nearbyHarness();
+  const cycle = cycles.find(item => item.id === 'c1');
+  const state = savedCycle('027');
+  const cells = clone(ctx.window.ATO_MAP_NAVIGATION.nearbyTiles(cycle, state));
+  assert.deepEqual(cells.map(cell => cell.tile?.id), ['021','022','023','026','027','028','031','032','033']);
+  assert.deepEqual(cells.filter(cell => cell.available).map(cell => cell.tile.id), ['022','026','032']);
+  assert.equal(ctx.window.ATO_MAP_NAVIGATION.revealed(state, '022'), false);
+  state.previewRevealed = { '022': true };
+  assert.equal(ctx.window.ATO_MAP_NAVIGATION.revealed(state, '022'), true);
+  assert.equal(ctx.mapDirectionalTarget(cycle, state, 'up:027:022'), '022');
+  assert.throws(() => ctx.mapDirectionalTarget(cycle, state, 'upper-right:027:023'), /航道/);
+  state.currentTile = '022';
+  assert.throws(() => ctx.mapDirectionalTarget(cycle, state, 'up:027:022'), /已更新/);
+});
+
+test('available routes and preview faces follow the saved tile variants', () => {
+  const ctx = nearbyHarness();
+  const c1 = cycles.find(item => item.id === 'c1');
+  const c5 = cycles.find(item => item.id === 'c5');
+  const nav = ctx.window.ATO_MAP_NAVIGATION;
+  const alt = savedCycle('022');
+  alt.tileVariants['022'] = 'alternate';
+  const changed = nav.nearbyTiles(c1, alt).find(cell => cell.direction === 'right');
+  assert.equal(changed.available, true);
+  assert.equal(changed.tile.id, '023');
+  assert.equal(ctx.mapDirectionalTarget(c1, alt, 'right:022:023'), '023');
+  assert.match(nav.revealedFace(c1, alt, c1.tiles.find(tile => tile.id === '022')), /022-alt-front.jpg$/);
+  const face = savedCycle('001');
+  face.tileVariants['001'] = 'alternate';
+  const tile = c5.tiles.find(tile => tile.id === '001');
+  assert.equal(nav.revealedFace(c5, face, tile), tile.back);
+});

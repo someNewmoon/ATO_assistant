@@ -981,3 +981,21 @@ test('Doom advance spends the entered cost and carries the excess across A/B and
   track.position = 6;
   assert.throws(() => app.applyDoomAdvance(app.state, app.doomAdvanceDetails(), 1), /重新确认/);
 });
+
+test('a Doom face with multiple trigger points leaves the amount manual even if only one is affordable', async () => {
+  const app = dashboard('c2', { doom: 5 });
+  app.state.cardTracks.doom.doom = 3;
+  const input = { value: '', valueAsNumber: NaN, validity: { valid: false } };
+  let onClose;
+  const dialog = { showModal() {}, addEventListener(_, callback) { onClose = callback; } };
+  const nodes = { doomAdvanceDialog: dialog, doomAdvanceCost: input };
+  app.document = { getElementById: id => nodes[id] ||= {} };
+  vm.runInContext(dashboardFunction('confirmDoomAdvance'), app);
+  const details = app.doomAdvanceDetails();
+  assert.deepEqual(Array.from(details.limits), [1, 5]);
+  const decision = app.confirmDoomAdvance(details);
+  assert.equal(input.value, '');
+  assert.equal(input.max, '3');
+  onClose();
+  assert.equal(await decision, null);
+});

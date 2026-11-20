@@ -7347,8 +7347,8 @@
       const input = document.getElementById("doomAdvanceCost");
       const output = document.getElementById("doomAdvancePreview");
       const hint = document.getElementById("doomAdvanceHint");
-      const available = details.limits.filter(limit => limit <= details.count);
-      const single = available.length === 1;
+      const [threshold] = details.limits;
+      const single = details.limits.length === 1 && threshold <= details.count;
       const sameCard = details.card?.name === details.next.name;
       const current = !details.card ? "未揭示" : sameCard ? details.card.label : `${details.card.label} · ${details.card.name}`;
       document.getElementById("doomAdvanceFaces").textContent = `${current} → ${details.next.label} · ${details.next.name}`;
@@ -7356,7 +7356,7 @@
         ? `卡面触发点 ${details.limits.join(" / ")}。按卡面确认扣除量和其他条件。填 0 可仅调整卡面。`
         : "按卡面指示填写扣除量。填 0 保留当前灾厄。";
       input.max = String(details.card ? details.count : 0);
-      input.value = !details.card ? "0" : single ? String(available[0]) : "";
+      input.value = !details.card ? "0" : single ? String(threshold) : "";
       const preview = () => {
         const cost = input.valueAsNumber;
         output.textContent = input.validity.valid && Number.isSafeInteger(cost)

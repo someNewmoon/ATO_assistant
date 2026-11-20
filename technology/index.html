@@ -1090,7 +1090,7 @@ button.gear-group-name:hover {
 <link rel="stylesheet" href="../assets/theme.css?v=20261001">
 <link rel="stylesheet" href="editorial.css?v=20261001-cycle-menu">
 <link rel="stylesheet" href="tech-tree.css?v=20261002-content-paper">
-<link rel="stylesheet" href="arsenal.css?v=20261117-loadouts">
+<link rel="stylesheet" href="arsenal.css?v=20261120-copy-limits">
 <link rel="stylesheet" href="../hero/battle-roster.css">
 <link rel="stylesheet" href="../assets/card-art.css?v=20261017-corners1">
 <script src="../assets/card-art.js?v=20261017-corners1" defer></script>
@@ -1169,7 +1169,7 @@ button.gear-group-name:hover {
   <script src="structure-tech-rules.js?v=20261118-moon-resource-types1"></script>
   <script src="structure-tech-client.js?v=20261019-negotiation-rows2"></script>
 <script src="../hero/hero-catalog.js?v=20261117-battle-polish"></script>
-<script src="gear-inventory.js?v=20261120-player-kit"></script>
+<script src="gear-inventory.js?v=20261120-copy-limits"></script>
 <script>
 const TECH_DICTIONARY_URL = 'tech_card_dictionary.min.json';
 const fetch = window.ATO_CAMPAIGN_NOTES.createFetch(window.fetch.bind(window), {
@@ -1485,7 +1485,7 @@ function craftPlanForGear(entry, gear) {
   const options = parseGearCostOptions(gear.cost, entry.cycle).map(parts => evaluateCraftOption(parts, resources));
   const craftableIndex = options.findIndex(option => option.canAutoCraft);
   const actionableIndex = options.findIndex(option => option.missing.length === 0);
-  const filterCraftable = actionableIndex >= 0;
+  const filterCraftable = actionableIndex >= 0 && gearSupply(gear.gearId).room !== 0;
   return {
     key: `${entry.techId}::${gear.gearId}`,
     techId: entry.techId,
@@ -1534,27 +1534,31 @@ function describeCraftPlan(plan) {
   }
   return { text: '没有可自动扣除的材料。', className: 'blocked' };
 }
+function gearSupply(id, record = gearRecordState, totals) {
+  const inventory = window.ATO_GEAR_INVENTORY;
+  const limit = inventory.copyLimit(id, record?.gearLimits);
+  const owned = (totals || inventory.stockTotals(record?.arsenal))[inventory.baseGearId(inventory.gearKey(id))] || 0;
+  return { limit, owned, room: limit === null ? null : Math.max(0, limit - owned) };
+}
+
 function renderCraftPanel(entry, gear) {
   const plan = craftPlanForGear(entry, gear);
   gearCraftPlans.set(plan.key, plan);
   const status = describeCraftPlan(plan);
-  const disabled = gearMutationInFlight || (gearRecordLoadInFlight && !gearRecordState);
+  const { room, limit, owned } = gearSupply(plan.gearId);
   const actionableOption = plan.options[plan.actionableIndex];
   const pending = gearCraftOperations.get(gearCraftOperationKey(plan.key));
-  const buttonText = pending ? '确认上次制造结果' : gearRecordLoadInFlight && !gearRecordState
-    ? '检查材料中'
-    : gearRecordError
-      ? '无法读取记录表'
-      : plan.actionableIndex >= 0
-        ? actionableOption?.unsupported.length
-          ? '确认手动材料并制造'
-          : '制造并扣除'
-        : plan.options.some(option => option.unsupported.length === 0)
-          ? '材料不足'
-          : '需手动处理';
+  const atLimit = room === 0;
+  const disabled = gearMutationInFlight || (gearRecordLoadInFlight && !gearRecordState) || (!pending && atLimit);
+  const buttonText = pending ? '确认上次制造结果' : atLimit ? '已达实物上限'
+    : gearRecordLoadInFlight && !gearRecordState ? '检查材料中'
+      : gearRecordError ? '无法读取记录表'
+        : plan.actionableIndex >= 0 ? actionableOption?.unsupported.length ? '确认手动材料并制造' : '制造并扣除'
+          : plan.options.some(option => option.unsupported.length === 0) ? '材料不足' : '需手动处理';
+  const detail = !pending && atLimit ? `已持有 ${owned} 件，实物上限 ${limit} 件。` : status.text;
   return `<div class="gear-craft-panel">
     <button type="button" class="gear-craft-btn" data-craft-key="${esc(plan.key)}" data-craft-option="${pending?.optionIndex ?? plan.actionableIndex}" ${disabled ? 'disabled' : ''}>${buttonText}</button>
-    <div class="gear-craft-status ${esc(status.className)}">${esc(status.text)}</div>
+    <div class="gear-craft-status ${esc(atLimit && !pending ? 'blocked' : status.className)}">${esc(detail)}</div>
   </div>`;
 }
 function normalizeCraftRecordResources(value) {
@@ -1656,7 +1660,11 @@ async function mutateCampaignRecordState(mutator, operation = null) {
       });
       const payload = campaignSession.accept(await response.json().catch(() => null));
       if (response.status === 409 && payload?.code === 'SAVE_CONFLICT') continue;
-      if (!response.ok || !payload?.ok) throw new Error(payload?.error || `HTTP ${response.status}`);
+      if (!response.ok || !payload?.ok) {
+        const error = new Error(payload?.error || `HTTP ${response.status}`);
+        error.code = payload?.code;
+        throw error;
+      }
       return adopt(next, Math.max(0, Number(payload.revision || latest.revision + 1)));
     } catch (error) {
       // The write and its receipt are atomic. A missing response is not proof
@@ -1701,6 +1709,10 @@ async function craftGear(planKey, optionIndex) {
     alert(`暂时无法制造 ${plan.gearName}：${describeCraftPlan(plan).text}`);
     return;
   }
+  if (!operation && gearSupply(plan.gearId).room === 0) {
+    alert(`${plan.gearName} 已达实物上限。`);
+    return;
+  }
   const initialCheck = evaluateCraftOption(option.parts, gearRecordState?.resources || {});
   if (!operation && initialCheck.missing.length) {
     const missingText = initialCheck.missing.map(part => `${part.label}，现有 ${part.available}`).join('；');
@@ -1728,17 +1740,22 @@ async function craftGear(planKey, optionIndex) {
         const missingText = checked.missing.map(part => `${part.label}，现有 ${part.available}`).join('；');
         throw new Error(`材料不足：${missingText}`);
       }
+      recordState.arsenal = window.ATO_GEAR_INVENTORY.adjust(recordState.arsenal, operation.gearId, 1, true, recordState.gearLimits);
       operation.parts.filter(part => !part.unsupported).forEach(part => {
         recordState.resources[part.storageKey] = resourceAmount(recordState.resources, part.storageKey) - part.amount;
       });
-      recordState.arsenal = window.ATO_GEAR_INVENTORY.adjust(recordState.arsenal, operation.gearId, 1, true);
       return recordState;
     }, operation);
     gearCraftOperations.delete(operationKey);
     arsenalMessage = `${plan.gearName} 制造成功，已存入军械库。`;
     arsenalMessageError = false;
   } catch (error) {
-    alert(`制造 ${plan.gearName} 未确认：${String(error.message || error)}。请点击「确认上次制造结果」重试，同一次制造不会重复扣料。`);
+    if (error.code === 'GEAR_COPY_LIMIT') {
+      gearCraftOperations.delete(operationKey);
+      alert(`无法制造 ${plan.gearName}：${error.message}`);
+    } else {
+      alert(`制造 ${plan.gearName} 未确认：${String(error.message || error)}。请点击「确认上次制造结果」重试，同一次制造不会重复扣料。`);
+    }
     await loadGearRecordState();
   } finally {
     gearMutationInFlight = false;
@@ -2149,6 +2166,7 @@ function renderGearInventoryView() {
 
 function arsenalCatalog() {
   const inventory = window.ATO_GEAR_INVENTORY.normalize(gearRecordState?.arsenal);
+  const totals = window.ATO_GEAR_INVENTORY.stockTotals(inventory);
   const catalog = new Map();
   // The complete card dictionary also includes loot and starting equipment.
   // Their card IDs identify the cycle even when there is no production recipe.
@@ -2181,7 +2199,7 @@ function arsenalCatalog() {
     if (ascended) item.cycles = [ascended];
     const searchNames = [name, gearProductionData?.gearCards?.[item.gearId], card?.title, ...(card?.aliases || [])];
     return {
-      ...item, name, part,
+      ...item, name, part, supply: gearSupply(item.gearId, gearRecordState, totals),
       ...(inventory[item.gearId] || { quantity: 0, manufactured: 0 }),
       recorded: Object.prototype.hasOwnProperty.call(inventory, item.gearId),
       searchText: [item.gearId, ...searchNames, part.label, ...item.techIds.map(getTechDisplayName)].join(' ').toLowerCase(),
@@ -2207,11 +2225,12 @@ function arsenalLoadoutsHtml(disabled) {
   const inventory = window.ATO_GEAR_INVENTORY;
   const heroes = window.ATO_HERO_CATALOG;
   const titans = inventory.loadoutTitans(gearRecordState);
+  const stock = inventory.normalize(gearRecordState.arsenal);
   const cards = gearRecordHeroes.map(hero => {
     const kit = inventory.normalizeLoadout(gearRecordState.loadouts?.[hero.id]);
     const titanId = inventory.titanIdFor(gearRecordState, kit.titanId);
     const titan = inventory.loadoutTitan(titans.find(entry => String(entry.id) === titanId), kit.titanPanelId);
-    const gear = Object.entries(kit.gear).map(([id, quantity]) => {
+    const gear = Object.entries(kit.gear).filter(([id]) => stock[id]?.quantity > 0).map(([id, quantity]) => {
       const art = gearImageSrc(id);
       return `<figure>${art ? `<img src="${esc(art)}" loading="lazy" alt="">` : ''}<figcaption>${esc(getGearName(id))} ×${quantity}</figcaption></figure>`;
     }).join('');
@@ -2245,6 +2264,7 @@ function editArsenalLoadout(heroId, catalog) {
   const accountId = campaignSession.accountId;
   const base = inventory.normalizeLoadout(record.loadouts?.[heroId]);
   const draft = inventory.normalizeLoadout(base);
+  const stock = inventory.normalize(record.arsenal);
   draft.titanId = inventory.titanIdFor(record, draft.titanId);
   const assignments = inventory.assignedLoadouts(record, gearRecordHeroes);
   const legacy = !record.loadouts?.[heroId] && Object.entries(record.loadouts || {}).filter(([id]) => /^[1-4]$/.test(id));
@@ -2368,7 +2388,7 @@ function editArsenalLoadout(heroId, catalog) {
 
   function renderGearChoices() {
     const needle = query.value.trim().toLowerCase();
-    const items = catalog.filter(item => item.part.key !== 'titan' && item.searchText.includes(needle));
+    const items = catalog.filter(item => item.part.key !== 'titan' && item.quantity > 0 && item.searchText.includes(needle));
     choices.innerHTML = inventory.groupGear(items, item => item.part.key).map(group =>
       '<section><h4>' + esc(group.label) + '</h4><div class="arsenal-kit-grid">' + group.items.map(item => {
         const id = item.gearId;
@@ -2385,7 +2405,8 @@ function editArsenalLoadout(heroId, catalog) {
   function renderAssignedGear() {
     list.innerHTML = Object.entries(draft.gear).map(([id, amount]) => {
       const name = getGearName(id);
-      return `<li>${loadoutArt(id, name)}<strong>${esc(name)} ×${amount}</strong><button type="button" class="tool-btn"
+      const stocked = stock[id]?.quantity > 0;
+      return `<li>${stocked ? loadoutArt(id, name) : ''}<strong>${esc(name)} ×${amount}</strong>${stocked ? '' : '<small>旧配装 · 库存为零</small>'}<button type="button" class="tool-btn"
         data-release-gear="${esc(id)}" aria-label="${esc(`释放一件${name}`)}">移除一件</button></li>`;
     }).join('') || '<li>未分配装备</li>';
     renderGearChoices();
@@ -2500,8 +2521,8 @@ function arsenalItemHtml(item) {
     <div class="arsenal-item-meta">${esc(item.gearId)} · ${esc(item.part.label)}<br>${esc(item.cycles.map(cycle => cycle.replace('c', '循环 ')).join(' / ') || '循环未分类')} · 累计制造 ${item.manufactured} 件</div>
     <div class="arsenal-quantity">
       <button type="button" class="gear-resource-btn" data-arsenal-gear="${esc(item.gearId)}" data-arsenal-delta="-1" aria-label="减少 ${esc(item.name)}" ${gearMutationInFlight || item.quantity === 0 ? 'disabled' : ''}>−</button>
-      <span class="arsenal-quantity-value">现有 ${item.quantity} 件${assigned ? `<small>已分配 ${assigned} 件${assigned > item.quantity ? ' · 超出库存' : ''}</small>` : ''}</span>
-      <button type="button" class="gear-resource-btn" data-arsenal-gear="${esc(item.gearId)}" data-arsenal-delta="1" aria-label="增加 ${esc(item.name)}" ${gearMutationInFlight ? 'disabled' : ''}>+</button>
+      <span class="arsenal-quantity-value">现有 ${item.quantity} 件${item.supply.limit === null ? '' : `<small>同款合计 ${item.supply.owned} / ${item.supply.limit} 件</small>`}${assigned ? `<small>已分配 ${assigned} 件${assigned > item.quantity ? ' · 超出库存' : ''}</small>` : ''}</span>
+      <button type="button" class="gear-resource-btn" data-arsenal-gear="${esc(item.gearId)}" data-arsenal-delta="1" aria-label="增加 ${esc(item.name)}" ${gearMutationInFlight || item.supply.room === 0 ? 'disabled' : ''}>+</button>
     </div>
     ${inventory.ascensionEnabled && !item.gearId.startsWith('T:') && inventory.nextCycle(inventory.ascendedCycle(item.gearId) || item.cycles[0]) ? `<button type="button" class="tool-btn" data-arsenal-ascend="${esc(item.gearId)}" ${gearMutationInFlight || (!pendingAscension && item.quantity <= assigned) ? 'disabled' : ''}>${pendingAscension ? '核对上次登升' : '登升一件 · 消耗对应升华核心'}</button>` : ''}
   </article>`;
@@ -2564,11 +2585,16 @@ function renderArsenalPage() {
     <label class="gear-filter-option"><input type="checkbox" data-arsenal-filter="stock" ${arsenalOnlyStock ? 'checked' : ''}>只显示有库存</label>
     <form class="arsenal-add">
     <label class="arsenal-add-gear">补录装备 <select id="arsenalAddGear" aria-label="补录装备" ${unavailable || !choices.length ? 'disabled' : ''}>${choices.length ? choices.map(item => optionHtml(item.gearId, `${item.name} · ${item.gearId}`, arsenalSelectedGear)).join('') : '<option value="">没有符合筛选条件的装备</option>'}</select></label>
-    <label>数量 <input id="arsenalAddQuantity" type="number" min="1" max="${Number.MAX_SAFE_INTEGER}" step="1" value="${arsenalAddQuantity}" required ${unavailable ? 'disabled' : ''}></label>
+    <label>数量 <input id="arsenalAddQuantity" type="number" min="1" step="1" value="${arsenalAddQuantity}" required ${unavailable ? 'disabled' : ''}></label>
     <button type="submit" class="tool-btn" ${unavailable || !choices.length ? 'disabled' : ''}>加入军械库</button>
     <button type="button" class="tool-btn" data-arsenal-refresh ${gearRecordLoadInFlight || gearMutationInFlight ? 'disabled' : ''}>刷新</button>
     </form>
-  </div><div class="arsenal-meta"><span>制造自动入库；所有装备均可补录，手动增减仅调整库存。</span><span class="arsenal-summary">显示 ${visible.length}/${recorded.length} 种 · ${visibleQuantity} 件</span></div>`;
+    <div class="arsenal-add arsenal-copy-controls">
+      <label>实物上限 <input id="arsenalCopyLimit" type="number" min="1" step="1" placeholder="待核实" title="留空恢复默认上限" ${unavailable ? 'disabled' : ''}></label>
+      <button type="button" class="tool-btn" data-save-copy-limit ${unavailable || !choices.length ? 'disabled' : ''}>保存上限</button>
+      <small class="arsenal-copy-info" data-copy-info aria-live="polite"></small>
+    </div>
+  </div><div class="arsenal-meta"><span>制造自动入库。补录和制造共用实物上限。</span><span class="arsenal-summary">显示 ${visible.length}/${recorded.length} 种 · ${visibleQuantity} 件</span></div>`;
   html += gearMutationInFlight ? '<div class="arsenal-message" role="status">正在保存军械库...</div>' : arsenalMessageHtml();
   if (gearRecordState) html += arsenalLoadoutsHtml(unavailable);
   if (gearRecordError) html += `<div class="gear-empty">军械库读取失败：${esc(gearRecordError)}。请点击刷新重试。</div>`;
@@ -2595,7 +2621,26 @@ function renderArsenalPage() {
     renderArsenalPage();
   }));
   mainView.querySelector('[data-arsenal-refresh]').addEventListener('click', () => void loadGearRecordState());
-  mainView.querySelector('#arsenalAddGear').addEventListener('change', event => { arsenalSelectedGear = event.target.value; });
+  const gearPicker = mainView.querySelector('#arsenalAddGear');
+  const quantityPicker = mainView.querySelector('#arsenalAddQuantity');
+  const limitPicker = mainView.querySelector('#arsenalCopyLimit');
+  const addButton = mainView.querySelector('.arsenal-add button[type="submit"]');
+  const limitButton = mainView.querySelector('[data-save-copy-limit]');
+  function renderSupply() {
+    const item = choices.find(entry => entry.gearId === gearPicker.value);
+    const supply = item?.supply;
+    limitPicker.value = supply?.limit ?? '';
+    limitPicker.disabled = limitButton.disabled = unavailable || !item;
+    quantityPicker.max = Math.max(1, supply?.room ?? Number.MAX_SAFE_INTEGER);
+    if (supply?.room > 0 && Number(quantityPicker.value) > supply.room) quantityPicker.value = supply.room;
+    addButton.disabled = quantityPicker.disabled = unavailable || !item || supply?.room === 0;
+    mainView.querySelector('[data-copy-info]').textContent = !item ? '' : supply.limit === null
+      ? '实物上限待核实，可在数过卡后登记。'
+      : `同款已持有 ${supply.owned} / ${supply.limit} 件${supply.room === 0 ? ' · 已达上限' : ` · 还能取得 ${supply.room} 件`}`;
+  }
+  gearPicker.addEventListener('change', () => { arsenalSelectedGear = gearPicker.value; renderSupply(); });
+  limitButton.addEventListener('click', () => void saveCopyLimit(gearPicker.value, limitPicker.value));
+  renderSupply();
   mainView.querySelector('#arsenalAddQuantity').addEventListener('input', event => {
     const value = Number(event.target.value);
     arsenalAddQuantity = Number.isSafeInteger(value) && value > 0 ? value : 1;
@@ -2621,6 +2666,35 @@ function renderArsenalPage() {
   });
 }
 
+async function saveCopyLimit(id, value) {
+  const inventory = window.ATO_GEAR_INVENTORY;
+  const base = inventory.baseGearId(inventory.gearKey(id));
+  const amount = value === '' ? null : Number(value);
+  if (gearMutationInFlight || !gearRecordState || !base) return;
+  if (amount !== null && (!Number.isSafeInteger(amount) || amount < 1)) {
+    alert('实物上限请输入正整数。');
+    return;
+  }
+  gearMutationInFlight = true;
+  try {
+    await mutateCampaignRecordState(record => {
+      const limits = isPlainObject(record.gearLimits) ? { ...record.gearLimits } : {};
+      if (amount === null) delete limits[base];
+      else limits[base] = amount;
+      record.gearLimits = limits;
+      return record;
+    });
+    arsenalMessage = `${getGearName(id)} 的实物上限已保存。`;
+    arsenalMessageError = false;
+  } catch (error) {
+    arsenalMessage = error.message;
+    arsenalMessageError = true;
+  } finally {
+    gearMutationInFlight = false;
+    renderGearInventoryView();
+  }
+}
+
 async function adjustArsenal(gearId, delta) {
   if (gearMutationInFlight) return;
   if (!gearRecordState || gearRecordError) { alert('军械库尚未连接，请刷新后重试。'); return; }
@@ -2633,7 +2707,7 @@ async function adjustArsenal(gearId, delta) {
   renderGearInventoryView();
   try {
     await mutateCampaignRecordState(recordState => {
-      recordState.arsenal = window.ATO_GEAR_INVENTORY.adjust(recordState.arsenal, gearId, delta);
+      recordState.arsenal = window.ATO_GEAR_INVENTORY.adjust(recordState.arsenal, gearId, delta, false, recordState.gearLimits);
       return recordState;
     });
     arsenalMessage = `${getGearName(gearId)} 的数量已保存。`;

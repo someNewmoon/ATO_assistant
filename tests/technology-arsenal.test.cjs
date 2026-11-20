@@ -19,8 +19,8 @@ function context(names, values) {
 
 test('manual stock changes preserve manufacturing totals and zero-stock history', () => {
   const original = { AJ0160: { quantity: 2, manufactured: 2 } };
-  const added = inventory.adjust(original, '1xaj0160', 3);
-  assert.deepEqual(added.AJ0160, { quantity: 5, manufactured: 2 });
+  const added = inventory.adjust(original, '1xaj0160', 1);
+  assert.deepEqual(added.AJ0160, { quantity: 3, manufactured: 2 });
   const empty = inventory.adjust(added, 'AJ0160', -8);
   assert.deepEqual(empty.AJ0160, { quantity: 0, manufactured: 2 });
   assert.deepEqual(inventory.adjust(empty, 'AJ0160', 1, true).AJ0160, { quantity: 1, manufactured: 3 });
@@ -36,6 +36,22 @@ test('inventory rejects invalid mutations and safely normalizes old or malformed
   }
   assert.throws(() => inventory.adjust({}, '__proto__', 1));
   assert.throws(() => inventory.adjust({}, 'AJ0160', -1, true));
+});
+
+test('copy limits count stock across old IDs and ascended variants', () => {
+  const original = { AJ0160: { quantity: 2, manufactured: 5 }, 'AJ0160@c2': { quantity: 1 } };
+  assert.equal(inventory.copyLimit('1xaj0160@c2'), 3);
+  assert.equal(inventory.copyLimit('AJ0230'), 1);
+  assert.equal(inventory.copyLimit('EJ2982'), null);
+  assert.throws(() => inventory.adjust(original, 'AJ0160', 1, true), /实物上限为 3/);
+  assert.throws(() => inventory.adjust(original, 'AJ0160@c3', 1), /实物上限为 3/);
+  assert.equal(inventory.stockTotals(inventory.ascend(original, 'AJ0160', 'c1')).AJ0160, 3);
+  const legacy = { AJ0160: { quantity: 4 } };
+  assert.equal(inventory.adjust(legacy, 'AJ0160', -1).AJ0160.quantity, 3);
+  assert.doesNotThrow(() => inventory.checkStockGrowth(legacy, legacy));
+  assert.throws(() => inventory.checkStockGrowth(legacy, { AJ0160: { quantity: 5 } }), /实物上限/);
+  const custom = { EJ2982: 2 };
+  assert.throws(() => inventory.adjust({}, 'EJ2982', 3, false, custom), /实物上限为 2/);
 });
 
 const heroes = [{ id: 'hero-a' }, { id: 'hero-b' }];
@@ -90,7 +106,7 @@ function craftContext({ conflict = false, fail = false, remoteMissing = false, l
   let revision = 1;
   let posts = 0;
   const warnings = [];
-  const c = context(['recordStateFromCampaign', 'readLatestRecordState', 'mutateCampaignRecordState', 'resourceAmount', 'evaluateCraftOption', 'gearCraftOperationKey', 'craftGear'], {
+  const c = context(['recordStateFromCampaign', 'readLatestRecordState', 'mutateCampaignRecordState', 'resourceAmount', 'evaluateCraftOption', 'gearCraftOperationKey', 'gearSupply', 'craftGear'], {
     window: { ATO_GEAR_INVENTORY: inventory },
     isPlainObject: value => !!value && typeof value === 'object' && !Array.isArray(value),
     normalizeCraftRecordResources: clone,
@@ -119,7 +135,7 @@ function craftContext({ conflict = false, fail = false, remoteMissing = false, l
       if (fail) return { ok: false, status: 500, json: async () => ({ ok: false, error: '保存失败' }) };
       if (conflict && posts === 1) {
         server.resources.material = 20;
-        server.arsenal = inventory.adjust(server.arsenal, 'AJ0160', 4);
+        server.arsenal = inventory.adjust(server.arsenal, 'AJ0160', 2);
         revision++;
         return { ok: false, status: 409, json: async () => ({ code: 'SAVE_CONFLICT' }) };
       }
@@ -149,7 +165,17 @@ test('a save conflict retries against fresh stock without double-counting manufa
   await c.craftGear('recipe', 0);
   assert.equal(posts(), 2);
   assert.equal(server().resources.material, 17);
-  assert.deepEqual(server().arsenal.AJ0160, { quantity: 5, manufactured: 1 });
+  assert.deepEqual(server().arsenal.AJ0160, { quantity: 3, manufactured: 1 });
+});
+
+test('capped manufacture leaves materials, receipts and stock unchanged', async () => {
+  const { c, server, posts, warnings } = craftContext();
+  server().arsenal = { AJ0160: { quantity: 2 }, 'AJ0160@c2': { quantity: 1 } };
+  await c.craftGear('recipe', 0);
+  assert.equal(posts(), 0);
+  assert.equal(server().resources.material, 10);
+  assert.equal(server()._gearCraftReceipts, undefined);
+  assert.match(warnings[0], /实物上限/);
 });
 
 test('failed saves and newly missing materials do not record manufactured gear', async () => {
@@ -213,12 +239,13 @@ test('offline receipt recovery retains the original operation even after stock i
 });
 
 test('pending manufacture button remains actionable after the saved stock is depleted', () => {
-  const c = context(['gearCraftOperationKey', 'renderCraftPanel'], {
+  const c = context(['gearCraftOperationKey', 'gearSupply', 'renderCraftPanel'], {
     activeAccountId: 'A', campaignSession: { accountId: 'login-A' }, gearCraftPlans: new Map(),
     gearCraftOperations: new Map([[JSON.stringify(['login-A', 'A', 'recipe']), { optionIndex: 0 }]]),
-    craftPlanForGear: () => ({ key: 'recipe', actionableIndex: -1, options: [{ unsupported: [] }] }),
+    window: { ATO_GEAR_INVENTORY: inventory },
+    craftPlanForGear: () => ({ key: 'recipe', gearId: 'AJ0160', actionableIndex: -1, options: [{ unsupported: [] }] }),
     describeCraftPlan: () => ({ text: '材料不足', className: 'blocked' }), esc: String,
-    gearMutationInFlight: false, gearRecordLoadInFlight: false, gearRecordState: {}, gearRecordError: '',
+    gearMutationInFlight: false, gearRecordLoadInFlight: false, gearRecordState: { arsenal: { AJ0160: { quantity: 3 } } }, gearRecordError: '',
   });
   const html = c.renderCraftPanel({}, {});
   assert.match(html, /确认上次制造结果/);
@@ -228,7 +255,7 @@ test('pending manufacture button remains actionable after the saved stock is dep
 
 function catalogContext() {
   const production = require('../technology/ato_gear_production.json');
-  return context(['normalizeGearId', 'getGearName', 'getTechDisplayName', 'gearPart', 'gearPartMatchesFilter', 'productionRecordCycle', 'arsenalCatalog', 'arsenalItemMatchesFilters'], {
+  return context(['normalizeGearId', 'getGearName', 'getTechDisplayName', 'gearPart', 'gearPartMatchesFilter', 'productionRecordCycle', 'gearSupply', 'arsenalCatalog', 'arsenalItemMatchesFilters'], {
     window: { ATO_GEAR_INVENTORY: inventory }, gearProductionData: production,
     gearCardDetails: require('../technology/gear_card_images.json').cards,
     gearPartLabels: require('../technology/gear_part_labels.json').labels,
@@ -318,11 +345,11 @@ test('non-manufacturable gear can be added, reloaded and adjusted without changi
     mutateCampaignRecordState: async mutator => { c.gearRecordState = clone(mutator(clone(c.gearRecordState))); },
   });
   const before = clone(c.gearRecordState.arsenal.AJ0160);
-  await c.adjustArsenal('AJ0257', 3);
+  await c.adjustArsenal('ZJ1240', 2);
   c.gearRecordState = clone(c.gearRecordState);
-  assert.deepEqual(clone(c.arsenalCatalog().find(item => item.gearId === 'AJ0257').quantity), 3);
-  await c.adjustArsenal('AJ0257', -1);
-  assert.deepEqual(clone(c.gearRecordState.arsenal.AJ0257), { quantity: 2, manufactured: 0 });
+  assert.equal(c.arsenalCatalog().find(item => item.gearId === 'ZJ1240').quantity, 2);
+  await c.adjustArsenal('ZJ1240', -1);
+  assert.deepEqual(clone(c.gearRecordState.arsenal.ZJ1240), { quantity: 1, manufactured: 0 });
   assert.deepEqual(clone(c.gearRecordState.arsenal.AJ0160), before);
 });
 

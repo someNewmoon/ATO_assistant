@@ -65,7 +65,7 @@ test('登升关闭时军械库隐藏操作，旧装备记录仍显示', async ()
   });
   vm.runInContext(html.slice(html.indexOf('function arsenalItemHtml('), html.indexOf('async function ascendArsenalGear(')) + source, context);
   const card = context.arsenalItemHtml({ gearId: 'AJ0160@c2', name: '测试装备', part: { label: '防具' },
-    cycles: ['c2'], quantity: 1, manufactured: 0 });
+    cycles: ['c2'], quantity: 1, manufactured: 0, supply: { owned: 1, limit: 3, room: 2 } });
   assert.match(card, /AJ0160@c2/);
   assert.match(card, /现有 1 件/);
   assert.doesNotMatch(card, /data-arsenal-ascend/);

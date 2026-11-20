@@ -45,7 +45,7 @@
 
         const record = {
           ...latest.record,
-          arsenal: inventory.adjust(latest.record.arsenal, gearId, 1),
+          arsenal: inventory.adjust(latest.record.arsenal, gearId, 1, false, latest.record.gearLimits),
           _theatreGearReceipts: {
             ...recordObject(latest.record._theatreGearReceipts),
             [receiptKey(nodeId, gearId)]: true,

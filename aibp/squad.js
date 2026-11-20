@@ -129,7 +129,9 @@
       + '>' + e(inventory.titanLabel(titan)) + ' · 库存 ' + titan.count + (titan.crippled ? ' · 残废' : '') + '</option>').join('');
     const panels = inventory.DREAMWALKER_PANELS.map(panel => '<option value="' + e(panel.id) + '"'
       + (panel.id === kit.titanPanelId ? ' selected' : '') + '>' + e(panel.name) + '</option>').join('');
-    const equipment = squad.gear.filter(item => item.count || kit.gear[item.id] || item.holders?.length);
+    const equipment = squad.gear.filter(item => item.count > 0);
+    const stocked = new Set(equipment.map(item => item.id));
+    const missing = Object.entries(kit.gear).filter(([id]) => !stocked.has(id)).reduce((sum, [, count]) => sum + count, 0);
     const gearCard = item => {
       const count = kit.gear[item.id] || 0;
       return '<article class="squad-gear-card"><label><input type="checkbox" name="gear:' + e(item.id)
@@ -151,6 +153,7 @@
       + (memories ? '<section><h3>旧忆</h3><div class="squad-reference-cards">' + memories + '</div></section>' : '')
       + '<section data-prep-patterns hidden><h3>样式卡牌</h3><div class="squad-reference-cards"></div></section>'
       + '<section><h3>装备 <span class="squad-sub" data-equipped-count></span></h3>'
+      + (missing ? '<p class="squad-sub">原配装有 ' + missing + ' 件装备库存为零。保存时会卸下这些装备。</p>' : '')
       + '<label>搜索装备<input type="search" data-kit-search placeholder="按名称或编号查找"></label>'
       + (gear || '<p>军械库暂无装备。</p>') + '</section>'
       + '<button type="submit">保存配装</button></form></section>';

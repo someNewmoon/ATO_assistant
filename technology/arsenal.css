@@ -93,3 +93,6 @@ body[data-theme-module="technology"] .arsenal-toolbar .tool-btn:hover:not(:disab
 .arsenal-loadout-gear span { overflow-wrap: anywhere; }
 .arsenal-loadout-dialog .tool-btn { flex-shrink: 0; }
 .arsenal-loadout-dialog .arsenal-message { margin: 10px 0 0; }
+
+.arsenal-copy-controls { flex-basis: 100%; }
+.arsenal-copy-info { color: var(--muted); }

@@ -1,3 +1,5 @@
+import gearInventory from '../../technology/gear-inventory.js';
+
 export const sections = ['dashboard', 'map', 'record', 'technology', 'heroes', 'aibp', 'story', 'theatre', 'trauma'];
 const cycleIds = new Set(['c1', 'c2', 'c3', 'c4', 'c5']);
 const notesSections = new Set(['record', 'technology', 'heroes', 'aibp', 'story']);
@@ -45,9 +47,25 @@ export function checkAccount(user, payload) {
   }
 }
 
-export function writeSection(campaign, section, state, userId, updated) {
+function checkRecordStock(previous, next, userId) {
+  if (!object(next)) return;
+  const profiles = record => object(record?.users) || object(record?.accounts)
+    ? { ...record.accounts, ...record.users } : null;
+  const oldProfiles = profiles(previous);
+  const verify = (old, record) => {
+    try { gearInventory.checkStockGrowth(old?.arsenal, record?.arsenal, record?.gearLimits); }
+    catch (error) { throw new ApiError(409, error.message, { code: 'GEAR_COPY_LIMIT' }); }
+  };
+  if (userId) return verify(oldProfiles ? oldProfiles[userId] : previous, next);
+  const current = profiles(next);
+  if (!current) return verify(previous, next);
+  for (const [id, record] of Object.entries(current)) verify(oldProfiles?.[id], record);
+}
+
+export function writeSection(campaign, section, state, userId, updated, { restore = false } = {}) {
   if (!sections.includes(section)) throw new ApiError(400, 'Unknown section.');
   const current = campaign.sections[section];
+  if (section === 'record' && !restore) checkRecordStock(current, state, userId);
   if (userId && section !== 'dashboard' && section !== 'theatre') {
     if (typeof userId !== 'string' || userId.length > 128 || ['__proto__', 'constructor', 'prototype'].includes(userId)) {
       throw new ApiError(400, 'Invalid profile ID.');
@@ -114,5 +132,10 @@ export function importSections(campaign, payload, updated) {
       code: 'SAVE_CONFLICT', sections: conflicts, updatedAt: campaign.updatedAt,
     });
   }
-  for (const [section, state] of Object.entries(payload.sections)) writeSection(campaign, section, state, payload.userId, updated);
+  // An archive restore can carry old physical inventory counts. Live profile
+  // writes, including rewards, can only increase stock within its limit.
+  const restore = !payload.userId && object(payload.sections.dashboard);
+  for (const [section, state] of Object.entries(payload.sections)) {
+    writeSection(campaign, section, state, payload.userId, updated, { restore });
+  }
 }

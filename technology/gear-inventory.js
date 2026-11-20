@@ -207,6 +207,78 @@
     return index < 0 ? '' : CYCLES[index + 1] || '';
   }
 
+  // TTS physical-card audit, checked against contiguous printed IDs, plus
+  // explicit supply limits from the local user-supplied card catalog.
+  const gearCopyLimits = Object.freeze({
+    AJ0160: 3, AJ0163: 2, AJ0165: 2, AJ0167: 2, AJ0169: 2, AJ0171: 2,
+    AJ0173: 2, AJ0175: 2, AJ0177: 2, AJ0179: 2, AJ0181: 2, AJ0183: 2,
+    AJ0185: 2, AJ0187: 2, AJ0189: 2, AJ0191: 2, AJ0193: 2, AJ0195: 2,
+    AJ0197: 2, AJ0199: 3, AJ0202: 2, AJ0204: 2, AJ0206: 3, AJ0209: 2,
+    AJ0211: 2, AJ0213: 2, AJ0215: 2, AJ0217: 2, AJ0219: 1, AJ0220: 2,
+    AJ0222: 2, AJ0224: 2, AJ0226: 2, AJ0228: 2, AJ0230: 1, AJ0231: 2,
+    AJ0233: 2, AJ0235: 2, AJ0237: 2, AJ0239: 2, AJ0241: 2, AJ0243: 2,
+    AJ0245: 2, AJ0247: 2, AJ0249: 2, AJ0251: 2, AJ0253: 1, AJ0254: 1,
+    AJ0255: 1, AJ0256: 1, AJ0258: 1, AJ0261: 1, AJ0262: 2, AJ0264: 1,
+    AJ0266: 2, AJ0268: 1, AJ0269: 1, AJ0270: 1, AJ0271: 2, AJ0273: 1,
+    AJ0274: 1, AJ0275: 2, AJ0277: 2, AJ0279: 1, AJ0280: 1, AJ0281: 1,
+    AJ0282: 1, AJ0283: 1,
+    BJ0827: 2, BJ0829: 2, BJ0831: 4, BJ0835: 2, BJ0837: 2, BJ0839: 2,
+    BJ0841: 3, BJ0844: 1, BJ0845: 2, BJ0847: 2, BJ0849: 2, BJ0851: 1,
+    BJ0852: 2, BJ0854: 2, BJ0856: 2, BJ0858: 1, BJ0859: 1, BJ0860: 2,
+    BJ0862: 2, BJ0866: 2, BJ0868: 1, BJ0869: 2, BJ0871: 2, BJ0873: 2,
+    BJ0875: 2, BJ0877: 2, BJ0879: 2, BJ0881: 2, BJ0883: 2, BJ0885: 2,
+    BJ0887: 2, BJ0889: 2, BJ0894: 2, BJ0898: 2, BJ0900: 1, BJ0901: 1,
+    BJ0902: 1, BJ0903: 1, BJ0904: 1, BJ0905: 1, BJ0906: 1, BJ0907: 1,
+    BJ0908: 1, BJ0909: 1, BJ0910: 1, BJ0911: 2, BJ0913: 2, BJ0915: 2,
+    BJ0917: 2, BJ0919: 2, BJ0921: 2, BJ0923: 2, BJ0925: 2, BJ0927: 1,
+    BJ0928: 2, BJ0930: 2, BJ0932: 2, BJ0934: 2, BJ0936: 1, BJ0937: 1,
+    BJ0938: 1, BJ0946: 2, BJ0948: 2, BJ0950: 2, BJ0952: 2, BJ0965: 1,
+    BJ0966: 1, BJ0967: 1, BJ0969: 1,
+    CJ1389: 2, CJ1391: 2, CJ1393: 2, CJ1395: 2, CJ1397: 2, CJ1399: 2,
+    CJ1405: 2, CJ1407: 2, CJ1409: 2, CJ1411: 2, CJ1413: 2, CJ1415: 2,
+    CJ1417: 2, CJ1419: 2, CJ1421: 2, CJ1423: 2, CJ1425: 2, CJ1427: 2,
+    CJ1429: 2, CJ1431: 2, CJ1433: 2, CJ1435: 2, CJ1437: 2, CJ1439: 2,
+    CJ1441: 2, CJ1443: 2, CJ1445: 2, CJ1447: 1, CJ1448: 2, CJ1450: 2,
+    CJ1452: 2, CJ1454: 2, CJ1456: 2, CJ1458: 2, CJ1460: 2, CJ1462: 2,
+    CJ1464: 2, CJ1466: 2, CJ1468: 2, CJ1470: 2, CJ1472: 2, CJ1477: 1,
+    CJ1478: 1, CJ1479: 1, CJ1480: 1, CJ1481: 1, CJ1482: 1, CJ1483: 1,
+    CJ1484: 1, CJ1485: 1, CJ1486: 1, CJ1487: 1, CJ1490: 1, CJ1491: 1,
+    CJ1492: 2, CJ1494: 2, CJ1496: 2, CJ1498: 2, CJ1500: 2, CJ1504: 1,
+    CJ1505: 1, CJ1506: 2, CJ1510: 2, CJ1512: 2, CJ1514: 2, CJ1518: 1,
+    CJ1519: 2, CJ1521: 2, CJ1523: 2, CJ1525: 2, CJ1536: 1, CJ1537: 1,
+    CJ1538: 1, CJ1539: 1, CJ1540: 2, CJ1542: 2, CJ1544: 2,
+  });
+
+  function copyLimit(id, overrides) {
+    const base = baseGearId(gearKey(id));
+    const override = overrides && Object.hasOwn(overrides, base) ? overrides[base] : null;
+    return Number.isSafeInteger(override) && override > 0 ? override : gearCopyLimits[base] ?? null;
+  }
+
+  function stockTotals(value) {
+    const totals = {};
+    for (const [id, item] of Object.entries(normalize(value))) {
+      const base = baseGearId(id);
+      totals[base] = (totals[base] || 0) + item.quantity;
+    }
+    return totals;
+  }
+
+  function assertCopyLimit(id, quantity, overrides) {
+    const limit = copyLimit(id, overrides);
+    if (limit === null || quantity <= limit) return;
+    const error = new Error(baseGearId(id) + ' 的实物上限为 ' + limit + ' 件。');
+    error.code = 'GEAR_COPY_LIMIT';
+    throw error;
+  }
+
+  function checkStockGrowth(previous, next, overrides) {
+    const before = stockTotals(previous);
+    for (const [id, quantity] of Object.entries(stockTotals(next))) {
+      if (quantity > (before[id] || 0)) assertCopyLimit(id, quantity, overrides);
+    }
+  }
+
   function count(value) {
     const number = Number(value);
     return Number.isFinite(number) ? Math.min(Number.MAX_SAFE_INTEGER, Math.max(0, Math.floor(number))) : 0;
@@ -229,7 +301,7 @@
 
   // Keep zero-quantity entries so equipment remains visible after it is used up.
   // Manual corrections only change stock; manufacturing also updates its total.
-  function adjust(value, gearId, delta, manufactured = false) {
+  function adjust(value, gearId, delta, manufactured = false, overrides) {
     const id = gearKey(gearId);
     if (!id || !Number.isSafeInteger(delta) || delta === 0 || (manufactured && delta < 0)) {
       throw new Error('装备或数量无效');
@@ -239,6 +311,7 @@
     const quantity = record.quantity + delta;
     const total = record.manufactured + (manufactured ? delta : 0);
     if (!Number.isSafeInteger(quantity) || !Number.isSafeInteger(total)) throw new Error('装备数量过大');
+    if (delta > 0) assertCopyLimit(id, (stockTotals(inventory)[baseGearId(id)] || 0) + delta, overrides);
     inventory[id] = { quantity: Math.max(0, quantity), manufactured: total };
     return inventory;
   }
@@ -252,9 +325,11 @@
     if (!source?.quantity) throw new Error('这件装备没有库存。');
     if (source.quantity <= reserved) throw new Error('库存已分配给主要配装，请先卸下一件。');
     const destination = baseGearId(id) + '@' + target;
-    const next = adjust(inventory, destination, 1);
-    next[id].quantity -= 1;
-    return next;
+    inventory[destination] ||= { quantity: 0, manufactured: 0 };
+    if (!Number.isSafeInteger(inventory[destination].quantity + 1)) throw new Error('装备数量过大');
+    source.quantity -= 1;
+    inventory[destination].quantity += 1;
+    return inventory;
   }
 
   // Upstream four-slot loadouts are templates, never a second stock reservation.
@@ -387,7 +462,7 @@
   }
 
   return {
-    gearGroups, groupGear, ascensionEnabled, baseGearId, ascendedCycle, nextCycle, ascend, loadoutTemplates,
+    gearGroups, groupGear, gearCopyLimits, copyLimit, stockTotals, checkStockGrowth, ascensionEnabled, baseGearId, ascendedCycle, nextCycle, ascend, loadoutTemplates,
     TITAN_NAMES_ZH, TITAN_TYPES, DREAMWALKER_PANELS, TRAUMA_DECKS, traumaTrack, defaultTraumaTrack, loadoutTraumaTrack,
     TITAN_PATTERNS, PATTERN_FIELDS, loadoutPatterns, titanPatternFields, traumaDeckLabel,
     dreamwalkerPanel, loadoutTitan, titanType, titanTypeFields, titanLabel, titanArtwork,

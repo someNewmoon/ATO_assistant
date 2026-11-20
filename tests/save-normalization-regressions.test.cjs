@@ -197,6 +197,38 @@ test('hero legacy default fields merge with remote memories without a false prom
   assert.deepEqual(clone(result.heroes[0].mnemos.c1), ['new-memory']);
   assert.deepEqual(remote.heroes[0].mnemos, { c1: ['new-memory'] }, 'remote data remains untouched');
 });
+test('hero sync treats a concurrent vault withdrawal as one ownership change', () => {
+  const c = context('hero/index.html', ['heroSnapshot', 'mergeHeroStates']);
+  const card = { id: 'c1_01', cycleId: 'c1' };
+  const baseline = { heroes: [{ id: 'h1' }, { id: 'h2' }], mnemosVault: [card] };
+  const local = c.heroSnapshot(baseline);
+  const remote = c.heroSnapshot(baseline);
+  local.mnemosVault = remote.mnemosVault = [];
+  local.heroes[0].mnemos = { c1: [card.id] };
+  remote.heroes[1].mnemos = { c1: [card.id] };
+  const { state, conflicts } = c.mergeHeroStates(baseline, local, remote);
+  assert.ok(conflicts.some(path => path.includes(card.id)));
+  assert.deepEqual(clone(state.heroes.map(hero => hero.mnemos?.c1 || [])), [[card.id], []]);
+  assert.deepEqual(clone(state.mnemosVault), []);
+});
+
+test('independent vault withdrawals cannot fill a third ordinary memory slot', () => {
+  const c = context('hero/index.html', ['heroSnapshot', 'mergeHeroStates']);
+  const first = { id: 'c1_01', cycleId: 'c1' };
+  const second = { id: 'c1_02', cycleId: 'c1' };
+  const baseline = { heroes: [{ id: 'h1', mnemos: { c1: ['c1_00'] } }], mnemosVault: [first, second] };
+  const local = c.heroSnapshot(baseline);
+  const remote = c.heroSnapshot(baseline);
+  local.mnemosVault = [second];
+  remote.mnemosVault = [first];
+  local.heroes[0].mnemos.c1.push(first.id);
+  remote.heroes[0].mnemos.c1.push(second.id);
+  const { state, conflicts } = c.mergeHeroStates(baseline, local, remote);
+  assert.ok(conflicts.length);
+  assert.deepEqual(clone(state.heroes[0].mnemos.c1), ['c1_00', first.id]);
+  assert.deepEqual(clone(state.mnemosVault), [second]);
+});
+
 test('technology snapshot generation is a read and unchanged snapshots do not write the dashboard', async () => {
   let saves = 0, writes = 0;
   const c = context('technology/index.html', ['unlockedTechSnapshot', 'displayTechReferenceName', 'writeSnapshotToMainArchive', 'technologyStateValuesEqual'], {

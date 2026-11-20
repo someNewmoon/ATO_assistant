@@ -1,4 +1,70 @@
 /* Hero records share the console's cycle palette and editorial layout. */
+.hero-workflow {
+  width: min(760px, calc(100vw - 24px));
+  max-height: min(90dvh, 900px);
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  color: var(--ink);
+  background: var(--panel);
+  box-shadow: 0 24px 65px rgb(0 0 0 / 25%);
+}
+.hero-workflow[open] { display: grid; grid-template-rows: auto minmax(0, 1fr); }
+.hero-workflow::backdrop { background: rgb(19 21 20 / 57%); }
+.hero-workflow .picker-head { background: var(--panel-2, var(--panel)); }
+.hero-workflow .picker-head h2 { margin: 0; font-size: clamp(19px, 3vw, 25px); }
+.hero-workflow .picker-body { overscroll-behavior: contain; }
+.hero-workflow-form, .hero-workflow-row { display: grid; gap: 14px; }
+.hero-workflow-row { grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr)); align-items: end; }
+.hero-workflow label { display: grid; gap: 4px; font-weight: 600; }
+.hero-workflow :is(input:not([type="radio"], [type="checkbox"]), select, textarea) { width: 100%; }
+.hero-workflow .picker-note { margin: 8px 0; }
+.hero-workflow-profile {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--panel) 92%, var(--accent));
+}
+.hero-workflow-profile img { width: 62px; height: 78px; object-fit: cover; object-position: top; border-radius: 4px; }
+.hero-workflow-profile strong { font-size: 20px; }
+.hero-workflow-profile p { margin: 2px 0 0; color: var(--muted); }
+.hero-workflow-summary { display: grid; gap: 8px; margin: 0; }
+.hero-workflow-summary div { padding: 10px 12px; border-inline-start: 2px solid var(--accent); background: var(--bg); }
+.hero-workflow-summary dt { color: var(--muted); font-size: 13px; }
+.hero-workflow-summary dd { margin: 0; }
+.hero-workflow-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 8px; }
+.hero-workflow fieldset { min-width: 0; margin: 0; padding: 12px; border: 1px solid var(--line); border-radius: 8px; }
+.hero-workflow legend { padding: 0 6px; color: var(--accent-strong); font-weight: 700; }
+.hero-story-link { min-height: 40px; display: flex; align-items: center; justify-self: start; font-weight: 700; color: var(--accent-strong); }
+.awakening-portraits { display: grid; grid-template-columns: repeat(auto-fit, minmax(74px, 1fr)); gap: 6px; margin-bottom: 8px; }
+.hero-workflow .awakening-portrait {
+  position: relative;
+  min-width: 0;
+  justify-items: center;
+  align-content: start;
+  text-align: center;
+  font-size: 12px;
+  padding: 6px 3px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  cursor: pointer;
+}
+.awakening-portrait input { position: absolute; inset: 4px auto auto 4px; margin: 0; accent-color: var(--accent); }
+.awakening-portrait img { width: 62px; height: 66px; max-width: 100%; object-fit: cover; object-position: top; border-radius: 4px; }
+.awakening-portrait:has(input:checked) { outline: 2px solid var(--accent); outline-offset: -2px; background: var(--bg); }
+.awakening-memories { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 12px; }
+.hero-workflow .awakening-memories label { display: flex; align-items: center; padding: 4px 8px; border: 1px solid var(--line); border-radius: 4px; }
+.hero-workflow-empty { border: 1px dashed var(--line); border-radius: 8px; padding: 20px; text-align: center; color: var(--muted); }
+.vault-card-grid { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(auto-fill, minmax(128px, 1fr)); gap: 10px; }
+.vault-card { min-width: 0; padding: 8px; border: 1px solid var(--line); border-radius: 8px; display: grid; align-content: start; gap: 4px; }
+.vault-card img { width: 100%; max-height: 235px; object-fit: contain; border-radius: 4px; background: var(--bg); }
+.vault-card small { color: var(--muted); }
+.vault-card button { margin-top: 4px; min-height: 34px; }
+.mnemos-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 6px; }
+
 :root { --paper: var(--panel); --accent-2: var(--gold); --line-strong: var(--accent); --shadow: none; }
 body { background: var(--bg); line-height: 1.6; }
 .app { padding: 40px clamp(20px, 4vw, 56px) 32px; }

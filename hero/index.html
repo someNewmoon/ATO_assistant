@@ -997,7 +997,7 @@
     }
   </style>
   <link rel="stylesheet" href="../api/cycle-theme.css">
-  <link rel="stylesheet" href="./hero.css?v=20261015-hero-name">
+  <link rel="stylesheet" href="./hero.css?v=20261120-mnemos-vault">
   <script src="../story/data/english-source-data.js?v=20261011-english4"></script>
   <script src="../assets/theme.js?v=20261114-light-sidebar1" defer></script>
   <!-- Mobile composition is enabled only by the installed APK in portrait. -->
@@ -1020,6 +1020,7 @@
           </button>
           <button id="addHeroButton" type="button" class="add-hero-btn">+ 添加英雄</button>
           <button id="exportButton" type="button" class="secondary">导出</button>
+          <button id="mnemosVaultButton" type="button" class="secondary">旧忆宝库</button>
           <button id="graveyardButton" type="button" class="secondary">墓园</button>
           <button id="importButton" type="button" class="secondary">导入</button>
           <a class="back-to-console" href="../index.html">返回主控台</a>
@@ -1229,6 +1230,14 @@
           if (!Array.isArray(h.fatedMnemos[c])) h.fatedMnemos[c] = [];
         });
       });
+      target.graveyard = Array.isArray(target.graveyard) ? target.graveyard : [];
+      const held = new Set(target.heroes.flatMap(hero => Object.values(hero.mnemos).flat()));
+      const vault = Array.isArray(target.mnemosVault) ? target.mnemosVault : [];
+      target.mnemosVault = vault.filter(entry => {
+        if (typeof entry?.id !== "string" || !MNEMOS_GROUPS.includes(entry.cycleId) || held.has(entry.id)) return false;
+        held.add(entry.id);
+        return true;
+      });
       if (!target.heroes.some(hero => hero.id === target.activeHeroId)) target.activeHeroId = target.heroes[0]?.id || "";
     }
 
@@ -1241,6 +1250,7 @@
         heroes: Array.isArray(value?.heroes) ? value.heroes : [],
         activeHeroId: value?.activeHeroId || "",
         graveyard: Array.isArray(value?.graveyard) ? value.graveyard : [],
+        mnemosVault: Array.isArray(value?.mnemosVault) ? value.mnemosVault : [],
       }));
     }
 
@@ -1297,11 +1307,72 @@
         });
         return ids.map(id => merged.get(id));
       }
-      return { state: {
+      const state = {
         heroes: mergeList("heroes"),
         graveyard: mergeList("graveyard"),
+        mnemosVault: mergeList("mnemosVault"),
         activeHeroId: localState?.activeHeroId || serverState?.activeHeroId || "",
-      }, conflicts };
+      };
+      // A handoff spans two fields. Resolve each card's placement as a unit.
+      function placements(snapshot) {
+        const map = new Map();
+        function add(id, cycleId, heroId) {
+          if (!map.has(id)) map.set(id, []);
+          map.get(id).push({ cycleId, heroId });
+        }
+        for (const hero of snapshot?.heroes || []) {
+          if (!hero.id) continue;
+          for (const [cycleId, ids] of Object.entries(hero.mnemos || {})) {
+            if (Array.isArray(ids)) for (const id of ids) add(id, cycleId, hero.id);
+          }
+        }
+        for (const entry of snapshot?.mnemosVault || []) add(entry.id, entry.cycleId, "");
+        for (const list of map.values()) list.sort((a, b) => a.heroId.localeCompare(b.heroId));
+        return map;
+      }
+      const base = placements(baseState), local = placements(localState);
+      const remote = placements(serverState), merged = placements(state);
+      for (const id of new Set([...base.keys(), ...local.keys(), ...remote.keys()])) {
+        const before = base.get(id), here = local.get(id), there = remote.get(id);
+        const useRemote = equal(here, before);
+        if (!useRemote && !equal(there, before) && !equal(here, there)) conflicts.push(`旧忆归属 · ${id}`);
+        const desired = (useRemote ? there : here)?.filter(place =>
+          !place.heroId || state.heroes.some(hero => hero.id === place.heroId));
+        if (equal(merged.get(id) || [], desired || [])) continue;
+        state.mnemosVault = state.mnemosVault.filter(entry => entry.id !== id);
+        for (const hero of state.heroes) {
+          for (const [cycleId, ids] of Object.entries(hero.mnemos || {})) {
+            if (Array.isArray(ids) && ids.includes(id)) hero.mnemos[cycleId] = ids.filter(cardId => cardId !== id);
+          }
+        }
+        for (const { cycleId, heroId } of desired || []) {
+          const hero = state.heroes.find(item => item.id === heroId);
+          if (!hero) state.mnemosVault.push({ id, cycleId });
+          else {
+            hero.mnemos ||= {};
+            (hero.mnemos[cycleId] ||= []).push(id);
+          }
+        }
+      }
+      for (const hero of state.heroes) {
+        const held = Object.entries(hero.mnemos || {}).flatMap(([cycleId, ids]) =>
+          Array.isArray(ids) ? ids.map(id => ({ cycleId, id })) : []);
+        const previous = [localState, serverState].map(snapshot => snapshot?.heroes?.find(item => item.id === hero.id));
+        const count = item => Object.values(item?.mnemos || {}).flat().length;
+        if (held.length <= 2 || previous.some(item => count(item) > 2)) continue;
+        conflicts.push(`旧忆持有上限 · ${hero.id}`);
+        // Keep this tab's selections and return any overflow to the vault.
+        const localCards = new Set(Object.values(previous[0]?.mnemos || {}).flat());
+        const ordered = [...held.filter(entry => localCards.has(entry.id)), ...held.filter(entry => !localCards.has(entry.id))];
+        for (const entry of ordered.slice(2)) {
+          hero.mnemos[entry.cycleId] = hero.mnemos[entry.cycleId].filter(id => id !== entry.id);
+          delete hero.mnemosProgress?.[entry.id];
+          delete hero.mnemosNodeProgress?.[entry.id];
+          delete hero.mnemosTags?.[entry.id];
+          if (!state.heroes.some(other => other.mnemos?.[entry.cycleId]?.includes(entry.id))) state.mnemosVault.push(entry);
+        }
+      }
+      return { state, conflicts };
     }
 
     function chooseHeroMerge(remote) {
@@ -1395,6 +1466,7 @@
     // 这时既不能写回服务器，也不能和服务器上的新账号存档合并：只能丢掉内存状态，按当前
     // 会话重新读取。读取失败时同样不能保留旧账号的英雄，否则下次保存会写错账号。
     async function reloadAfterAccountChange() {
+      document.getElementById("pickerOverlay")?.remove?.();
       const sessionEpoch = ++heroSessionEpoch;
       heroSavePending = false;
       heroExternalReloadPending = false;
@@ -1555,6 +1627,7 @@
 
     function renderAll() {
       document.body.dataset.cycle = titleCycle;
+      document.getElementById("mnemosVaultButton").textContent = `旧忆宝库 · ${state.mnemosVault?.length || 0}`;
       window.ATO_CYCLE_SYMBOLS?.prependModuleLogo(document.querySelector("#heroTitle"), "argonauts", "../");
       renderHeroContent();
     }
@@ -1633,7 +1706,7 @@
           </div>` : ""}
         </section>
         <section class="panel">
-          <div class="panel-heading"><h2>回忆</h2><div class="panel-heading-actions"><button class="secondary" style="min-height:24px;font-size:11px;padding:0 8px" data-open-mnemos="${escHtml(hid)}">+ 添加</button><button class="danger" style="min-height:24px;font-size:11px;padding:0 8px" data-remove-mnemos="${escHtml(hid)}">删除</button></div></div>
+          <div class="panel-heading"><h2>旧忆</h2><div class="panel-heading-actions"><button class="secondary" style="min-height:24px;font-size:11px;padding:0 8px" data-open-mnemos="${escHtml(hid)}">获得</button><button class="secondary" style="min-height:24px;font-size:11px;padding:0 8px" data-remove-mnemos="${escHtml(hid)}">管理</button></div></div>
           <div class="panel-body" data-mnemos-panel="${escHtml(hid)}">${renderColumnMnemos(hero)}</div>
         </section>
         <section class="panel">
@@ -2165,20 +2238,23 @@
 
       let html = '<div class="picker-overlay" id="pickerOverlay" onclick="if(event.target===this)closePicker()">';
       html += '<div class="picker-dialog">';
-      html += '<div class="picker-head"><h2>添加回忆</h2><button onclick="closePicker()">关闭</button></div>';
+      html += '<div class="picker-head"><h2>获得旧忆</h2><button onclick="closePicker()">关闭</button></div>';
       html += '<div class="picker-body">';
       MNEMOS_GROUPS.forEach(cycleId => {
         const items = MNEMOS[cycleId] || [];
         if (!items.length) return;
         const heroMnemos = hero.mnemos[cycleId] || [];
-        html += `<details><summary style="cursor:pointer;font-weight:900;font-size:14px;margin-bottom:6px;">${CYCLE_LABELS[cycleId]}</summary><div class="mnemos-list" style="margin-bottom:12px">`;
+        html += `<details ${cycleId === titleCycle ? "open" : ""}><summary style="cursor:pointer;font-weight:900;font-size:14px;margin-bottom:6px;">${CYCLE_LABELS[cycleId]}</summary><div class="mnemos-list" style="margin-bottom:12px">`;
         items.forEach(m => {
           const active = heroMnemos.includes(m.id);
+          const taken = state.heroes.some(other => other !== hero && (other.mnemos[cycleId] || []).includes(m.id));
+          const resolved = state.graveyard.some(other => (other.mnemos?.[cycleId] || []).includes(m.id) && mnemosResolved(other, m));
+          const inVault = state.mnemosVault.some(entry => entry.id === m.id);
           const s1 = skillZhMap[m.skill1]; const s2 = skillZhMap[m.skill2];
           html += `<div class="mnemos-item${active ? " active" : ""}">
             <div><strong>${m.zh}</strong> <span style="color:var(--muted);font-size:12px">${m.en}</span><br>
             <span class="mnemos-skill-badge">${s1} +1</span> <span class="mnemos-skill-badge skill2">${s2} +1</span></div>
-            <button class="mnemos-toggle ${active ? "danger" : ""}" onclick="toggleMnemos('${cycleId}','${m.id}');openMnemosPicker()">${active ? "移除" : "选择"}</button>
+            <button class="mnemos-toggle" ${active || taken || resolved ? "disabled" : ""} onclick="toggleMnemos('${cycleId}','${m.id}');closePicker()">${active ? "已持有" : taken ? "队友持有" : resolved ? "已结算" : inVault ? "从宝库领取" : "获得"}</button>
           </div>`;
         });
         html += '</div></details>';
@@ -2195,7 +2271,7 @@
       SKILLS.forEach(s => { skillZhMap[s.id] = s.zh; });
       let html = '<div class="picker-overlay" id="pickerOverlay" onclick="if(event.target===this)closePicker()">';
       html += '<div class="picker-dialog">';
-      html += '<div class="picker-head"><h2>删除回忆</h2><button onclick="closePicker()">关闭</button></div>';
+      html += '<div class="picker-head"><h2>管理已持有的旧忆</h2><button onclick="closePicker()">关闭</button></div>';
       html += '<div class="picker-body">';
       let count = 0;
       MNEMOS_GROUPS.forEach(cycleId => {
@@ -2209,12 +2285,15 @@
           html += `<div class="mnemos-item active">
             <div><strong>${escHtml(m.zh)}</strong> <span style="color:var(--muted);font-size:12px">${escHtml(m.en)}</span><br>
             <span class="mnemos-skill-badge">${skillZhMap[m.skill1]} +1</span> <span class="mnemos-skill-badge skill2">${skillZhMap[m.skill2]} +1</span></div>
-            <button class="mnemos-toggle danger" onclick="removeMnemosFromPicker('${cycleId}','${m.id}')">删除</button>
+            <div class="mnemos-actions">
+              ${mnemosResolved(hero, m) ? '<span>最终突破已结算</span>' : `<button class="mnemos-toggle" onclick="returnMnemos('${cycleId}','${m.id}')">存入宝库</button>`}
+              <button class="mnemos-toggle danger" onclick="removeMnemosFromPicker('${cycleId}','${m.id}')">移除</button>
+            </div>
           </div>`;
         });
         html += '</div></details>';
       });
-      if (!count) html += '<div style="color:var(--muted);font-size:13px;text-align:center;padding:18px">暂无可删除的回忆</div>';
+      if (!count) html += '<div class="hero-workflow-empty">这位英雄还没有旧忆牌</div>';
       html += '</div></div></div>';
       document.getElementById("pickerOverlay")?.remove();
       document.body.insertAdjacentHTML("beforeend", html);
@@ -2384,18 +2463,62 @@
 
     function toggleMnemos(cycleId, mnemosId) {
       const hero = activeHero();
-      if (!hero) return;
-      hero.mnemos[cycleId] = hero.mnemos[cycleId] || [];
-      const idx = hero.mnemos[cycleId].indexOf(mnemosId);
-      if (idx >= 0) {
-        hero.mnemos[cycleId].splice(idx, 1);
+      const card = (MNEMOS[cycleId] || []).find(item => item.id === mnemosId);
+      if (!hero || !card) return;
+      const entry = { id: mnemosId, cycleId };
+      if ((hero.mnemos[cycleId] || []).includes(mnemosId)) {
+        removeHeldMnemos(hero, entry);
       } else {
-        if (countHeroMnemos(hero) >= 2) { alert("每位英雄最多持有 2 张回忆卡"); return; }
-        hero.mnemos[cycleId].push(mnemosId);
+        if (state.heroes.some(other => other.mnemos[cycleId]?.includes(mnemosId))
+            || state.graveyard.some(other => other.mnemos?.[cycleId]?.includes(mnemosId) && mnemosResolved(other, card))) return;
+        const inVault = state.mnemosVault.some(item => item.id === mnemosId);
+        if (inVault && countHeroMnemos(hero) >= 2) {
+          alert("这位英雄已持有两张旧忆。可在旧忆宝库中选择其他英雄。");
+          return;
+        }
+        const eligible = state.heroes.filter(other => countHeroMnemos(other) < 2);
+        const recipient = countHeroMnemos(hero) < 2 ? hero : eligible[Math.floor(Math.random() * eligible.length)];
+        if (recipient) {
+          giveMnemos(recipient, entry);
+          if (recipient !== hero) setSaveStatus(`旧忆已分给「${heroDisplayName(recipient)}」，等待同步`);
+        } else {
+          state.mnemosVault.push(entry);
+          setSaveStatus("全队旧忆已满，已存入旧忆宝库，等待同步");
+        }
       }
       queueSave();
-      renderActiveMnemos(hero);
-      renderSkillGrid(hero);
+      renderAll();
+    }
+
+    function mnemosResolved(hero, card) {
+      const last = card.nodes?.at(-1);
+      return Boolean(last && hero.mnemosNodeProgress?.[card.id]?.[last]);
+    }
+
+    function removeHeldMnemos(hero, { cycleId, id }) {
+      hero.mnemos[cycleId] = (hero.mnemos[cycleId] || []).filter(cardId => cardId !== id);
+      delete hero.mnemosProgress?.[id];
+      delete hero.mnemosNodeProgress?.[id];
+      delete hero.mnemosTags?.[id];
+    }
+
+    function giveMnemos(hero, { cycleId, id }) {
+      (hero.mnemos[cycleId] ||= []).push(id);
+      state.mnemosVault = state.mnemosVault.filter(entry => entry.id !== id);
+    }
+
+    function returnMnemos(cycleId, id) {
+      const hero = activeHero();
+      const card = (MNEMOS[cycleId] || []).find(item => item.id === id);
+      if (!hero || !card || !hero.mnemos[cycleId]?.includes(id) || mnemosResolved(hero, card)) return;
+      const hasProgress = hero.mnemosProgress?.[id] || Object.values(hero.mnemosNodeProgress?.[id] || {}).some(Boolean)
+        || hero.mnemosTags?.[id]?.some(Boolean);
+      if (hasProgress && !confirm(`将「${card.zh}」存入宝库？下次领取时会从空白进度开始。`)) return;
+      removeHeldMnemos(hero, { cycleId, id });
+      if (!state.heroes.some(other => other.mnemos[cycleId]?.includes(id))) state.mnemosVault.push({ cycleId, id });
+      queueSave();
+      openMnemosRemovePicker();
+      renderAll();
     }
 
     function renderTrack3(m, progress, heroId) {
@@ -2499,26 +2622,244 @@
       renderAll();
     }
 
+
+    function openHeroDialog(title, body) {
+      document.getElementById("pickerOverlay")?.remove();
+      document.body.insertAdjacentHTML("beforeend", `<dialog class="hero-workflow" id="pickerOverlay" aria-labelledby="workflowTitle">
+        <header class="picker-head"><h2 id="workflowTitle">${escHtml(title)}</h2><button type="button" class="secondary" onclick="closePicker()">关闭</button></header>
+        <div class="picker-body">${body}</div>
+      </dialog>`);
+      const dialog = document.getElementById("pickerOverlay");
+      dialog.addEventListener("close", () => dialog.remove(), { once: true });
+      dialog.showModal();
+      return dialog;
+    }
+
+    function vaultCard(entry) {
+      return (MNEMOS[entry.cycleId] || []).find(card => card.id === entry.id);
+    }
+
+    function eligibleVaultCards() {
+      return MNEMOS_GROUPS.flatMap(cycleId => (MNEMOS[cycleId] || [])
+        .filter(card => !state.mnemosVault.some(entry => entry.id === card.id)
+          && !state.heroes.some(hero => hero.mnemos[cycleId]?.includes(card.id))
+          && !state.graveyard.some(hero => hero.mnemos?.[cycleId]?.includes(card.id) && mnemosResolved(hero, card)))
+        .map(card => ({ ...card, cycleId })));
+    }
+
+    function openMnemosVault() {
+      const recipients = state.heroes.filter(hero => countHeroMnemos(hero) < 2);
+      const available = eligibleVaultCards();
+      const groups = MNEMOS_GROUPS.map(cycleId => {
+        const cards = available.filter(card => card.cycleId === cycleId);
+        return cards.length ? `<optgroup label="${CYCLE_LABELS[cycleId]}">${cards.map(card =>
+          `<option value="${escHtml(card.id)}">${escHtml(card.zh)}</option>`).join("")}</optgroup>` : "";
+      }).join("");
+      const dialog = openHeroDialog("旧忆宝库", `
+        <form id="vaultDeposit" class="hero-workflow-row">
+          <label>登记已获得的旧忆<select name="card" ${available.length ? "required" : "disabled"}><option value="">选择旧忆牌</option>${groups}</select></label>
+          <button type="submit" ${available.length ? "" : "disabled"}>存入宝库</button>
+        </form>
+        <p class="picker-note">存放队伍已获得、暂时无人持有的旧忆。英雄离队时，最终突破尚未结算的旧忆会回到这里。</p>
+        ${state.mnemosVault.length ? `<form id="vaultWithdraw" class="hero-workflow-row">
+          <label>领取英雄<select name="hero" ${recipients.length ? "required" : "disabled"}><option value="">${recipients.length ? "选择英雄" : "暂无英雄有空位"}</option>
+            ${recipients.map(hero => `<option value="${escHtml(hero.id)}"${hero.id === state.activeHeroId ? " selected" : ""}>${escHtml(heroDisplayName(hero))} · ${countHeroMnemos(hero)}/2</option>`).join("")}</select></label>
+          <div class="vault-card-grid">
+            ${state.mnemosVault.map(entry => {
+              const card = vaultCard(entry);
+              return `<article class="vault-card">
+                ${card?.card ? `<img data-mnemos-art="${escHtml(card.card)}" alt="" hidden>` : ""}
+                <small>${escHtml(CYCLE_LABELS[entry.cycleId])}</small>
+                <strong>${escHtml(card?.zh || entry.id)}</strong>
+                <button type="submit" name="card" value="${escHtml(entry.id)}" class="secondary" aria-label="领取 ${escHtml(card?.zh || entry.id)}" ${recipients.length ? "" : "disabled"}>领取</button>
+              </article>`;
+            }).join("")}
+          </div></form>` : '<div class="hero-workflow-empty">宝库目前没有旧忆牌</div>'}
+      `);
+      dialog.querySelector("#vaultDeposit").onsubmit = event => {
+        event.preventDefault();
+        const card = eligibleVaultCards().find(item => item.id === event.currentTarget.elements.card.value);
+        if (!card) return;
+        state.mnemosVault.push({ id: card.id, cycleId: card.cycleId });
+        queueSave();
+        renderAll();
+        openMnemosVault();
+      };
+      const withdraw = dialog.querySelector("#vaultWithdraw");
+      if (withdraw) withdraw.onsubmit = event => {
+        event.preventDefault();
+        const hero = state.heroes.find(item => item.id === withdraw.elements.hero.value);
+        const entry = state.mnemosVault.find(item => item.id === event.submitter?.value);
+        if (!hero || !entry || countHeroMnemos(hero) >= 2) return;
+        giveMnemos(hero, entry);
+        state.activeHeroId = hero.id;
+        queueSave();
+        renderAll();
+        openMnemosVault();
+      };
+      if (dialog.querySelector("[data-mnemos-art]")) {
+        mnemosArtIndex ||= fetch("../aibp/room-card-art.json").then(response => response.ok ? response.json() : null).catch(() => null);
+        void mnemosArtIndex.then(art => {
+          if (!dialog.isConnected || !art) return;
+          dialog.querySelectorAll("[data-mnemos-art]").forEach(img => {
+            const id = img.dataset.mnemosArt;
+            const path = art.thumbs?.[id] || art.mnemos?.[id];
+            if (!path) return;
+            img.onload = () => { img.hidden = false; };
+            img.src = new URL(path, new URL("../", location.href)).href;
+          });
+        });
+      }
+    }
+
+    let mnemosArtIndex;
+
+
+    const awakeningStoryKeys = {
+      c1: "c1-10-5",
+      c2: "c2-10-7",
+      c3: "c3-10-5",
+      c4: "c4-10-2",
+      c5: "c5-supplement-残酷觉醒-rude-awakening",
+    };
+
     function retireHero() {
       const hero = activeHero();
       if (!hero) return;
-      const name = heroDisplayName(hero);
-      const reason = prompt(`「${name}」死亡或退休的原因：`);
-      if (reason === null) return;
-      const katharsisCode = prompt("疏泄代码（Katharsis Code）：") || "";
-      state.graveyard = state.graveyard || [];
-      state.graveyard.push({
-        ...JSON.parse(JSON.stringify(hero)),
-        retiredAt: new Date().toISOString(),
-        retireReason: reason.trim(),
-        katharsisCode: katharsisCode.trim(),
-      });
-      state.heroes = state.heroes.filter(h => h.id !== hero.id);
-      state.activeHeroId = state.heroes.length ? state.heroes[0].id : "";
-      queueSave();
-      renderAll();
+      const memories = MNEMOS_GROUPS.flatMap(cycleId => (MNEMOS[cycleId] || [])
+        .filter(card => hero.mnemos[cycleId]?.includes(card.id))
+        .map(card => ({ card, cycleId })));
+      const returned = memories.filter(({ card }) => !mnemosResolved(hero, card));
+      const resolved = memories.filter(({ card }) => mnemosResolved(hero, card));
+      const names = list => list.map(({ card }) => escHtml(card.zh)).join("、") || "无";
+      const dialog = openHeroDialog("英雄离队", `
+        <form class="hero-workflow-form">
+          <div class="hero-workflow-profile">${workflowPortrait(hero)}<div><strong data-user-content>${escHtml(heroDisplayName(hero))}</strong><p>保留这位英雄的完整记录，方便后续剧情查阅。</p></div></div>
+          <div class="hero-workflow-row">
+            <label>离队方式<select name="kind"><option value="death">死亡</option><option value="retire">退休</option></select></label>
+            <label>疏泄代码<input name="code" value="${escHtml(hero.katharsisCode || "")}" autocomplete="off"></label>
+          </div>
+          <label>离队原因<textarea name="reason" rows="2" placeholder="可选"></textarea></label>
+          <dl class="hero-workflow-summary">
+            <div><dt>归入旧忆宝库</dt><dd>${names(returned)}</dd></div>
+            <div><dt>已结算旧忆 · 留在档案</dt><dd>${names(resolved)}</dd></div>
+          </dl>
+          <div class="hero-workflow-actions">
+            <button name="next" value="archive" type="submit" class="secondary">归档</button>
+            <button name="next" value="awaken" type="submit">归档并唤醒新英雄</button>
+          </div>
+        </form>`);
+      dialog.querySelector("form").onsubmit = event => {
+        event.preventDefault();
+        if (!state.heroes.includes(hero)) return;
+        const values = new FormData(event.currentTarget);
+        const archive = {
+          ...JSON.parse(JSON.stringify(hero)),
+          retiredAt: new Date().toISOString(),
+          retireReason: values.get("reason").trim(),
+          katharsisCode: values.get("code").trim(),
+          retirementKind: values.get("kind"),
+          retiredCycle: titleCycle,
+          vaultReturned: returned.map(({ card }) => card.id),
+        };
+        state.heroes = state.heroes.filter(other => other !== hero);
+        for (const { card, cycleId } of returned) {
+          if (!state.heroes.some(other => other.mnemos[cycleId]?.includes(card.id))
+              && !state.mnemosVault.some(entry => entry.id === card.id)) {
+            state.mnemosVault.push({ cycleId, id: card.id });
+          }
+        }
+        state.graveyard.push(archive);
+        state.activeHeroId = state.heroes[0]?.id || "";
+        queueSave();
+        closePicker();
+        if (event.submitter?.value === "awaken") openAwakening(archive);
+      };
     }
 
+    function workflowPortrait(hero) {
+      const src = argonautPortraitSrc(hero.argonaut);
+      return src ? `<img src="${escHtml(src)}" alt="">` : "";
+    }
+
+    function openAwakening(archive) {
+      if (!archive || state.heroes.length >= 4 || archive.replacementId || !state.graveyard.includes(archive)) return;
+      const retired = archive.retirementKind === "retire";
+      const cycle = CYCLES.includes(archive.retiredCycle) ? archive.retiredCycle : titleCycle;
+      const story = `../story/?${new URLSearchParams({ book: cycle, key: awakeningStoryKeys[cycle] })}`;
+      const blanks = ARGONAUTS.filter(arg => arg.unnamed);
+      const named = ARGONAUTS.filter(arg => !arg.unnamed);
+      const portraits = list => list.map(arg => `<label class="awakening-portrait">
+        <input type="radio" name="portrait" value="${escHtml(arg.id)}" required>
+        ${workflowPortrait({ argonaut: arg.id })}<span>${escHtml(arg.zh)}</span>
+      </label>`).join("");
+      const dialog = openHeroDialog("唤醒新英雄", `
+        <form class="hero-workflow-form">
+          <div class="hero-workflow-profile">${workflowPortrait(archive)}<div>
+            <strong data-user-content>${escHtml(heroDisplayName(archive))}</strong>
+            <p>已归档。新英雄从一张空白记录表开始，沿用玩家名。</p>
+          </div></div>
+          ${retired ? '<p class="picker-note">退休后可选择新肖像或指定一项技能 +1，并从旧忆宝库抽取一张牌。</p>'
+            : `<a class="hero-story-link" href="${escHtml(story)}" target="_blank" rel="noopener">查看 ${escHtml(CYCLE_LABELS[cycle])} 的重新唤醒事件 ↗</a>`}
+          <fieldset><legend>英雄肖像</legend>
+            <div class="awakening-portraits">${portraits(named)}</div>
+            <details><summary>未命名肖像</summary><div class="awakening-portraits">${portraits(blanks)}</div></details>
+          </fieldset>
+          <div class="hero-workflow-row">
+            <label>英雄名<input name="heroName" placeholder="默认使用肖像名" autocomplete="off"></label>
+            <label>基础技能 +1<select name="skill"><option value="">暂不设置</option>${SKILLS.map(skill =>
+              `<option value="${escHtml(skill.id)}">${escHtml(skill.zh)}</option>`).join("")}</select></label>
+          </div>
+          <fieldset><legend>起始旧忆</legend>
+            ${state.mnemosVault.length ? `<p class="picker-note">${retired ? "可以随机抽一张，或录入实体牌堆抽到的那张。"
+              : "按当前故事集的唤醒事件处理。可随机抽取，也可以登记实体牌堆抽到的牌。"}</p>
+              <div class="awakening-memories">${state.mnemosVault.map(entry => `<label><input type="checkbox" name="memory" value="${escHtml(entry.id)}">${escHtml(vaultCard(entry)?.zh || entry.id)}</label>`).join("")}</div>
+              <button type="button" class="secondary" data-awakening-draw>随机抽一张</button>` : '<p class="picker-note">旧忆宝库目前没有牌。</p>'}
+          </fieldset>
+          <div class="hero-workflow-actions"><button type="submit">建立新英雄</button></div>
+        </form>`);
+      const form = dialog.querySelector("form");
+      const memoryChoices = [...form.querySelectorAll('input[name="memory"]')];
+      const maxMemories = retired ? 1 : 2;
+      const draw = form.querySelector("[data-awakening-draw]");
+      function updateChoices() {
+        const count = memoryChoices.filter(input => input.checked).length;
+        for (const input of memoryChoices) input.disabled = !input.checked && count >= maxMemories;
+        if (draw) draw.disabled = count >= maxMemories || !memoryChoices.some(input => !input.checked);
+      }
+      memoryChoices.forEach(input => { input.onchange = updateChoices; });
+      if (draw) draw.onclick = () => {
+        const choices = memoryChoices.filter(input => !input.checked && !input.disabled);
+        const selected = choices[Math.floor(Math.random() * choices.length)];
+        if (selected) {
+          selected.checked = true;
+          updateChoices();
+        }
+      };
+      form.onsubmit = event => {
+        event.preventDefault();
+        if (state.heroes.length >= 4 || archive.replacementId || !state.graveyard.includes(archive)) return;
+        const values = new FormData(form);
+        const selected = values.getAll("memory");
+        const entries = selected.map(id => state.mnemosVault.find(entry => entry.id === id));
+        if (selected.length > maxMemories || entries.some(entry => !entry)) return;
+        if (retired && state.mnemosVault.length && !entries.length) {
+          alert("请从旧忆宝库抽取一张起始旧忆。");
+          return;
+        }
+        const hero = defaultHero();
+        hero.argonaut = values.get("portrait");
+        hero.customName = values.get("heroName").trim();
+        hero.playerName = archive.playerName || "";
+        hero.basicSkill = values.get("skill");
+        for (const entry of entries) giveMnemos(hero, entry);
+        archive.replacementId = hero.id;
+        state.heroes.push(hero);
+        state.activeHeroId = hero.id;
+        queueSave();
+        closePicker();
+      };
+    }
     function openGraveyard() {
       const graveyard = state.graveyard || [];
       let html = '<div class="picker-overlay" id="pickerOverlay" onclick="if(event.target===this)closePicker()">';
@@ -2535,6 +2876,7 @@
           const displayName = hero.customName || (arg ? arg.zh : "未知英雄");
           const portraitSrc = arg ? argonautPortraitSrc(arg.id) : "";
           const date = hero.retiredAt ? new Date(hero.retiredAt).toLocaleDateString("zh-CN") : "";
+          const kind = hero.retirementKind === "retire" ? "退休" : hero.retirementKind === "death" ? "死亡" : "已离队";
           const { total } = getHeroSkills(hero);
           const skillText = SKILLS.map(s => `${s.abbr}${total[s.id]}`).join(" ");
           hero.mnemosProgress = hero.mnemosProgress || {};
@@ -2578,17 +2920,21 @@
             <summary class="graveyard-summary">
               <div class="graveyard-portrait">${portraitSrc ? `<img src="${escHtml(portraitSrc)}" alt="${escHtml(displayName)}">` : `<span>${escHtml(displayName)}</span>`}</div>
               <div class="graveyard-name">${escHtml(displayName)}</div>
-              <div class="graveyard-meta">${escHtml(hero.retireReason || "")} · ${escHtml(date)}</div>
+              <div class="graveyard-meta">${kind}${date ? ` · ${escHtml(date)}` : ""}</div>
             </summary>
             <div class="graveyard-body">
               <div class="graveyard-section"><strong>技能：</strong>${escHtml(skillText)}</div>
               <div class="graveyard-section"><strong>三幅节：</strong>怒${hero.triskelion.fury} / 命${hero.triskelion.fate} / 危${hero.triskelion.danger}</div>
               <div class="graveyard-section"><strong>原因：</strong>${escHtml(hero.retireReason || "未记录")}</div>
               ${hero.katharsisCode ? `<div class="graveyard-section"><strong>疏泄代码：</strong>${escHtml(hero.katharsisCode)}</div>` : ""}
-              <div class="graveyard-section"><strong>回忆：</strong>${mnemosHtml}</div>
-              <div class="graveyard-section"><strong>宿命：</strong>${fatedHtml}</div>
+              <div class="graveyard-section"><strong>旧忆</strong> ${mnemosHtml}</div>
+              <div class="graveyard-section"><strong>命业旧忆</strong> ${fatedHtml}</div>
               ${hero.notes ? `<div class="graveyard-section"><strong>笔记：</strong><span data-user-content style="white-space:pre-wrap">${escHtml(hero.notes)}</span></div>` : ""}
-              <div style="margin-top:10px"><button class="secondary" style="min-height:30px;font-size:12px" data-revive-idx="${idx}">复活</button></div>
+              <div class="hero-workflow-actions">
+                ${hero.replacementId ? '<span class="picker-note">已建立新英雄</span>' :
+                  `<button type="button" data-awaken-idx="${idx}" ${state.heroes.length >= 4 ? "disabled" : ""}>唤醒新英雄</button>`}
+                <button type="button" class="secondary" data-revive-idx="${idx}" ${state.heroes.length >= 4 ? "disabled" : ""}>恢复旧记录</button>
+              </div>
             </div>
           </details>`;
         });
@@ -2596,6 +2942,9 @@
       html += '</div></div></div>';
       document.getElementById("pickerOverlay")?.remove();
       document.body.insertAdjacentHTML("beforeend", html);
+      document.querySelectorAll("[data-awaken-idx]").forEach(button => {
+        button.onclick = () => openAwakening(state.graveyard[Number(button.dataset.awakenIdx)]);
+      });
       // Bind revive buttons
       document.querySelectorAll("[data-revive-idx]").forEach(btn => {
         btn.onclick = () => {
@@ -2609,18 +2958,46 @@
       const graveyard = state.graveyard || [];
       if (idx < 0 || idx >= graveyard.length) return;
       if (state.heroes.length >= 4) { alert("队伍已满（最多4人），请先移除一位英雄。"); return; }
-      const hero = graveyard[idx];
-      const name = hero.customName || (ARGONAUTS.find(a => a.id === hero.argonaut)?.zh || "英雄");
-      if (!confirm(`确定要复活「${name}」吗？`)) return;
-      // Remove retirement metadata, restore to active
-      delete hero.retiredAt;
-      delete hero.retireReason;
-      delete hero.katharsisCode;
-      state.heroes.push(hero);
-      state.graveyard.splice(idx, 1);
-      state.activeHeroId = hero.id;
-      queueSave();
-      closePicker();
+      const archive = graveyard[idx];
+      if (state.heroes.some(hero => hero.id === archive.id)) return;
+      const hero = JSON.parse(JSON.stringify(archive));
+      const held = new Set(state.heroes.flatMap(item => Object.values(item.mnemos).flat()));
+      const vaulted = new Set(state.mnemosVault.map(entry => entry.id));
+      const blocked = [];
+      for (const [cycleId, cards] of Object.entries(hero.mnemos || {})) {
+        for (const id of cards) {
+          if (held.has(id) || (hero.vaultReturned?.includes(id) && !vaulted.has(id))) {
+            blocked.push(vaultCard({ cycleId, id })?.zh || id);
+            removeHeldMnemos(hero, { cycleId, id });
+          }
+        }
+      }
+      const dialog = openHeroDialog("恢复旧英雄记录", `
+        <div class="hero-workflow-form">
+          <div class="hero-workflow-profile">${workflowPortrait(hero)}<div><strong data-user-content>${escHtml(heroDisplayName(hero))}</strong>
+          <p>恢复归档时的技能、三曲盘和可取回的旧忆进度。</p></div></div>
+          ${blocked.length ? `<p class="picker-note">以下旧忆当前无法取回：${escHtml(blocked.join("、"))}</p>` : ""}
+          <div class="hero-workflow-actions"><button type="button" data-confirm-recovery>恢复记录</button></div>
+        </div>`);
+      dialog.querySelector("[data-confirm-recovery]").onclick = () => {
+        if (!state.graveyard.includes(archive) || state.heroes.length >= 4
+            || state.heroes.some(item => item.id === hero.id)
+            || JSON.stringify([...held]) !== JSON.stringify([...new Set(state.heroes.flatMap(item => Object.values(item.mnemos).flat()))])
+            || JSON.stringify([...vaulted]) !== JSON.stringify(state.mnemosVault.map(entry => entry.id))) return;
+        const reclaimed = new Set(Object.values(hero.mnemos || {}).flat());
+        state.mnemosVault = state.mnemosVault.filter(entry => !reclaimed.has(entry.id));
+        delete hero.retiredAt;
+        delete hero.retireReason;
+        delete hero.retirementKind;
+        delete hero.retiredCycle;
+        delete hero.vaultReturned;
+        delete hero.replacementId;
+        state.heroes.push(hero);
+        state.graveyard = state.graveyard.filter(item => item !== archive);
+        state.activeHeroId = hero.id;
+        queueSave();
+        closePicker();
+      };
     }
 
     function resetHeroTriskelion(heroId) {
@@ -2712,6 +3089,7 @@
     document.getElementById("addHeroButton").onclick = addHero;
     document.getElementById("resetAllTriskelionButton").onclick = resetAllTriskelion;
     document.getElementById("graveyardButton").onclick = openGraveyard;
+    document.getElementById("mnemosVaultButton").onclick = openMnemosVault;
     document.querySelectorAll("[data-reset-triskelion-icon]").forEach(img => {
       img.src = assetSrc("reset_triskelion_F4F4F4.png");
     });

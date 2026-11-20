@@ -35,7 +35,7 @@ function element(tag) {
 }
 
 function harness({ adversary = '', introduced = false, manual = false, ids = ['6436'] } = {}) {
-  const mapState = { cycles: { c1: { currentTile: '001', tokens: { AD: adversary }, explored: { '001': true } } } };
+  const mapState = { cycles: { c1: { currentTile: '001', tokens: { AD: adversary }, explored: Object.fromEntries(['001', '002', '003', '004', '005', '006'].map(id => [id, true])) } } };
   if (introduced) mapState.cycles.c1.adversaryIntroduced = true;
   const state = { exploration: { drawStateByCycle: { c1: { pursuitRoundId: 'round-1',
     activePiles: [ids.map(id => ({ id, name: id, day: 8 })), []], pursuitChoices: {} } } } };
@@ -53,7 +53,7 @@ function harness({ adversary = '', introduced = false, manual = false, ids = ['6
     currentCycleConfig: () => ({ id: 'c1', map: true }),
     state, cachedArgoRecord: context.record,
     ensureExplorationDrawState: () => state.exploration.drawStateByCycle.c1,
-    saveState() {}, renderFlow() {}, adversaryBattleByCycle: {},
+    saveState() {}, renderFlow() {},
     pursuitSettlementMode: () => (manual ? 'manual' : 'auto'),
     settleExplorationPursuit: { busy: false }, settleExplorationDraw: { busy: false },
     mutateExplorationRecord: { busy: false }, mapCommandBusy: false,
@@ -82,7 +82,7 @@ test('追踪栏在宿敌未引入时只提示一句', () => {
 
 test('特殊事件把宿敌放进地图后追踪栏恢复移动与结算按钮', () => {
   const box = harness({ adversary: '006' });
-  assert.match(textOf(box), /宿敌将移动 2 格/);
+  assert.match(textOf(box), /最短路线距离 5 → 3 格/);
   assert.ok(buttons(box).some(button => /结算追踪/.test(button.textContent)));
   assert.doesNotMatch(textOf(box), /宿敌未引入/);
 });

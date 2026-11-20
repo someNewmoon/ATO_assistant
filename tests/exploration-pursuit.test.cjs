@@ -79,6 +79,35 @@ test('no enemy plus fewer than two symbols records no event movement or payment;
   assert.equal(spawned.event.pursuit.steps, 0);
 });
 
+test('one outside marker spawns only an introduced nemesis, including the furthest reachable fallback', () => {
+  const ctx = fixture(['6407'], { adversary: '' });
+  const saved = ctx.mapState.cycles.c1;
+  assert.equal(pursuit.outsideMarker(ctx).code, 'NEMESIS_NOT_INTRODUCED');
+  saved.adversaryIntroduced = true;
+  assert.equal(pursuit.plan(ctx).mode, 'none', 'one exploration card marker is insufficient');
+  assert.deepEqual(clone(pursuit.outsideMarker(ctx).candidates.map(({ id, distance }) => ({ id, distance }))),
+    [{ id: '005', distance: 4 }]);
+  saved.explored = { '001': true, '002': true, '003': true, '006': true };
+  assert.deepEqual(clone(pursuit.outsideMarker(ctx).candidates.map(({ id, distance }) => ({ id, distance }))),
+    [{ id: '003', distance: 2 }]);
+  assert.equal(saved.tokens.AD, '', 'preview does not move the model');
+});
+
+test('one outside marker moves exactly one tile, detects encounters and uses the Titan X track in Cycle V', () => {
+  const ctx = fixture([], { adversary: '003' });
+  assert.deepEqual(clone(pursuit.outsideMarker(ctx).movement),
+    { before: 2, after: 1, moved: 1, destination: '002', encounter: false });
+  ctx.mapState.cycles.c1.tokens.AD = '002';
+  assert.equal(pursuit.outsideMarker(ctx).movement.encounter, true);
+  ctx.mapState.cycles.c1.tokens.AD = '001';
+  assert.equal(pursuit.outsideMarker(ctx).movement.encounter, true);
+  const titanX = fixture([], { cycle: 'c5' });
+  const preview = pursuit.outsideMarker(titanX);
+  assert.equal(preview.track, 6);
+  assert.equal(preview.adjacent[0].id, '002');
+  assert.equal(titanX.mapState.cycles.c5.titanXTrackPosition, 7);
+});
+
 test('markers are ignored until the cycle special event introduces the adversary', () => {
   const ctx = fixture(['6436'], { adversary: '' });
   const counted = pursuit.countMarkers(ctx);
@@ -202,6 +231,17 @@ test('unreachable routes stay still; missing spawn routes and stale rounds fail 
   assert.equal(apply(ctx).code,'NO_SPAWN_LOCATION');
   assert.equal(apply(fixture(),{roundId:'old'}).code,'EXPLORATION_CHANGED');
   assert.equal(apply(fixture(['forged'])).code,'UNKNOWN_PURSUIT_CARD');
+});
+
+test('automatic spawning requires a player choice if several explored candidates qualify', () => {
+  const ctx = fixture(['6436'], { adversary: '' });
+  ctx.mapState.cycles.c1.adversaryIntroduced = true;
+  ctx.pathRules = { ...pathRules, spawnCandidates: () => [
+    { id: '005', distance: 4 }, { id: '006', distance: 4 },
+  ] };
+  assert.equal(apply(ctx).code, 'SPAWN_SELECTION_REQUIRED');
+  assert.equal(apply(ctx, { spawnTileId: '006' }).mapState.cycles.c1.tokens.AD, '006');
+  assert.equal(apply(ctx, { spawnTileId: '007' }).code, 'INVALID_SPAWN_LOCATION');
 });
 
 test('Cycle V advances once per marker along the Titan X track and respects avoidance', () => {

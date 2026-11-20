@@ -14,6 +14,7 @@ const vm = require('node:vm');
 
 const root = path.join(__dirname, '..');
 const appSource = fs.readFileSync(path.join(root, 'story/assets/app.js'), 'utf8').replace(/\r\n/g, '\n');
+const nemesisSource = fs.readFileSync(path.join(root, 'map/nemesis-battle.js'), 'utf8');
 const htmlSource = fs.readFileSync(path.join(root, 'index.html'), 'utf8').replace(/\r\n/g, '\n');
 
 // 故事书数据里确实还不存在的段号：主控台表里填了，但故事书没有这条。
@@ -141,7 +142,7 @@ function consoleStoryTargets(cycle, tables) {
 
   // 宿敌战斗：目标书由表自己指定——循环 3 读的仍是 C2 故事书里的重担之战。
   const battle = tables.battle[cycle];
-  assert.ok(battle, `index.html 缺少 ${cycle} 的 adversaryBattleByCycle`);
+  assert.ok(battle, `宿敌战斗表缺少 ${cycle}`);
   pushTarget(targets, '宿敌战斗', battle.chapter, battle.entry, battle.entry, battle.book);
   // encounter 参数是入口层筛选（不是条目 id），由 resolveEncounterKey 解析。
   targets.push({
@@ -165,7 +166,7 @@ function tables() {
     special: extractLiteral('specialEventConstants'),
     mnemos: extractLiteral('mnemosBreakthroughConstants'),
     survey: extractLiteral('surveyConstantData'),
-    battle: extractLiteral('adversaryBattleByCycle'),
+    battle: extractLiteral('adversaryBattleByCycle', nemesisSource),
   };
 }
 
@@ -311,16 +312,6 @@ test('主控台回忆突破入口用各循环自己的章节', () => {
     assert.equal(url.searchParams.get('book'), cycle);
     assert.equal(url.searchParams.get('chapter'), mnemos[cycle].chapter, `${cycle} 的回忆突破章节不对`);
   }
-});
-
-test('地图模块的宿敌战斗表和主控台保持一致', () => {
-  const mapSource = fs.readFileSync(path.join(root, 'map/app.js'), 'utf8').replace(/\r\n/g, '\n');
-  // 两个常量来自不同的 vm realm，比较序列化结果而不是对象原型。
-  assert.equal(
-    JSON.stringify(extractLiteral('adversaryBattleByCycle', mapSource)),
-    JSON.stringify(extractLiteral('adversaryBattleByCycle')),
-    'map/app.js 与 index.html 的宿敌战斗目标不一致（曾出现 c3 抄成 c2）',
-  );
 });
 
 test('精确 id 仍然优先，官方版条目不受短号兜底影响', () => {

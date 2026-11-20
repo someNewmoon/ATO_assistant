@@ -31,8 +31,9 @@ const { battleAibpLink, envelopeAibpLink } = vm.runInNewContext(`
 
 const storyContext = { window: {} };
 vm.createContext(storyContext);
+const storyDataPath = path.join(storyRoot, "data", "storybook-data.js");
 vm.runInContext(
-  fs.readFileSync(path.join(storyRoot, "data", "storybook-data.js"), "utf8"),
+  fs.readFileSync(fs.existsSync(storyDataPath) ? storyDataPath : path.join(storyRoot, "storybook-placeholder.js"), "utf8"),
   storyContext
 );
 
@@ -176,6 +177,15 @@ function runEnvelopeHarness() {
   return { api, layer };
 }
 
+test("a rest adventure sharing the Burden name never gets a battle shortcut", () => {
+  const books = storyContext.window.STORYBOOK_DATA.books;
+  const rest = books.find(book => book.id === "c1").entries.find(entry => entry.id === "9-the-burden");
+  const battle = books.find(book => book.id === "c2").entries.find(entry => entry.id === "重担之战-burden-battle");
+  assert.equal(rest.chapterKey, "rr-adventures");
+  assert.equal(battleAibpLink(rest), "");
+  assert.match(battleAibpLink(battle), /#THE_BURDEN"/);
+});
+
 test("existing C1-C3 mappings remain available", () => {
   const cases = [
     ["百臂巨人之战 (Hekaton Battle)", "HEKATON"],
@@ -185,7 +195,7 @@ test("existing C1-C3 mappings remain available", () => {
 
   for (const [title, apostle] of cases) {
     assert.match(
-      battleAibpLink({ title }),
+      battleAibpLink({ title, chapterKey: "battle" }),
       new RegExp(`\\.\\./aibp/index\\.html#${apostle}(?:["'])`)
     );
   }
@@ -247,7 +257,7 @@ test("C5 translated entries use the ordinary layout: no AI title, notice, Englis
   const entry = c5Book.entries.find(
     (candidate) => candidate.id === "dragon-of-phobos-battle"
   );
-  const otherBook = { ...entry, bookId: "c6", key: `c6-${entry.key}` };
+  const otherBook = { ...entry, bookId: "c6", key: `c6-${entry.key}`, originalText: entry.originalText || "Source text." };
   const untouched = renderAiTranslatedSupplement(otherBook, '<img src="page-174.jpg">');
   assert.match(untouched, /ai-translation-notice/, "非 C5 仍保留 AI 翻译提醒");
   assert.match(untouched, /source-original-text/, "非 C5 仍保留英文原文");

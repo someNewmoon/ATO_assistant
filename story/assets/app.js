@@ -2137,6 +2137,7 @@
   }
 
   function battleAibpLink(entry) {
+    if (entry?.chapterKey !== "battle") return "";
     const haystack = [
       entry.id,
       entry.key,

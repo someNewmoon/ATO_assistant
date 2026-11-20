@@ -1,6 +1,34 @@
-(function () {
-  const open = document.querySelector("#storySettlementOpen");
-  const panel = document.querySelector("#storySettlement");
+window.ATO_MOUNT_QUICK_SETTLEMENT = function mountQuickSettlement(options = {}) {
+  const root = options.root || "../";
+  const conflictHelp = "请放弃暂存改动并重新读取。";
+  const panel = document.createElement("dialog");
+  panel.id = "storySettlement";
+  panel.setAttribute("aria-labelledby", "storySettlementTitle");
+  panel.innerHTML = `<form novalidate>
+        <header>
+          <h2 id="storySettlementTitle">剧情结算</h2>
+          <button type="button" data-settlement-close autofocus>收起</button>
+          <p id="storySettlementContext"></p>
+        </header>
+        <fieldset aria-label="剧情结算数值"></fieldset>
+        <footer>
+          <section id="storySettlementBill" aria-labelledby="storySettlementBillTitle" hidden>
+            <h3 id="storySettlementBillTitle">本次变更</h3>
+            <ul aria-live="polite"></ul>
+          </section>
+          <p role="status"></p>
+          <a id="storySettlementRecord" href="#" target="_blank" rel="noopener">打开记录表</a>
+          <div class="story-settlement-save-actions">
+            <button type="button" data-settlement-reset hidden>放弃暂存改动</button>
+            <button type="submit" disabled>确认保存</button>
+          </div>
+        </footer>
+      </form>`;
+  document.body.appendChild(panel);
+  const title = panel.querySelector("#storySettlementTitle");
+  title.textContent = options.title || "剧情结算";
+  const close = panel.querySelector("[data-settlement-close]");
+  const reset = panel.querySelector("[data-settlement-reset]");
   const form = panel.querySelector("form");
   const fields = panel.querySelector("fieldset");
   const status = panel.querySelector("[role=status]");
@@ -8,7 +36,7 @@
   const submit = panel.querySelector("[type=submit]");
   const session = window.ATO_CAMPAIGN_SESSION.create();
   const effects = window.ATO_EXPLORATION_EFFECT_RULES;
-  const endpoint = "../api/campaign-state.php";
+  const endpoint = `${root}api/campaign-state.php`;
   const recordSync = typeof BroadcastChannel === "function" ? new BroadcastChannel("ato-record-sync-v1") : null;
   const dashboardSync = typeof BroadcastChannel === "function" ? new BroadcastChannel("ato-dashboard-sync-v1") : null;
   const entries = new Map();
@@ -100,7 +128,9 @@
     if (response.status === 401) throw new Error("请先登录主控台。");
     const payload = session.accept(await response.json());
     if (!response.ok || !payload.ok) throw new Error("读取战役档案失败，请重试。");
-    return describe(payload.campaign);
+    const snapshot = describe(payload.campaign);
+    options.assertTarget?.(snapshot, payload.user?.id);
+    return snapshot;
   }
 
   function addGroup(label) {
@@ -130,7 +160,11 @@
       item.append(name, total);
       list.appendChild(item);
     }
-    bill.hidden = !list.children.length;
+    const count = list.children.length;
+    bill.hidden = !count;
+    options.onDraftCount?.(count);
+    reset.hidden = !count;
+    reset.disabled = busy;
     submit.disabled = busy || bill.hidden || session.changed;
   }
 
@@ -178,7 +212,7 @@
 
     if (ranges) {
       const icon = document.createElement("img");
-      icon.src = `../record/assets/ally/${key.toUpperCase()}.png`;
+      icon.src = `${root}record/assets/ally/${key.toUpperCase()}.png`;
       icon.alt = "";
       icon.width = 20;
       icon.height = 20;
@@ -277,7 +311,7 @@
       note.textContent = "此前暂存的标记可在主控台对应步骤放置。";
       markers.appendChild(note);
     }
-    document.querySelector("#storySettlementRecord").href = `../record/index.html?cycle=${cycle}`;
+    document.querySelector("#storySettlementRecord").href = `${root}record/index.html?cycle=${cycle}`;
   }
 
   function writeKnowledge(snapshot, value) {
@@ -341,7 +375,7 @@
     return sections;
   }
 
-  open.addEventListener("click", async () => {
+  async function loadPanel() {
     const requestId = ++loadId;
     displayed = null;
     fields.replaceChildren();
@@ -350,8 +384,9 @@
     context.textContent = "";
     status.textContent = "正在读取当前战役…";
     submit.disabled = true;
-    panel.showModal();
+    if (!panel.open) panel.showModal();
     try {
+      await options.beforeRead?.();
       const snapshot = await read();
       if (!panel.open || requestId !== loadId) return;
       render(snapshot);
@@ -361,9 +396,10 @@
     } catch (error) {
       if (requestId === loadId) status.textContent = error.message;
     }
-  });
+  }
 
-  panel.querySelector("[data-settlement-close]").addEventListener("click", () => panel.close());
+  reset.addEventListener("click", () => void loadPanel());
+  close.addEventListener("click", () => panel.close());
   panel.addEventListener("cancel", event => { if (busy) event.preventDefault(); });
   form.addEventListener("submit", async event => {
     event.preventDefault();
@@ -371,24 +407,26 @@
     busy = true;
     fields.disabled = true;
     submit.disabled = true;
-    const close = panel.querySelector("[data-settlement-close]");
     close.disabled = true;
+    reset.disabled = true;
     try {
       const changes = new Map([...entries].filter(([, entry]) => entry.after !== entry.baseline)
         .map(([key, entry]) => [key, { before: entry.baseline, after: entry.after }]));
       if (!changes.size) { status.textContent = "没有需要保存的改动。"; return; }
+      await options.beforeRead?.();
       const snapshot = await read();
       const initial = displayed;
       if (snapshot.profileId !== initial.profileId || snapshot.cycle !== initial.cycle
           || String(snapshot.state.day) !== String(initial.state.day)
           || ["dashboard", "record"].some(key => snapshot.campaign.sectionRevisions[key] !== initial.campaign.sectionRevisions[key])) {
-        throw new Error("战役进度已在其他页面更新，请关闭面板后重新打开。");
+        throw new Error(`战役进度已更新。${conflictHelp}`);
       }
       if (changes.has("hope-story")) {
         const target = markerTrack(snapshot.state, snapshot.cycle, "hope-story");
         if (target.remove && target.rule.gainCondition === "lastVisitedCity"
             && !window.confirm("确认当前板块是最后访问的城市？按当前主线卡规则，登记希望会移除相应数量的进展。")) return;
       }
+      options.assertTarget?.(snapshot, session.accountId);
       const sections = buildSections(snapshot, changes);
       const response = await fetch(`${endpoint}?action=import-sections`, {
         method: "POST",
@@ -404,14 +442,15 @@
         }),
       });
       const payload = session.accept(await response.json());
-      if (payload.code === "SAVE_CONFLICT") throw new Error("战役进度已在其他页面更新，请关闭面板后重新打开。");
-      if (!response.ok || !payload.ok) throw new Error("未能保存，请关闭面板后重新打开核对。");
+      if (payload.code === "SAVE_CONFLICT") throw new Error(`战役进度已更新。${conflictHelp}`);
+      if (!response.ok || !payload.ok) throw new Error(`未能保存。${conflictHelp}`);
       if (sections.record) recordSync?.postMessage({ revision: payload.sections.record });
       if (sections.dashboard) dashboardSync?.postMessage({ revision: payload.sections.dashboard });
       displayed = null;
       const saved = await read();
       render(saved);
       displayed = saved;
+      await options.onSaved?.(sections);
       status.textContent = `已保存 ${changes.size} 项。`;
     } catch (error) {
       status.textContent = error.message;
@@ -423,4 +462,8 @@
       if (!displayed) submit.disabled = true;
     }
   });
-})();
+  return function openPanel() {
+    if (displayed && !bill.hidden) panel.showModal();
+    else return loadPanel();
+  };
+};

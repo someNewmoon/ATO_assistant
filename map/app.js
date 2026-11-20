@@ -103,40 +103,6 @@ const alwaysVisibleStartTileIds = {
 const lastCityExcludedTileIds = {
   c1: ["027"],
 };
-const adversaryBattleByCycle = {
-  c1: {
-    book: "c1",
-    chapter: "battle",
-    encounter: "赫尔墨斯追踪者战斗-pursuer-battle",
-    entry: "赫尔墨斯追踪者战斗-pursuer-battle",
-  },
-  c2: {
-    book: "c2",
-    chapter: "battle",
-    encounter: "重担之战-burden-battle",
-    entry: "重担之战-burden-battle",
-  },
-  c3: {
-    // 循环 3 的宿敌战斗读的仍是 C2 故事书里的重担之战，不是笔误。
-    book: "c2",
-    chapter: "battle",
-    encounter: "重担之战-burden-battle",
-    entry: "重担之战-burden-battle",
-  },
-  c4: {
-    book: "c4",
-    chapter: "battle",
-    encounter: "收割旋风之战-reap-the-whirlwind-battle",
-    entry: "收割旋风之战-reap-the-whirlwind-battle",
-  },
-  c5: {
-    book: "c5",
-    chapter: "battle",
-    encounter: "the-devil-himself-battle-the-devil-himself-battle",
-    entry: "the-devil-himself-battle",
-  },
-};
-
 if ("scrollRestoration" in window.history) {
   window.history.scrollRestoration = "manual";
 }
@@ -1061,6 +1027,18 @@ async function flushCampaignMapSave() {
   }
   return saveCampaignMapSection();
 }
+
+window.ATO_CAMPAIGN_TOOLBOX_OPTIONS = {
+  async beforeRead() {
+    await initialMapLoad;
+    campaignSession.assertCurrent();
+    if (!mapStateLoadedFromServer || !campaignStorageAvailable || mapSaveConflict
+        || ((campaignSaveInFlight || !deepEqualValue(state, mapStateBaseline)) && !await flushCampaignMapSave())) {
+      throw new Error("当前地图尚未同步，请恢复连接后重试。");
+    }
+  },
+  onMapSaved: refreshMapAfterTechnology,
+};
 
 async function loadCampaignDashboardArchive() {
   const response = await fetch(campaignDashboardUrl, { cache: "no-store" });
@@ -2143,21 +2121,21 @@ function spawnAdversary() {
     window.alert("请先设置 AG/当前位置。");
     return;
   }
-  const exact = window.ATO_NEMESIS_PATH.spawnCandidates(activeCycle(), cycleState);
-  if (!exact.length) {
-    window.alert("没有距离阿尔戈号正好 4 格的已揭示地图板块。");
+  const candidates = window.ATO_NEMESIS_PATH.spawnCandidates(activeCycle(), cycleState);
+  if (!candidates.length) {
+    window.alert("没有可到达的已探索板块可供生成。");
     return;
   }
 
-  if (exact.length === 1) {
-    placeAdversary(exact[0].id);
+  if (candidates.length === 1) {
+    placeAdversary(candidates[0].id);
     return;
   }
 
-  pendingAdversarySpawnCandidates = new Set(exact.map((tile) => tile.id));
+  pendingAdversarySpawnCandidates = new Set(candidates.map((tile) => tile.id));
   saveState();
   renderTiles();
-  window.alert("有多个符合条件的板块，请点击高亮板块生成仇敌。");
+  window.alert("有多个符合条件的板块，请点击高亮板块生成宿敌。");
 }
 
 function titanXAdjacentTileCandidates(cycleState) {
@@ -2220,8 +2198,12 @@ async function triggerAdversaryBattle(recordUndo = false) {
   const cycleId = state.activeCycleId;
   const profileId = mapStateProfileId;
   let battleUrl;
+  let dashboard;
   try {
-    battleUrl = await adversaryBattleUrl(cycleId, profileId);
+    [battleUrl, dashboard] = await Promise.all([
+      adversaryBattleUrl(cycleId, profileId),
+      loadCampaignDashboardArchive(),
+    ]);
     if (state.activeCycleId !== cycleId || mapStateProfileId !== profileId) {
       throw new Error("地图档案或循环已切换，请在当前地图重新执行宿敌战斗。");
     }
@@ -2235,6 +2217,8 @@ async function triggerAdversaryBattle(recordUndo = false) {
   }
   const cycleState = activeCycleState();
   if (recordUndo) pushUndo();
+  const day = dashboard?.profiles?.[profileId]?.cycles?.[cycleId]?.state?.day;
+  window.ATO_NEMESIS_BATTLE.recordEncounter(cycleState, day, battleUrl);
   cycleState.tokens.AD = "";
   if (state.activeCycleId === "c5") cycleState.titanXTrackPosition = null;
   saveState();
@@ -2272,7 +2256,7 @@ async function adversaryBattleUrl(cycleId = state.activeCycleId, profileId = map
   if (!payload?.ok) throw new Error(payload?.error || "读取记录表失败");
   const section = payload.state;
   const record = section?.users ? section.users[profileId] : section;
-  const target = window.ATO_NEMESIS_BATTLE.targetFor(cycleId, record, adversaryBattleByCycle);
+  const target = window.ATO_NEMESIS_BATTLE.targetFor(cycleId, record);
   if (!target) return "";
 
   const params = new URLSearchParams();
@@ -2357,6 +2341,7 @@ function currentMapSnapshot() {
     currentTileFace,
     adversaryTileId: cycleState.tokens.AD || "",
     adversaryTileLabel: adversary?.label || cycleState.tokens.AD || "",
+    nemesisEncounters: cycleState.nemesisEncounters || {},
     titanXTrackPosition: cycle.id === "c5" ? cycleState.titanXTrackPosition : null,
     latestRevealedTileId: cycleState.latestRevealedTile || "",
     latestRevealedTileLabel: latestRevealed?.label || cycleState.latestRevealedTile || "",
@@ -2691,7 +2676,7 @@ window.ATO_MAP_ARTWORK?.attachControls({
   onChange: renderTiles,
 });
 render();
-loadCampaignMapSection();
+const initialMapLoad = loadCampaignMapSection();
 if (!secondScreenMode) {
   elements.secondScreenMapModeToggle?.addEventListener("change", toggleSecondScreenMapMode);
   window.addEventListener("focus", refreshSecondScreenMapModeToggle);

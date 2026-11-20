@@ -140,6 +140,39 @@
     });
     return { ok: true, total: values.reduce((sum, card) => sum + card.count, 0), cards: values, unresolved, fateChoices };
   }
+  function outsideMarker(ctx) {
+    const { cycle: cycleId, introduced } = introductionState(ctx);
+    if (!introduced) return fail('NEMESIS_NOT_INTRODUCED', '当前循环尚未引入宿敌，忽略这枚标记。');
+    const cycle = (ctx.mapData || root.ATO_MAP_DATA)?.cycles?.find(item => item.id === cycleId);
+    const saved = (ctx.mapState || ctx.map)?.cycles?.[cycleId];
+    const currentTile = saved?.currentTile || saved?.tokens?.AG;
+    const rules = ctx.pathRules || root.ATO_NEMESIS_PATH;
+    if (!cycle || !rules || !cycle.tiles.some(tile => tile.id === currentTile)) {
+      return fail('MAP_REQUIRED', '请先在地图中设置当前循环的阿尔戈号位置。');
+    }
+    const layout = { ...saved, currentTile };
+    if (cycleId === 'c5') {
+      const position = saved.titanXTrackPosition;
+      if (position == null && !saved.tokens?.AD) return { ok: true, mode: 'track', track: 7 };
+      if (!Number.isInteger(position) || position < 1 || position > 7) {
+        return fail('INVALID_TITAN_X_TRACK', '泰坦 X 追踪位置无效，请先在地图中核对。');
+      }
+      if (position === 1) return fail('TITAN_X_TRACK_END', '泰坦 X 追踪指示物已在 1。');
+      const track = position - 1;
+      const adjacent = track === 6 || track === 3 ? rules.titanXAdjacentCandidates(cycle, layout) : null;
+      if (adjacent && !adjacent.length) return fail('NO_TITAN_X_LOCATION', '找不到泰坦 X 的相邻放置位置，请先核对地图。');
+      return { ok: true, mode: 'track', position, track, adjacent };
+    }
+    if (!saved.tokens?.AD) {
+      const candidates = rules.spawnCandidates(cycle, layout);
+      if (!candidates.length) return fail('NO_SPAWN_LOCATION', '没有可到达的已探索板块可供放置宿敌。');
+      return { ok: true, mode: 'spawn', cycle, layout, candidates };
+    }
+    const path = rules.shortestPath(cycle, layout, saved.tokens.AD, currentTile);
+    const movement = rules.pursuitMovement(path, 1);
+    if (movement.before === null) return fail('NO_NEMESIS_ROUTE', '没有通往阿尔戈号的已揭示路线，宿敌未移动。');
+    return { ok: true, mode: 'move', origin: saved.tokens.AD, movement };
+  }
   function plan(ctx) {
     const id = roundId(ctx), cycleId = ctx.cycleId || ctx.cycle;
     if (!id) return fail('NO_EXPLORATION_ROUND', '当前没有需要结算追踪的探索抽卡。');
@@ -164,9 +197,12 @@
     if (!cycle || !pathRules || !saved?.currentTile || !cycle.tiles.some(tile => tile.id === saved.currentTile)) return fail('MAP_REQUIRED', '请先在地图中设置当前循环的阿尔戈号位置。');
     const active = Boolean(saved.tokens?.AD || cycleId === 'c5' && saved.titanXTrackPosition != null);
     const mode = active ? 'move' : counted.total >= 2 ? 'spawn' : 'none';
-    const candidates = mode === 'spawn' && cycleId !== 'c5' ? pathRules.spawnCandidates(cycle, saved).map(tile => ({ id: tile.id, label: tile.label || tile.id })) : [];
-    if (mode === 'spawn' && cycleId !== 'c5' && !candidates.length) return fail('NO_SPAWN_LOCATION', '本轮至少有 2 个追踪标记，但没有距离阿尔戈号正好 4 格的已揭示生成位置，请先核对地图。');
-    return { ok: true, ...counted, introduction, roundId: id, mode, steps: mode === 'move' ? counted.total : 0, candidates, cycle, saved, pathRules };
+    const candidates = mode === 'spawn' && cycleId !== 'c5' ? pathRules.spawnCandidates(cycle, saved).map(tile => ({ id: tile.id, label: tile.label || tile.id, distance: tile.distance })) : [];
+    if (mode === 'spawn' && cycleId !== 'c5' && !candidates.length) return fail('NO_SPAWN_LOCATION', '本轮至少有 2 个追踪标记，但没有可到达的已探索板块可供生成，请先核对地图。');
+    const steps = mode === 'move' ? counted.total : 0;
+    const path = mode === 'move' && cycleId !== 'c5'
+      ? pathRules.shortestPath(cycle, saved, saved.tokens.AD, saved.currentTile) : [];
+    return { ok: true, ...counted, introduction, roundId: id, mode, steps, candidates, cycle, saved, pathRules, path };
   }
   function prepareOperation(ctx, helpers, draft) {
     const preview = plan(ctx);
@@ -205,9 +241,10 @@
       if (preview.mode === 'spawn') {
         if (cycleId === 'c5') { saved.titanXTrackPosition = 7; saved.tokens.AD = ''; saved.adversaryIntroduced = true; message = '泰坦 X 已生成，追踪指示物放在 7'; }
         else {
-          const chosen = selection.spawnTileId || preview.candidates[0]?.id;
+          const chosen = selection.spawnTileId || (preview.candidates.length === 1 ? preview.candidates[0].id : "");
+          if (!chosen) return fail('SPAWN_SELECTION_REQUIRED', '请先选择宿敌生成的板块。');
           if (!preview.candidates.some(tile => tile.id === chosen)) return fail('INVALID_SPAWN_LOCATION', '所选生成位置已失效，请按最新地图重新选择。');
-          saved.tokens.AD = chosen; saved.adversaryIntroduced = true; message = `本轮 ${preview.total} 个追踪标记，宿敌生成在 ${chosen}，本次不再移动`;
+          saved.tokens.AD = chosen; saved.adversaryIntroduced = true; message = `本轮 ${preview.total} 个追踪标记，宿敌生成在 ${chosen}，距离 ${preview.candidates.find(tile => tile.id === chosen).distance} 格`;
         }
       } else if (cycleId === 'c5') {
         let position = saved.titanXTrackPosition;
@@ -227,14 +264,16 @@
         }
         message = `泰坦 X 追踪指示物 ${preview.saved.titanXTrackPosition} → ${position}${saved.tokens.AD ? `；模型位于 ${saved.tokens.AD}` : ''}`;
       } else {
-        const start = saved.tokens.AD, target = saved.currentTile;
+        const start = saved.tokens.AD;
         if (!preview.cycle.tiles.some(tile => tile.id === start)) return fail('INVALID_ADVERSARY', '宿敌位置无效，请先在地图中核对。');
-        path = preview.pathRules.shortestPath(preview.cycle, saved, start, target);
-        if (path.length) saved.tokens.AD = path[Math.min(steps, path.length - 1)];
-        if (saved.tokens.AD === target) { saved.tokens.AD = ''; battle = true; }
-        message = battle ? '宿敌追上阿尔戈号，已移除模型；请在探索结算后进行宿敌战斗'
+        path = preview.path;
+        const result = preview.pathRules.pursuitMovement(path, steps);
+        if (path.length) saved.tokens.AD = result.destination;
+        if (result.encounter) { saved.tokens.AD = ''; saved.adversaryIntroduced = true; battle = true; }
+        const distance = `距离 ${result.before} → ${result.after} 格`;
+        message = battle ? `${distance}，宿敌与阿尔戈号相遇；已移除模型，请进行宿敌战斗`
           : !steps ? '已使用追踪者对策，本轮宿敌移动降至 0'
-          : path.length ? `宿敌移动 ${Math.min(steps, path.length - 1)} 格：${start} → ${saved.tokens.AD}` : '没有通往阿尔戈号的已揭示路线，宿敌未移动';
+          : path.length ? `宿敌移动 ${result.moved} 格：${start} → ${saved.tokens.AD}；${distance}` : '没有通往阿尔戈号的已揭示路线，宿敌未移动';
       }
     }
     const state = copy(ctx.state || {}), saved = mapState?.cycles?.[cycleId];
@@ -254,5 +293,5 @@
     return { ok: true, operation: event, event, receipt, record, automation, state, readSections: ['map'], ...(mapState ? { mapState } : {}) };
   }
   return { version: 2, markers: copy(manifest), conditional: copy(conditional), ignores: copy(ignores),
-    manualIndexes, choiceCards, roundId, countMarkers, introduction: introductionState, plan, prepareOperation };
+    manualIndexes, choiceCards, roundId, countMarkers, introduction: introductionState, outsideMarker, plan, prepareOperation };
 });

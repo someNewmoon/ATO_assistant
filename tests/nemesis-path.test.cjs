@@ -36,6 +36,20 @@ test('spawn uses exactly four placed steps and returns every eligible tile for p
   assert.deepEqual(Array.from(rules.spawnCandidates(cycle, cycleState)), []);
 });
 
+test('without a four-step explored destination, choose the farthest reachable explored tiles', () => {
+  const { cycle, cycleState } = fixture('c2', '001');
+  cycleState.explored = { '001': true, '002': true, '003': true };
+  cycleState.previewRevealed = { '004': true, '005': true };
+  assert.deepEqual(Array.from(rules.spawnCandidates(cycle, cycleState), tile => [tile.id, tile.distance]), [['003', 2]]);
+});
+
+test('pursuit stops at contact and reports distance for unreachable, adjacent and already shared tiles', () => {
+  assert.equal(rules.pursuitMovement([], 1).after, null);
+  assert.equal(rules.pursuitMovement(['a', 'b', 'c'], 1).after, 1);
+  assert.equal(rules.pursuitMovement(['a', 'b', 'c'], 3).moved, 2);
+  assert.equal(rules.pursuitMovement(['c'], 1).encounter, true);
+});
+
 test('pursuit can cross a tile revealed by a scout marker', () => {
   const { cycle, cycleState } = fixture('c2', '003');
   cycleState.explored = { '001': true, '003': true };

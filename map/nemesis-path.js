@@ -314,13 +314,37 @@ function shortestPath(cycle, cycleState, startId, targetId, tiles = placedTiles(
   }
   return [];
 }
+function pursuitMovement(path, steps) {
+  if (!path.length) return { before: null, after: null, moved: 0, destination: "", encounter: false };
+  const before = path.length - 1;
+  const moved = Math.min(before, Math.max(0, steps));
+  const after = before - moved;
+  return { before, after, moved, destination: path[moved], encounter: after === 0 };
+}
 function spawnCandidates(cycle, cycleState) {
   const targetId = cycleState.currentTile;
-  if (!targetId) return [];
-  const revealed = cycle.tiles.filter((tile) => cycleState.explored?.[tile.id] || tile.id === targetId)
-    .map((tile) => effectiveTile(cycle, cycleState, tile));
-  return revealed.filter((tile) => tile.id !== targetId && cycleState.explored?.[tile.id])
-    .filter((tile) => shortestPath(cycle, cycleState, targetId, tile.id, revealed).length === 5);
+  const current = cycle.tiles.find(tile => tile.id === targetId);
+  if (!current) return [];
+  const revealed = placedTiles(cycle, cycleState);
+  if (!revealed.some(tile => tile.id === targetId)) revealed.push(effectiveTile(cycle, cycleState, current));
+  const reachable = revealed.filter(tile => tile.id !== targetId && cycleState.explored?.[tile.id])
+    .map(tile => ({ ...tile, distance: shortestPath(cycle, cycleState, targetId, tile.id, revealed).length - 1 }))
+    .filter(tile => tile.distance > 0);
+  const exact = reachable.filter(tile => tile.distance === 4);
+  if (exact.length) return exact;
+  const furthest = Math.max(0, ...reachable.map(tile => tile.distance));
+  return reachable.filter(tile => tile.distance === furthest);
 }
-window.ATO_NEMESIS_PATH = { displayLayout, effectiveTile, shortestPath, spawnCandidates, c1AlternateTileConnections };
+function titanXAdjacentCandidates(cycle, saved) {
+  const argoId = saved.currentTile || saved.tokens?.AG;
+  const argo = cycle.tiles.find(tile => tile.id === argoId);
+  if (!argo) return [];
+  const neighbors = cycle.tiles.filter(tile => tile.id !== argoId && (
+    Object.values(argo.neighbors || {}).includes(tile.id)
+    || Object.values(tile.neighbors || {}).includes(argoId)
+  ));
+  const unexplored = neighbors.filter(tile => !saved.explored?.[tile.id]);
+  return unexplored.length ? unexplored : neighbors;
+}
+window.ATO_NEMESIS_PATH = { displayLayout, effectiveTile, shortestPath, pursuitMovement, spawnCandidates, titanXAdjacentCandidates, c1AlternateTileConnections };
 })();

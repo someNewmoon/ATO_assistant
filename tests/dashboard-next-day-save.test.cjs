@@ -12,6 +12,7 @@ function harness() {
   const c = vm.createContext({
     state: copy(server), archive: { activeProfileId: 'p' }, campaignSessionEpoch: 1,
     campaignRestoreInFlight: false, ownsDashboardWriteLease: () => true,
+    canAdvanceFlowDay: () => true,
     todaySettlementItems: () => [],
     currentCycleConfig: () => ({ id: 'c1' }), dateTrackData: { c1: { entries: [{ day: 1 }, { day: 2 }, { day: 3 }] } },
     elements: { appShell: { inert: false } }, window: { alert: text => alerts.push(text) },
@@ -91,4 +92,30 @@ test('account changes during the save abort the date transition', async () => {
   assert.equal(await h.c.nextDay(), false);
   assert.equal(h.c.state.day, 1);
   assert.equal(h.backups.length, 0);
+});
+
+test('the day cannot advance before the round-end step is unlocked', async () => {
+  const h = harness();
+  h.c.canAdvanceFlowDay = () => false;
+  h.c.flushCampaignSave = () => assert.fail('a locked day tried to save');
+  assert.equal(await h.c.nextDay(), false);
+  assert.equal(h.c.state.day, 1);
+  assert.deepEqual(h.settlementDays, []);
+});
+
+test('the first unchecked step stays active even when an old save checked later steps', () => {
+  const h = harness();
+  h.c.flowSteps = ['move', 'explore', 'survey', 'end'].map(id => ({ id }));
+  const guides = ['hasOpenExplorationRound', 'activeFlowStepIndex', 'bgmFlowStepId', 'canAdvanceFlowDay'].map(name =>
+    source.match(new RegExp('^    function ' + name + '[^]*?^    }', 'm'))[0]);
+  vm.runInContext(guides.join('\n'), h.c);
+  h.c.state.completed = { move: true, survey: true };
+  assert.equal(h.c.bgmFlowStepId(), 'explore');
+  assert.equal(h.c.canAdvanceFlowDay(), false);
+  h.c.state.completed.explore = true;
+  assert.equal(h.c.bgmFlowStepId(), 'end');
+  assert.equal(h.c.canAdvanceFlowDay(), true);
+  h.c.state.exploration = { drawStateByCycle: { c1: { activePiles: [[{ id: '6425' }], []] } } };
+  assert.equal(h.c.bgmFlowStepId(), 'explore');
+  assert.equal(h.c.canAdvanceFlowDay(), false);
 });

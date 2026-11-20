@@ -2122,17 +2122,22 @@ test('a Titan-loss row keeps its own controls instead of joining the one-click b
 });
 
 // ---- 延迟效果与定时战斗 ---------------------------------------------------------
+async function completeEncounterFromFlow(harness) {
+  harness.ctx.elements = { appShell: { inert: false } };
+  harness.ctx.adventureRollContext = () => 'test-encounter';
+  harness.ctx.bgmFlowStepId = () => harness.ctx.state.completed.encounter ? 'development' : 'encounter';
+  harness.ctx.focusFlowStep = () => {};
+  vm.runInContext(fn('completeFlowStep'), harness.ctx);
+  await harness.ctx.completeFlowStep('encounter');
+}
+
 test('checking encounter without a scheduled battle preserves terrain and temporary cards', async () => {
   const harness = settleHarness();
   harness.ctx.state.completed = {};
   harness.ctx.state.nextBattleTerrain = { terrain: '特殊地形' };
   harness.drawState.drawPile.push('6401');
   harness.drawState.temporaryRemoved.push(drawnEntry('6403', 'Labyrinthian Vessel'));
-  harness.ctx.step = { id: 'encounter' };
-  harness.ctx.checkbox = { checked: true };
-  const listener = source.match(/checkbox\.addEventListener\("change", (\(\) => \{[^]*?)\n        \}\);/);
-  assert.ok(listener, 'the encounter checkbox handler exists');
-  vm.runInContext(`(${listener[1]}\n})()`, harness.ctx);
+  await completeEncounterFromFlow(harness);
   assert.equal(harness.ctx.state.completed.encounter, true);
   await flushAsync();
   assert.equal(harness.ctx.state.nextBattleTerrain.terrain, '特殊地形');
@@ -2198,12 +2203,7 @@ test('the encounter step completes the Timeline Battle instead of showing button
   assert.equal(harness.record.explorationDelays.queue[0].status, 'ready');
   assert.deepEqual(harness.ctx.createDelayedExplorationStepTools('encounter').buttons, [], '已到期的提醒也没有单独确认按钮');
   harness.ctx.state.completed = {};
-  harness.ctx.step = { id: 'encounter' };
-  harness.ctx.checkbox = { checked: true };
-  const checkboxListener = source.match(/checkbox\.addEventListener\("change", (\(\) => \{[^]*?)\n        \}\);/);
-  assert.ok(checkboxListener);
-  vm.runInContext(`(${checkboxListener[1]}\n})()`, harness.ctx);
-  await flushAsync();
+  await completeEncounterFromFlow(harness);
   assert.equal(harness.ctx.state.completed.encounter, true);
   assert.equal(harness.ctx.state.nextBattleTerrain, null);
   assert.equal(harness.drawState.temporaryRemoved.length, 0);
@@ -2226,7 +2226,7 @@ test('a Timeline battle day no longer renders duplicate battle buttons in the en
   assert.equal(harness.ctx.createDelayedExplorationStepTools('encounter'), null,
     '战斗当天没有延迟效果要展示时，遭遇步骤不再多出一块按钮');
   assert.match(source, /title: "今日战斗"/);
-  assert.match(source, /if \(step\.id === "encounter" && checkbox\.checked\) void completeTimelineBattle\(\);/);
+  assert.match(fn('completeFlowStep'), /stepId === "encounter"[\s\S]+?await completeTimelineBattle\(\)/);
 });
 
 // ---- 派系关系行 -----------------------------------------------------------------

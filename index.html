@@ -1,6 +1,7 @@
 <!doctype html>
 <html lang="zh-CN">
 <head>
+    <script src="./assets/campaign-toolbox.js?v=20261120-open" defer></script>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>ATO 战役主控台</title>
@@ -642,7 +643,7 @@
 
     .flow-step {
       display: grid;
-      grid-template-columns: auto minmax(0, 1fr);
+      grid-template-columns: minmax(0, 1fr);
       gap: 10px;
       align-items: start;
       padding: 13px;
@@ -656,13 +657,49 @@
       background: #f1faf5;
     }
 
-    .flow-check {
-      width: 24px;
-      height: 24px;
-      margin-top: 2px;
-      accent-color: var(--done);
-      cursor: pointer;
+    .flow-step.current {
+      border-color: var(--accent-strong);
+      padding: 16px;
     }
+
+    .flow-step.locked { background: #f7f7f4; }
+    .flow-step.locked .step-index,
+    .flow-step.locked .step-title { color: var(--muted); }
+    .flow-step.compact { gap: 5px; padding: 7px 12px; }
+    .flow-step.compact .step-title { min-height: 29px; margin: 0; }
+    .flow-step .step-state {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 750;
+    }
+    .flow-step.current .step-state {
+      color: var(--accent-strong);
+      background: #f2ece1;
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+    .flow-step.done .step-state { color: var(--done); }
+    .flow-step .step-state.nemesis-encounter-tag {
+      padding: 2px 6px;
+      border-radius: 4px;
+      background: #f6e5df;
+      color: #8a362b;
+    }
+    .flow-review-toggle { margin-left: auto; padding: 4px 8px; font-size: 12px; }
+    .flow-step-review { min-width: 0; padding: 0; border: 0; margin: 0; }
+    .flow-step-review > .step-actions { margin: 8px 0 0; }
+    .flow-step-footer {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: flex-end;
+      margin-top: 12px;
+      padding-top: 10px;
+      border-top: 1px solid var(--line);
+    }
+    .flow-footer-hint { align-self: center; color: var(--muted); font-size: 13px; }
+    .flow-step:focus-visible { outline: 2px solid var(--accent-strong); outline-offset: 2px; }
+    .flow-day-finished { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 
     .step-title {
       display: flex;
@@ -1646,6 +1683,29 @@
       gap: 8px;
     }
 
+    .adventure-roll-branch { margin: 0 0 12px; }
+    .adventure-roll-branch .survey-constant-title { font-size: 15px; }
+    .adventure-roll-branch .survey-constant-boxes { gap: 2px; }
+    .adventure-roll-branch .survey-constant-boxes > label { padding: 4px 6px; border-radius: 4px; }
+    .adventure-roll-branch label[data-roll-selected] { background: #f2ece1; box-shadow: inset 0 0 0 1px var(--accent-strong); }
+    .adventure-roll-branch .survey-constant-boxes input:disabled { opacity: 1; }
+    .adventure-roll-branch .roll-selected-label { color: var(--accent-strong); white-space: nowrap; }
+
+    .adventure-roll-preview {
+      margin: 0 0 16px;
+      padding: 10px 12px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: var(--panel);
+    }
+    .adventure-roll-track-heading { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 12px; }
+    .adventure-roll-track-heading span, .adventure-roll-preview [data-roll-note] { color: var(--muted); font-size: 13px; }
+    .adventure-roll-slots { display: flex; flex-wrap: wrap; gap: 6px; list-style: none; margin: 8px 0 0; padding: 0; }
+    .adventure-roll-slots li { padding: 3px 6px; border: 1px solid var(--line); border-radius: 4px; font-size: 13px; }
+    .adventure-roll-slots li[data-mark="checked"] { background: #eaf5ee; color: #245a3c; }
+    .adventure-roll-slots li[data-mark="next"] { border-color: var(--accent-strong); background: #f2ece1; font-weight: 800; }
+    .adventure-roll-preview [data-roll-note] { margin-top: 8px; }
+
     #doomAdvanceCost { width: 6em; margin-inline: 6px; }
     #doomAdvancePreview { display: block; font-weight: 700; margin: 12px 0; }
     #doomAdvanceHint { color: var(--muted); font-size: 13px; }
@@ -2392,6 +2452,58 @@
       font-size: 12px;
     }
 
+    .campaign-mini-map { min-width: 0; margin: 0; }
+    .campaign-mini-map figcaption {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      gap: 5px 12px;
+      margin-bottom: 6px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .campaign-mini-map figcaption strong { color: var(--ink); }
+    .campaign-mini-map-scroll {
+      max-height: 270px;
+      overflow: auto;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #eeece5;
+    }
+    .campaign-mini-map-board { position: relative; margin: 8px; }
+    .campaign-mini-tile {
+      position: absolute;
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 2px;
+      min-height: 0;
+      padding: 2px;
+      width: 51px;
+      height: 51px;
+      border: 1px solid #817768;
+      border-radius: 4px;
+      background: #d9d2bf center / cover no-repeat;
+      color: #211d16;
+      font: 700 10px system-ui, sans-serif;
+    }
+    .campaign-mini-tile > span { padding: 1px 2px; border-radius: 2px; background: #fffc; }
+    .campaign-mini-tile.unrevealed { background: #e8e4d9; border-style: dashed; }
+    .campaign-mini-tile.movable { border: 2px dashed #167466; }
+    .campaign-mini-tile.current { border: 3px solid #176c62; z-index: 1; }
+    .campaign-mini-tile.enemy { outline: 2px solid #9d332c; outline-offset: -2px; }
+    .campaign-mini-tile.candidate { border: 2px solid #a66d1d; }
+    .campaign-mini-tile[aria-pressed="true"] { border: 3px solid #176c62; z-index: 1; }
+    #nemesisSpawnDialog { width: min(46rem, calc(100vw - 28px)); padding: 16px; }
+    #nemesisSpawnDialog h2 { margin: 0 0 8px; font-size: 20px; }
+    #nemesisSpawnDialog p { margin: 0 0 8px; }
+    #nemesisSpawnDialog .nemesis-spawn-choices, #nemesisSpawnDialog .nemesis-spawn-actions {
+      display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 10px;
+    }
+    #nemesisSpawnDialog .nemesis-spawn-actions { justify-content: end; }
+    .nemesis-spawn-choices label { display: flex; align-items: center; gap: 5px; }
+    .nemesis-spawn-choices input { width: auto; }
+
     .argo-nearby-layout {
       width: 100%;
       display: flex;
@@ -2487,10 +2599,6 @@
 
       .date-track-list {
         max-height: 280px;
-      }
-
-      .flow-step {
-        grid-template-columns: auto minmax(0, 1fr);
       }
 
       .flow-head-tools {
@@ -2991,6 +3099,15 @@
     <form method="dialog">
       <h2 id="adventureRollTitle">D10 掷骰结果</h2>
       <p id="adventureRollOutcome"></p>
+      <div class="adventure-roll-branch" data-term-scope="survey-record" hidden></div>
+      <section class="adventure-roll-preview" aria-labelledby="adventureRollTrackTitle" hidden>
+        <div class="adventure-roll-track-heading">
+          <strong id="adventureRollTrackTitle"></strong>
+          <span data-roll-progress></span>
+        </div>
+        <ul class="adventure-roll-slots"></ul>
+        <div data-roll-note hidden></div>
+      </section>
       <div class="adventure-roll-actions">
         <button type="submit" class="secondary" value="cancel">取消</button>
         <button type="submit" class="secondary" value="reroll">重骰</button>
@@ -3014,6 +3131,19 @@
     </form>
   </dialog>
 
+  <dialog id="nemesisSpawnDialog" class="card-track-dialog" aria-labelledby="nemesisSpawnTitle">
+    <form method="dialog">
+      <h2 id="nemesisSpawnTitle">选择宿敌生成位置</h2>
+      <p data-spawn-hint></p>
+      <div data-spawn-map></div>
+      <div class="nemesis-spawn-choices" data-spawn-choices></div>
+      <div class="nemesis-spawn-actions">
+        <button type="submit" value="cancel" class="secondary" formnovalidate>取消</button>
+        <button type="submit" value="confirm">确认生成</button>
+      </div>
+    </form>
+  </dialog>
+
   <dialog id="mnemosChoiceDialog" class="card-track-dialog" aria-labelledby="mnemosChoiceTitle" aria-describedby="mnemosChoiceInstructions">
     <form method="dialog">
       <h2 id="mnemosChoiceTitle">选择回忆卡</h2>
@@ -3032,7 +3162,8 @@
   <script src="./assets/exploration-card-tags.js?v=20261018-card-audit1"></script>
   <script src="./assets/exploration-card-rules.js?v=20261018-card-audit1"></script>
   <script src="./assets/exploration-card-resource-rules.js?v=20261013-automation5"></script>
-  <script src="./assets/exploration-card-effects.js?v=20261018-card-audit1"></script>
+  <script src="./assets/exploration-card-effects.js?v=20261120-ledger"></script>
+  <script src="./assets/campaign-session.js?v=20260917"></script>
   <script src="./assets/exploration-card-conditions.js?v=20261018-card-audit1"></script>
   <script src="./assets/exploration-card-options.js?v=20261117-resource-types1"></script>
   <script src="./assets/exploration-card-choices.js?v=20261013-next-choices12"></script>
@@ -3050,12 +3181,12 @@
   <script src="./map/map-tile-tags.js?v=20261016-icon-scope"></script>
   <script src="./map/frozen-time-rules.js?v=20261110-silo6"></script>
   <script src="./map/map-data.js?v=20260730-cycle-labels"></script>
-  <script src="./map/nemesis-path.js?v=20260924-shared"></script>
+  <script src="./map/nemesis-path.js?v=20261120-toolbox"></script>
   <script src="./map/nearby-navigation.js?v=20261120-nearby"></script>
   <script src="./map/tile-artwork-data.js?v=20261108-rasterless1"></script>
   <script src="./map/tile-artwork.js?v=20261026-dual-map-masks1"></script>
-  <script src="./map/nemesis-battle.js?v=20261003-record"></script>
-  <script src="./assets/exploration-pursuit.js?v=20261016-voyage3"></script>
+  <script src="./map/nemesis-battle.js?v=20261120-toolbox"></script>
+  <script src="./assets/exploration-pursuit.js?v=20261120-toolbox"></script>
   <script src="./assets/cycle-symbols.js?v=20261115-module-logo"></script>
   <!-- 官方 App 存档（.jsave）→ ATO sections 的转换器；「导入存档」按内容判定后走它。
 
@@ -3109,40 +3240,6 @@
       { id: "c4", label: "Cycle 4: Gardens of Infinite Growth", storyBook: "c4", aibp: true, map: true },
       { id: "c5", label: "Cycle 5: Truthsayer", storyBook: "c5", aibp: true, map: true },
     ];
-    const adversaryBattleByCycle = {
-      c1: {
-        book: "c1",
-        chapter: "battle",
-        encounter: "赫尔墨斯追踪者战斗-pursuer-battle",
-        entry: "赫尔墨斯追踪者战斗-pursuer-battle",
-      },
-      c2: {
-        book: "c2",
-        chapter: "battle",
-        encounter: "重担之战-burden-battle",
-        entry: "重担之战-burden-battle",
-      },
-      c3: {
-        // 循环 3 的宿敌战斗读的仍是 C2 故事书里的重担之战，不是笔误。
-
-        book: "c2",
-        chapter: "battle",
-        encounter: "重担之战-burden-battle",
-        entry: "重担之战-burden-battle",
-      },
-      c4: {
-        book: "c4",
-        chapter: "battle",
-        encounter: "收割旋风之战-reap-the-whirlwind-battle",
-        entry: "收割旋风之战-reap-the-whirlwind-battle",
-      },
-      c5: {
-        book: "c5",
-        chapter: "battle",
-        encounter: "the-devil-himself-battle-the-devil-himself-battle",
-        entry: "the-devil-himself-battle",
-      },
-    };
     // 内蕴奥德赛按「阿尔戈号知识」结算，条目号就是知识等级；
     // 每个循环只覆盖自己那 20 段，区间外的知识值夹到当循环可用段落。
 
@@ -3213,21 +3310,22 @@
 
     // 背景音乐跟随「今日流程」。曲目表在 assets/bgm/manifest.js，播放器在 assets/bgm/bgm.js。
 
-    // 判定规则：
+    function hasOpenExplorationRound() {
+      const piles = state.exploration?.drawStateByCycle?.[currentCycleConfig().id]?.activePiles;
+      return Array.isArray(piles) && piles.some(pile => Array.isArray(pile) && pile.length > 0);
+    }
 
-    //   1. 从**最后一个已勾选**的步骤往后找（不是从第一个没勾的找），所以跳着点也不会卡住；
-
-    //   2. 没有提醒不代表已完成，考察/遭遇等条件步骤也等待用户勾选确认；
-    //   3. 最后一步完成后进入休整。
+    function activeFlowStepIndex(steps = flowSteps, completed = state.completed) {
+      const index = steps.findIndex(step => !completed?.[step.id] || (step.id === "explore" && hasOpenExplorationRound()));
+      return index < 0 ? steps.length : index;
+    }
 
     function bgmFlowStepId(steps = flowSteps, completed = state.completed) {
-      const list = steps || [];
-      if (!list.length) return "rest";
-      let lastDone = -1;
-      list.forEach((step, index) => {
-        if (completed && completed[step.id]) lastDone = index;
-      });
-      return list[lastDone + 1]?.id || "rest";
+      return steps[activeFlowStepIndex(steps, completed)]?.id || "rest";
+    }
+
+    function canAdvanceFlowDay() {
+      return activeFlowStepIndex() >= flowSteps.length - 1;
     }
 
     let bgmResetRevision = 0;
@@ -6001,6 +6099,8 @@
       drawState.history = [];
       drawState.discardPile = [];
       drawState.current = null;
+      // An imported completion flag can coexist with a still-open draw.
+      if (state.completed) delete state.completed.explore;
       // 本轮结束，「结算完毕」那一步的临时状态跟着复位。
 
       explorationSettlePrepared = false;
@@ -6310,6 +6410,7 @@
           // 宿敌是否已由本循环的特殊事件引入：主控台的地图命令整体重写地图分区时不能丢，
           // 否则打完一场宿敌战斗后追踪标记又会被当成“尚未登场”。
           adversaryIntroduced: Boolean(saved.adversaryIntroduced),
+          nemesisEncounters: isPlainObject(saved.nemesisEncounters) ? saved.nemesisEncounters : {},
           titanXTrackPosition: Number.isInteger(Number(saved.titanXTrackPosition))
             && Number(saved.titanXTrackPosition) >= 1 && Number(saved.titanXTrackPosition) <= 7
             ? Number(saved.titanXTrackPosition)
@@ -6413,7 +6514,7 @@
     async function adversaryBattleHref(cycleId, profileId = archive.activeProfileId) {
       const server = await readServerArgoRecord(profileId);
       if (!server.available) throw new Error("无法读取当前记录表宿敌，请恢复连接后重试。");
-      const target = window.ATO_NEMESIS_BATTLE.targetFor(cycleId, server.record, adversaryBattleByCycle);
+      const target = window.ATO_NEMESIS_BATTLE.targetFor(cycleId, server.record);
       if (!target) return "";
       const params = new URLSearchParams(target);
       return `./story/index.html?${params.toString()}`;
@@ -6487,6 +6588,7 @@
           : "",
         adversaryTileId: cycleState.tokens.AD || "",
         adversaryTileLabel: adversary?.label || cycleState.tokens.AD || "",
+        nemesisEncounters: cycleState.nemesisEncounters || {},
         titanXTrackPosition: cycleId === "c5" ? cycleState.titanXTrackPosition : null,
         latestRevealedTileId: cycleState.latestRevealedTile || "",
         latestRevealedTileLabel: latest?.label || cycleState.latestRevealedTile || "",
@@ -6587,16 +6689,56 @@
       });
     }
 
-    function titanXAdjacentCandidates(cycle, cycleState) {
-      const argoId = cycleState.currentTile || cycleState.tokens.AG;
-      const argo = cycle.tiles.find((tile) => tile.id === argoId);
-      if (!argo) return [];
-      const neighbors = cycle.tiles.filter((tile) => tile.id !== argoId && (
-        Object.values(argo.neighbors || {}).includes(tile.id)
-        || Object.values(tile.neighbors || {}).includes(argoId)
-      ));
-      const unexplored = neighbors.filter((tile) => !cycleState.explored[tile.id]);
-      return unexplored.length ? unexplored : neighbors.filter((tile) => cycleState.explored[tile.id]);
+    function chooseNemesisSpawn(cycle, cycleState, candidates) {
+      const dialog = document.getElementById("nemesisSpawnDialog");
+      const choices = dialog.querySelector("[data-spawn-choices]");
+      const map = dialog.querySelector("[data-spawn-map]");
+      const distance = candidates[0].distance;
+      dialog.querySelector("[data-spawn-hint]").textContent = distance === 4
+        ? "选择距离阿尔戈号正好 4 格的已探索板块。"
+        : `没有正好 4 格的候选。以下是最远的可达已探索板块，距离 ${distance} 格。`;
+      choices.replaceChildren();
+      const radios = new Map();
+      for (const tile of candidates) {
+        const label = document.createElement("label");
+        const input = document.createElement("input");
+        input.type = "radio";
+        input.name = "nemesis-spawn-tile";
+        input.value = tile.id;
+        input.required = true;
+        input.checked = candidates.length === 1;
+        label.append(input, tile.label === tile.id || !tile.label ? tile.id : `${tile.id} · ${tile.label}`);
+        choices.appendChild(label);
+        radios.set(tile.id, input);
+      }
+      const updateSelection = () => {
+        for (const tile of map.querySelectorAll("[data-candidate-tile]")) {
+          tile.setAttribute("aria-pressed", String(radios.get(tile.dataset.candidateTile).checked));
+        }
+      };
+      map.replaceChildren(createDashboardMiniMap(cycle, cycleState, {
+        candidates,
+        onSelect(id) {
+          radios.get(id).checked = true;
+          updateSelection();
+        },
+      }));
+      for (const radio of radios.values()) radio.addEventListener("change", updateSelection);
+      updateSelection();
+      dialog.returnValue = "cancel";
+      dialog.showModal();
+      return new Promise(resolve => {
+        dialog.addEventListener("close", () => {
+          resolve(dialog.returnValue === "confirm" ? choices.querySelector("input:checked")?.value || "" : "");
+        }, { once: true });
+      });
+    }
+
+    async function choosePursuitSpawn(preview, requested = "") {
+      if (requested && preview.candidates.some(tile => tile.id === requested)) return requested;
+      const chosen = await chooseNemesisSpawn(preview.cycle, preview.saved, preview.candidates);
+      if (chosen) return chosen;
+      throw Object.assign(new Error("已取消生成宿敌。"), { code: "SPAWN_CANCELLED" });
     }
 
     async function runMapCommand(command, value = "") {
@@ -6613,6 +6755,7 @@
         const { cycleId, cycle, cycleState } = currentMapCommandCycle(commandState);
         let message = "地图已更新。";
         let battleHref = "";
+        let metNemesis = false;
 
         if (command === "move-argo") {
           const targetId = mapDirectionalTarget(cycle, cycleState, value);
@@ -6638,6 +6781,7 @@
           if (cycleState.tokens.AD === targetId) {
             cycleState.tokens.AD = "";
             if (cycleId === "c5") cycleState.titanXTrackPosition = null;
+            metNemesis = true;
             battleHref = await adversaryBattleHref(cycleId, commandState.profileId);
             message = battleHref
               ? `阿尔戈号已移动至 ${targetId}，与宿敌相遇：已移除宿敌，正在打开宿敌战斗。`
@@ -6672,6 +6816,7 @@
           if (cycleState.tokens.AD === value) {
             cycleState.tokens.AD = "";
             if (cycleId === "c5") cycleState.titanXTrackPosition = null;
+            metNemesis = true;
             battleHref = await adversaryBattleHref(cycleId, commandState.profileId);
             message = battleHref
               ? `阿尔戈号经特殊连接移动至 ${value}，与宿敌相遇：已移除宿敌，正在打开宿敌战斗。`
@@ -6705,25 +6850,19 @@
           } else {
             const targetId = cycleState.currentTile;
             if (!targetId) throw new Error("请先设置阿尔戈号当前位置。");
+            if (cycleState.tokens.AD) throw new Error("宿敌已在地图上，可以推进现有宿敌。");
             const candidates = window.ATO_NEMESIS_PATH.spawnCandidates(cycle, cycleState);
-            if (!candidates.length) throw new Error("没有距离阿尔戈号正好 4 格的已揭示板块。");
-            let chosen = candidates[0];
-            if (candidates.length > 1) {
-              const options = candidates.map((tile, index) => `${index + 1}. ${tile.label || tile.id} (${tile.id})`).join("\n");
-              const selection = window.prompt(`有多个符合条件的板块，请选择宿敌生成位置：\n${options}`, "1");
-              if (selection === null) {
-                setMapCommandStatus("已取消生成宿敌。");
-                return;
-              }
-              const index = Number(selection) - 1;
-              if (!Number.isInteger(index) || index < 0 || index >= candidates.length) {
-                throw new Error("请选择列表中的位置编号。");
-              }
-              chosen = candidates[index];
+            if (!candidates.length) throw new Error("没有可到达的已探索板块可供生成。");
+            const selection = await chooseNemesisSpawn(cycle, cycleState, candidates);
+            if (!selection) {
+              setMapCommandStatus("已取消生成宿敌。");
+              return;
             }
+            const chosen = candidates.find(tile => tile.id === selection);
+            if (!chosen) throw new Error("所选板块不在当前生成候选内。");
             cycleState.tokens.AD = chosen.id;
             cycleState.adversaryIntroduced = true;
-            message = `宿敌已生成在 ${chosen.label || chosen.id}。`;
+            message = `宿敌已生成在 ${chosen.label || chosen.id}，距阿尔戈号 ${chosen.distance} 格。`;
           }
         } else if (command === "chase-nemesis") {
           if (cycleId === "c5") {
@@ -6733,7 +6872,7 @@
             cycleState.titanXTrackPosition = position - 1;
             message = `泰坦 X 追踪指示物移至 ${cycleState.titanXTrackPosition}。`;
             if (cycleState.titanXTrackPosition === 6 || cycleState.titanXTrackPosition === 3) {
-              const candidates = titanXAdjacentCandidates(cycle, cycleState);
+              const candidates = window.ATO_NEMESIS_PATH.titanXAdjacentCandidates(cycle, cycleState);
               if (candidates.length) {
                 const chosen = candidates[Math.floor(Math.random() * candidates.length)];
                 cycleState.tokens.AD = chosen.id;
@@ -6747,20 +6886,23 @@
             const targetId = cycleState.currentTile;
             if (!startId) throw new Error("地图上还没有宿敌，请先生成。");
             if (!targetId) throw new Error("请先设置阿尔戈号当前位置。");
-            if (startId !== targetId) {
-              const path = window.ATO_NEMESIS_PATH.shortestPath(cycle, cycleState, startId, targetId);
-              if (path.length >= 2) cycleState.tokens.AD = path[1];
+            const path = window.ATO_NEMESIS_PATH.shortestPath(cycle, cycleState, startId, targetId);
+            const movement = window.ATO_NEMESIS_PATH.pursuitMovement(path, 1);
+            if (movement.before === null) {
+              setMapCommandStatus("宿敌与阿尔戈号之间没有已揭示路线，宿敌未移动。");
+              return;
             }
-            if (cycleState.tokens.AD === targetId) {
+            cycleState.tokens.AD = movement.destination;
+            const distance = `距离 ${movement.before} → ${movement.after} 格`;
+            if (movement.encounter) {
               cycleState.tokens.AD = "";
+              metNemesis = true;
               battleHref = await adversaryBattleHref(cycleId, commandState.profileId);
               message = battleHref
-                ? "宿敌追上阿尔戈号：已移除宿敌，正在打开宿敌战斗。"
-                : "宿敌追上阿尔戈号：已移除宿敌，请结算宿敌战斗。";
+                ? `${distance}，宿敌与阿尔戈号相遇。已移除宿敌，正在打开宿敌战斗。`
+                : `${distance}，宿敌与阿尔戈号相遇。已移除宿敌，请结算宿敌战斗。`;
             } else {
-              message = cycleState.tokens.AD === startId
-                ? "宿敌与阿尔戈号之间没有已揭示路线，宿敌未移动。"
-                : `宿敌已追击 1 格，移动至 ${cycleState.tokens.AD}。`;
+              message = `宿敌移动至 ${cycleState.tokens.AD}。距阿尔戈号 ${movement.before} → ${movement.after} 格。`;
             }
           }
         } else if (command === "retreat-titan-x") {
@@ -6771,7 +6913,9 @@
         }
 
         assertStructureTechTarget(target);
-        await saveMapCommandState(commandState, commandBaseState);
+        if (metNemesis) window.ATO_NEMESIS_BATTLE.recordEncounter(cycleState, target.day, battleHref);
+        const routeDependent = metNemesis || (cycleId !== "c5" && (command === "spawn-nemesis" || command === "chase-nemesis"));
+        await saveMapCommandState(commandState, routeDependent ? undefined : commandBaseState);
         assertStructureTechTarget(target);
         // A conflict retry may have rebased the command onto a newer state, so
         // re-read the cycle the snapshot must be built from.
@@ -8772,7 +8916,7 @@
       }
     }
 
-    function createSurveyConstantCard(item, groupId) {
+    function createSurveyConstantCard(item, groupId, preview = null) {
       const card = document.createElement("article");
       card.className = "survey-constant-card";
 
@@ -8790,7 +8934,7 @@
         const row = document.createElement("label");
         const input = document.createElement("input");
         input.type = "checkbox";
-        input.checked = surveyConstantChecked(groupId, item.id, boxId);
+        input.checked = preview ? Boolean(preview.checkedBoxes[boxId]) : surveyConstantChecked(groupId, item.id, boxId);
         if (boxOptions?.requiresFirst) {
           // 追踪标的第二个框里写着跳转段号，段号本身就是剧透：第一格没勾（这一格也没勾过）
           // 时整行不渲染，勾上第一格重新绘制后这一格才出现。
@@ -8798,7 +8942,8 @@
           const firstBoxId = item.boxes[0]?.[0];
           if (!surveyConstantChecked(groupId, item.id, firstBoxId) && !input.checked) return;
         }
-        input.addEventListener("change", () => setSurveyConstant(groupId, item.id, boxId, input.checked));
+        if (preview) input.disabled = true;
+        else input.addEventListener("change", () => setSurveyConstant(groupId, item.id, boxId, input.checked));
         const rollText = document.createElement("span");
         rollText.className = "survey-constant-roll";
         rollText.textContent = roll;
@@ -8809,6 +8954,13 @@
           tagBadge.className = "survey-constant-tag";
           tagBadge.textContent = tag;
           labelText.append(" ", tagBadge);
+        }
+        if (boxId === preview?.selectedBox) {
+          row.dataset.rollSelected = "";
+          const selected = document.createElement("span");
+          selected.className = "roll-selected-label";
+          selected.textContent = "本次勾选";
+          labelText.append(" · ", selected);
         }
         row.append(input, rollText, labelText);
         boxes.appendChild(row);
@@ -8937,7 +9089,7 @@
       return pickAdventureD10(data.rr.map(([id, title, extra]) => {
         const followUp = values[id] && extra?.goTo && !values[`${id}-goto`];
         return {
-          range: id, id, title, slot: followUp ? `${id}-goto` : id,
+          range: id, id, title, goTo: extra?.goTo, slot: followUp ? `${id}-goto` : id,
           entry: followUp ? extra.goTo : id, available: !values[id] || Boolean(followUp),
         };
       }), random);
@@ -8946,19 +9098,20 @@
     function pickBranchAdventure(data, column, cycle, record, values, random = Math.random) {
       const branches = data.summary.map(({ hubId, story }) => {
         const index = data.hubs.findIndex(hub => hub.id === hubId);
-        const slots = ["alpha", ...recordAdventureMiddleSlots(cycle, index), "omega"];
-        const recordSlot = slots.find(slot => !record.adventures?.[`${cycle}-${index}-${slot}`]);
-        return { range: story[column], hub: data.hubs[index], recordSlot, available: Boolean(recordSlot) };
+        const track = ["alpha", ...recordAdventureMiddleSlots(cycle, index), "omega"]
+          .map(id => ({ id, checked: Boolean(record.adventures?.[`${cycle}-${index}-${id}`]) }));
+        const recordSlot = track.find(slot => !slot.checked)?.id;
+        return { range: story[column], hub: data.hubs[index], track, recordSlot, available: Boolean(recordSlot) };
       });
       const branch = pickAdventureD10(branches, random);
       if (!branch || branch.reset) return null;
-      const { hub, recordSlot } = branch.row;
+      const { hub, track, recordSlot } = branch.row;
       const boxes = hub.boxes.filter(([, range]) => adventureRollFaces(range).length);
-      if (recordSlot === "alpha" || recordSlot === "omega") return { hub, recordSlot, slot: recordSlot, reset: [], faces: [branch.face] };
+      if (recordSlot === "alpha" || recordSlot === "omega") return { hub, track, recordSlot, slot: recordSlot, reset: [], faces: [branch.face] };
       const result = pickAdventureD10(boxes.map(([id, range]) => ({
         range, id, available: !values.hubs?.[hub.id]?.[id],
       })), random);
-      return result && { hub, recordSlot, slot: result.row.id, reset: result.reset ? boxes.map(([id]) => id) : [], faces: [branch.face, result.face] };
+      return result && { hub, track, recordSlot, slot: result.row.id, reset: result.reset ? boxes.map(([id]) => id) : [], faces: [branch.face, result.face] };
     }
 
     let adventureRollBusy = false;
@@ -8973,9 +9126,38 @@
         .filter(Boolean).join(" · ");
     }
 
-    function chooseAdventureRoll(result) {
+    function chooseAdventureRoll(result, preview) {
       const dialog = document.getElementById("adventureRollDialog");
-      document.getElementById("adventureRollOutcome").textContent = adventureRollResultText(result);
+      const outcome = document.getElementById("adventureRollOutcome");
+      const branch = preview?.branch;
+      outcome.textContent = adventureRollResultText(branch ? { faces: result.faces } : result);
+      if (preview) outcome.dataset.termScope = "survey-record";
+      else delete outcome.dataset.termScope;
+
+      const branchPanel = dialog.querySelector(".adventure-roll-branch");
+      branchPanel.hidden = !branch;
+      branchPanel.replaceChildren();
+      if (branch) branchPanel.appendChild(createSurveyConstantCard(branch.hub, "hubs", branch));
+
+      const panel = dialog.querySelector(".adventure-roll-preview");
+      panel.hidden = !preview;
+      if (preview) {
+        const { title, slots, target, resetTrack, note } = preview;
+        const count = slots.filter(slot => slot.checked).length;
+        const confirmed = slots.filter(slot => slot.id === target || (!resetTrack && slot.checked)).length;
+        panel.querySelector("#adventureRollTrackTitle").textContent = title;
+        panel.querySelector("[data-roll-progress]").textContent = `已勾选 ${count}/${slots.length} → ${confirmed}/${slots.length}`;
+        panel.querySelector("ul").replaceChildren(...slots.map(slot => {
+          const item = document.createElement("li");
+          const next = slot.id === target;
+          item.dataset.mark = next ? "next" : slot.checked ? "checked" : "unchecked";
+          item.textContent = `${slot.label} · ${next ? "本次勾选" : slot.checked ? "已勾选" : "未勾选"}`;
+          return item;
+        }));
+        const noteElement = panel.querySelector("[data-roll-note]");
+        noteElement.hidden = !note;
+        noteElement.textContent = note || "";
+      }
       dialog.returnValue = "cancel";
       dialog.showModal();
       return new Promise(resolve => {
@@ -8996,7 +9178,7 @@
             const plan = await prepare();
             if (!plan || !stillCurrent() || state !== rollState) return;
             if (plan.result) {
-              const choice = await chooseAdventureRoll(plan.result);
+              const choice = await chooseAdventureRoll(plan.result, plan.preview);
               if (!stillCurrent() || state !== rollState) return;
               if (choice === "reroll") continue;
               if (choice !== "confirm") return;
@@ -9037,17 +9219,26 @@
         const values = ensureTodaySurveyConstants().rr;
         const result = pickRestAdventure(data, values);
         if (!result) return;
-        const { id, slot, entry, title } = result.row;
+        const { id, slot, entry, title, goTo } = result.row;
         const target = result.reset ? id : entry;
+        const markSlot = result.reset ? id : slot;
+        const slots = [{ id, label: "首段", checked: Boolean(values[id]) }];
+        if (goTo) {
+          slots.push({ id: `${id}-goto`, label: "后续段落", checked: Boolean(values[`${id}-goto`]) });
+        }
         return {
           route: { bgm: "rest", chapter: "rr-adventures", entry: target },
           result: { faces: [result.face], title: `${title} · 段落 ${target}` },
+          preview: {
+            title: "休整冒险记录", slots, target: markSlot, resetTrack: result.reset,
+            note: result.reset ? "休整冒险已全部勾选，确认后重置休整记录并勾选本次结果。" : "",
+          },
           mark() {
             if (result.reset) for (const [rowId] of data.rr) {
               delete values[rowId];
               delete values[`${rowId}-goto`];
             }
-            setSurveyConstant("rr", id, result.reset ? id : slot, true);
+            setSurveyConstant("rr", id, markSlot, true);
           },
         };
       });
@@ -9064,12 +9255,21 @@
         const values = ensureTodaySurveyConstants();
         const selection = pickBranchAdventure(data, column, cycle, result.record, values);
         if (!selection) throw new Error("当前剧情卡牌可用的分支已用完，请核对冒险记录轨。");
-        const { hub, recordSlot, slot, reset, faces } = selection;
+        const { hub, track, recordSlot, slot, reset, faces } = selection;
         const action = { cycle, day: normalizeCampaignDay(state.day, cycle), adventure: hub.title, box: slot, recordSlot };
         return {
           sync: () => syncAdventureActionToArgoRecord(action),
           route: { bgm: "hub", chapter: surveyHubChapterKey(data, hub.id), entry: surveyStoryEntryId(slot) },
           result: { faces, title: surveyHubTargetLabel(data, { itemId: hub.id, boxId: slot }) || hub.title },
+          preview: {
+            title: "阿尔戈号冒险记录轨",
+            branch: { hub, selectedBox: slot, checkedBoxes: values.hubs?.[hub.id] || {} },
+            slots: track.map(item => ({ ...item,
+              label: item.id.startsWith("mid") ? `空白格 ${item.id.slice(3)}` : adventureSlotLabel(item.id),
+            })),
+            target: recordSlot,
+            note: reset.length ? "确认后重置该分支的普通段落勾选，再勾选本段。" : "",
+          },
           mark() {
             for (const id of reset) delete values.hubs[hub.id][id];
             setSurveyConstant("hubs", hub.id, slot, true, recordSlot);
@@ -9309,6 +9509,19 @@
           </span>` : ""}
       `;
       if (isCycleFive) queueMicrotask(updateDashboardTitanXTrack);
+      else {
+        const cycle = mapCycleDefinition();
+        const saved = getStructureTechContext()?.map?.cycles?.[cycle?.id];
+        if (saved?.tokens?.AD && saved.currentTile) {
+          const rules = window.ATO_NEMESIS_PATH;
+          const move = rules.pursuitMovement(rules.shortestPath(cycle, saved, saved.tokens.AD, saved.currentTile), 1);
+          const note = document.createElement("span");
+          note.className = "step-kind";
+          note.textContent = move.before === null ? "宿敌无可行路线"
+            : move.encounter ? `当前距离 ${move.before} 格 · 本次推进会相遇` : `宿敌距离 ${move.before} 格`;
+          group.appendChild(note);
+        }
+      }
       return group;
     }
 
@@ -9330,8 +9543,8 @@
       const button = document.createElement("button");
       button.type = "button";
       button.className = "step-action-button";
-      button.textContent = "进入下一天";
-      button.title = "结清今日流程并推进到时间表的下一天";
+      button.textContent = state.completed.end ? "进入下一天" : "完成轮末，进入下一天";
+      button.title = "结清轮末并推进到时间表的下一天";
       button.addEventListener("click", async () => {
         if (await nextDay()) scrollPageToTopAfterNextDay();
       });
@@ -9515,6 +9728,8 @@
       if (snapshot.currentTileIsLatestRevealed) previewRevealed[snapshot.currentTileId] = true;
       return {
         currentTile: snapshot.currentTileId,
+        tokens: { AG: snapshot.currentTileId, AD: snapshot.adversaryTileId },
+        explored: Object.fromEntries((snapshot.exploredIds || []).map(id => [id, true])),
         previewRevealed,
         latestRevealedTile: snapshot.latestRevealedTileId,
         tileVariants: snapshot.currentTileFace === "B" ? { [snapshot.currentTileId]: "alternate" } : {},
@@ -9566,6 +9781,92 @@
       return panel;
     }
 
+    function createDashboardMiniMap(cycle, mapState, { nearby = [], candidates = [], onSelect } = {}) {
+      const navigation = window.ATO_MAP_NAVIGATION;
+      const layout = window.ATO_NEMESIS_PATH.displayLayout(cycle);
+      const movable = new Map(nearby.filter(cell => cell.available).map(cell => [cell.tile.id, cell]));
+      const eligible = new Set(candidates.map(tile => tile.id));
+      const currentId = mapState.currentTile;
+      const enemyId = mapState.tokens?.AD;
+      const unit = 52;
+      const shown = cycle.tiles.filter(tile => navigation.revealed(mapState, tile.id)
+          || tile.id === currentId || tile.id === enemyId || movable.has(tile.id))
+        .map(tile => {
+          const point = layout.position(tile);
+          return { tile, x: point.x * unit / layout.tileWidth, y: point.y * unit / layout.tileWidth };
+        });
+      const figure = document.createElement("figure");
+      figure.className = "campaign-mini-map";
+      const caption = document.createElement("figcaption");
+      const title = document.createElement("strong");
+      title.textContent = "已探索地图";
+      const legend = document.createElement("span");
+      legend.textContent = candidates.length ? "阿尔戈号 · 金框候选 · ↑ 上" : "阿尔戈号 · 宿敌 · 虚线可航行 · ↑ 上";
+      caption.append(title, legend);
+      figure.appendChild(caption);
+      if (!shown.length) return figure;
+
+      const minX = Math.min(...shown.map(point => point.x));
+      const minY = Math.min(...shown.map(point => point.y));
+      const scroll = document.createElement("div");
+      scroll.className = "campaign-mini-map-scroll";
+      const board = document.createElement("div");
+      board.className = "campaign-mini-map-board";
+      board.style.width = `${Math.ceil(Math.max(...shown.map(point => point.x)) - minX + unit)}px`;
+      board.style.height = `${Math.ceil(Math.max(...shown.map(point => point.y)) - minY + unit)}px`;
+      scroll.appendChild(board);
+      figure.appendChild(scroll);
+      const artwork = window.ATO_MAP_ARTWORK;
+      const mapUrl = path => new URL(path, new URL("./map/", window.location.href)).href;
+      for (const { tile, x, y } of shown) {
+        const faceUp = navigation.revealed(mapState, tile.id);
+        const route = movable.get(tile.id);
+        const candidate = eligible.has(tile.id);
+        const cell = document.createElement(route || candidate ? "button" : "div");
+        cell.className = ["campaign-mini-tile", faceUp ? "" : "unrevealed",
+          tile.id === currentId ? "current" : "", tile.id === enemyId ? "enemy" : "",
+          route ? "movable" : "", candidate ? "candidate" : ""].filter(Boolean).join(" ");
+        cell.style.left = `${x - minX}px`;
+        cell.style.top = `${y - minY}px`;
+        cell.dataset.miniTile = tile.id;
+        const name = faceUp ? tile.label || tile.id : tile.id;
+        if (route) {
+          cell.type = "button";
+          cell.dataset.mapDirection = `${route.direction}:${currentId}:${tile.id}`;
+          cell.disabled = mapCommandBusy;
+          cell.setAttribute("aria-label", `向${route.label}移动至 ${name}`);
+        }
+        if (candidate) {
+          cell.type = "button";
+          cell.dataset.candidateTile = tile.id;
+          cell.setAttribute("aria-label", `选择生成板块 ${name}`);
+          cell.addEventListener("click", () => onSelect(tile.id));
+        }
+        cell.title = name;
+        if (faceUp) {
+          const source = navigation.revealedFace(cycle, mapState, tile);
+          if (source && artwork?.resolve(source)) void artwork.paintBackground(cell, source, mapUrl);
+          else if (source) cell.style.backgroundImage = `url("${mapUrl(source)}")`;
+        }
+        const label = document.createElement("span");
+        label.textContent = tile.id;
+        cell.appendChild(label);
+        const marker = tile.id === currentId ? "船" : tile.id === enemyId ? "敌" : route?.label || "";
+        if (marker) {
+          const badge = document.createElement("span");
+          badge.textContent = marker;
+          cell.appendChild(badge);
+        }
+        board.appendChild(cell);
+        if (tile.id === currentId) requestAnimationFrame(() => {
+          if (!scroll.isConnected) return;
+          scroll.scrollLeft = Math.max(0, x - minX - (scroll.clientWidth - unit) / 2);
+          scroll.scrollTop = Math.max(0, y - minY - (scroll.clientHeight - unit) / 2);
+        });
+      }
+      return figure;
+    }
+
     function createNearbyMapPicker() {
       const group = document.createElement("div");
       group.className = "map-step-group";
@@ -9613,7 +9914,7 @@
       layout.appendChild(grid);
       const preview = createRevealedMapPreview(cycle, mapState, currentTile);
       if (preview) layout.appendChild(preview);
-      group.appendChild(layout);
+      group.append(layout, createDashboardMiniMap(cycle, mapState, { nearby: cells }));
       if (cells.some(({ tile, available }) => (tile === currentTile || available)
           && Object.keys(window.ATO_NEMESIS_PATH.effectiveTile(cycle, mapState, tile).exits || {})
             .some(exit => /^(TOP|BOTTOM|LEFT|RIGHT)_(TOP|BOTTOM|LEFT|RIGHT)$/.test(exit)))) {
@@ -9701,56 +10002,189 @@
       });
     }
 
+    let reviewedFlowStep = null;
+
+    function focusFlowStep(stepId) {
+      const element = document.getElementById(`flow-step-${stepId}`);
+      element?.focus({ preventScroll: true });
+      element?.scrollIntoView({ block: "nearest" });
+    }
+
+    function todayNemesisEncounter() {
+      const cycleId = currentCycleConfig().id;
+      const savedMap = getStructureTechContext()?.map?.cycles?.[cycleId];
+      const day = String(state.day);
+      const saved = savedMap?.nemesisEncounters?.[day]
+        || (state.mapSnapshot?.cycleId === cycleId ? state.mapSnapshot.nemesisEncounters?.[day] : null);
+      const pursuitDay = day === "T6/00" ? "0" : day;
+      const auto = Object.values(state.techAutomation?.events || {}).find(event => event.cycleId === cycleId
+        && event.pursuit?.battle && String(event.createdDay) === pursuitDay);
+      if (!saved && !auto) return null;
+      const stored = new URLSearchParams(saved?.battleSearch || "");
+      const target = stored.get("chapter") === "battle" ? stored
+        : window.ATO_NEMESIS_BATTLE.targetFor(cycleId, cachedArgoRecord || {});
+      return {
+        tile: saved?.tileId || auto?.pursuit.path?.at(-1) || "",
+        href: target ? `./story/index.html?${new URLSearchParams(target)}` : "",
+      };
+    }
+
+    function appendNemesisEncounterTag(heading, encounter) {
+      if (!encounter) return;
+      const tag = document.createElement("span");
+      tag.className = "step-state nemesis-encounter-tag";
+      tag.textContent = encounter.tile ? `宿敌相遇 · ${encounter.tile}` : "宿敌相遇";
+      heading.appendChild(tag);
+    }
+
+    function compactFlowHeading(step, index, mode, reviewed, encounter) {
+      const heading = document.createElement("div");
+      heading.className = "step-title";
+      heading.innerHTML = `<span class="step-index">${String(index + 1).padStart(2, "0")}</span>
+        <span data-term-scope="step-name">${escapeHtml(step.title)}</span>
+        <span class="step-state">${mode === "done" ? "已完成" : "等待前一步"}</span>`;
+      appendNemesisEncounterTag(heading, encounter);
+      if (mode === "done") {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "secondary flow-review-toggle";
+        button.dataset.dashboardReadonlyAllowed = "";
+        button.setAttribute("aria-expanded", String(reviewed));
+        button.textContent = reviewed ? "收起" : "查看";
+        button.addEventListener("click", () => {
+          reviewedFlowStep = reviewed ? null : { id: step.id, context: adventureRollContext() };
+          renderFlow();
+          document.querySelector(`#flow-step-${step.id} .flow-review-toggle`)?.focus();
+        });
+        heading.appendChild(button);
+      }
+      return heading;
+    }
+
+    async function completeFlowStep(stepId) {
+      if (elements.appShell.inert || !ownsDashboardWriteLease() || bgmFlowStepId() !== stepId || stepId === "end"
+          || (stepId === "explore" && hasOpenExplorationRound())) return;
+      const context = adventureRollContext();
+      const stillCurrent = () => context === adventureRollContext() && ownsDashboardWriteLease() && bgmFlowStepId() === stepId;
+      elements.appShell.inert = true;
+      let completed = false;
+      try {
+        if (stepId === "encounter" && todayTrackIcons().some(icon => icon.className === "battle")
+          && !await completeTimelineBattle()) return;
+        if (stepId === "development" && cachedArgoRecord?.explorationDelays
+          && !await processExplorationDelays("development")) return;
+        if (!stillCurrent()) return;
+        state.completed[stepId] = true;
+        reviewedFlowStep = null;
+        saveState();
+        completed = true;
+      } finally {
+        elements.appShell.inert = false;
+        renderFlow();
+        if (completed) focusFlowStep(bgmFlowStepId());
+      }
+    }
+
+    function createFlowStepFooter(step, mode, pending) {
+      const footer = document.createElement("div");
+      footer.className = "flow-step-footer";
+      if (mode === "done") {
+        const reopen = document.createElement("button");
+        reopen.type = "button";
+        reopen.className = "secondary";
+        reopen.textContent = "重新处理此步骤";
+        reopen.addEventListener("click", () => {
+          if (!ownsDashboardWriteLease() || elements.appShell.inert || !state.completed[step.id]) return;
+          delete state.completed[step.id];
+          reviewedFlowStep = null;
+          saveState();
+          renderFlow();
+          focusFlowStep(step.id);
+        });
+        footer.appendChild(reopen);
+      } else if (step.id === "end") {
+        footer.appendChild(createNextDayStepButton("end"));
+      } else {
+        const complete = document.createElement("button");
+        complete.type = "button";
+        complete.textContent = "完成并继续";
+        if (step.id === "explore" && hasOpenExplorationRound()) {
+          complete.disabled = true;
+          const hint = document.createElement("span");
+          hint.className = "flow-footer-hint";
+          hint.textContent = "当前探索牌组仍在结算，结束后才能继续。";
+          footer.appendChild(hint);
+        }
+        complete.addEventListener("click", () => void completeFlowStep(step.id));
+        if (step.kind !== "总是执行" && !pending.some(item => item.step === step.id)) {
+          const skip = document.createElement("button");
+          skip.type = "button";
+          skip.className = "secondary";
+          skip.textContent = "本步无需处理";
+          skip.addEventListener("click", () => void completeFlowStep(step.id));
+          footer.appendChild(skip);
+        }
+        footer.appendChild(complete);
+      }
+      return footer;
+    }
+
     function renderFlow() {
       renderTheatreLink();
       elements.flowList.innerHTML = "";
       const fragment = document.createDocumentFragment();
+      const active = activeFlowStepIndex();
+      const pending = todaySettlementItems();
+      const nemesisEncounter = todayNemesisEncounter();
+      if (reviewedFlowStep?.context !== adventureRollContext()
+          || !flowSteps.slice(0, active).some(step => step.id === reviewedFlowStep?.id)) reviewedFlowStep = null;
+      elements.nextDayButton.disabled = !canAdvanceFlowDay();
+      elements.nextDayButton.title = elements.nextDayButton.disabled ? "进入轮末后可换日" : "完成轮末并进入下一天";
 
       flowSteps.forEach((step, index) => {
         const item = document.createElement("article");
-        const checked = Boolean(state.completed[step.id]);
-        item.className = `flow-step${checked ? " done" : ""}`;
+        const mode = index < active ? "done" : index === active ? "current" : "locked";
+        const reviewed = mode === "done" && reviewedFlowStep?.id === step.id;
+        const encounter = step.id === "encounter" ? nemesisEncounter : null;
+        item.className = `flow-step ${mode}${mode === "current" ? "" : " compact"}`;
         item.id = `flow-step-${step.id}`;
         item.tabIndex = -1;
+        if (mode === "current") item.setAttribute("aria-current", "step");
+        else item.appendChild(compactFlowHeading(step, index, mode, reviewed, encounter));
+        if (mode === "locked" || (mode === "done" && !reviewed)) {
+          fragment.appendChild(item);
+          return;
+        }
 
-        const checkbox = document.createElement("input");
-        checkbox.type = "checkbox";
-        checkbox.className = "flow-check";
-        checkbox.checked = checked;
-        checkbox.setAttribute("aria-label", `完成${step.title}`);
-        // Marks the step name so the official version can use the full step
-        // wording (探索步骤/剧情步骤…) here only (see assets/term-language.js).
-        checkbox.setAttribute("data-term-scope", "step-name");
-        checkbox.addEventListener("change", () => {
-          state.completed[step.id] = checkbox.checked;
-          saveState();
-          renderFlow();
-          if (step.id === "development" && checkbox.checked) void processExplorationDelays("development");
-          // 当天有定时战斗时，遭遇步骤打勾 = 战斗已经打完：结算「下次定时战斗结束时…」的延迟效果，
-
-          // 并把暂时移出的探索卡放回牌堆（原先靠区块里的两个按钮，已移除）。
-
-          if (step.id === "encounter" && checkbox.checked) void completeTimelineBattle();
-        });
-
-        const text = document.createElement("div");
+        const text = document.createElement(mode === "done" ? "fieldset" : "div");
+        if (mode === "done") {
+          text.className = "flow-step-review";
+          text.disabled = true;
+        }
         const trackReminders = getStepTrackReminders(step.id);
-        const titleText = step.id === "story" || step.id === "doom"
-          ? `<button type="button" class="flow-title-button" data-term-scope="step-name" data-card-track-open="${step.id}">${escapeHtml(step.title)}</button>`
-          : `<span data-term-scope="step-name"${step.id === "end" ? ' data-english-text="End Step"' : ""}>${escapeHtml(step.title)}</span>`;
+        let currentHeading = "";
+        if (mode === "current") {
+          const titleText = step.id === "story" || step.id === "doom"
+            ? `<button type="button" class="flow-title-button" data-term-scope="step-name" data-card-track-open="${step.id}">${escapeHtml(step.title)}</button>`
+            : `<span data-term-scope="step-name"${step.id === "end" ? ' data-english-text="End Step"' : ""}>${escapeHtml(step.title)}</span>`;
+          currentHeading = `<div class="step-title">
+            <span class="step-index">${String(index + 1).padStart(2, "0")}</span>
+            ${titleText}
+            <span class="step-kind">${escapeHtml(step.kind)}</span>
+            <span class="step-state">当前步骤</span>
+          </div>`;
+        }
         const descLanguage = step.id === "end"
           ? 'data-english-text="Mark the unexplored tile under the Argo as explored. Proceeding to the next day also does this automatically."'
           : `data-english-source="${({ move: "lbl_MOVEMENT_desc", explore: "lbl_EXPLORATION_desc", survey: "lbl_EXPEDITION_desc", encounter: "lbl_ENCOUNTER_desc", development: "lbl_ADVANCEMENT_desc", story: "lbl_STORY_desc", doom: "lbl_DOOM_desc" })[step.id]}"`;
         text.innerHTML = `
-          <div class="step-title">
-            <span class="step-index">${String(index + 1).padStart(2, "0")}</span>
-            ${titleText}
-            <span class="step-kind">${escapeHtml(step.kind)}</span>
-          </div>
+          ${currentHeading}
           <p class="step-desc" ${descLanguage}>${renderStepDesc(step.desc)}</p>
           ${step.id === "end" ? '<p class="step-desc" id="roundEndStatus" role="status"></p>' : ""}
           ${renderStepTrackReminders(trackReminders)}
         `;
+        const heading = text.querySelector(".step-title");
+        if (heading) appendNemesisEncounterTag(heading, encounter);
         trackReminders.forEach((reminder, reminderIndex) => {
           if (!reminder.explorationToken) return;
           const { entry, item, field } = reminder.explorationToken;
@@ -9771,7 +10205,9 @@
               event.entry ? "继续阅读航标梦境" : "航标梦境 · 掷 1d10", () => rollPharosDream(id)));
           }
         }
-        getStepLinks(step).forEach((link) => {
+        const links = getStepLinks(step);
+        if (encounter?.href) links.push({ label: "打开宿敌战斗", href: encounter.href, bgm: "encounter" });
+        links.forEach((link) => {
           const anchor = document.createElement("a");
           anchor.href = link.href;
           anchor.textContent = link.label;
@@ -9800,9 +10236,7 @@
         if (nemesisTools) actions.appendChild(nemesisTools);
         const roundEndButton = createRoundEndStepButton(step.id);
         if (roundEndButton) actions.appendChild(roundEndButton);
-        const stepNextDayButton = createNextDayStepButton(step.id);
-        if (stepNextDayButton) actions.appendChild(stepNextDayButton);
-        if (actions.children.length) text.querySelector(".step-title")?.appendChild(actions);
+        if (actions.children.length) (heading || text).appendChild(actions);
         if (step.id === "end" && currentCycleConfig().id === "c3") text.appendChild(createC3TimeLoopTools());
         const mapTools = createMapStepTools(step.id);
         if (mapTools) text.appendChild(mapTools);
@@ -9860,12 +10294,20 @@
           const advance = createDoomAdvanceTools();
           if (advance) text.appendChild(advance);
         }
-        item.append(checkbox, text);
+        item.append(text, createFlowStepFooter(step, mode, pending));
         fragment.appendChild(item);
       });
 
+      if (active === flowSteps.length) {
+        const finished = document.createElement("div");
+        finished.className = "flow-day-finished";
+        const note = document.createElement("strong");
+        note.textContent = "今日步骤已完成";
+        finished.append(note, createNextDayStepButton("end"));
+        fragment.appendChild(finished);
+      }
       elements.flowList.appendChild(fragment);
-      renderTodayPreview();
+      renderTodayPreview(pending);
       renderStructureTechDue();
       renderProgress();
       updateRecordLinks();
@@ -11199,7 +11641,8 @@
         const preview = rules.plan(current);
         if (!preview.ok || preview.settled || preview.code === "NO_EXPLORATION_ROUND") return null;
         const operationId = preview.roundId;
-        const spawnTileId = document.querySelector(".exploration-pursuit [name='pursuitSpawnTile']")?.value || "";
+        let spawnTileId = document.querySelector(".exploration-pursuit [name='pursuitSpawnTile']")?.value || "";
+        if (preview.mode === "spawn" && preview.candidates?.length > 1) spawnTileId = await choosePursuitSpawn(preview, spawnTileId);
         submitted = true;
         const result = await structureTechClient().submit({ ...target, expectedDay: current.day,
           techKey: "pursuer problem", actionId: "exploration-pursuit", operationId,
@@ -11265,7 +11708,8 @@
         const preview = rules.plan(current);
         if (!preview.ok || preview.settled || preview.code === "NO_EXPLORATION_ROUND") return null;
         const operationId = preview.roundId;
-        const spawnTileId = document.querySelector(".exploration-pursuit [name='pursuitSpawnTile']")?.value || "";
+        let spawnTileId = document.querySelector(".exploration-pursuit [name='pursuitSpawnTile']")?.value || "";
+        if (preview.mode === "spawn" && preview.candidates?.length > 1) spawnTileId = await choosePursuitSpawn(preview, spawnTileId);
         submitted = true;
         const result = await structureTechClient().submit({ ...target, expectedDay: current.day,
           techKey: "pursuer problem", actionId: "exploration-pursuit", operationId,
@@ -11300,7 +11744,7 @@
           try {
             result = await settleExplorationWithPursuit(entries, target);
           } catch (error) {
-            if (error?.combinedStage === "submit") throw error;
+            if (error?.code === "SPAWN_CANCELLED" || error?.combinedStage === "submit") throw error;
             if (typeof assertStructureTechTarget === "function") assertStructureTechTarget(target);
             console.warn("合并结算不可用，回退为分步写入", error);
           }
@@ -11330,7 +11774,7 @@
           markExplorationSettlePrepared(true, { render: false });
         }
       } catch (error) {
-        window.alert(`一键结算失败，当前牌组已保留：${error?.message || error}`);
+        if (error?.code !== "SPAWN_CANCELLED") window.alert(`一键结算失败，当前牌组已保留：${error?.message || error}`);
       } finally {
         settleExplorationDraw.busy = false;
         renderFlow();
@@ -11353,7 +11797,7 @@
         if (autoPursuit && typeof settlePursuitWithDashboard === "function") {
           try { pursued = Boolean(await settlePursuitWithDashboard(structureTechTarget())); }
           catch (error) {
-            if (error?.combinedStage === "submit") throw error;
+            if (error?.code === "SPAWN_CANCELLED" || error?.combinedStage === "submit") throw error;
             console.warn("合并追踪结算不可用，回退为分步写入", error);
           }
         }
@@ -11364,7 +11808,7 @@
         if (settlement) settlement.pending = [];
         endExplorationDraw({ skipPendingConfirm: true, render: false });
       } catch (error) {
-        window.alert(`结算失败，当前牌组已保留：${error?.message || error}`);
+        if (error?.code !== "SPAWN_CANCELLED") window.alert(`结算失败，当前牌组已保留：${error?.message || error}`);
       } finally {
         settleExplorationDraw.busy = false;
         renderFlow();
@@ -12643,6 +13087,7 @@
           await applyStructureTechCommit({ campaign: context.campaign }, target);
           return preview.operation;
         }
+        if (preview.mode === "spawn" && preview.candidates?.length > 1) spawnTileId = await choosePursuitSpawn(preview, spawnTileId);
         const result = await structureTechClient().submit({ ...target, expectedDay: target.day,
           techKey: "pursuer problem", actionId: "exploration-pursuit", operationId: preview.roundId,
           selection: { roundId: preview.roundId, waive: Boolean(waive), spawnTileId: spawnTileId || "" },
@@ -12680,7 +13125,7 @@
         note.textContent = `已结算：${preview.operation.rewardLabel}`;
         box.appendChild(note);
         if (preview.operation.pursuit?.battle && preview.operation.status !== "completed") {
-          const target = window.ATO_NEMESIS_BATTLE.targetFor(currentCycleConfig().id, live.record, adversaryBattleByCycle);
+          const target = window.ATO_NEMESIS_BATTLE.targetFor(currentCycleConfig().id, live.record);
           if (target) {
             const link = document.createElement("a");
             link.href = `./story/index.html?${new URLSearchParams(target).toString()}`;
@@ -12717,6 +13162,8 @@
         box.appendChild(details);
       }
       const manualMode = pursuitSettlementMode() === "manual";
+      const movement = preview.mode === "move" && preview.path?.length
+        ? preview.pathRules.pursuitMovement(preview.path, preview.steps) : null;
       // 宿敌未引入时只给一句提示：标记不生成、不移动。
       note.textContent = markersIgnored
         ? "宿敌未引入，追踪标记忽略。"
@@ -12725,7 +13172,8 @@
           ? `手动结算：本轮 ${count.total} 个宿敌标记，请按计数自行结算（不会自动生成或移动宿敌）。`
           : count.message)
         : !preview.ok ? preview.message : preview.mode === "spawn" ? "地图无宿敌，本轮达到 2 个标记，将生成宿敌（本次不再移动）。"
-        : preview.mode === "move" ? `宿敌将移动 ${preview.steps} 格；一键结算默认不豁免。`
+        : movement ? `最短路线距离 ${movement.before} → ${movement.after} 格${movement.encounter ? "，本次会相遇" : ""}。`
+        : preview.mode === "move" ? (preview.cycle?.id === "c5" ? `泰坦 X 将推进 ${preview.steps} 格。` : "宿敌与阿尔戈号之间没有已揭示路线。")
         : "无事发生。一键结算会记录本轮已处理。";
       box.appendChild(note);
       // 手动模式下只做计数提示，不提供生成/移动/豁免按钮，避免误触自动结算。
@@ -12736,8 +13184,12 @@
         location = document.createElement("select"); location.name = "pursuitSpawnTile";
         location.className = "step-action-button";
         location.setAttribute("aria-label", "宿敌生成位置");
+        const placeholder = document.createElement("option");
+        placeholder.value = "";
+        placeholder.textContent = "选择生成板块…";
+        location.appendChild(placeholder);
         for (const tile of preview.candidates) {
-          const option = document.createElement("option"); option.value = tile.id; option.textContent = `生成位置 ${tile.label}`; location.appendChild(option);
+          const option = document.createElement("option"); option.value = tile.id; option.textContent = `${tile.label} · 距离 ${tile.distance} 格`; location.appendChild(option);
         }
         box.appendChild(location);
       }
@@ -12747,7 +13199,7 @@
         node.addEventListener("click", async () => {
           node.disabled = true;
           try { await settleExplorationPursuit(waive, location?.value || ""); }
-          catch (error) { window.alert(`追踪结算失败：${error.message || error}`); }
+          catch (error) { if (error?.code !== "SPAWN_CANCELLED") window.alert(`追踪结算失败：${error.message || error}`); }
           finally { renderFlow(); }
         });
         box.appendChild(node);
@@ -13714,7 +14166,7 @@
           Object.fromEntries(confirmations.map(item => [item.id, item.input.checked]))));
         actions.appendChild(complete);
         if (event.pursuit?.battle) {
-          const target = window.ATO_NEMESIS_BATTLE?.targetFor(currentCycleConfig().id, cachedArgoRecord || {}, adversaryBattleByCycle);
+          const target = window.ATO_NEMESIS_BATTLE?.targetFor(currentCycleConfig().id, cachedArgoRecord || {});
           if (target) {
             const battle = document.createElement("a");
             battle.className = "structure-tech-due-battle";
@@ -13805,6 +14257,7 @@
     function todaySettlementItems() {
       const completed = state.completed || {};
       const items = [];
+      if (hasOpenExplorationRound()) items.push({ step: "explore", label: "探索 · 当前牌组尚未结束" });
       if (!completed.survey) {
         for (const reminder of getSurveyMapReminders()) {
           const rest = reminder.tag?.label === "R&R";
@@ -13832,10 +14285,9 @@
       return items;
     }
 
-    function renderTodayPreview() {
+    function renderTodayPreview(items = todaySettlementItems()) {
       const title = document.getElementById("todayPreviewTitle");
       const list = document.getElementById("todayPreviewItems");
-      const items = todaySettlementItems();
       title.textContent = items.length ? `今日待结算 · ${items.length} 项` : "今日待结算 · 暂无提示";
       list.replaceChildren();
       for (const { step, label } of items) {
@@ -13849,9 +14301,12 @@
         jump.textContent = "去步骤";
         jump.setAttribute("aria-label", `去步骤：${label}`);
         jump.addEventListener("click", () => {
-          const target = document.getElementById(`flow-step-${step}`);
-          target?.focus({ preventScroll: true });
-          target?.scrollIntoView({ block: "start" });
+          if (flowSteps.slice(0, activeFlowStepIndex()).some(item => item.id === step)
+              && reviewedFlowStep?.id !== step) {
+            reviewedFlowStep = { id: step, context: adventureRollContext() };
+            renderFlow();
+          }
+          focusFlowStep(step);
         });
         row.append(text, jump);
         list.appendChild(row);
@@ -13859,7 +14314,7 @@
     }
 
     function renderProgress() {
-      const completed = flowSteps.filter((step) => state.completed[step.id]).length;
+      const completed = activeFlowStepIndex();
       const percent = Math.round((completed / flowSteps.length) * 100);
       elements.progressFill.style.width = `${percent}%`;
       elements.progressText.textContent = `${completed} / ${flowSteps.length}`;
@@ -14908,7 +15363,7 @@
     }
 
     async function nextDay() {
-      if (nextDay.busy || campaignRestoreInFlight || !ownsDashboardWriteLease()) return false;
+      if (nextDay.busy || campaignRestoreInFlight || !ownsDashboardWriteLease() || !canAdvanceFlowDay()) return false;
       const pending = todaySettlementItems();
       if (pending.length && !window.confirm(`今天仍有这些事项待确认：\n\n${pending.map(item => item.label).join("\n")}\n\n仍要进入下一天吗？`)) return false;
       const profileId = archive.activeProfileId;
@@ -15747,6 +16202,33 @@
     });
 
     setAuthMode("login");
+    window.ATO_CAMPAIGN_TOOLBOX_OPTIONS = {
+      container: elements.appShell,
+      async beforeRead() {
+        if (elements.appShell.inert || !ownsDashboardWriteLease()) throw new Error("请先接管主控台编辑。");
+        if (!campaignStorageAvailable || !await flushCampaignSave()) {
+          throw new Error("当前进度尚未同步，请恢复连接后重试。");
+        }
+      },
+      assertTarget(snapshot, accountId) {
+        if (!ownsDashboardWriteLease() || accountId !== sessionUser?.id
+            || snapshot.profileId !== archive.activeProfileId || snapshot.cycle !== currentCycleConfig().id
+            || String(snapshot.state.day) !== String(state.day)) {
+          throw new Error("当前战役、循环或日期已变化，请重新读取。");
+        }
+      },
+      async onSettlementSaved(sections) {
+        if (sections.dashboard) await syncDashboardFromExternalUpdate();
+        if (sections.record) await refreshCachedArgoRecord();
+      },
+      async onMapSaved() {
+        await refreshStructureTechContext();
+        updateDashboardTitanXTrack();
+      },
+      renderSpawnMap(cycle, cycleState, candidates, onSelect) {
+        return createDashboardMiniMap(cycle, cycleState, { candidates, onSelect });
+      },
+    };
     initAuth();
   </script>
   <script src="./assets/ato-terms.js?v=20261110-loop-terms"></script>

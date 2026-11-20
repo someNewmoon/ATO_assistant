@@ -1,6 +1,7 @@
 <!doctype html>
 <html lang="zh-CN">
 <head>
+    <script src="../assets/campaign-toolbox.js?v=20261120-open" defer></script>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>阿尔戈号记录表</title>
@@ -5717,6 +5718,23 @@
       if (!document.hidden) void syncRecordFromExternalUpdate();
     });
 
+    window.ATO_CAMPAIGN_TOOLBOX_OPTIONS = {
+      async beforeRead() {
+        await initialRecordLoad;
+        const syncError = "记录表正在同步或尚未连接，请同步后重试。";
+        campaignSession.assertCurrent();
+        if (!serverStorageAvailable) throw new Error(syncError);
+        clearTimeout(serverSaveTimer);
+        while (serverSaveInFlight) await new Promise(resolve => window.setTimeout(resolve, 40));
+        if (!jsonEqual(cloneJson(state), serverStateBaseline)) await saveStateToServer();
+        while (serverSaveInFlight) await new Promise(resolve => window.setTimeout(resolve, 40));
+        if (serverSaveNeedsRetry || !jsonEqual(cloneJson(state), serverStateBaseline)) throw new Error(syncError);
+      },
+      async onSettlementSaved(sections) {
+        if (sections.record) await syncRecordFromExternalUpdate();
+      },
+    };
+
     applyRequestedCycleFromUrl();
     consumeDashboardSurveyNote({ clearUrl: false });
     bindInputs();
@@ -5724,7 +5742,7 @@
     // Rendering initializes cycle fields and compatibility values. Only changes
     // after this snapshot are edits to merge into the first server response.
     serverStateBaseline = cloneJson(state);
-    loadServerState();
+    const initialRecordLoad = loadServerState();
   </script>
   <script src="../assets/ato-terms.js?v=20261110-loop-terms"></script>
   <script src="../assets/english-terms.js?v=20261011-english4"></script>

@@ -205,6 +205,7 @@ test('无冷却的发展交换保留凭据但不生成虚假的冷却事项或�
 test('超表科技日期稀疏补行，nextDay 仍按官方日期轨推进并保留科技记录', async () => {
   const { context: c } = harness(['trackEntriesForRender', 'nextDay'], {
     dateTrackData: { c2: { entries: [{ day: 1 }, { day: 2 }, { day: 3 }] } },
+    canAdvanceFlowDay: () => true,
     todaySettlementItems: () => [],
     structureTechEvents: () => [event('reward', { dueDay: 1000, cooldownUntilDay: 1200 }), event('done', { dueDay: 900, status: 'completed' })],
     syncInputs() {},

@@ -177,7 +177,7 @@
   box-shadow: 0 5px 20px #1c242233;
 }
 .campaign-toolbox-menu button,
-.campaign-nemesis-tool button,
+:is(.campaign-nemesis-tool, .campaign-hero-tool) button,
 .campaign-nemesis-tool select {
   min-height: 36px;
   padding: 5px 10px;
@@ -189,9 +189,9 @@
 }
 .campaign-toolbox-menu button { text-align: start; }
 .campaign-toolbox-menu button:not(:disabled):hover,
-.campaign-nemesis-tool button:not(:disabled):hover { border-color: #176c62; background: #e0eeea; }
+:is(.campaign-nemesis-tool, .campaign-hero-tool) button:not(:disabled):hover { border-color: #176c62; background: #e0eeea; }
 .campaign-toolbox-menu p { margin: 0 5px; }
-.campaign-nemesis-tool {
+:is(.campaign-nemesis-tool, .campaign-hero-tool) {
   box-sizing: border-box;
   width: min(39rem, calc(100% - 24px));
   max-height: 90dvh;
@@ -202,12 +202,40 @@
   border-radius: 10px;
   font: 500 15px/1.5 system-ui, sans-serif;
 }
-.campaign-nemesis-tool::backdrop { background: #1c24226b; }
-.campaign-nemesis-tool h2 { margin: 0; font-size: 1.2rem; }
-.campaign-nemesis-tool p { margin: 8px 0; }
+:is(.campaign-nemesis-tool, .campaign-hero-tool)::backdrop { background: #1c24226b; }
+:is(.campaign-nemesis-tool, .campaign-hero-tool) h2 { margin: 0; font-size: 1.2rem; }
+:is(.campaign-nemesis-tool, .campaign-hero-tool) p { margin: 8px 0; }
 .campaign-nemesis-tool label { display: block; margin-bottom: 8px; }
 .campaign-nemesis-tool [data-nemesis-actions] { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
-.campaign-nemesis-tool [data-nemesis-confirm] { background: #176c62; color: white; border-color: #176c62; }
-.campaign-nemesis-tool [data-nemesis-confirm]:not(:disabled):hover { background: #12564e; }
-.campaign-nemesis-tool :disabled, .campaign-toolbox-menu :disabled { opacity: .55; }
+:is(.campaign-nemesis-tool [data-nemesis-confirm], .campaign-hero-tool button[type="submit"]) { background: #176c62; color: white; border-color: #176c62; }
+:is(.campaign-nemesis-tool [data-nemesis-confirm], .campaign-hero-tool button[type="submit"]):not(:disabled):hover { background: #12564e; }
+:is(.campaign-nemesis-tool, .campaign-hero-tool, .campaign-toolbox-menu) :disabled { opacity: .55; }
 .campaign-nemesis-tool [hidden], .campaign-toolbox [hidden] { display: none; }
+
+
+.hero-tool-roster {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  margin: 12px 0 0;
+  padding: 0;
+  border: 0;
+}
+.hero-tool-roster section { padding: 8px 10px; border: 1px solid #bdccc8; border-radius: 7px; background: #fff; }
+.hero-tool-roster h3 { color: inherit; margin: 0 0 6px; font-size: 1rem; }
+.hero-tool-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.hero-tool-stats > div { background: #f6f8f7; border-radius: 5px; padding: 5px; text-align: center; }
+.hero-tool-stats > div > div:first-child { display: flex; justify-content: center; align-items: center; gap: 5px; margin-bottom: 4px; }
+.hero-tool-stats img { box-sizing: border-box; width: 22px; height: 22px; padding: 4px; border-radius: 50%; background: #2f3135; }
+.hero-tool-controls { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 3px; align-items: center; }
+.hero-tool-controls button { min-width: 0; min-height: 32px; padding: 4px 7px; }
+.hero-tool-controls output { font-weight: 700; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.hero-tool-controls output.hero-tool-changed { color: #176c62; }
+.campaign-hero-tool footer { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 8px; margin-top: 12px; }
+.campaign-hero-tool footer a { margin-inline-end: auto; color: #176c62; }
+.campaign-hero-tool [role=status]:empty { display: none; }
+@media (max-width: 450px) {
+  .hero-tool-stats { grid-template-columns: 1fr; }
+  .hero-tool-stats > div { display: grid; grid-template-columns: minmax(0, 1fr) minmax(105px, 1fr); gap: 6px; align-items: center; }
+  .hero-tool-stats > div > div:first-child { justify-content: start; margin-bottom: 0; }
+}

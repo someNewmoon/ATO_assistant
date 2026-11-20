@@ -141,3 +141,13 @@ test('an import while the initial load is pending is queued for the established 
   assert.equal(app.server().heroes[0].id, 'startup-import');
   assert.equal(app.context.state._userId, 'current-account');
 });
+
+test('after a server read, a local triskelion edit survives an unrelated edit from another page', async () => {
+  const { context, server } = load();
+  await context.loadFromServer();
+  context.state.heroes[0].triskelion.danger = 2;
+  const remote = server();
+  remote.heroes[0].triskelion = { fury: 0, fate: 3, danger: 0 };
+  const merged = context.chooseHeroMerge(remote);
+  assert.deepEqual(copy(merged.heroes[0].triskelion), { fury: 0, fate: 3, danger: 2 });
+});

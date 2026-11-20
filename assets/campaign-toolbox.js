@@ -10,6 +10,7 @@
     <div class="campaign-toolbox-menu">
       <button type="button" data-tool="settlement" aria-haspopup="dialog">阿尔戈号快捷结算</button>
       <button type="button" data-tool="nemesis" aria-haspopup="dialog">推进宿敌</button>
+      <button type="button" data-tool="heroes" aria-haspopup="dialog">英雄状态</button>
       <p role="status" hidden></p>
     </div>`;
   (options.container || document.body).append(tooltip);
@@ -19,7 +20,7 @@
   const buttons = [...tooltip.querySelectorAll("[data-tool]")];
   const style = document.createElement("link");
   style.rel = "stylesheet";
-  style.href = `${root}story/assets/quick-settlement.css?v=20261120-toolbox`;
+  style.href = `${root}story/assets/quick-settlement.css?v=20261120-hero-state`;
   if (!document.querySelector('link[href*="quick-settlement.css"]')) document.head.append(style);
 
   function load(path, api) {
@@ -36,7 +37,7 @@
     });
   }
 
-  let openSettlement, openNemesis;
+  let openSettlement, openNemesis, openHeroes;
   async function initialize(tool) {
     const session = load("assets/campaign-session.js?v=20260917", "ATO_CAMPAIGN_SESSION");
     if (tool === "settlement") {
@@ -54,6 +55,14 @@
           draft.textContent = count ? `· ${count} 项未保存` : "";
         },
       });
+    }
+    if (tool === "heroes") {
+      await Promise.all([
+        session,
+        load("hero/hero-catalog.js?v=20261117-battle-polish", "ATO_HERO_CATALOG"),
+        load("assets/campaign-hero-tool.js?v=20261120-hero-state", "ATO_MOUNT_HERO_TOOL"),
+      ]);
+      return openHeroes ||= window.ATO_MOUNT_HERO_TOOL(root, options);
     }
     await Promise.all([
       session,

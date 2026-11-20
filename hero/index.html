@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="zh-CN">
 <head>
-    <script src="../assets/campaign-toolbox.js?v=20261120-open" defer></script>
+    <script src="../assets/campaign-toolbox.js?v=20261120-hero-state" defer></script>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>英雄记录表</title>
@@ -1522,7 +1522,8 @@
         }
         serverStorageAvailable = true;
         serverSectionRevision = Number(payload.revision || 0);
-        heroServerBaseline = remote;
+        // Keep the saved baseline separate from the objects the controls edit in place.
+        heroServerBaseline = heroSnapshot(remote);
         state = { ...next, _userId: serverUser, _lastSyncRevision: serverSectionRevision };
         normalizeState();
         state._dirty = JSON.stringify(heroSnapshot(state)) !== JSON.stringify(remote);
@@ -3142,7 +3143,18 @@
     delete state._syncBaseline;
     normalizeState();
     renderAll();
-    loadFromServer();
+    const initialHeroLoad = loadFromServer();
+    window.ATO_CAMPAIGN_TOOLBOX_OPTIONS = {
+      async beforeHeroRead() {
+        await initialHeroLoad;
+        clearTimeout(saveTimer);
+        while (heroLoading || heroSaveInFlight) await new Promise(resolve => setTimeout(resolve, 40));
+        if (state._dirty) await saveToServer();
+        while (heroLoading || heroSaveInFlight) await new Promise(resolve => setTimeout(resolve, 40));
+        if (!serverStorageAvailable || state._dirty) throw new Error("英雄记录尚未同步，请恢复连接后重试。");
+      },
+      onHeroSaved: syncHeroFromExternalUpdate,
+    };
   </script>
   <script src="../assets/page-focus-router.js?v=20261028-android-return1"></script>
 

@@ -1632,19 +1632,23 @@
       background: rgba(30, 38, 35, 0.42);
     }
 
-    #theatreRestoreDialog, #adventureRollDialog {
+    #theatreRestoreDialog, #adventureRollDialog, #doomAdvanceDialog {
       width: min(28rem, calc(100vw - 28px));
       padding: 18px;
     }
 
-    #theatreRestoreDialog h2, #adventureRollDialog h2 { margin: 0 0 8px; font-size: 20px; }
-    #theatreRestoreDialog p, #adventureRollDialog p { margin: 0 0 16px; }
-    #theatreRestoreDialog .theatre-restore-actions, #adventureRollDialog .adventure-roll-actions {
+    #theatreRestoreDialog h2, #adventureRollDialog h2, #doomAdvanceDialog h2 { margin: 0 0 8px; font-size: 20px; }
+    #theatreRestoreDialog p, #adventureRollDialog p, #doomAdvanceDialog p { margin: 0 0 16px; }
+    #theatreRestoreDialog .theatre-restore-actions, #adventureRollDialog .adventure-roll-actions, #doomAdvanceDialog .doom-advance-actions {
       display: flex;
       flex-wrap: wrap;
       justify-content: end;
       gap: 8px;
     }
+
+    #doomAdvanceCost { width: 6em; margin-inline: 6px; }
+    #doomAdvancePreview { display: block; font-weight: 700; margin: 12px 0; }
+    #doomAdvanceHint { color: var(--muted); font-size: 13px; }
 
     #mnemosChoiceDialog {
       width: min(34rem, calc(100vw - 28px));
@@ -2991,6 +2995,21 @@
         <button type="submit" class="secondary" value="cancel">取消</button>
         <button type="submit" class="secondary" value="reroll">重骰</button>
         <button type="submit" value="confirm" autofocus>确认并打开段落</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="doomAdvanceDialog" class="card-track-dialog" aria-labelledby="doomAdvanceTitle" aria-describedby="doomAdvanceHint">
+    <form method="dialog">
+      <h2 id="doomAdvanceTitle">灾厄卡结算</h2>
+      <p id="doomAdvanceFaces"></p>
+      <label for="doomAdvanceCost">扣除灾厄</label>
+      <input id="doomAdvanceCost" type="number" min="0" step="1" required />
+      <output id="doomAdvancePreview" for="doomAdvanceCost" aria-live="polite"></output>
+      <p id="doomAdvanceHint"></p>
+      <div class="doom-advance-actions">
+        <button type="submit" value="cancel" class="secondary" formnovalidate>取消</button>
+        <button type="submit" value="confirm">确认翻卡</button>
       </div>
     </form>
   </dialog>
@@ -7141,23 +7160,20 @@
       return Number.isSafeInteger(value) && value > 0 ? value : 0;
     }
 
-    async function placeStoryReward(type, key) {
-      if (elements.appShell.inert || !ownsDashboardWriteLease() || !storyRewardCount(state.storyRewards?.[type])) return;
-      const field = type === "hope" ? "progress" : "doom";
-      const initial = cardTrackTokenState(key, field);
-      if (!initial.allowed || (initial.gainMode === "remove" && !initial.count)) return;
-      if (initial.gainMode === "remove" && initial.gainCondition === "lastVisitedCity"
-        && !window.confirm("确认当前板块是「最后访问城市」标记所在的城市？将结算 1 枚希望并移除卡面上 1 枚进展。")) return;
-
+    async function commitStoryTrackChange(change, saveMessage) {
+      if (elements.appShell.inert || !ownsDashboardWriteLease()) return;
       const target = structureTechTarget();
       const assertTarget = () => {
         if (target.accountId !== sessionUser?.id || target.sessionEpoch !== campaignSessionEpoch
           || !ownsDashboardWriteLease() || target.profileId !== archive.activeProfileId
           || target.cycleId !== currentCycleConfig().id || String(target.day) !== String(state.day)) {
-          throw new Error("当前战役或日期已变化，请重新选择放置位置。");
+          throw new Error("当前战役或日期已变化，请重新打开结算。");
         }
       };
+      const cardDialog = elements.cardTrackDialog;
+      const wasInert = cardDialog.inert;
       elements.appShell.inert = true;
+      cardDialog.inert = true;
       try {
         saveState();
         if (!await flushCampaignSave()) throw new Error("当前进度尚未保存，请恢复连接后重试。");
@@ -7167,9 +7183,36 @@
         const dashboard = campaign?.sections?.dashboard;
         const profile = dashboard?.profiles?.[target.profileId];
         const savedState = profile?.cycles?.[target.cycleId]?.state;
-        const count = storyRewardCount(savedState?.storyRewards?.[type]);
         if (dashboard?.activeProfileId !== target.profileId || profile?.activeCycleId !== target.cycleId
-          || String(savedState?.day) !== String(target.day) || !count) {
+          || !savedState || String(savedState.day) !== String(target.day)) {
+          throw new Error("当前战役或日期已变化，请重新打开结算。");
+        }
+        change(savedState);
+        const result = await importCampaignSections({ dashboard }, { dashboard: campaign.sectionRevisions.dashboard });
+        campaign.sectionRevisions.dashboard = result.sections.dashboard;
+        await applyStructureTechCommit({ campaign }, target, { saveMessage });
+        if (cardDialog.open) renderCardTrackDialog();
+        campaignSyncChannel?.postMessage({ revision: result.sections.dashboard, pageId: dashboardPageId });
+      } catch (error) {
+        window.alert(error?.code === "SAVE_CONFLICT" ? "战役已在其他页面更新，请核对最新卡面和计数后重试。" : error.message);
+        await syncDashboardFromExternalUpdate();
+      } finally {
+        cardDialog.inert = wasInert;
+        elements.appShell.inert = false;
+      }
+    }
+
+    async function placeStoryReward(type, key) {
+      if (elements.appShell.inert || !ownsDashboardWriteLease() || !storyRewardCount(state.storyRewards?.[type])) return;
+      const field = type === "hope" ? "progress" : "doom";
+      const initial = cardTrackTokenState(key, field);
+      if (!initial.allowed || (initial.gainMode === "remove" && !initial.count)) return;
+      if (initial.gainMode === "remove" && initial.gainCondition === "lastVisitedCity"
+        && !window.confirm("确认当前板块是「最后访问城市」标记所在的城市？将结算 1 枚希望并移除卡面上 1 枚进展。")) return;
+
+      return commitStoryTrackChange(savedState => {
+        const count = storyRewardCount(savedState?.storyRewards?.[type]);
+        if (!count) {
           throw new Error("战役或待结算数量已更新，请重新选择。");
         }
         const current = cardTrackTokenState(key, field, savedState);
@@ -7180,16 +7223,7 @@
         if (!Number.isSafeInteger(next)) throw new Error("卡面计数超出范围。");
         savedState.cardTracks[key][field] = next;
         savedState.storyRewards[type] = count - 1;
-        const result = await importCampaignSections({ dashboard }, { dashboard: campaign.sectionRevisions.dashboard });
-        campaign.sectionRevisions.dashboard = result.sections.dashboard;
-        await applyStructureTechCommit({ campaign }, target, { saveMessage: "标记已结算" });
-        campaignSyncChannel?.postMessage({ revision: result.sections.dashboard });
-      } catch (error) {
-        window.alert(error?.code === "SAVE_CONFLICT" ? "战役已在其他页面更新，请核对待结算数量后重试。" : error.message);
-        await syncDashboardFromExternalUpdate();
-      } finally {
-        elements.appShell.inert = false;
-      }
+      }, "标记已结算");
     }
 
     function createStoryRewardTools(type) {
@@ -7259,11 +7293,128 @@
       setCardTrackCounter(key, field, Number(tracks[key][field] || 0) + delta);
     }
 
+    function inwardExchangeDetails(dashboardState = state) {
+      const track = ensureCardTracks(dashboardState).inwardOdyssey;
+      const range = inwardOdysseyStoryRanges[currentCycleConfig().id];
+      const atEnd = Boolean(range && track.position >= range.max);
+      const available = Boolean(range && track.position >= range.min - 1 && !atEnd && track.progress >= 2);
+      return { knowledge: track.position, hope: track.progress, available, atEnd };
+    }
+
+    function applyInwardExchange(dashboardState, expected) {
+      const current = inwardExchangeDetails(dashboardState);
+      if (!current.available || current.knowledge !== expected.knowledge || current.hope !== expected.hope) {
+        throw new Error("内部之旅计数已变化，请核对后重试。");
+      }
+      dashboardState.inwardResolvedThrough ??= current.knowledge;
+      const track = dashboardState.cardTracks.inwardOdyssey;
+      track.progress -= 2;
+      track.position += 1;
+    }
+
+    function exchangeInwardHope() {
+      const details = inwardExchangeDetails();
+      if (!details.available) return;
+      return commitStoryTrackChange(savedState => applyInwardExchange(savedState, details), "内部之旅已推进");
+    }
+
+    function doomAdvanceDetails(dashboardState = state) {
+      const track = ensureCardTracks(dashboardState).doom;
+      const steps = activeStoryDoomData().doomSteps;
+      const card = steps[track.position - 1];
+      const next = steps[track.position];
+      const limits = card ? cardTrackTokenState("doom", "doom", dashboardState).limits : [];
+      return { position: track.position, count: track.doom, progress: track.progress, card, next, limits };
+    }
+
+    function applyDoomAdvance(dashboardState, expected, cost) {
+      const current = doomAdvanceDetails(dashboardState);
+      if (!current.next || current.position !== expected.position
+          || current.count !== expected.count || current.progress !== expected.progress) {
+        throw new Error("灾厄卡或计数已变化，请重新确认。");
+      }
+      if (!Number.isSafeInteger(cost) || cost < 0 || cost > current.count || (!current.card && cost > 0)) {
+        throw new Error("请输入卡面实际要求扣除的灾厄数量。");
+      }
+      const track = dashboardState.cardTracks.doom;
+      track.position += 1;
+      track.doom -= cost;
+      track.progress = 0;
+    }
+
+    function confirmDoomAdvance(details) {
+      const dialog = document.getElementById("doomAdvanceDialog");
+      const input = document.getElementById("doomAdvanceCost");
+      const output = document.getElementById("doomAdvancePreview");
+      const hint = document.getElementById("doomAdvanceHint");
+      const available = details.limits.filter(limit => limit <= details.count);
+      const single = available.length === 1;
+      const sameCard = details.card?.name === details.next.name;
+      const current = !details.card ? "未揭示" : sameCard ? details.card.label : `${details.card.label} · ${details.card.name}`;
+      document.getElementById("doomAdvanceFaces").textContent = `${current} → ${details.next.label} · ${details.next.name}`;
+      hint.textContent = details.limits.length
+        ? `卡面触发点 ${details.limits.join(" / ")}。按卡面确认扣除量和其他条件。填 0 可仅调整卡面。`
+        : "按卡面指示填写扣除量。填 0 保留当前灾厄。";
+      input.max = String(details.card ? details.count : 0);
+      input.value = !details.card ? "0" : single ? String(available[0]) : "";
+      const preview = () => {
+        const cost = input.valueAsNumber;
+        output.textContent = input.validity.valid && Number.isSafeInteger(cost)
+          ? `灾厄 ${details.count} − ${cost} = ${details.count - cost} 枚结转`
+          : `当前 ${details.count} 枚灾厄，请填写扣除量。`;
+        if (details.progress) output.textContent += ` · 卡面进展 ${details.progress} → 0`;
+      };
+      preview();
+      input.oninput = preview;
+      dialog.returnValue = "cancel";
+      dialog.showModal();
+      return new Promise(resolve => {
+        dialog.addEventListener("close", () => {
+          input.oninput = null;
+          resolve(dialog.returnValue === "confirm" && input.validity.valid ? input.valueAsNumber : null);
+        }, { once: true });
+      });
+    }
+
+    async function requestDoomAdvance() {
+      if (elements.appShell.inert || !ownsDashboardWriteLease()) return;
+      const details = doomAdvanceDetails();
+      if (!details.next) return;
+      const context = adventureRollContext();
+      const cost = await confirmDoomAdvance(details);
+      if (cost === null || context !== adventureRollContext()) return;
+      return commitStoryTrackChange(savedState => applyDoomAdvance(savedState, details, cost), "灾厄卡已结算");
+    }
+
+    function createDoomAdvanceTools() {
+      const details = doomAdvanceDetails();
+      if (!details.card) return null;
+      const panel = document.createElement("section");
+      panel.className = "story-reward-placement doom-advance-panel";
+      const summary = document.createElement("p");
+      const threshold = details.limits.length ? ` · 卡面触发点 ${details.limits.join(" / ")}` : "";
+      summary.textContent = `${details.card.label} · 当前 ${details.count} 枚灾厄${threshold}`;
+      panel.appendChild(summary);
+      if (details.next) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "secondary";
+        button.textContent = "查看翻卡账单";
+        button.addEventListener("click", () => void requestDoomAdvance());
+        panel.appendChild(button);
+      } else {
+        const last = document.createElement("p");
+        last.textContent = "已是最后一面，按当前卡面结算。";
+        panel.appendChild(last);
+      }
+      return panel;
+    }
+
     function advanceCardTrack(key) {
       const tracks = ensureCardTracks();
       if (!tracks[key]) return;
       tracks[key].position = normalizeCounterValue(Number(tracks[key].position || 0) + 1);
-      tracks[key].progress = 0;
+      if (key !== "inwardOdyssey") tracks[key].progress = 0;
       saveState();
       renderCardTrackDialog();
       if (typeof renderFlow === "function") renderFlow();
@@ -7274,7 +7425,7 @@
       if (!tracks[key]) return;
       const minimum = key === "inwardOdyssey" ? argoKnowledgeStart(currentCycleConfig().id) : 0;
       tracks[key].position = Math.max(minimum, normalizeCounterValue(Number(tracks[key].position || 0) - 1));
-      tracks[key].progress = 0;
+      if (key !== "inwardOdyssey") tracks[key].progress = 0;
       saveState();
       renderCardTrackDialog();
       if (typeof renderFlow === "function") renderFlow();
@@ -7328,7 +7479,9 @@
               </div>
               <div class="card-track-step-actions">
                 <button type="button" class="card-track-retreat" data-card-retreat="${escapeHtml(def.key)}">回退</button>
-                <button type="button" class="card-track-advance" data-card-advance="${escapeHtml(def.key)}">推进</button>
+                ${def.key === "doom"
+                  ? `<button type="button" class="card-track-advance" data-doom-advance${track.position >= cycleData.doomSteps.length ? " disabled" : ""}>${track.position ? "查看翻卡账单" : "揭示首面"}</button>`
+                  : `<button type="button" class="card-track-advance" data-card-advance="${escapeHtml(def.key)}">${def.fixed ? "手动增加知识" : "推进"}</button>`}
               </div>
               <div class="card-track-meta">${escapeHtml(cardTrackMeta(def, track, cycleData, card))}</div>
             </div>
@@ -7979,7 +8132,17 @@
         });
         actions.appendChild(done);
       }
-      section.append(title, status, actions);
+      const details = inwardExchangeDetails();
+      const balance = document.createElement("p");
+      balance.textContent = `希望 ${details.hope} 枚 · 阿尔戈号知识 ${details.knowledge}`;
+      const advance = document.createElement("button");
+      advance.type = "button";
+      advance.className = "secondary";
+      advance.textContent = details.atEnd ? "本循环内部之旅已全部解锁" : "消耗 2 枚希望，推进内部之旅";
+      advance.disabled = !details.available;
+      advance.addEventListener("click", () => void exchangeInwardHope());
+      actions.prepend(advance);
+      section.append(title, balance, status, actions);
       return section;
     }
 
@@ -9694,6 +9857,8 @@
         if (step.id === "doom") {
           const doomTools = createStoryRewardTools("doom");
           if (doomTools) text.appendChild(doomTools);
+          const advance = createDoomAdvanceTools();
+          if (advance) text.appendChild(advance);
         }
         item.append(checkbox, text);
         fragment.appendChild(item);
@@ -13653,12 +13818,17 @@
       if (tech.length) items.push({ step: "development", label: `发展 · ${tech.length} 项科技时间线事项到期` });
       const dreams = pharosTimelineForDay(state.day).filter(([, event]) => !event.entry);
       if (dreams.length) items.push({ step: "story", label: `剧情 · ${dreams.length} 项航标梦境未掷骰` });
+      if (inwardExchangeDetails().available) items.push({ step: "story", label: "剧情末尾 · 内部之旅可消耗希望推进" });
       const inward = pendingInwardOdysseyEntries();
       if (inward.length) items.push({ step: "story", label: `剧情末尾 · ${inward.length} 段内部之旅待结算` });
       const hope = storyRewardCount(state.storyRewards?.hope);
       if (hope) items.push({ step: "story", label: `剧情 · ${hope} 枚希望待结算` });
       const doom = storyRewardCount(state.storyRewards?.doom);
       if (doom) items.push({ step: "doom", label: `灾祸 · ${doom} 枚灾厄待结算` });
+      const doomCard = doomAdvanceDetails();
+      if (doomCard.limits.some(limit => doomCard.count >= limit)) {
+        items.push({ step: "doom", label: `灾祸 · ${doomCard.card.label} 已达到灾厄触发点` });
+      }
       return items;
     }
 
@@ -15444,6 +15614,10 @@
       const retreatButton = event.target.closest("[data-card-retreat]");
       if (retreatButton) {
         retreatCardTrack(retreatButton.dataset.cardRetreat);
+        return;
+      }
+      if (event.target.closest("[data-doom-advance]")) {
+        void requestDoomAdvance();
         return;
       }
       const advanceButton = event.target.closest("[data-card-advance]");

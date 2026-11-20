@@ -45,7 +45,7 @@ function dashboard(cycle = 'c1', positions = {}) {
     },
     updateDashboardWriteAccessUi() {},
   };
-  sandbox.ensureCardTracks = () => sandbox.state.cardTracks;
+  sandbox.ensureCardTracks = (draft = sandbox.state) => draft.cardTracks;
   const context = vm.createContext(sandbox);
   vm.runInContext(datasetSource, context);
   context.storyDoomData = context.window.ATO_STORY_DOOM_DATA;
@@ -64,8 +64,11 @@ function dashboard(cycle = 'c1', positions = {}) {
     'cardTrackStatus', 'cardTrackMeta', 'cardTrackTokenState', 'cardTokenLimitText',
     'cardTokenPlacementTargets', 'renderCardTokenPlacementTools', 'refreshCardTokenViews', 'placeCardTrackToken',
     'getMapProgressTechReminders', 'currentTileRevealDayState', 'getStoryMapReminders', 'getDoomMapReminders', 'renderStepTrackReminders',
-    'doomSaveFateSources',
+    'doomSaveFateSources', 'doomAdvanceDetails', 'applyDoomAdvance', 'inwardExchangeDetails', 'applyInwardExchange',
   ]) vm.runInContext(dashboardFunction(name), context);
+  context.inwardOdysseyStoryRanges = {
+    c1: { min: 1, max: 20 }, c2: { min: 21, max: 40 },
+  };
   context.calls = calls;
   context.loadDialog = () => vm.runInContext(dashboardFunction('renderCardTrackDialog'), context);
   return context;
@@ -940,4 +943,41 @@ test('exploration completion excludes pure placement tasks but keeps actual manu
   assert.equal(app.pendingExplorationEffects().length, 3);
   assert.equal(app.pendingExplorationEffects(false).length, 2);
   assert.ok(app.pendingExplorationEffects(false).some(text => text.includes('抽取遇难者牌') || text.includes(manual.text)));
+});
+
+test('Inward Odyssey exchanges exactly two Hope and preserves the last settled entry', () => {
+  const app = dashboard('c2', { inwardOdyssey: 21 });
+  app.state.cardTracks.inwardOdyssey.progress = 5;
+  app.state.inwardResolvedThrough = 20;
+  const original = app.inwardExchangeDetails();
+  app.applyInwardExchange(app.state, original);
+  assert.equal(app.state.cardTracks.inwardOdyssey.progress, 3);
+  assert.equal(app.state.cardTracks.inwardOdyssey.position, 22);
+  assert.equal(app.state.inwardResolvedThrough, 20);
+  assert.throws(() => app.applyInwardExchange(app.state, original), /计数已变化/);
+  app.state.cardTracks.inwardOdyssey.position = 40;
+  assert.equal(app.inwardExchangeDetails().available, false);
+  assert.equal(app.state.cardTracks.inwardOdyssey.progress, 3);
+});
+
+test('Doom advance spends the entered cost and carries the excess across A/B and deck changes', () => {
+  const app = dashboard('c1');
+  const track = app.state.cardTracks.doom;
+  track.doom = 7;
+  const first = app.doomAdvanceDetails();
+  assert.deepEqual(Array.from(first.limits), [5]);
+  assert.equal(first.card.label, '1A');
+  assert.equal(first.next.label, '1B');
+  assert.throws(() => app.applyDoomAdvance(app.state, first, 8), /扣除/);
+  app.applyDoomAdvance(app.state, first, 5);
+  assert.equal(track.position, 2);
+  assert.equal(track.doom, 2);
+  assert.throws(() => app.applyDoomAdvance(app.state, first, 2), /计数已变化/);
+  const second = app.doomAdvanceDetails();
+  assert.equal(second.next.label, '2A');
+  app.applyDoomAdvance(app.state, second, 0);
+  assert.equal(track.position, 3);
+  assert.equal(track.doom, 2);
+  track.position = 6;
+  assert.throws(() => app.applyDoomAdvance(app.state, app.doomAdvanceDetails(), 1), /重新确认/);
 });

@@ -42,20 +42,21 @@ for (const [cycle, start] of Object.entries(starts)) {
     assert.equal(resolveCampaignProgress({ cardCounters: { inwardOdysseyCount: start + 1 } }, cycle, []).inward.position, start + 1);
   });
 
-  test(`${cycle}: 回退停在 ${start}，再次归一化和推进不会跳过第一等级`, () => {
+  test(`${cycle}: 回退停在 ${start}，再次归一化和手动修正知识保留希望`, () => {
     const dashboard = dashboardContext();
     let tracks = dashboard.normalizeCardTracks({ inwardOdyssey: { position: start + 1, progress: 1 } }, {}, false, cycle);
     dashboard.ensureCardTracks = () => tracks;
     dashboard.currentCycleConfig = () => ({ id: cycle });
     dashboard.retreatCardTrack('inwardOdyssey');
     assert.equal(tracks.inwardOdyssey.position, start);
-    assert.equal(tracks.inwardOdyssey.progress, 0);
+    assert.equal(tracks.inwardOdyssey.progress, 1);
     tracks = dashboard.normalizeCardTracks(tracks, {}, false, cycle);
     assert.equal(tracks.inwardOdyssey.position, start);
     dashboard.retreatCardTrack('inwardOdyssey');
     assert.equal(tracks.inwardOdyssey.position, start);
     dashboard.advanceCardTrack('inwardOdyssey');
     assert.equal(tracks.inwardOdyssey.position, start + 1);
+    assert.equal(tracks.inwardOdyssey.progress, 1);
   });
 
   test(`${cycle}: 官方存档导入的知识起点为 ${start}`, () => {

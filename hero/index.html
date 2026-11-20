@@ -997,7 +997,7 @@
     }
   </style>
   <link rel="stylesheet" href="../api/cycle-theme.css">
-  <link rel="stylesheet" href="./hero.css?v=20261120-mnemos-vault">
+  <link rel="stylesheet" href="./hero.css?v=20261120-argonaut-replacement">
   <script src="../story/data/english-source-data.js?v=20261011-english4"></script>
   <script src="../assets/theme.js?v=20261114-light-sidebar1" defer></script>
   <!-- Mobile composition is enabled only by the installed APK in portrait. -->
@@ -1018,7 +1018,7 @@
           <button id="resetAllTriskelionButton" type="button" class="icon-button triskelion-reset" title="重置全部三幅节" aria-label="重置全部三幅节">
             <img src="assets/reset_triskelion_F4F4F4.png" alt="" data-reset-triskelion-icon>
           </button>
-          <button id="addHeroButton" type="button" class="add-hero-btn">+ 添加英雄</button>
+          <button id="addHeroButton" type="button" class="add-hero-btn">唤醒新英雄</button>
           <button id="exportButton" type="button" class="secondary">导出</button>
           <button id="mnemosVaultButton" type="button" class="secondary">旧忆宝库</button>
           <button id="graveyardButton" type="button" class="secondary">墓园</button>
@@ -1627,6 +1627,9 @@
 
     function renderAll() {
       document.body.dataset.cycle = titleCycle;
+      const awakenButton = document.getElementById("addHeroButton");
+      awakenButton.disabled = state.heroes.length >= 4;
+      awakenButton.textContent = `唤醒新英雄 · ${state.heroes.length}/4`;
       document.getElementById("mnemosVaultButton").textContent = `旧忆宝库 · ${state.mnemosVault?.length || 0}`;
       window.ATO_CYCLE_SYMBOLS?.prependModuleLogo(document.querySelector("#heroTitle"), "argonauts", "../");
       renderHeroContent();
@@ -1637,7 +1640,7 @@
     function renderHeroContent() {
       const container = document.getElementById("heroContent");
       if (!state.heroes.length) {
-        container.innerHTML = '<div class="hero-empty-slot"><p>点击「添加英雄」开始记录你的阿尔戈号英雄（最多4人）</p></div>';
+        container.innerHTML = '<div class="hero-empty-slot"><p>按故事集的战役设置登记阿尔戈英雄。</p></div>';
         return;
       }
       const likelihood = computeLikelihood();
@@ -2571,18 +2574,6 @@
       if (playerEl) playerEl.oninput = () => { hero.playerName = playerEl.value; queueSave(); renderTabs(); };
     }
 
-    function addHero() {
-      if (state.heroes.length >= 4) { alert("最多添加 4 个英雄。"); return; }
-      openArgonautPicker((argId) => {
-        const hero = defaultHero();
-        hero.argonaut = argId;
-        state.heroes.push(hero);
-        state.activeHeroId = hero.id;
-        queueSave();
-        renderAll();
-      });
-    }
-
     function openArgonautPicker(onSelect) {
       let html = '<div class="picker-overlay" id="pickerOverlay" onclick="if(event.target===this)closePicker()">';
       html += '<div class="picker-dialog">';
@@ -2715,13 +2706,19 @@
     let mnemosArtIndex;
 
 
-    const awakeningStoryKeys = {
+    const deathStoryKeys = {
       c1: "c1-10-5",
       c2: "c2-10-7",
       c3: "c3-10-5",
       c4: "c4-10-2",
       c5: "c5-supplement-残酷觉醒-rude-awakening",
     };
+
+    function deathStoryLink(cycle) {
+      const title = cycle === "c4" || cycle === "c5" ? "残酷觉醒" : "粗暴觉醒";
+      const href = `../story/?${new URLSearchParams({ book: cycle, key: deathStoryKeys[cycle] })}`;
+      return `<a class="hero-story-link" href="${escHtml(href)}" target="_blank" rel="noopener">查看《${title}》特殊事件 ↗</a>`;
+    }
 
     function retireHero() {
       const hero = activeHero();
@@ -2744,12 +2741,22 @@
             <div><dt>归入旧忆宝库</dt><dd>${names(returned)}</dd></div>
             <div><dt>已结算旧忆 · 留在档案</dt><dd>${names(resolved)}</dd></div>
           </dl>
+          <div data-death-event>
+            <p class="picker-note">英雄死亡后，按当前剧情指示处理特殊事件。剧情有例外时，以该段落为准。</p>
+            ${deathStoryLink(titleCycle)}
+          </div>
           <div class="hero-workflow-actions">
-            <button name="next" value="archive" type="submit" class="secondary">归档</button>
-            <button name="next" value="awaken" type="submit">归档并唤醒新英雄</button>
+            <button type="submit">归档</button>
+            <button name="next" value="replace" type="submit" class="secondary" hidden>归档并登记接任英雄</button>
           </div>
         </form>`);
-      dialog.querySelector("form").onsubmit = event => {
+      const form = dialog.querySelector("form");
+      form.elements.kind.onchange = () => {
+        const retired = form.elements.kind.value === "retire";
+        dialog.querySelector("[data-death-event]").hidden = retired;
+        form.querySelector('[value="replace"]').hidden = !retired;
+      };
+      form.onsubmit = event => {
         event.preventDefault();
         if (!state.heroes.includes(hero)) return;
         const values = new FormData(event.currentTarget);
@@ -2773,7 +2780,7 @@
         state.activeHeroId = state.heroes[0]?.id || "";
         queueSave();
         closePicker();
-        if (event.submitter?.value === "awaken") openAwakening(archive);
+        if (archive.retirementKind === "retire" && event.submitter?.value === "replace") openAwakening(archive);
       };
     }
 
@@ -2782,37 +2789,42 @@
       return src ? `<img src="${escHtml(src)}" alt="">` : "";
     }
 
-    function openAwakening(archive) {
-      if (!archive || state.heroes.length >= 4 || archive.replacementId || !state.graveyard.includes(archive)) return;
-      const retired = archive.retirementKind === "retire";
-      const cycle = CYCLES.includes(archive.retiredCycle) ? archive.retiredCycle : titleCycle;
-      const story = `../story/?${new URLSearchParams({ book: cycle, key: awakeningStoryKeys[cycle] })}`;
+    function openAwakening(archive = null) {
+      const canAdd = () => state.heroes.length < 4
+        && (!archive || (!archive.replacementId && state.graveyard.includes(archive)));
+      if (!canAdd()) return;
+      const retired = archive?.retirementKind === "retire";
       const blanks = ARGONAUTS.filter(arg => arg.unnamed);
       const named = ARGONAUTS.filter(arg => !arg.unnamed);
       const portraits = list => list.map(arg => `<label class="awakening-portrait">
-        <input type="radio" name="portrait" value="${escHtml(arg.id)}" required>
+        <input type="radio" name="portrait" value="${escHtml(arg.id)}">
         ${workflowPortrait({ argonaut: arg.id })}<span>${escHtml(arg.zh)}</span>
       </label>`).join("");
-      const dialog = openHeroDialog("唤醒新英雄", `
+      const dialog = openHeroDialog(archive ? "登记接任英雄" : "唤醒新英雄", `
         <form class="hero-workflow-form">
-          <div class="hero-workflow-profile">${workflowPortrait(archive)}<div>
+          ${archive ? `<div class="hero-workflow-profile">${workflowPortrait(archive)}<div>
             <strong data-user-content>${escHtml(heroDisplayName(archive))}</strong>
-            <p>已归档。新英雄从一张空白记录表开始，沿用玩家名。</p>
-          </div></div>
+            <p>已归档。接任英雄从空白记录表开始。</p>
+          </div></div>` : `<div class="hero-workflow-profile"><div>
+            <strong>现役英雄 ${state.heroes.length} / 4</strong>
+            <p>按战役设置或当前剧情指示登记新英雄。部分剧情检定可以少于四人，通常开战前补齐。</p>
+          </div></div>`}
           ${retired ? '<p class="picker-note">退休后可选择新肖像或指定一项技能 +1，并从旧忆宝库抽取一张牌。</p>'
-            : `<a class="hero-story-link" href="${escHtml(story)}" target="_blank" rel="noopener">查看 ${escHtml(CYCLE_LABELS[cycle])} 的重新唤醒事件 ↗</a>`}
+            : ""}
           <fieldset><legend>英雄肖像</legend>
             <div class="awakening-portraits">${portraits(named)}</div>
             <details><summary>未命名肖像</summary><div class="awakening-portraits">${portraits(blanks)}</div></details>
+            <label class="awakening-skill-only"><input type="radio" name="portrait" value="">直接选择一项技能 +1</label>
           </fieldset>
           <div class="hero-workflow-row">
             <label>英雄名<input name="heroName" placeholder="默认使用肖像名" autocomplete="off"></label>
             <label>基础技能 +1<select name="skill"><option value="">暂不设置</option>${SKILLS.map(skill =>
               `<option value="${escHtml(skill.id)}">${escHtml(skill.zh)}</option>`).join("")}</select></label>
           </div>
+          <label>玩家<input name="playerName" value="${escHtml(archive?.playerName || "")}" autocomplete="off"></label>
           <fieldset><legend>起始旧忆</legend>
             ${state.mnemosVault.length ? `<p class="picker-note">${retired ? "可以随机抽一张，或录入实体牌堆抽到的那张。"
-              : "按当前故事集的唤醒事件处理。可随机抽取，也可以登记实体牌堆抽到的牌。"}</p>
+              : "剧情要求从旧忆宝库取牌时，可以随机抽取或登记实体牌。其他来源的旧忆可在建立英雄后登记。"}</p>
               <div class="awakening-memories">${state.mnemosVault.map(entry => `<label><input type="checkbox" name="memory" value="${escHtml(entry.id)}">${escHtml(vaultCard(entry)?.zh || entry.id)}</label>`).join("")}</div>
               <button type="button" class="secondary" data-awakening-draw>随机抽一张</button>` : '<p class="picker-note">旧忆宝库目前没有牌。</p>'}
           </fieldset>
@@ -2838,8 +2850,12 @@
       };
       form.onsubmit = event => {
         event.preventDefault();
-        if (state.heroes.length >= 4 || archive.replacementId || !state.graveyard.includes(archive)) return;
+        if (!canAdd()) return;
         const values = new FormData(form);
+        if (!values.get("portrait") && !values.get("skill")) {
+          alert("请选择一张肖像，或指定一项技能 +1。");
+          return;
+        }
         const selected = values.getAll("memory");
         const entries = selected.map(id => state.mnemosVault.find(entry => entry.id === id));
         if (selected.length > maxMemories || entries.some(entry => !entry)) return;
@@ -2848,12 +2864,12 @@
           return;
         }
         const hero = defaultHero();
-        hero.argonaut = values.get("portrait");
+        hero.argonaut = values.get("portrait") || "";
         hero.customName = values.get("heroName").trim();
-        hero.playerName = archive.playerName || "";
+        hero.playerName = values.get("playerName").trim();
         hero.basicSkill = values.get("skill");
         for (const entry of entries) giveMnemos(hero, entry);
-        archive.replacementId = hero.id;
+        if (archive) archive.replacementId = hero.id;
         state.heroes.push(hero);
         state.activeHeroId = hero.id;
         queueSave();
@@ -2877,6 +2893,7 @@
           const portraitSrc = arg ? argonautPortraitSrc(arg.id) : "";
           const date = hero.retiredAt ? new Date(hero.retiredAt).toLocaleDateString("zh-CN") : "";
           const kind = hero.retirementKind === "retire" ? "退休" : hero.retirementKind === "death" ? "死亡" : "已离队";
+          const cycle = CYCLES.includes(hero.retiredCycle) ? hero.retiredCycle : titleCycle;
           const { total } = getHeroSkills(hero);
           const skillText = SKILLS.map(s => `${s.abbr}${total[s.id]}`).join(" ");
           hero.mnemosProgress = hero.mnemosProgress || {};
@@ -2930,9 +2947,10 @@
               <div class="graveyard-section"><strong>旧忆</strong> ${mnemosHtml}</div>
               <div class="graveyard-section"><strong>命业旧忆</strong> ${fatedHtml}</div>
               ${hero.notes ? `<div class="graveyard-section"><strong>笔记：</strong><span data-user-content style="white-space:pre-wrap">${escHtml(hero.notes)}</span></div>` : ""}
+              ${hero.retirementKind === "death" ? deathStoryLink(cycle) : ""}
               <div class="hero-workflow-actions">
                 ${hero.replacementId ? '<span class="picker-note">已建立新英雄</span>' :
-                  `<button type="button" data-awaken-idx="${idx}" ${state.heroes.length >= 4 ? "disabled" : ""}>唤醒新英雄</button>`}
+                  `<button type="button" data-awaken-idx="${idx}" ${state.heroes.length >= 4 ? "disabled" : ""}>登记接任英雄</button>`}
                 <button type="button" class="secondary" data-revive-idx="${idx}" ${state.heroes.length >= 4 ? "disabled" : ""}>恢复旧记录</button>
               </div>
             </div>
@@ -2943,7 +2961,8 @@
       document.getElementById("pickerOverlay")?.remove();
       document.body.insertAdjacentHTML("beforeend", html);
       document.querySelectorAll("[data-awaken-idx]").forEach(button => {
-        button.onclick = () => openAwakening(state.graveyard[Number(button.dataset.awakenIdx)]);
+        const archive = graveyard[Number(button.dataset.awakenIdx)];
+        button.onclick = () => openAwakening(archive);
       });
       // Bind revive buttons
       document.querySelectorAll("[data-revive-idx]").forEach(btn => {
@@ -3086,7 +3105,7 @@
       e.target.value = "";
     };
 
-    document.getElementById("addHeroButton").onclick = addHero;
+    document.getElementById("addHeroButton").onclick = () => openAwakening();
     document.getElementById("resetAllTriskelionButton").onclick = resetAllTriskelion;
     document.getElementById("graveyardButton").onclick = openGraveyard;
     document.getElementById("mnemosVaultButton").onclick = openMnemosVault;

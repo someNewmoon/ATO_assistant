@@ -195,6 +195,7 @@
       });
     }
 
+    let boardStamp, livingRosterKey;
     return {
       sync(nextRoom, nextActor) {
         const previous = room?.board;
@@ -211,19 +212,26 @@
         }
         pingButton.hidden = !canPing();
         showPing(room.board && !room.closed ? room.boardPing : null);
-        if (!room.board) { toolbar.hidden = true; return; }
+        if (!room.board) { toolbar.hidden = true; stamp = null; return; }
         const seat = room.turn?.seat;
         finishTurn.hidden = room.turn?.phase !== "titans" || !Number.isInteger(seat) || !canMove(seat);
-        const stateKey = JSON.stringify([room.board, actor.role, room.closed, room.turn?.phase, room.priorityTarget, room.heroes.map(hero => hero.condition)]);
-        if (stateKey === stamp) return;
+        const livingRoster = room.heroes.map(hero => hero.condition === 'dead' ? null : hero.name);
+        const nextBoardStamp = room.board === previous ? boardStamp : JSON.stringify(room.board);
+        const stateKey = JSON.stringify([actor.role, room.closed, room.turn?.phase, room.priorityTarget, livingRoster]);
+        if (nextBoardStamp === boardStamp && stateKey === stamp) return;
+        boardStamp = nextBoardStamp;
         stamp = stateKey;
         target.hidden = !canEdit();
         lock.hidden = !canEdit();
-        const living = room.heroes.flatMap((hero, seat) => hero.condition === 'dead' ? [] : [new Option(hero.name, seat)]);
-        targetSelect.replaceChildren(...living);
+        const rosterKey = JSON.stringify(livingRoster);
+        if (rosterKey !== livingRosterKey) {
+          const living = livingRoster.flatMap((name, seat) => name === null ? [] : [new Option(name, seat)]);
+          targetSelect.replaceChildren(...living);
+          lockInput.disabled = !living.length;
+          livingRosterKey = rosterKey;
+        }
         targetSelect.value = room.priorityTarget?.seat ?? '';
         lockInput.checked = room.priorityTarget?.locked === true;
-        lockInput.disabled = !living.length;
         toolbar.hidden = !canEdit();
         map = room.board.map;
         const existing = Boolean(control);

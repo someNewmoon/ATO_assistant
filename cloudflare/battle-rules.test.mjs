@@ -107,21 +107,22 @@ test('实时操作在确认中更新发起端，同时广播给其他标签页�
   const r = room();
   r.revision = 0;
   r.secrets = { host: 'host', viewer: 'viewer', players: [null, null] };
-  function socket(role, secretHash) {
+  function socket(role, secretHash, patches = false) {
     const messages = [];
     return {
       messages,
-      deserializeAttachment: () => ({ role, secretHash }),
+      deserializeAttachment: () => ({ role, secretHash, patches }),
       send: text => messages.push(JSON.parse(text)),
     };
   }
   const sender = socket('host', 'host');
   const otherTab = socket('host', 'host');
   const viewer = socket('viewer', 'viewer');
+  const compactHost = socket('host', 'host', true);
   const battle = Object.assign(Object.create(BattleRoom.prototype), {
     load: () => r,
     save: () => {},
-    ctx: { getWebSockets: () => [sender, otherTab, viewer],
+    ctx: { getWebSockets: () => [sender, otherTab, viewer, compactHost],
       storage: { transactionSync: write => write() } },
     sql: { exec: () => ({ toArray: () => [] }) },
   });
@@ -140,6 +141,19 @@ test('实时操作在确认中更新发起端，同时广播给其他标签页�
     assert.equal(observer.messages[0].actor.role, role);
     assert.equal(observer.messages[0].room.revision, acknowledgement.data.room.revision);
   }
+  assert.deepEqual(compactHost.messages, [{
+    roomPatch: { baseRevision: 0, revision: 1, room: { pool: { opening: 1 } }, activity: r.activity[0] },
+  }]);
+  const clear = crypto.randomUUID();
+  await battle.webSocketMessage(compactHost, JSON.stringify({
+    type: 'action', action: { id: clear, type: 'pool-clear' },
+  }));
+  const clearAck = compactHost.messages[1];
+  assert.equal(clearAck.id, clear);
+  assert.equal(clearAck.data.roomPatch.room.pool.opening, 0);
+  assert.equal(clearAck.data.roomPatch.activity.id, clear);
+  assert.equal(clearAck.data.roomPatch.baseRevision, 1);
+  assert.equal(sender.messages[1].room.revision, 2);
 });
 
 test('历史战斗编号不能修改新一场战斗', () => {

@@ -226,6 +226,30 @@ function recordBattleActivity(room, actor, body, previousProjection) {
     ...(room.activity || [])].slice(0, 80);
 }
 
+// Only reducers with a small, role-independent write set use compact updates.
+function combatPatch(room, { type, id, seat, key, delta }) {
+  let changes, hero;
+  if (type === 'pool' || type === 'pool-clear') {
+    changes = { pool: room.pool };
+  } else if (type === 'titan-marker') {
+    hero = { seat, fields: { markers: room.heroes[seat].markers } };
+  } else if (type === 'stat' && !(key === 'danger' && delta === 1)) {
+    hero = { seat, fields: { stats: room.heroes[seat].stats } };
+    changes = { priorityTarget: priorityTarget(room) };
+  } else if (type === 'condition') {
+    hero = { seat, fields: { condition: room.heroes[seat].condition } };
+    changes = { board: room.board, turn: room.turn, priorityTarget: priorityTarget(room) };
+  } else if (['board-move', 'board-undo-move', 'board-end-move'].includes(type)) {
+    changes = { board: room.board, turn: room.turn };
+  } else return null;
+
+  const activity = room.activity?.[0];
+  return { roomPatch: {
+    baseRevision: room.revision - 1, revision: room.revision, room: changes,
+    ...(hero && { hero }), ...(activity?.id === id && { activity }),
+  } };
+}
+
 export class BattleRoom extends DurableObject {
   constructor(ctx, env) {
     super(ctx, env);
@@ -285,12 +309,16 @@ export class BattleRoom extends DurableObject {
     }
   }
 
-  publish(room, sender) {
+  publish(room, sender, patch) {
+    let compact;
     for (const socket of this.ctx.getWebSockets()) {
-      // The initiating socket receives its role-specific state in the acknowledgement.
+      // The initiating socket receives its update in the acknowledgement.
       if (socket === sender) continue;
-      try { socket.send(JSON.stringify(this.view(room, socket.deserializeAttachment()))); }
-      catch { socket.close(1011, 'Reconnect'); }
+      try {
+        const attachment = socket.deserializeAttachment();
+        socket.send(patch && attachment.patches
+          ? (compact ??= JSON.stringify(patch)) : JSON.stringify(this.view(room, attachment)));
+      } catch { socket.close(1011, 'Reconnect'); }
     }
   }
 
@@ -367,7 +395,7 @@ export class BattleRoom extends DurableObject {
         const actor = this.actor(room, secretHash);
         const [client, server] = Object.values(new WebSocketPair());
         this.ctx.acceptWebSocket(server);
-        server.serializeAttachment({ ...actor, secretHash });
+        server.serializeAttachment({ ...actor, secretHash, patches: url.searchParams.get('patch') === '1' });
         server.send(JSON.stringify({ ...this.view(room, actor), socketActions: true, socketHeartbeat: true }));
         return new Response(null, { status: 101, webSocket: client, headers: { 'Sec-WebSocket-Protocol': protocol } });
       }
@@ -529,8 +557,9 @@ export class BattleRoom extends DurableObject {
     previousPlayers.forEach((key, seat) => {
       if (key && key !== room.secrets.players[seat]) this.revokeSeat(seat);
     });
-    this.publish(room, sender);
-    return this.view(room, actor);
+    const patch = combatPatch(room, body);
+    this.publish(room, sender, patch);
+    return patch && sender?.deserializeAttachment()?.patches ? { ok: true, ...patch } : this.view(room, actor);
   }
 
   apply(room, actor, body, savedTrauma) {

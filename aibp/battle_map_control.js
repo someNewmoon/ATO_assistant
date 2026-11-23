@@ -193,8 +193,7 @@
       return fixedSetup ? choices.filter((choice) => choice.id === fixedSetup) : choices;
     }
 
-    function renderSetupOptions(map) {
-      const choices = availableSetupOptions();
+    function renderSetupOptions(map, choices) {
       setupControl.hidden = choices.length < 2;
       setupSelect.replaceChildren();
       choices.forEach((choice) => {
@@ -959,11 +958,9 @@
       }
     }
 
-    function renderMap(map = ensureMap()) {
-      renderSetupOptions(map);
+    function renderTerrain(map) {
       renderTerrainOptions(map);
       terrainLayer.replaceChildren();
-      board.classList?.toggle("coordinates-visible", map.showCoordinates === true);
       window.BattleTerrain.getMapTiles(map).forEach((placement) => {
         const button = document.createElement("button");
         const definition = window.BattleTerrain.catalog[placement.name] || {};
@@ -1002,16 +999,37 @@
         terrainLayer.appendChild(button);
       });
       renderLightCoverage(map);
-      startsToggle.checked = map.showStarts !== false;
-      if (coordinatesToggle) {
-        const showCoordinates = map.showCoordinates === true;
-        coordinatesToggle.setAttribute("aria-pressed", showCoordinates ? "true" : "false");
-        coordinatesToggle.textContent = showCoordinates ? "隐藏坐标" : "显示坐标";
-      }
-      renderStarts(map);
-      renderCoordinates(map);
       renderSelection(map);
       renderTerrainCards(map);
+    }
+
+    let terrainKey, setupOptionsKey, coordinatesVisible;
+    function renderMap(map = ensureMap()) {
+      const choices = availableSetupOptions();
+      const nextSetup = JSON.stringify([map.setupId, choices]);
+      if (nextSetup !== setupOptionsKey) {
+        renderSetupOptions(map, choices);
+        setupOptionsKey = nextSetup;
+      }
+
+      // Moving pieces and changing overlays leave the static map layers intact.
+      const nextTerrain = JSON.stringify([options.getApostle(), selectedId, map.terrain]);
+      if (nextTerrain !== terrainKey) {
+        renderTerrain(map);
+        terrainKey = nextTerrain;
+      }
+      const showCoordinates = map.showCoordinates === true;
+      if (showCoordinates !== coordinatesVisible) {
+        board.classList?.toggle("coordinates-visible", showCoordinates);
+        renderCoordinates(map);
+        if (coordinatesToggle) {
+          coordinatesToggle.setAttribute("aria-pressed", showCoordinates ? "true" : "false");
+          coordinatesToggle.textContent = showCoordinates ? "隐藏坐标" : "显示坐标";
+        }
+        coordinatesVisible = showCoordinates;
+      }
+      startsToggle.checked = map.showStarts !== false;
+      renderStarts(map);
       renderLos(map);
       renderLosControl(map);
       renderTactics(map);

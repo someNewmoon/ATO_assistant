@@ -164,6 +164,24 @@
     if (actor.role === 'host' && (first || !lastProjectionSent || (state.deckRevision || 0) !== hostDeckRevision)) syncProjection();
   }
 
+  function acceptUpdate(data) {
+    if (data.room) return accept(data);
+    const patch = data.roomPatch;
+    if (!patch || (state && patch.revision <= state.revision)) return;
+    if (!state || patch.baseRevision !== state.revision) {
+      disconnectSocket?.();
+      void refreshRoomState();
+      return;
+    }
+    const room = { ...state, ...patch.room, revision: patch.revision };
+    if (patch.hero) {
+      const { seat, fields } = patch.hero;
+      room.heroes = state.heroes.map((hero, index) => index === seat ? { ...hero, ...fields } : hero);
+    }
+    if (patch.activity) room.activity = [patch.activity, ...(state.activity || [])].slice(0, 80);
+    accept({ room, actor });
+  }
+
   function lostSeat() {
     if (actor?.role !== 'player' || !state?.squad || !credentials) return false;
     credentials = null;
@@ -190,7 +208,7 @@
   let disconnectSocket;
   function connect() {
     if (!credentials?.token || socket) return;
-    const url = new URL(id + '/socket', base);
+    const url = new URL(id + '/socket?patch=1', base);
     url.protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
     const current = new WebSocket(url, ['ato-battle-v1', credentials.token]);
     socket = current;
@@ -231,6 +249,7 @@
         else pending.resolve(data.data);
         return;
       }
+      if (data.roomPatch) { acceptUpdate(data); return; }
       if (!data.room) return;
       const reconnected = !socketReady;
       if (reconnected) {
@@ -1370,7 +1389,7 @@
     while (actions.length && !failedAction) {
       const action = actions.shift();
       try {
-        accept(await submitAction(action));
+        acceptUpdate(await submitAction(action));
         actionRetryDelay = 1500;
         say('');
       } catch (error) {

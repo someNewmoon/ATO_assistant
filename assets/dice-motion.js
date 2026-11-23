@@ -24,17 +24,12 @@
     node.className = face.className;
     const white = face.src.includes('/crit-');
     Object.assign(node.style, {
-      display: 'grid', placeItems: 'center', fontWeight: '800', fontSize: '1.2rem',
+      display: 'block',
       clipPath: 'polygon(50% 0, 91% 27%, 97% 69%, 50% 100%, 3% 69%, 9% 27%)',
-      color: white ? '#27323a' : '#fff3d5',
       background: white ? 'linear-gradient(145deg, #fffdf3 37%, #b9c0c2 38%, #f0eee3 71%, #a0a9ae 72%)'
         : 'linear-gradient(145deg, #91a9b5 37%, #223b49 38%, #476274 71%, #192d38 72%)',
     });
-    return {
-      node,
-      values: Array.from({ length: 10 }, (_, index) => index + 1).filter(index => index !== value),
-      show(index) { node.textContent = index; },
-    };
+    return { node };
   }
 
   function animateFace(face, preview, index) {
@@ -45,12 +40,12 @@
     node.removeAttribute('data-dice-value');
     node.removeAttribute('aria-label');
     node.dataset.dicePreview = '';
-    show(values[index % values.length]);
+    if (values) show(values[index % values.length]);
     const control = face.closest('[data-select-die]');
     if (control) control.inert = true;
     face.replaceWith(node);
-    const timers = [86, 165, 252, 359].map((time, frame) =>
-      setTimeout(() => show(values[(index + frame + 1) % values.length]), delay + time));
+    const timers = values ? [86, 165, 252, 359].map((time, frame) =>
+      setTimeout(() => show(values[(index + frame + 1) % values.length]), delay + time)) : [];
     const animation = node.animate([
       { transform: `perspective(240px) translate(${direction * 14}px, -18px) rotateX(-85deg) rotateZ(${direction * 55}deg) scale(.7)`, opacity: .3 },
       { transform: `perspective(240px) translateY(-10px) rotateX(230deg) rotateZ(${-direction * 24}deg) scale(.93)`, opacity: .74, offset: .42 },
@@ -106,7 +101,7 @@
     const rolls = Array.from(faces).flatMap(face => {
       if (!face.animate || !face.getClientRects().length || face.dataset.dicePreview !== undefined) return [];
       const preview = makePreview(face);
-      return preview?.values.length ? [{ face, preview }] : [];
+      return preview ? [{ face, preview }] : [];
     });
     if (!rolls.length) return Promise.resolve();
     const show = [...new Set(conceal)].filter(Boolean).map(hide);

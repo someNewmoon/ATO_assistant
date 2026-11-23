@@ -5,7 +5,7 @@ import inventory from '../../technology/gear-inventory.js';
 import cardState from '../../aibp/room-card-state.js';
 import roomDice from '../../aibp/room-dice.js';
 import { roomProjection } from './room-projection.js';
-import { prepareRoomDeck, revealRoomBp, roomDeckProjection, settleRoomBp } from './room-deck.js';
+import { prepareRoomDeck, revealRoomAi, revealRoomBp, roomDeckProjection, settleRoomBp } from './room-deck.js';
 import { applyTurn, claimTurn, setTurnPhase } from './room-turn.js';
 import { battleRecap, battleStats, countReaction, setRollWounds } from './room-recap.js';
 import battleConfig from '../../technology/battle-config.js';
@@ -163,7 +163,7 @@ const activityLabels = {
   'board-apostle-undo': '撤回骇物移动', 'board-face': '调整骇物朝向', 'priority-target': '调整首要目标', round: '开启新一轮',
   stat: '调整三曲盘', 'titan-marker': '调整泰坦标记', condition: '调整泰坦状态', gear: '使用装备', 'gear-card': '调整装备卡', 'gear-ready-all': '回正所有横置卡牌',
   'mnemos-card': '调整旧忆卡', 'pattern-card': '调整样式卡牌', 'argo-use': '使用阿尔戈能力', 'argo-undo': '撤回阿尔戈能力',
-  'bp-settle': '结算部位牌', 'bp-request': '揭示部位牌', 'trauma-draw': '抽取创伤或结算受击', 'trauma-resolve': '结算创伤', 'pool-clear': '清空克拉托斯池',
+  'ai-request': '揭示 AI', 'bp-settle': '结算部位牌', 'bp-request': '揭示部位牌', 'trauma-draw': '抽取创伤或结算受击', 'trauma-resolve': '结算创伤', 'pool-clear': '清空克拉托斯池',
   roll: '掷骰', pool: '调整克拉托斯池', end: '结束战斗', reroll: '重掷骰子', convert: '转换威力骰', 'roll-wounds': '记录击破结果',
 };
 
@@ -173,7 +173,10 @@ function recordBattleActivity(room, actor, body, previousProjection) {
   const hero = room.heroes[seat];
   let detail = '';
   const projection = room.projection;
-  if (body.type === 'bp-request') {
+  if (body.type === 'ai-request') {
+    if (previousProjection?.aiPending || !projection?.aiPending) return;
+    detail = projection.ai?.label;
+  } else if (body.type === 'bp-request') {
     if (previousProjection?.bpPending || !projection?.bpPending) return;
     seat = room.battleDeck.bpSeat ?? seat;
     detail = projection.bp?.label;
@@ -294,18 +297,18 @@ export class BattleRoom extends DurableObject {
       actor: { role: actor.role, ...(actor.role === 'player' && { seat: actor.seat }) } };
   }
 
-  actor(room, secretHash) {
-    if (secretHash && room.secrets.host === secretHash) return { role: 'host' };
+  actor(room, secretHash, projection = false) {
+    if (secretHash && room.secrets.host === secretHash) return { role: projection && room.squad ? 'viewer' : 'host' };
     if (secretHash && room.secrets.viewer === secretHash) return { role: 'viewer' };
     const seat = secretHash ? room.secrets.players.findIndex(value => value === secretHash) : -1;
-    if (seat >= 0) return { role: 'player', seat };
+    if (seat >= 0) return { role: projection && room.squad ? 'viewer' : 'player', seat };
     reject('请重新加入战斗室。', 401);
   }
 
   revokeSeat(seat) {
     for (const socket of this.ctx.getWebSockets()) {
       const actor = socket.deserializeAttachment();
-      if (actor.role === 'player' && actor.seat === seat) socket.close(4001, 'Seat reassigned');
+      if (actor?.seat === seat) socket.close(4001, 'Seat reassigned');
     }
   }
 
@@ -392,10 +395,11 @@ export class BattleRoom extends DurableObject {
         if (version !== protocol || extra) reject('战斗室连接格式无效。');
         const secretHash = await hash(secret);
         const room = this.load();
-        const actor = this.actor(room, secretHash);
+        const projection = url.searchParams.get('projection') === '1';
+        const actor = this.actor(room, secretHash, projection);
         const [client, server] = Object.values(new WebSocketPair());
         this.ctx.acceptWebSocket(server);
-        server.serializeAttachment({ ...actor, secretHash, patches: url.searchParams.get('patch') === '1' });
+        server.serializeAttachment({ ...actor, secretHash, projection, patches: url.searchParams.get('patch') === '1' });
         server.send(JSON.stringify({ ...this.view(room, actor), socketActions: true, socketHeartbeat: true }));
         return new Response(null, { status: 101, webSocket: client, headers: { 'Sec-WebSocket-Protocol': protocol } });
       }
@@ -418,7 +422,7 @@ export class BattleRoom extends DurableObject {
         await this.syncDirectory(room);
         return result;
       }
-      const actor = this.actor(room, secretHash);
+      const actor = this.actor(room, secretHash, url.searchParams.get('projection') === '1');
       if (route === 'state') return response(this.view(room, actor));
       if (route === 'story-scan') {
         const file = url.searchParams.get('file');
@@ -511,7 +515,8 @@ export class BattleRoom extends DurableObject {
       if (!object(packet) || packet.type !== 'action' || !object(packet.action)) reject('战斗操作格式无效。');
       id = packet.action.id;
       const room = this.load();
-      const actor = this.actor(room, socket.deserializeAttachment()?.secretHash);
+      const attachment = socket.deserializeAttachment();
+      const actor = this.actor(room, attachment?.secretHash, attachment?.projection);
       data = await this.submitAction(room, actor, packet.action, socket);
     } catch (error) {
       const result = errorResponse(error);
@@ -576,6 +581,19 @@ export class BattleRoom extends DurableObject {
     if (['turn-phase', 'turn-take', 'turn-finish'].includes(body.type)) return applyTurn(room, actor, body);
     if (typeof body.type === 'string' && body.type.startsWith('trauma-')) return applyTrauma(room, actor, body, randomInt);
     if (typeof body.type === "string" && body.type.startsWith("board-")) return applyRoomBoard(room, actor, body);
+    if (body.type === 'ai-request') {
+      if (actor.role !== 'host') reject('只有房主可以揭示 AI。', 403);
+      if (room.turn?.phase !== 'apostle') reject('请在骇物轮次揭示 AI。', 409);
+      const deck = room.battleDeck;
+      if (!deck) reject('请先在 AIBP 初始化骇物牌堆。', 409);
+      if (['DEMIDJINN', 'TITAN_X'].includes(deck.data.apostle)) reject('这只骇物要在 AIBP 按特殊规则揭示 AI。', 409);
+      if (revealRoomAi(deck, randomInt)) {
+        deck.revision++;
+        deck.operation = body.id;
+        room.projection = roomDeckProjection(deck, room.projection);
+      }
+      return;
+    }
     if (body.type === 'bp-request' || body.type === 'bp-settle') {
       const seat = actor.role === 'player' ? actor.seat : body.seat;
       const reveal = body.type === 'bp-request';
@@ -624,7 +642,8 @@ export class BattleRoom extends DurableObject {
         const previous = room.battleDeck;
         if ((previous?.revision || 0) !== body.deckRevision) reject('牌堆已更新，请核对最新牌面后再操作。', 409);
         const next = prepareRoomDeck(body.deck, room.board?.apostle, (previous?.revision || 0) + 1, body.id);
-        if (previous?.bpSeat !== undefined && projection.bpPending) next.bpSeat = previous.bpSeat;
+        if (previous?.bpSeat != null && room.projection?.bpPending && projection.bpPending
+            && room.projection.bp?.src === projection.bp?.src) next.bpSeat = previous.bpSeat;
         room.battleDeck = next;
         delete room.bpRequest;
       }

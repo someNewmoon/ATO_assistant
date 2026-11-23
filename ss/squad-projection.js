@@ -2,7 +2,9 @@
   const id = new URLSearchParams(location.search).get('squad');
   if (!id) return;
   const api = window.ATO_SQUAD_LINK;
-  const token = new URLSearchParams(location.hash.slice(1)).get('view');
+  const sharedToken = new URLSearchParams(location.hash.slice(1)).get('view');
+  const projection = !sharedToken;
+  const token = sharedToken || api?.read(id)?.token;
   if (!api?.validId(id) || !api.validKey(token)) {
     showUnavailable('请使用房主提供的小队投屏链接。');
     return;
@@ -152,7 +154,8 @@
       fight.hidden = false;
       if (battleNumber !== nextBattle) {
         battleNumber = nextBattle;
-        const url = new URL(api.link('/aibp/room', id, 'view', token));
+        const url = new URL(api.link('/aibp/room', id, 'view', sharedToken));
+        if (projection) url.searchParams.set('projection', '1');
         url.searchParams.set('embed', '1');
         fight.src = url.href;
       }
@@ -171,7 +174,7 @@
       timer = null;
       reading = true;
       try {
-        const data = await api.request(id, 'state', token, undefined, { timeout: 22000 });
+        const data = await api.request(id, projection ? 'state?projection=1' : 'state', token, undefined, { timeout: 22000 });
         if (stopped) return;
         if (data.actor.role !== 'viewer' || !data.room.squad) throw new Error('请打开正确的小队投屏链接。');
         update(data);
@@ -188,7 +191,16 @@
         if (!stopped && !connected) timer = setTimeout(readState, 4500);
       }
     }
-    const close = api.connect(id, token, update, message => {
+    const close = api.connect(id, token, update, (message, code) => {
+      if (code === 4001) {
+        stop?.();
+        fight.removeAttribute('src');
+        fight.hidden = true;
+        prep.hidden = true;
+        overlay.hidden = true;
+        showUnavailable(message);
+        return;
+      }
       connected = !message;
       if (connected) {
         clearTimeout(timer);
@@ -196,7 +208,7 @@
       } else if (!timer && !reading) {
         timer = setTimeout(readState, 1000);
       }
-    }, { timeout: 22000 });
+    }, { timeout: 22000, projection });
     stop = () => {
       stopped = true;
       clearTimeout(timer);

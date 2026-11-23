@@ -2984,10 +2984,10 @@
   <script src="../technology/battle-config.js" defer></script>
   <script src="../assets/dice-motion.js?v=7" defer></script>
   <script src="room-dice.js?v=20261123-player-bp" defer></script>
-  <script src="squad-link.js?v=20261120-live-recovery" defer></script>
+  <script src="squad-link.js?v=20261124-member-projection" defer></script>
   <script src="../record/enemy-evolution.js?v=20261120"></script>
   <script src="kratos-tables.js?v=20261123-mazerunner" defer></script>
-  <script src="battle-room.js?v=20261123-player-bp" defer></script>
+  <script src="battle-room.js?v=20261124-room-actions" defer></script>
   <script src="../technology/gear-inventory.js?v=20261120-player-kit"></script>
   <script src="../assets/campaign-notes.js?v=20261015-aibp-summary1"></script>
   <script src="../assets/cycle-symbols.js?v=20261115-module-logo"></script>
@@ -9233,8 +9233,16 @@
       piles[currentApostle].lastPendingType = "AI";
       savePiles();
       renderAibpCards();
-      const drawnCard = ai.pending;
+      openDrawnAi(ai.pending);
+    }
+
+    function openDrawnAi(drawnCard) {
+      if (!drawnCard) return false;
       const drawnApostle = currentApostle;
+      if (drawnApostle === "DAHAKA") {
+        openImageZoom(cardSrc(drawnCard), "达哈卡 AI/BP（AI 半区）", null, { bpActions: true });
+        return true;
+      }
       openImageZoom(cardSrc(drawnCard), drawnApostle === "BLACKBEAK" ? "抽取的 AI（牌堆底部）" : "抽取的 AI", hasAiCombo() ? null : () => {
         if (currentApostle !== drawnApostle) return;
         const pending = piles[currentApostle]?.AI?.pending;
@@ -9247,6 +9255,7 @@
         noticeImages: currentAiNoticeImages()
       });
       window.AibpCardKeywords?.showDraw(cardSrc(drawnCard));
+      return true;
     }
 
     function drawBp() {
@@ -9802,9 +9811,11 @@
     window.refreshAibpRecordLevels = refreshRecordApostleLevels;
     window.drawAibpRoomCard = (type, apostle) => {
       if (apostle !== currentApostle || type !== "AI") return null;
+      const before = JSON.stringify(window.getAibpRoomBattleDeck());
       drawAi();
-      return window.getAibpRoomProjection();
+      return JSON.stringify(window.getAibpRoomBattleDeck()) !== before ? window.getAibpRoomProjection() : null;
     };
+    window.openAibpRoomAi = apostle => apostle === currentApostle && openDrawnAi(piles[apostle]?.AI?.pending);
     window.getAibpBoardSetup = () => currentApostle ? {
       apostle: currentApostle, level: currentApostleLevel() === 0 ? 0 : window.BattleTerrain.levelNumber(currentApostleLevel()),
       map: piles[currentApostle]?.battleMap,

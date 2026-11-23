@@ -13,6 +13,7 @@
   const invite = fragment.get('invite') || '';
   const quickJoin = params.get('quick') === '1';
   const viewKey = fragment.get('view') || '';
+  const memberProjection = params.get('projection') === '1';
   const isLink = /^[a-f0-9]{32}$/.test(routeId || '');
   const base = new URL('../api/battle-room/', location.href);
   const campaignUrl = new URL('../api/campaign-state.php', location.href);
@@ -34,6 +35,7 @@
   let projectionRetry;
   let hostDeckRevision = 0;
   let projectionAction;
+  let turnAiAction;
   let readingState = false;
   let lobbyCampaign;
   let abilityDictionary;
@@ -111,6 +113,7 @@
 
   async function request(path, body, token = credentials?.token) {
     const url = new URL(path, base);
+    if (memberProjection) url.searchParams.set('projection', '1');
     const headers = token ? { Authorization: 'Bearer ' + token } : {};
     if (body !== undefined) headers['Content-Type'] = 'application/json';
     const response = await fetch(url, {
@@ -209,6 +212,7 @@
   function connect() {
     if (!credentials?.token || socket) return;
     const url = new URL(id + '/socket?patch=1', base);
+    if (memberProjection) url.searchParams.set('projection', '1');
     url.protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
     const current = new WebSocket(url, ['ato-battle-v1', credentials.token]);
     socket = current;
@@ -398,9 +402,21 @@
     if (!button || !state || state.closed) return;
     const { turnAction: type, seat, value } = button.dataset;
     if (type === 'draw-ai') {
-      const result = window.drawAibpRoomCard?.('AI', state.board?.apostle);
-      turnWindow.querySelector('[data-turn-status]').textContent = result?.aiPending ? '' : '请在 AIBP 检查当前骇物和 AI 牌堆。';
-      if (result?.aiPending) syncProjection();
+      if (turnAiAction || state.projection?.aiPending) return;
+      const apostle = state.board?.apostle;
+      if (!state.deckRevision || ['DEMIDJINN', 'TITAN_X'].includes(apostle)) {
+        if (projectionAction) { say('牌堆正在同步，请稍后再揭示 AI。'); return; }
+        const result = window.drawAibpRoomCard?.('AI', apostle);
+        if (!result) { say('请在 AIBP 检查当前骇物和 AI 牌堆。'); return; }
+        syncProjection();
+        say('');
+        return;
+      }
+      syncProjection();
+      turnAiAction = crypto.randomUUID();
+      renderTurn();
+      say('正在揭示 AI…');
+      send({ id: turnAiAction, type: 'ai-request' });
       return;
     }
     send({ id: crypto.randomUUID(), type, round: state.round, phase: state.turn?.phase ?? null,
@@ -444,7 +460,7 @@
     }).join('');
     const controls = host ? (!turn ? action('turn-phase', '进入骇物轮次', ' data-value="apostle"')
         + action('turn-phase', '进入泰坦轮次', ' data-value="titans"')
-      : !titans ? (shouldDrawAi ? action('draw-ai', '抽取 AI') : '') + action('turn-phase', '结束骇物轮次', ' data-value="titans"')
+      : !titans ? (shouldDrawAi ? action('draw-ai', '抽取 AI', turnAiAction ? ' disabled' : '') : '') + action('turn-phase', '结束骇物轮次', ' data-value="titans"')
         : action('round', '下一轮 · 骇物行动',
           ' title="开始下一轮，回正阿尔戈能力"' + (everyoneFinished ? '' : ' disabled'))) : '';
     const hint = !turn ? '' : !titans ? (shouldDrawAi ? '<p>骇物轮开始，请揭示 AI。</p>' : '')
@@ -807,6 +823,7 @@
     const inTurn = turn?.phase !== 'apostle'
       && (turn?.seat == null || turn.seat === seat) && !turn?.finished?.includes(seat);
     return Boolean(state.heroes[seat]) && state.heroes[seat].condition !== 'dead'
+      && !(state.projection?.sharedDeck && state.projection.aiPending)
       && dice.canUseBodyPart(state, seat, state.bpSeat) && (inTurn || dice.pendingPowerRoll(state, seat));
   }
 
@@ -829,20 +846,22 @@
 
   function powerPartCard(seat, latestResult) {
     const projection = state.projection;
-    const bp = projection?.bp;
-    const caption = bp?.src ? projection.bpPending === true ? '当前部位牌' : '最后揭示的部位牌' : '部位牌';
+    const bp = projection?.bpPending ? projection.bp : null;
+    const back = projection?.bpDeck?.back;
     const roll = dice.pendingPowerRoll(state, seat);
     const outcome = projection?.bpPending && roll && roll.id !== latestResult?.id && canSettleBp(seat)
       ? '<div class="room-bp-actions">' + bpOutcomeButtons(roll) + '</div>' : '';
     let control = '';
     if (!projection?.bpPending) {
-      control = canRequestBp(seat) ? bpDrawButton(seat) : '<small>投掷威力骰后可揭示 BP</small>';
+      control = canRequestBp(seat) ? bpDrawButton(seat) : '<small>'
+        + (projection?.sharedDeck && projection.aiPending ? '请先结算当前 AI' : '投掷威力骰后可揭示 BP') + '</small>';
     } else if (roll && !canSettleBp(seat)) {
       control = '<small>等待当前部位牌结算</small>';
     }
-    return '<aside class="room-power-card"><h4>' + caption + '</h4>'
+    return '<aside class="room-power-card"><h4>' + (bp?.src ? '当前部位牌' : '部位牌') + '</h4>'
       + (bp?.src ? cardImage('/aibp/' + bp.src, bp.label || '部位牌')
-        : '<small>' + (projection ? '尚未揭示' : '等待房主同步') + '</small>')
+        : (back?.src ? cardImage('/aibp/' + back.src, back.label || '部位牌牌背') : '')
+          + '<small>' + (projection ? '等待揭示本次部位牌' : '等待房主同步') + '</small>')
       + control + outcome + '</aside>';
   }
 
@@ -999,7 +1018,7 @@
       return true;
     }
     const value = ['discard', 'defeat', 'critical'].indexOf(mode);
-    if (value < 0) return false;
+    if (value < 0 || (state.projection?.sharedDeck && state.projection.aiPending)) return false;
     if (!canSettleBp(seat)) {
       say('请先揭示并核对当前部位牌。');
       return true;
@@ -1258,6 +1277,7 @@
 
   function screenActivityKind(entry) {
     if (entry.kind === 'roll' || entry.kind === 'reroll') return 'roll';
+    if (entry.kind === 'ai-request') return 'ai';
     if (entry.kind === 'room-projection' && /^AI(?: |、|$)/.test(entry.detail)) return 'ai';
     return null;
   }
@@ -1391,10 +1411,13 @@
     const goal = state.battleGoal ? '<section class="room-battle-goal"><h3>战斗目标</h3><p>'
       + escape(state.battleGoal) + '</p></section>' : '';
     const second = state.secondAbility;
+    const canFinishTurn = second?.round === state.round && state.turn?.phase === 'titans'
+      && state.turn.seat === second.seat && (host ? rollSeat === second.seat : seat === second.seat);
     const poolSection = '<section class="battle-room-pool" id="room-kratos-pool" tabindex="-1"><header><h3>克拉托斯池</h3>'
       + clearPool + '</header>' + (second && second.round === state.round
         ? '<p class="room-second-ability"><strong>第二能力时段 · ' + escape(state.heroes[second.seat]?.name)
-          + '</strong> · 先结算响应与激化，再清空旧标记（按卡文保留例外），之后加入本次标记。</p>' : '')
+          + '</strong> · 先结算响应与激化，再清空旧标记（按卡文保留例外），之后加入本次标记。</p>'
+        + (canFinishTurn ? '<button type="button" data-action="turn-finish" data-seat="' + second.seat + '">结束回合</button>' : '') : '')
       + '<div>' + pool + '</div></section>';
     const poolByDice = edit && (personal || !!own || rollMode === 'power');
     renderSections(content, [
@@ -1475,6 +1498,14 @@
       const action = actions.shift();
       try {
         acceptUpdate(await submitAction(action));
+        if (action.id === turnAiAction) {
+          turnAiAction = null;
+          renderTurn();
+          const card = state.projection?.aiPending && state.projection.ai;
+          if (card?.src && !window.openAibpRoomAi?.(state.board?.apostle)) {
+            window.ATO_BATTLE_ASSETS?.zoom('/aibp/' + card.src, card.label || '抽取的 AI');
+          }
+        }
         actionRetryDelay = 1500;
         say('');
       } catch (error) {
@@ -1487,6 +1518,8 @@
             projectionRetry = setTimeout(syncProjection, 3000);
           }
         } else if (error instanceof RejectedAction) {
+          if (action.id === turnAiAction) turnAiAction = null;
+          if (error.status === 409 && ['ai-request', 'bp-request', 'bp-settle'].includes(action.type)) await refreshRoomState();
           if (error.status === 401 && lostSeat()) break;
           if (!state.squad || state.squad.phase === 'battle') render();
         } else {
@@ -1696,6 +1729,8 @@
       send({ id: crypto.randomUUID(), type: action, seat: Number(seat), draw: button.dataset.draw, operation: value });
     } else if (action === 'public-lobby') {
       send({ id: crypto.randomUUID(), type: action, value: value === 'true' });
+    } else if (action === 'turn-finish') {
+      send({ id: crypto.randomUUID(), type: action, seat: Number(seat), round: state.round, phase: state.turn?.phase });
     } else if (action === 'pool-clear') {
       send({ id: crypto.randomUUID(), type: action });
     } else if (action) {

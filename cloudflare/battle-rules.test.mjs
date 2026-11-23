@@ -288,6 +288,44 @@ test('旧战斗没有牌堆快照时，需要由房主初始化，玩家不能�
   assert.throws(() => reducer.apply(r, player, { type: 'room-projection' }), /由房主同步/);
 });
 
+test('导航揭示 AI 使用 Worker 当前牌堆，重试不会多抽牌', () => {
+  const r = room();
+  r.board = { apostle: 'HEKATON' };
+  r.turn = { phase: 'apostle', seat: null, finished: [] };
+  const card = n => ({ type: 'AI', level: 'I', index: n, _room: { face: { src: 'ps/HEKATON/AI' + n + '.jpg', label: 'AI ' + n } } });
+  const pile = { deck: [], discard: [card(1), card(2)], removed: [], supply: {} };
+  const data = { apostle: 'HEKATON', lastRevealed: {}, tokens: [], AI: pile,
+    BP: { ...pile, discard: [] }, flags: { aiBottom: true } };
+  r.battleDeck = api.prepareRoomDeck(data, 'HEKATON');
+  r.projection = api.roomDeckProjection(r.battleDeck, {});
+  assert.throws(() => reducer.apply(r, player, { type: 'ai-request' }), /只有房主/);
+  reducer.apply(r, host, { type: 'ai-request', id: 'first' });
+  const first = r.projection.ai.src;
+  assert.match(first, /AI[12]\.jpg$/);
+  assert.equal(r.projection.aiPending, true);
+  assert.equal(r.projection.aiDeck.count, 1);
+  assert.equal(r.projection.aiDeck.discard, 0);
+  reducer.apply(r, host, { type: 'ai-request', id: 'retry' });
+  assert.equal(r.projection.ai.src, first);
+  assert.equal(r.battleDeck.revision, 2);
+  assert.equal(r.battleDeck.operation, 'first');
+});
+
+test('成员的投屏连接使用只读身份，并只投影共享剧情', () => {
+  const r = room();
+  r.secrets = { host: 'host', viewer: 'viewer', players: ['player'] };
+  r.squad = { phase: 'story', story: { text: '共享剧情' } };
+  const projected = reducer.actor(r, 'player', true);
+  assert.deepEqual(projected, { role: 'viewer', seat: 0 });
+  const view = reducer.view(r, projected);
+  assert.deepEqual(view.actor, { role: 'viewer' });
+  assert.equal(view.room.squad.story.text, '共享剧情');
+  assert.equal(view.room.squad.loadouts, undefined);
+  assert.equal(view.room.secrets, undefined);
+  assert.throws(() => reducer.action(r, projected, {}), /只能查看/);
+  assert.deepEqual(reducer.actor(r, 'player'), player);
+});
+
 test('Worker 独立揭示、结算部位牌并激化，完整牌堆只对房主可见', () => {
   const face = (type, level, index) => {
     const src = `ps/HEKATON/HEKATON_${type}_${level}_00${index}.jpg`;

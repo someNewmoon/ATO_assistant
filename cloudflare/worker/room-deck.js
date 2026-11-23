@@ -147,6 +147,25 @@ function settleWound(data, bp, card, critical, randomInt, owner) {
   return damageValue(wound);
 }
 
+export function revealRoomAi(deck, randomInt) {
+  const data = deck.data;
+  const ai = data.AI;
+  if (ai.pending) {
+    if (data.shared && ai.pendingMode !== 'AI') fail('请先结算当前部位牌。');
+    return false;
+  }
+  if (!ai.deck.length && !ai.discard.length) fail('AI 牌堆已空。');
+  if (!ai.deck.length) discardIntoDeck(ai, randomInt);
+  const card = data.flags?.aiBottom ? ai.deck.at(-1) : ai.deck[0];
+  if (!card._room?.face?.src) fail('这张 AI 缺少可同步的牌面，请检查 AIBP 牌库。');
+  ai.pending = card;
+  if (data.shared) ai.pendingMode = 'AI';
+  if (['THE_NIETZSCJEAN', 'CYCLONUS'].includes(data.apostle)) ai.comboFollowup = false;
+  data.lastPendingType = 'AI';
+  data.lastRevealed.AI = card;
+  return true;
+}
+
 export function revealRoomBp(deck, seat, randomInt, allowHandoff = false) {
   const data = deck.data;
   let bp = piles(data).BP;
@@ -245,7 +264,7 @@ export function roomDeckProjection(deck, previous) {
   return roomProjection({ ...previous, apostle: data.apostle,
     ai: (pending(data, 'AI') || data.lastRevealed.AI)?._room?.face,
     bp: (pending(data, 'BP') || data.lastRevealed.BP)?._room?.face,
-    aiPending: Boolean(pending(data, 'AI')), bpPending: Boolean(pending(data, 'BP')),
+    aiPending: Boolean(pending(data, 'AI')), bpPending: Boolean(pending(data, 'BP')), sharedDeck: Boolean(data.shared),
     aiDeck: publicPile(AI, data.flags?.aiBottom), bpDeck: publicPile(BP, data.flags?.bpBottom),
     damage: { wounds: previous?.damage?.wounds, total: split ? damage1 + damage2 : total('damage'), damage1, damage2 },
   }, data.apostle);

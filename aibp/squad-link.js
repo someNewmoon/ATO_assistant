@@ -89,9 +89,10 @@
     };
   }
 
-  function connect(id, token, receive, status, { timeout: connectTimeout = 12000 } = {}) {
+  function connect(id, token, receive, status, { timeout: connectTimeout = 12000, projection = false } = {}) {
     const url = new URL('/api/battle-room/' + id + '/socket', location.href);
     url.protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    if (projection) url.searchParams.set('projection', '1');
     let socket, timer, close, stopped = false, delay = 1000;
     function open() {
       if (stopped || socket) return;

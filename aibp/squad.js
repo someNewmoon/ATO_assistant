@@ -266,7 +266,8 @@
         + '</fieldset><button type="submit">认领或接管英雄</button></form></details>' : '';
       const fight = squad.phase === 'battle' && !isHost ? '<section class="squad-panel">' + anchor(battleURL(actor.role), '进入当前战斗') + '</section>' : '';
       content.innerHTML = '<div class="squad-stack"><h2>' + e(room.title) + '</h2>'
-        + (isHost ? hostControls() : button('transfer', '复制我的席位链接')) + claim + personal + fight
+        + (isHost ? hostControls() : '<section class="squad-panel">' + anchor(api.link('/ss/', id),
+          '打开剧情投屏', ' target="_blank" rel="noopener"') + '</section>') + claim + personal + fight
         + (squad.phase === 'battle' ? '' : api.recapMarkup(squad.recap))
         + (hero && squad.phase !== 'battle' ? rollForm() : '') + (hero && squad.phase !== 'battle' ? prepForm(seat) : '')
         + (isHost ? '<details class="squad-roster"' + (content.querySelector('.squad-roster')?.open ? ' open' : '')
@@ -435,8 +436,8 @@
         return action('squad-phase', { phase: value });
       }
       if (name === 'visibility') return action('public-lobby', { value: value === 'true' });
-      const link = name === 'invite' ? api.link('/aibp/squad', id, 'invite', credentials.keys.invite, true)
-        : api.link('/aibp/squad', id, 'member', credentials.token, true);
+      if (name !== 'invite') return;
+      const link = api.link('/aibp/squad', id, 'invite', credentials.keys.invite, true);
       try { await navigator.clipboard.writeText(link); node.textContent = '已复制'; }
       catch { window.prompt('复制链接', link); }
     });

@@ -40,6 +40,7 @@
   const battleConfig = window.ATO_BATTLE_CONFIG;
   let actor = null;
   let socket = null;
+  let socketReady = false;
   let socketActions = false;
   let socketAction = null;
   let reconnectTimer;
@@ -183,7 +184,7 @@
   }
 
   window.setInterval(() => {
-    if (activeTool === 'apostle' || socket?.readyState !== WebSocket.OPEN) void refreshRoomState();
+    if (!socketReady || socket?.readyState !== WebSocket.OPEN) void refreshRoomState();
   }, 5000);
 
   let disconnectSocket;
@@ -194,11 +195,12 @@
     const current = new WebSocket(url, ['ato-battle-v1', credentials.token]);
     socket = current;
     socketActions = false;
-    let unwatch, ready = false;
+    let unwatch;
     const connectionTimer = setTimeout(() => disconnect(), 12000);
     function disconnect(code) {
       if (socket !== current) return;
       socket = null;
+      socketReady = false;
       clearTimeout(connectionTimer);
       unwatch?.();
       socketActions = false;
@@ -230,9 +232,9 @@
         return;
       }
       if (!data.room) return;
-      const reconnected = !ready;
+      const reconnected = !socketReady;
       if (reconnected) {
-        ready = true;
+        socketReady = true;
         clearTimeout(connectionTimer);
         reconnectDelay = 1000;
         connection = '已连接 · 自动保存';

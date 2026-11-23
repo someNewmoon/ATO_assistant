@@ -103,6 +103,45 @@ test('每颗骰子只能重掷一次；转换后不可回到重掷阶段', () =>
   reducer.changeRoll(r, 0, { type: 'convert', roll: 'roll', die: 'die', symbol: 'potential' });
   assert.throws(() => reducer.changeRoll(r, 0, { type: 'reroll', roll: 'roll', ids: ['die'] }), /转换/);
 });
+test('实时操作在确认中更新发起端，同时广播给其他标签页和投屏', async () => {
+  const r = room();
+  r.revision = 0;
+  r.secrets = { host: 'host', viewer: 'viewer', players: [null, null] };
+  function socket(role, secretHash) {
+    const messages = [];
+    return {
+      messages,
+      deserializeAttachment: () => ({ role, secretHash }),
+      send: text => messages.push(JSON.parse(text)),
+    };
+  }
+  const sender = socket('host', 'host');
+  const otherTab = socket('host', 'host');
+  const viewer = socket('viewer', 'viewer');
+  const battle = Object.assign(Object.create(BattleRoom.prototype), {
+    load: () => r,
+    save: () => {},
+    ctx: { getWebSockets: () => [sender, otherTab, viewer],
+      storage: { transactionSync: write => write() } },
+    sql: { exec: () => ({ toArray: () => [] }) },
+  });
+  const id = crypto.randomUUID();
+  await battle.webSocketMessage(sender, JSON.stringify({
+    type: 'action', action: { id, type: 'pool', key: 'opening', delta: 1 },
+  }));
+  assert.equal(sender.messages.length, 1);
+  const [acknowledgement] = sender.messages;
+  assert.equal(acknowledgement.type, 'action-result');
+  assert.equal(acknowledgement.id, id);
+  assert.equal(acknowledgement.status, 200);
+  assert.equal(acknowledgement.data.room.pool.opening, 1);
+  for (const [observer, role] of [[otherTab, 'host'], [viewer, 'viewer']]) {
+    assert.equal(observer.messages.length, 1);
+    assert.equal(observer.messages[0].actor.role, role);
+    assert.equal(observer.messages[0].room.revision, acknowledgement.data.room.revision);
+  }
+});
+
 test('历史战斗编号不能修改新一场战斗', () => {
   const r = room(); r.squad = { phase: 'battle', battleNumber: 2 };
   assert.throws(() => reducer.apply(r, player, { type: 'pool', key: 'opening', delta: 1, battleNumber: 1 }), /已经切换/);

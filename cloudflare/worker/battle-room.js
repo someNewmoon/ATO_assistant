@@ -285,8 +285,10 @@ export class BattleRoom extends DurableObject {
     }
   }
 
-  publish(room) {
+  publish(room, sender) {
     for (const socket of this.ctx.getWebSockets()) {
+      // The initiating socket receives its role-specific state in the acknowledgement.
+      if (socket === sender) continue;
       try { socket.send(JSON.stringify(this.view(room, socket.deserializeAttachment()))); }
       catch { socket.close(1011, 'Reconnect'); }
     }
@@ -407,7 +409,7 @@ export class BattleRoom extends DurableObject {
           ? { book: story.bookId, key: story.entryKey } : null;
         return response({ ok: true, version, key, cycle: room.squad.cycle, language: room.squad.language, phase: room.squad.phase, current });
       }
-      return await this.submitAction(room, actor, body);
+      return response(await this.submitAction(room, actor, body));
     } catch (error) {
       return errorResponse(error);
     }
@@ -439,7 +441,7 @@ export class BattleRoom extends DurableObject {
     return parsed;
   }
 
-  async submitAction(room, actor, body) {
+  async submitAction(room, actor, body, sender) {
     let savedTrauma;
     if (actor.role === 'host' && room.owner && this.campaigns && !room.closed
         && body.type === 'squad-start' && room.squad?.phase === 'prep' && body.battleNumber === room.squad.battleNumber) {
@@ -455,8 +457,12 @@ export class BattleRoom extends DurableObject {
         reject('小队状态已更新，请确认备战后重试。', 409);
       }
     }
-    const result = this.action(room, actor, body, room.secrets.players.slice(), savedTrauma);
-    if (["public-lobby", "end", "round", "squad-phase", "squad-start", "squad-host-seat", "squad-remove-player", "squad-disband"].includes(body.type)) await this.syncDirectory(room);
+    const updatesDirectory = ['public-lobby', 'end', 'round', 'squad-phase', 'squad-start',
+      'squad-host-seat', 'squad-remove-player', 'squad-disband'].includes(body.type);
+    // Keep the immediate sender update when the acknowledgement waits for the directory.
+    const result = this.action(room, actor, body, room.secrets.players.slice(), savedTrauma,
+      updatesDirectory ? undefined : sender);
+    if (updatesDirectory) await this.syncDirectory(room);
     return result;
   }
 
@@ -466,7 +472,8 @@ export class BattleRoom extends DurableObject {
 
   async webSocketMessage(socket, message) {
     let id;
-    let result;
+    let status = 200;
+    let data;
     try {
       if (typeof message !== 'string' || new TextEncoder().encode(message).byteLength > 98304) {
         reject('战斗操作请求过大。', 413);
@@ -477,11 +484,13 @@ export class BattleRoom extends DurableObject {
       id = packet.action.id;
       const room = this.load();
       const actor = this.actor(room, socket.deserializeAttachment()?.secretHash);
-      result = await this.submitAction(room, actor, packet.action);
+      data = await this.submitAction(room, actor, packet.action, socket);
     } catch (error) {
-      result = errorResponse(error);
+      const result = errorResponse(error);
+      status = result.status;
+      data = await result.json();
     }
-    socket.send(JSON.stringify({ type: 'action-result', id, status: result.status, data: await result.json() }));
+    socket.send(JSON.stringify({ type: 'action-result', id, status, data }));
   }
 
   join(room, body, playerHash, reclaim) {
@@ -501,11 +510,11 @@ export class BattleRoom extends DurableObject {
     return response(this.view(room, { role: 'player', seat }));
   }
 
-  action(room, actor, body, previousPlayers, savedTrauma) {
+  action(room, actor, body, previousPlayers, savedTrauma, sender) {
     if (actor.role === 'viewer') reject('投屏页面只能查看。', 403);
     if (typeof body.id !== 'string' || !/^[a-f0-9-]{36}$/.test(body.id)) reject('操作编号无效。');
     if (this.sql.exec('SELECT 1 FROM actions WHERE id = ?', body.id).toArray().length) {
-      return response(this.view(room, actor));
+      return this.view(room, actor);
     }
     if (room.closed) reject(room.squad ? '小队已解散。' : '本场战斗已结束。', 409);
     const previousProjection = room.projection;
@@ -520,8 +529,8 @@ export class BattleRoom extends DurableObject {
     previousPlayers.forEach((key, seat) => {
       if (key && key !== room.secrets.players[seat]) this.revokeSeat(seat);
     });
-    this.publish(room);
-    return response(this.view(room, actor));
+    this.publish(room, sender);
+    return this.view(room, actor);
   }
 
   apply(room, actor, body, savedTrauma) {

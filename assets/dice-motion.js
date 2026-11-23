@@ -26,7 +26,7 @@
     context.scale(scale, scale);
     node.style.filter = 'drop-shadow(0 2px 1px #19243267)';
     const ivory = face.src.includes('/crit-');
-    const pigment = ivory ? [240, 228, 207] : [107, 145, 163];
+    const pigment = ivory ? [240, 228, 207] : [43, 46, 49];
     const tint = light => `rgb(${pigment.map(channel => Math.min(255, Math.round(channel * light))).join(',')})`;
     const radius = Math.min(width, height) * .39;
     const camera = 5;
@@ -69,7 +69,7 @@
         context.closePath();
         context.fillStyle = gradient;
         context.fill();
-        context.strokeStyle = tint(tone * .8);
+        context.strokeStyle = tint(tone * (ivory ? .8 : 1.4));
         context.lineWidth = .7;
         context.stroke();
 

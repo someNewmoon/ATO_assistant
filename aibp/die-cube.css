@@ -36,13 +36,10 @@
     inset -1px -1px #30161285,
     inset 0 -3px 5px #30161236;
 }
-.room-die-cube.is-red { --die-top-light: #d99684; --die-top-dark: #a75143; --die-side-light: #81372d; --die-side-dark: #432018; }
+.room-die-cube.is-red { --die-top-light: #ffc6aa; --die-top-dark: #f26f53; --die-side-light: #cb3a29; --die-side-dark: #77261d; }
 .room-die-cube.is-black { --die-top-light: #87898a; --die-top-dark: #4b4e51; --die-side-light: #353637; --die-side-dark: #0a0a0c; }
 .room-die-cube.is-white { --die-top-light: #fff; --die-top-dark: #deded6; --die-side-light: #b2b6b3; --die-side-dark: #666a66; }
-.room-die-cube.is-red .room-die-pips {
-  background-image: url("room-dice-art/red.webp");
-  filter: saturate(.62) brightness(.89);
-}
+.room-die-cube.is-red .room-die-pips { background-image: url("room-dice-art/red.webp"); }
 .room-die-cube.is-black .room-die-pips { background-image: url("room-dice-art/black.webp"); }
 .room-die-cube.is-white .room-die-pips { background-image: url("room-dice-art/white.webp"); }
 .room-die-cube.is-armor { --die-top-light: #fffdf3; --die-top-dark: #e1d6bf; --die-side-light: #b4a58e; --die-side-dark: #665944; }

@@ -206,6 +206,39 @@
       opacity: 0.45;
     }
 
+    .boss-cycle {
+      border: 1px solid var(--line);
+      border-radius: 9px;
+    }
+
+    .boss-cycle summary {
+      padding: 9px 11px;
+      cursor: pointer;
+      font-weight: 600;
+    }
+
+    .boss-cycle[data-locked] summary::after {
+      content: "未解锁";
+      float: right;
+      color: var(--muted);
+      font-size: .8em;
+      font-weight: 400;
+    }
+
+    .boss-cycle-choices {
+      display: grid;
+      gap: 5px;
+      padding: 0 7px 7px;
+    }
+
+    .boss-cycle-mosaic {
+      height: 34px;
+      border-radius: 5px;
+      background:
+        repeating-conic-gradient(#9a856b66 0% 25%, #bda78d26 0% 50%) 0 / 18px 18px,
+        repeating-conic-gradient(#6b574e77 0% 25%, #8d795544 0% 50%) 4px 4px / 30px 30px;
+    }
+
     .nav button {
       width: 100%;
       min-height: 42px;
@@ -2420,10 +2453,10 @@
   </style>
   <link rel="stylesheet" href="c45_specials.css?v=20260926-titan-group-layout1">
   <link rel="stylesheet" href="battle_map_control.css?v=20261117-battle-polish">
-  <link rel="stylesheet" href="battle_tactics.css?v=20261123-hekaton">
+  <link rel="stylesheet" href="battle_tactics.css?v=20261123-boss-alpha">
   <link rel="stylesheet" href="../api/cycle-theme.css">
   <script src="../assets/theme.js?v=20261114-light-sidebar1" defer></script>
-  <link rel="stylesheet" href="editorial.css?v=20261123-sidebar">
+  <link rel="stylesheet" href="editorial.css?v=20261123-boss-alpha">
   <link rel="stylesheet" href="../assets/card-art.css?v=20261017-fan-fringe5">
   <link rel="stylesheet" href="../hero/battle-roster.css">
   <script src="../assets/fan-card-trims-data.js?v=20261020-fan-scan3" defer></script>
@@ -2441,7 +2474,7 @@
   <script src="../assets/mobile/play.js?v=20261114-theatre-return" defer></script>
   <link rel="stylesheet" href="room-recap.css">
   <link rel="stylesheet" href="battle-room.css?v=20261123-d6">
-  <link rel="stylesheet" href="./die-cube.css?v=2">
+  <link rel="stylesheet" href="./die-cube.css?v=3">
   <script src="theatre-battle.js?v=2"></script>
   <script src="../theatre/terms.js?v=2"></script>
 </head>
@@ -2986,29 +3019,22 @@
     const fetch = window.ATO_CAMPAIGN_NOTES.createFetch(window.fetch.bind(window), {
       source: "AIBP", context: () => ({ cycleId: linkedCycleId }),
     });
-    const apostles = [
-      "HEKATON",
-      "LABYRINTHAUROS",
-      "HERMESIAN_PURSUER",
-      "ALPHA_TEMENOS",
-      "CHIMERA_METASTASIOS",
-      "CYCLONUS",
-      "THE_BURDEN",
-      "THE_NIETZSCJEAN",
-      "HYPERTIME_ORACLE",
-      "ICARIAN_HARPY",
-      "SUN_DESCENDANT",
-      "MIDASCORE",
-      "DEMIDJINN",
-      "THE_BABELIAN_LUNACY",
-      "DAHAKA",
-      "DRAGON_OF_PHOBOS",
-      "MEDUKETOS",
-      "UR_FLEECE",
-      "TITAN_X",
-      "HELIOS",
-      "BLACKBEAK"
+    // Match the campaign enemy tracks, including the shared Cycle II/III encounter.
+    const apostleCycles = [
+      ["HEKATON", "LABYRINTHAUROS", "HERMESIAN_PURSUER", "ALPHA_TEMENOS"],
+      ["CHIMERA_METASTASIOS", "CYCLONUS", "THE_BURDEN", "THE_NIETZSCJEAN"],
+      ["HYPERTIME_ORACLE", "ICARIAN_HARPY", "SUN_DESCENDANT", "THE_BURDEN"],
+      ["MIDASCORE", "DEMIDJINN", "THE_BABELIAN_LUNACY", "DAHAKA", "HELIOS"],
+      ["DRAGON_OF_PHOBOS", "MEDUKETOS", "UR_FLEECE", "TITAN_X", "BLACKBEAK"],
     ];
+    const apostles = apostleCycles.flat();
+    const cycleUnlockKey = "aibp-boss-cycle-unlocks-v1";
+    const unlockedBossCycles = new Set([0]);
+    try {
+      for (const index of JSON.parse(localStorage.getItem(cycleUnlockKey) || "[]")) {
+        if (Number.isInteger(index) && apostleCycles[index]) unlockedBossCycles.add(index);
+      }
+    } catch {}
     const aiViews = ["当前", "弃牌", "移除", "II", "III"];
     const bpViews = ["当前", "弃牌", "损伤", "移除", "II", "III"];
     const traitLevels = ["O", "I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X"];
@@ -5087,6 +5113,7 @@
     }
 
     function renderApostleTitle() {
+      renderBossNavLabels();
       const level = currentApostleLevel();
       if (currentApostle === "BLACKBEAK") {
         window.AIBP_BOSS_SEARCH.renderLabel(title, currentApostle);
@@ -5100,8 +5127,12 @@
         : ` · ${window.HeliosConfig.modes[special].label}`);
       renderMapFactionStatus();
       renderApostleLevelSelectOptions();
-      document.querySelectorAll("#nav button[data-name]").forEach((button) => {
+    }
+
+    function renderBossNavLabels() {
+      nav.querySelectorAll("button[data-name]").forEach((button) => {
         const name = button.dataset.name;
+        button.classList.toggle("active", name === currentApostle);
         const navLevel = apostleLevelFor(name);
         const specialMode = name === "HELIOS" ? heliosMode() : "normal";
         window.AIBP_BOSS_SEARCH.renderLabel(button, name, name === "HELIOS" && specialMode !== "normal"
@@ -9166,9 +9197,6 @@
       aibpLayout.classList.toggle("ai-only", !bpAvailable);
       bpColumn.hidden = !bpAvailable;
 
-      document.querySelectorAll(".nav button").forEach((button) => {
-        button.classList.toggle("active", button.dataset.name === name);
-      });
 
       renderAibpCards();
       renderExtraCards();
@@ -9378,21 +9406,65 @@
       document.documentElement.style.setProperty("--panel-image-height", `${panelHeight}px`);
     }
 
-    (theatreRequest ? [] : apostles).forEach((name) => {
-      const button = document.createElement("button");
-      button.type = "button";
-      button.dataset.name = name;
-      window.AIBP_BOSS_SEARCH.renderLabel(button, name);
-      if (name === "HELIOS" || name === "BLACKBEAK") button.hidden = true;
-      button.addEventListener("click", () => renderApostle(name));
-      nav.appendChild(button);
+    function availableBossSearchMatches(query) {
+      return window.AIBP_BOSS_SEARCH.find(query).filter(({ id }) =>
+        apostleCycles.some((names, index) => unlockedBossCycles.has(index) && names.includes(id)));
+    }
+
+    function renderBossCycleChoices(list, names) {
+      for (const name of names) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.dataset.name = name;
+        window.AIBP_BOSS_SEARCH.renderLabel(button, name);
+        if (name === "HELIOS" || name === "BLACKBEAK") {
+          button.hidden = !(name === "HELIOS" ? heliosAccessGranted : blackbeakAccessGranted);
+        }
+        button.addEventListener("click", () => renderApostle(name));
+        list.appendChild(button);
+      }
+    }
+
+    if (!theatreRequest) apostleCycles.forEach((names, index) => {
+      const group = document.createElement("details");
+      group.className = "boss-cycle";
+      group.dataset.bossCycle = String(index + 1);
+      group.open = unlockedBossCycles.has(index) && names.includes(currentApostle);
+      const heading = document.createElement("summary");
+      heading.textContent = `循环 ${index + 1}`;
+      const list = document.createElement("div");
+      list.className = "boss-cycle-choices";
+      group.append(heading, list);
+      nav.appendChild(group);
+      if (unlockedBossCycles.has(index)) {
+        renderBossCycleChoices(list, names);
+        return;
+      }
+      group.dataset.locked = "true";
+      const mask = document.createElement("div");
+      mask.className = "boss-cycle-mosaic";
+      mask.setAttribute("aria-hidden", "true");
+      const unlock = document.createElement("button");
+      unlock.type = "button";
+      unlock.textContent = `解锁循环 ${index + 1} 的骇物`;
+      unlock.addEventListener("click", () => {
+        unlockedBossCycles.add(index);
+        try { localStorage.setItem(cycleUnlockKey, JSON.stringify([...unlockedBossCycles])); } catch {}
+        delete group.dataset.locked;
+        list.replaceChildren();
+        renderBossCycleChoices(list, names);
+        renderBossNavLabels();
+        list.querySelector("button")?.focus();
+        renderBossSearchResults();
+      });
+      list.append(mask, unlock);
     });
 
     function renderBossSearchResults() {
       const query = bossSearchInput.value.trim();
       bossSearchResults.replaceChildren();
       if (!query || window.AIBP_BOSS_SEARCH.isSecretQuery(query)) return;
-      const matches = window.AIBP_BOSS_SEARCH.find(query);
+      const matches = availableBossSearchMatches(query);
       for (const match of matches) {
         const button = document.createElement("button");
         button.type = "button";
@@ -9404,7 +9476,7 @@
         });
         bossSearchResults.appendChild(button);
       }
-      if (!matches.length) bossSearchResults.textContent = "未找到 BOSS";
+      if (!matches.length) bossSearchResults.textContent = "已解锁循环中没有匹配的骇物";
     }
 
     function confirmHeliosSpoiler(message, buttonText) {
@@ -9473,6 +9545,11 @@
 
     async function searchSecret(mode) {
       if (theatreRequest) return;
+      const cycleIndex = mode === "normal" ? 3 : 4;
+      if (!unlockedBossCycles.has(cycleIndex)) {
+        bossSearchResults.textContent = `请先解锁循环 ${cycleIndex + 1}`;
+        return;
+      }
       if (mode === "titan-x-group") {
         bossSearchInput.value = "";
         bossSearchResults.replaceChildren();
@@ -9537,7 +9614,7 @@
         void searchSecret(secretMode);
         return;
       }
-      const matches = window.AIBP_BOSS_SEARCH.find(query);
+      const matches = availableBossSearchMatches(query);
       if (matches.length === 1) {
         bossSearchInput.value = "";
         bossSearchResults.replaceChildren();

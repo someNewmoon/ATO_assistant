@@ -289,13 +289,20 @@ test("万事皆休通过 Boss 搜索开启，不显示普通入口按钮", async
     assert.equal(bossSearch.find(query).length, 0);
   }
   const calls = [];
+  const unlockedBossCycles = new Set([0]);
   const context = {
+    unlockedBossCycles,
     bossSearchInput: { value: "万事皆休" }, bossSearchResults: { replaceChildren() {} },
     renderApostle: (name) => calls.push(name),
     window: { C45Specials: { startTitanXGroup: () => calls.push("group") } },
   };
-  await vm.runInNewContext(`${entryFunction("searchSecret")}\nsearchSecret("titan-x-group");`,
-    Object.assign(context, { theatreRequest: null }));
+  const searchGroup = () => vm.runInNewContext(`${entryFunction("searchSecret")}\nsearchSecret("titan-x-group");`,
+    { ...context, theatreRequest: null });
+  await searchGroup();
+  assert.deepEqual(calls, []);
+  assert.equal(context.bossSearchResults.textContent, "请先解锁循环 5");
+  unlockedBossCycles.add(4);
+  await searchGroup();
   assert.deepEqual(calls, ["TITAN_X", "group"]);
   assert.equal(context.bossSearchInput.value, "");
   assert.doesNotMatch(fs.readFileSync(path.join(aibpDir, "c45_specials.js"), "utf8"), /data-action="start-titan-x-group"/);

@@ -46,6 +46,7 @@
   isolation: isolate;
   pointer-events: none;
 }
+.battle-map-board .battle-piece.battle-piece-apostle { background: #16263166; }
 .battle-piece-titan { border-radius: 18%; background: transparent; }
 button.battle-piece { pointer-events: auto; cursor: pointer; min-height: 0; }
 .battle-piece.is-selected { box-shadow: 0 0 0 2px #fff2ca, 0 0 9px #dda95a; }

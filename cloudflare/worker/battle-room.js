@@ -651,17 +651,23 @@ export class BattleRoom extends DurableObject {
         delete room.secondAbility;
         if (room.battleDeck) delete room.battleDeck.bpSeat;
         setTurnPhase(room, 'apostle');
-      } else if (room.squad) {
+        return;
+      }
+      if (room.squad) {
         if (body.damage !== undefined && (!Array.isArray(body.damage) || body.damage.length !== room.heroes.length
             || body.damage.some(value => value !== null && (!Number.isInteger(value) || value < 0 || value > 999)))) {
           reject('请为每位英雄填写 0–999 的损伤，或留空。');
         }
         room.squad.recap = battleRecap(room, body.damage, randomInt);
         if (latestBattleRoll(room)) room.squad.lastBattleRoll = latestBattleRoll(room);
-        for (const hero of room.heroes) hero.storyStats = squadStats(hero.stats);
         room.squad.phase = 'story';
+      } else room.closed = true;
+      for (const hero of room.heroes) {
+        hero.stats = squadStats();
+        if (room.squad) hero.storyStats = squadStats();
+        delete hero.markers;
+        if (hero.condition !== 'dead') hero.condition = 'standing';
       }
-      else room.closed = true;
       return;
     }
     if (body.type === 'roll-reaction') {

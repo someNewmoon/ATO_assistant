@@ -176,6 +176,39 @@ test('从备战开始下一场：重置战斗状态，保留剧情三曲盘', ()
   assert.deepEqual(r.heroes[0].storyStats, { danger: 2, rage: 3, fate: 4 });
 });
 
+test('战斗结算清零三曲盘和临时状态，并保留损伤、投掷与阵亡记录', () => {
+  const r = room(6);
+  r.squad = { phase: 'battle', battleNumber: 1, cycle: 'c1', checks: [],
+    stock: { loadouts: {}, titans: [] }, gearNames: {} };
+  r.heroes[0].storyStats = { danger: 2, rage: 3, fate: 4 };
+  r.heroes[1].storyStats = { danger: 1, rage: 2, fate: 3 };
+  r.heroes[0].stats.rage = 5;
+  r.heroes[1].stats.fate = 7;
+  r.heroes[0].markers = { despair: 1, ambrosia: 2 };
+  r.heroes[0].condition = 'down';
+  r.heroes[1].condition = 'dead';
+  r.rolls = [{ id: 'last', seat: 0, mode: 'power', wounds: 3 }];
+
+  reducer.apply(r, host, { type: 'end', battleNumber: 1, damage: [null, 2] });
+  assert.equal(r.squad.phase, 'story');
+  for (const hero of r.heroes) {
+    const zeroes = { rage: 0, fate: 0, danger: 0 };
+    assert.deepEqual(hero.stats, zeroes);
+    assert.deepEqual(hero.storyStats, zeroes);
+    assert.equal(hero.markers, undefined);
+  }
+  assert.deepEqual(r.heroes.map(hero => hero.condition), ['standing', 'dead']);
+  assert.deepEqual(r.squad.recap.heroes.map(hero => hero.damage), [3, 2]);
+  assert.equal(r.squad.lastBattleRoll.id, 'last');
+
+  applySquad(r, player, { type: 'squad-stat', seat: 0, key: 'fate', delta: 1 }, random);
+  assert.equal(r.heroes[0].storyStats.fate, 1);
+  assert.equal(r.heroes[0].stats.fate, 0);
+  applySquad(r, host, { type: 'squad-phase', phase: 'prep' }, random);
+  applySquad(r, host, { type: 'squad-start', battleNumber: 1, board: { apostle: 'HEKATON', level: 1 } }, random);
+  assert.deepEqual(r.heroes[0].stats, { rage: 0, fate: 1, danger: 0 });
+});
+
 test('读剧情保存配装，备战刷新库存时保存未被军械库改动的个人配装', () => {
   const r = room();
   const kit = { player: '', titanId: 't', gear: {} };

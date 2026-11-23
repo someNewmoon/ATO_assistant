@@ -994,7 +994,7 @@
           event.stopPropagation();
           if (losState.active || !editBoard()) return;
           selectedId = selectedId === placement.id ? "" : placement.id;
-          renderMap(map);
+          renderMap();
         });
         terrainLayer.appendChild(button);
       });

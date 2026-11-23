@@ -4048,7 +4048,6 @@
     };
 
     const bossAvatarFiles = {
-      hekaton: "HEKATON.png",
       labyrinthauros: "LABYRINTHAUROS.png",
       temenos: "ALPHA_TEMENOS.png",
       pursuer: "HERMESIAN_PURSUER.png",
@@ -4076,7 +4075,9 @@
 
     function makeBossAvatar(title, bossKey) {
       const fileName = bossAvatarFiles[bossKey];
-      if (!fileName || missingBossAvatars.has(bossKey)) return null;
+      const src = bossKey === "hekaton" ? "../aibp/images/board-pieces/restored/hekaton-v1.webp"
+        : fileName && `./assets/boss-avatars/${fileName}?v=cardbacks-restored-20261023`;
+      if (!src || missingBossAvatars.has(bossKey)) return null;
       const icon = document.createElement("img");
       icon.className = "track-boss-avatar";
       icon.alt = "";
@@ -4091,7 +4092,7 @@
         icon.remove();
         title.classList.remove("with-icon");
       }, { once: true });
-      icon.src = `./assets/boss-avatars/${fileName}?v=cardbacks-restored-20261023`;
+      icon.src = src;
       return icon;
     }
 

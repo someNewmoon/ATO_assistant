@@ -1,3 +1,11 @@
+.boss-identity-art {
+  width: 1.55em;
+  height: 1.55em;
+  object-fit: contain;
+  vertical-align: middle;
+  margin-inline-end: .4em;
+}
+
 [data-board-tactics] {
   display: grid;
   gap: 10px;

@@ -924,7 +924,9 @@
 
   function roomProjection() {
     const projection = state.projection;
-    if (!projection) return state.board ? '<section class="room-projection"><h3>骇物战况</h3><p>等待房主同步 AIBP 战况。</p></section>' : '';
+    const logo = state.board?.apostle === 'HEKATON' && window.BattleBoardSprites?.hekaton?.restored;
+    const heading = '<h3>' + (logo ? '<img class="boss-identity-art" src="' + escape(logo) + '" alt="">' : '') + '骇物战况</h3>';
+    if (!projection) return state.board ? '<section class="room-projection">' + heading + '<p>等待房主同步 AIBP 战况。</p></section>' : '';
     const { title, level, panel, signature, ai, bp, aiDeck, bpDeck, damage } = projection;
     const bossArt = (src, label) => src ? cardImage('/aibp/' + src, label) : '';
     function deckCards(type, card, deck) {
@@ -940,7 +942,7 @@
     }
     const damageText = damage.total + (damage.wounds ? ' / ' + damage.wounds : '')
       + (damage.damage1 == null ? '' : '（' + damage.damage1 + ' + ' + damage.damage2 + '）');
-    return '<section class="room-projection"><h3>骇物战况</h3><p>' + escape([title, level].filter(Boolean).join(' · ')) + '</p>'
+    return '<section class="room-projection">' + heading + '<p>' + escape([title, level].filter(Boolean).join(' · ')) + '</p>'
       + '<div class="room-projection-cards">' + deckCards('AI', ai, aiDeck) + deckCards('BP', bp, bpDeck)
       + '<div class="room-projection-panel"><h4>骇物面板</h4>' + (bossArt(panel, title) || '<p>暂无面板图</p>') + '</div>'
       + (signature ? '<div class="room-projection-panel"><h4>招牌技</h4>' + bossArt(signature, '招牌技') + '</div>' : '') + '</div>'

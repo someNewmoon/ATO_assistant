@@ -94,7 +94,7 @@ test('boss avatars load their own files, fall back to the title on error, and do
   const h = harness();
   const title = h.makeTitle('赫卡同', 'Hekaton', { bossKey: 'hekaton' });
   const icon = title.children[0];
-  assert.equal(icon.src.split('?')[0], './assets/boss-avatars/HEKATON.png');
+  assert.equal(icon.src, '../aibp/images/board-pieces/restored/hekaton-v1.webp');
   assert.equal(icon.style.visibility, 'hidden', '加载完成前不显示');
   icon.fire('error');
   assert.ok(!title.classList.contains('with-icon'), '缺图后标题退回纯文字');

@@ -22,8 +22,8 @@ pursuer:{url:'../aibp/images/board-pieces/pursuer-top.png',offset:[1052.878,136.
 path:'M1059 141Q1066 134 1073 142L1078 147 1083 145 1090 148 1096 155 1099 162 1099 171 1096 178 1090 184 1083 188 1070 187 1063 184 1058 179 1054 172 1055 167 1060 164 1065 166 1065 160 1061 155 1059 153 1060 149 1058 146Z'}
 };
 
-// Faithful panel-image restorations, generated with imagegen; see restored/README.md.
-window.BattleBoardSprites.hekaton.restored = '../aibp/images/board-pieces/restored/hekaton-hd.webp';
+// High-resolution board artwork; see restored/README.md.
+window.BattleBoardSprites.hekaton.restored = '../aibp/images/board-pieces/restored/hekaton-v1.webp';
 window.BattleBoardSprites.labyrinthauros.restored = '../aibp/images/board-pieces/restored/labyrinthauros-hd.webp';
 window.BattleBoardSprites.temenos.restored = '../aibp/images/board-pieces/restored/temenos-hd.webp';
 window.BattleBoardSprites.pursuer.restored = '../aibp/images/board-pieces/restored/pursuer-hd.webp';

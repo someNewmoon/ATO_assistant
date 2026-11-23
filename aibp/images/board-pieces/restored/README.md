@@ -1,5 +1,7 @@
 # Panel overhead image restorations
 
+The selected `hekaton-v1.webp` is used for both the Hekaton logo and its board piece. It was encoded from the selected transparent PNG with a 1024px maximum edge. The artwork faces south at rest.
+
 Generated with the built-in `image_gen` tool, not the CLI. One edit call per input: `hekaton-top.png`, `labyrinthauros-top.png`, `temenos-top.png`, `pursuer-top.png` from the existing hosted card-art pack. Originals are unchanged.
 
 Outputs: `hekaton-hd.webp`, `labyrinthauros-hd.webp`, `temenos-hd.webp`, `pursuer-hd.webp`. The generated transparent PNGs were encoded as WebP at 1024px maximum edge, quality 0.94, preserving alpha. The runtime uses the complete restored illustration without the earlier hand-drawn clip path.

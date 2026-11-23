@@ -99,6 +99,15 @@
           ? root.ATO_THEATRE_TERMS.boss(id, variant, names.en) : label;
         return span;
       });
+      const logo = id === "HEKATON" && root.BattleBoardSprites?.hekaton?.restored;
+      if (logo) {
+        const img = root.document.createElement("img");
+        img.className = "boss-identity-art";
+        img.src = logo;
+        img.alt = "";
+        img.addEventListener("error", () => img.remove(), { once: true });
+        variants.unshift(img);
+      }
       element.replaceChildren(...variants, suffix);
     },
     isSecretQuery(query) { return secretNames.has(normalize(query)); },

@@ -305,6 +305,8 @@
   const dock = document.createElement('div');
   dock.className = 'room-tool-dock';
   dock.hidden = true;
+  const toolLinks = document.createElement('div');
+  toolLinks.className = 'room-secondary-nav';
   const toolsDialog = document.createElement('dialog');
   toolsDialog.className = 'room-tool-sheet';
   toolsDialog.id = 'room-tool-sheet';
@@ -330,12 +332,15 @@
       toolsDialog.showModal();
       if (key === 'apostle') void refreshRoomState();
     });
-    dock.append(button);
+    toolLinks.append(button);
   }
+  const bossShortcut = toolLinks.querySelector('[data-tool="apostle"]');
+  bossShortcut.textContent = '骇物';
   const quick = document.createElement('nav');
   quick.className = 'room-primary-nav';
   quick.setAttribute('aria-label', '常用操作');
   quick.innerHTML = '<a href="#room-movement">移动</a><a href="#room-dice">掷骰</a><a href="#room-status">状态</a><a href="#room-equipment">装备</a>';
+  quick.append(bossShortcut);
   const movementShortcut = quick.querySelector('a[href="#room-movement"]');
   function forcedMovementSeat() {
     const seat = personalSeat();
@@ -346,7 +351,7 @@
     const seat = forcedMovementSeat();
     if (seat !== null && roomBoard?.openForcedMovement(seat)) event.preventDefault();
   });
-  dock.prepend(quick);
+  dock.append(quick, toolLinks);
   toolsDialog.querySelector('[data-close-tools]').addEventListener('click', () => toolsDialog.close());
   toolsDialog.addEventListener('close', () => {
     activeTool = null;
@@ -439,6 +444,7 @@
     dock.hidden = !personal;
     if (!personal && toolsDialog.open) toolsDialog.close();
     movementShortcut.hidden = !state.board;
+    bossShortcut.hidden = !state.board;
     const forced = forcedMovementSeat() !== null;
     if (forced !== (movementShortcut.dataset.forced === 'true')) {
       movementShortcut.dataset.forced = String(forced);
@@ -450,7 +456,7 @@
     if (!personal || !activeTool) return;
     const markup = {
       rolls: latestHeroRolls,
-      apostle: () => roomProjection() || '<p>骇物面板尚未准备。</p>',
+      apostle: () => roomProjection(true) || '<p>骇物面板尚未准备。</p>',
       argo: () => argoAbilities() || '<p>本场尚未准备阿尔戈能力。</p>',
       trauma: () => {
         const traumaSeat = seat ?? (actor.role === 'host' ? equipmentSeat : null);
@@ -461,7 +467,10 @@
     if (markup !== toolsMarkup) {
       const focused = toolsBody.contains(document.activeElement) ? document.activeElement : null;
       const focusKey = focused?.dataset.action || focused?.dataset.traumaDialog;
+      const comparisonWasOpen = toolsBody.querySelector('.room-boss-levels')?.open;
       toolsBody.innerHTML = markup;
+      const comparison = toolsBody.querySelector('.room-boss-levels');
+      if (comparison) comparison.open = Boolean(comparisonWasOpen);
       toolsMarkup = markup;
       if (focusKey) [...toolsBody.querySelectorAll('button:not(:disabled)')].find(button =>
         (button.dataset.action || button.dataset.traumaDialog) === focusKey
@@ -937,10 +946,55 @@
     return logo ? '<img class="boss-identity-art" src="' + escape(logo) + '" alt="">' : '';
   }
 
-  function roomProjection() {
+  function roomBossStats() {
+    const { apostle, level } = state.board;
+    const rows = window.AIBP_BOSS_LEVEL_DATA?.bosses?.[apostle]?.levels ?? {};
+    const levels = Object.values(rows);
+    const current = rows[level];
+    const hit = value => Number.isFinite(value) ? value + '+' : value;
+    const per = (attack, hit) => [
+      attack ? attack + ' / 攻击' : '',
+      hit ? hit + ' / 命中' : '',
+    ].filter(Boolean).join('、') || '—';
+    const columns = [
+      ['生命值', row => row.stats.wounds],
+      ['移动', row => row.stats.movement],
+      ['命中', row => hit(row.stats.hitRequirement)],
+      ['永世力场', row => row.bonuses.at > 0 ? '+' + row.bonuses.at : row.bonuses.at],
+      ['闪避骰', row => row.bonuses.evasionDice],
+      ['开战晋升', row => row.bonuses.promotions],
+    ];
+    if (levels.some(({ bonuses }) => bonuses.dangerPerAttack || bonuses.dangerPerHit)) {
+      columns.push(['凶险', row => per(row.bonuses.dangerPerAttack, row.bonuses.dangerPerHit)]);
+    }
+    if (levels.some(({ bonuses }) => bonuses.fatePerAttack || bonuses.fatePerHit)) {
+      columns.push(['命运', row => per(row.bonuses.fatePerAttack, row.bonuses.fatePerHit)]);
+    }
+    const cell = value => escape(value ?? '—');
+    const attrs = current
+      ? '<dl>' + columns.map(([label, value]) =>
+        '<div><dt>' + label + '</dt><dd>' + cell(value(current)) + '</dd></div>').join('') + '</dl>'
+      : '<p>此等级的属性暂无记录。</p>';
+    const comparison = levels.length > 1
+      ? '<details class="room-boss-levels"><summary>各等级属性对照</summary>'
+        + '<div class="room-boss-level-scroll" role="region" aria-label="各等级属性对照" tabindex="0">'
+        + '<table><thead><tr><th scope="col">等级</th>'
+        + columns.map(([label]) => '<th scope="col">' + label + '</th>').join('') + '</tr></thead>'
+        + '<tbody>' + levels.map(row => '<tr' + (row === current ? ' aria-current="true"' : '') + '>'
+          + '<th scope="row">' + cell(row.label) + '</th>'
+          + columns.map(([, value]) => '<td>' + cell(value(row)) + '</td>').join('') + '</tr>').join('')
+        + '</tbody></table></div></details>'
+      : '';
+    return '<section class="room-boss-stats"><h4>骇物属性 · Lv ' + cell(current?.label ?? level)
+      + '</h4>' + attrs + comparison + '</section>';
+  }
+
+  function roomProjection(showStats = false) {
     const projection = state.projection;
     const heading = '<h3>' + bossIdentityArt() + '骇物战况</h3>';
-    if (!projection) return state.board ? '<section class="room-projection">' + heading + '<p>等待房主同步 AIBP 战况。</p></section>' : '';
+    const stats = showStats && state.board ? roomBossStats() : '';
+    if (!projection) return state.board
+      ? '<section class="room-projection">' + heading + stats + '<p>等待房主同步 AIBP 战况。</p></section>' : '';
     const { title, level, panel, signature, ai, bp, aiDeck, bpDeck, damage } = projection;
     const bossArt = (src, label) => src ? cardImage('/aibp/' + src, label) : '';
     function deckCards(type, card, deck) {
@@ -956,7 +1010,7 @@
     }
     const damageText = damage.total + (damage.wounds ? ' / ' + damage.wounds : '')
       + (damage.damage1 == null ? '' : '（' + damage.damage1 + ' + ' + damage.damage2 + '）');
-    return '<section class="room-projection">' + heading + '<p>' + escape([title, level].filter(Boolean).join(' · ')) + '</p>'
+    return '<section class="room-projection">' + heading + '<p>' + escape([title, level].filter(Boolean).join(' · ')) + '</p>' + stats
       + '<div class="room-projection-cards">' + deckCards('AI', ai, aiDeck) + deckCards('BP', bp, bpDeck)
       + '<div class="room-projection-panel"><h4>骇物面板</h4>' + (bossArt(panel, title) || '<p>暂无面板图</p>') + '</div>'
       + (signature ? '<div class="room-projection-panel"><h4>招牌技</h4>' + bossArt(signature, '招牌技') + '</div>' : '') + '</div>'

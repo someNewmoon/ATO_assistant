@@ -1,4 +1,5 @@
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { copyFile, lstat, mkdir, mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { basename, dirname, extname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -25,6 +26,29 @@ if (imageRoot && hosted.length === 0) throw new Error('ATO_CARD_ART_DIR 中没�
 const sourceFiles = new Map(files.map(file => [file, join(repo, file)]));
 for (const path of hosted) if (!sourceFiles.has(path)) sourceFiles.set(path, join(imageRoot, path));
 if (sourceFiles.size + 9 > 20000) throw new Error('Pages 免费版文件数上限为 20,000。');
+
+async function addCampaignShell(staging) {
+  const shellPages = [
+    'index.html', 'record/index.html', 'hero/index.html', 'aibp/index.html',
+    'technology/index.html', 'map/index.html', 'story/index.html', 'theatre/index.html',
+    'aibp/trauma.html', 'aibp/squads.html', 'aibp/squad.html', 'briefing/index.html',
+  ];
+  const assets = ['campaign-shell.css', 'campaign-shell.js', 'campaign-diplomacy.js'];
+  const urls = await Promise.all(assets.map(async asset => {
+    const bytes = await readFile(join(staging, 'assets', asset));
+    const version = createHash('sha256').update(bytes).digest('hex').slice(0, 12);
+    return `/assets/${asset}?v=${version}`;
+  }));
+  const [style, shell, diplomacy] = urls;
+  await Promise.all(shellPages.map(async page => {
+    const path = join(staging, page);
+    const html = await readFile(path, 'utf8');
+    if (!/<\/head>/i.test(html)) throw new Error(`Missing document head: ${page}`);
+    const markup = `<link rel="stylesheet" href="${style}"><script src="${shell}" defer></script>`
+      + (page === 'record/index.html' ? `<script src="${diplomacy}" defer></script>` : '');
+    await writeFile(path, html.replace(/<\/head>/i, markup + '</head>'));
+  }));
+}
 
 const staging = await mkdtemp(join(directory, '.pages-'));
 try {
@@ -101,6 +125,7 @@ try {
     }
   }
   await buildBattleRoom(staging, repo);
+  await addCampaignShell(staging);
   const gitVersion = execFileSync('git', ['describe', '--abbrev=0', '--match', 'v[0-9]*'], {
     cwd: repo, encoding: 'utf8',
   }).trim().replace(/^v/, '');

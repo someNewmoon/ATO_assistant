@@ -275,7 +275,16 @@ test('Worker 独立揭示、结算部位牌并激化，完整牌堆只对房主�
         supply: { II: [face('BP', 'II', 1)], III: [face('BP', 'III', 2), face('BP', 'III', 3)] } } };
     r.battleDeck = api.prepareRoomDeck(data, 'HEKATON');
     r.projection = api.roomDeckProjection(r.battleDeck, {});
+    if (outcome === 0) {
+      reducer.apply(r, host, { type: 'bp-request', id: 'preview', round: 1 });
+      assert.equal(r.turn.seat, null);
+      assert.equal(r.battleDeck.bpSeat, undefined);
+    } else if (outcome === 2) {
+      reducer.apply(r, host, { type: 'bp-request', id: 'preview', round: 1, seat: 1 });
+      assert.equal(r.battleDeck.bpSeat, 1);
+    }
     reducer.apply(r, player, { type: 'bp-request', id: 'reveal', round: 1 });
+    assert.equal(r.battleDeck.bpSeat, 0);
     assert.equal(r.projection.bp.src, current._room.face.src);
     assert.equal(r.projection.bpDeck.back.src, hidden._room.back.src);
     const viewer = reducer.view(r, { role: 'viewer' }).room;
@@ -286,8 +295,17 @@ test('Worker 独立揭示、结算部位牌并激化，完整牌堆只对房主�
     if (manual) r.rolls = [];
     const settlement = { type: 'bp-settle', id: 'settled', round: 1,
       ...(manual ? {} : { roll: 'power' }), seat: 0, value: outcome, card: current._room.face.src };
-    reducer.apply(r, player, { type: 'turn-finish', seat: 0, round: 1, phase: 'titans' });
-    assert.throws(() => reducer.apply(r, player, { type: 'bp-request', id: 'another', round: 1 }), /泰坦回合/);
+    if (r.turn.seat === 0) reducer.apply(r, player, { type: 'turn-finish', seat: 0, round: 1, phase: 'titans' });
+    const priorSeat = r.turn.seat;
+    if (manual) assert.throws(() => reducer.apply(r, player, { type: 'bp-request', id: 'another', round: 1 }), /泰坦回合/);
+    else {
+      const other = { id: 'other-power', mode: 'power', seat: 1, round: 1 };
+      r.rolls.push(other);
+      const rival = { role: 'player', seat: 1 };
+      assert.throws(() => reducer.apply(r, rival, { ...settlement, roll: other.id }), /核对当前部位牌/);
+      assert.throws(() => reducer.apply(r, rival, { type: 'bp-request', id: 'another', round: 1 }), /另一位泰坦/);
+      r.rolls.pop();
+    }
     if (manual) assert.throws(() => reducer.apply(r, player, settlement), /威力投掷/);
     else assert.throws(() => reducer.apply(r, { role: 'player', seat: 1 }, settlement), /威力投掷|核对当前部位牌/);
     reducer.apply(r, manual ? host : player, settlement);
@@ -299,10 +317,10 @@ test('Worker 独立揭示、结算部位牌并激化，完整牌堆只对房主�
       assert.equal(r.rolls[0].wounds, damage);
     }
     assert.equal(r.battleStats[0].damage, damage);
-    assert.equal(r.turn.seat, null);
+    assert.equal(r.turn.seat, priorSeat);
     assert.equal(r.secondAbility.id, 'settled');
     assert.equal(r.pool.opening, 3);
-    assert.equal(r.battleDeck.revision, 3);
+    assert.equal(r.battleDeck.revision, outcome === 1 ? 3 : 4);
     if (!outcome) assert.deepEqual(r.battleDeck.data.BP.discard, [current]);
     if (level === 'I' && outcome) assert.equal(r.battleDeck.data.AI.deck[0].level, 'II');
     if (level === 'III' && outcome === 1) assert.equal(r.battleDeck.data.BP.deck.at(-1), current);

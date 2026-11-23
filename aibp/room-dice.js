@@ -90,6 +90,15 @@
     return roll.by || (roll.seat === hostSeat ? 'host' : 'seat:' + roll.seat);
   }
 
+  function pendingPowerRoll(room, seat) {
+    const roll = room.rolls.find(entry => entry.seat === seat && entry.round === room.round && entry.mode === 'power');
+    return roll?.bpOutcome === undefined ? roll : undefined;
+  }
+
+  function canUseBodyPart(room, seat, owner) {
+    return owner == null || owner === seat || Boolean(pendingPowerRoll(room, seat) && !pendingPowerRoll(room, owner));
+  }
+
   function latestByHero(rolls, latestId) {
     const latest = rolls.find(roll => roll.id && roll.id === latestId);
     const bySeat = new Map();
@@ -114,5 +123,5 @@
     }));
   }
 
-  return { faces, names, limits, modes, naturalFace, remainingFace, canReroll, faceIndex, faceLabel, rollSummary, woundResults, criticalLabel, pipMarkup, faceMarkup, storyFaces, rollOwner, latestByHero, reactionGroups };
+  return { faces, names, limits, modes, naturalFace, remainingFace, canReroll, faceIndex, faceLabel, rollSummary, woundResults, criticalLabel, pipMarkup, faceMarkup, storyFaces, rollOwner, pendingPowerRoll, canUseBodyPart, latestByHero, reactionGroups };
 });

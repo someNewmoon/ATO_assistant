@@ -147,12 +147,12 @@ function settleWound(data, bp, card, critical, randomInt, owner) {
   return damageValue(wound);
 }
 
-export function revealRoomBp(deck, seat, randomInt) {
+export function revealRoomBp(deck, seat, randomInt, allowHandoff = false) {
   const data = deck.data;
   let bp = piles(data).BP;
   if (bp.pending) {
     if (data.shared && bp.pendingMode !== 'BP') fail('请先结算牌面上的 AI。');
-    if (deck.bpSeat !== undefined && deck.bpSeat !== seat) fail('这张部位牌已由另一位泰坦揭示。');
+    if (!allowHandoff && deck.bpSeat != null && deck.bpSeat !== seat) fail('这张部位牌已由另一位泰坦揭示。');
     if (deck.bpSeat === seat) return false;
     deck.bpSeat = seat;
     return true;
@@ -179,11 +179,11 @@ export function revealRoomBp(deck, seat, randomInt) {
   return true;
 }
 
-export function settleRoomBp(deck, { seat, card: path, value }, randomInt) {
+export function settleRoomBp(deck, { seat, card: path, value, allowHandoff = false }, randomInt) {
   const data = deck.data;
   const bp = piles(data).BP;
   const card = pending(data, 'BP');
-  if (!card || card._room?.face?.src !== path || (deck.bpSeat !== undefined && deck.bpSeat !== seat)) fail('请先揭示并核对当前部位牌。');
+  if (!card || card._room?.face?.src !== path || (!allowHandoff && deck.bpSeat != null && deck.bpSeat !== seat)) fail('请先揭示并核对当前部位牌。');
   const index = bp.deck.findIndex(entry => same(entry, card));
   if (index >= 0) bp.deck.splice(index, 1);
   bp.pending = null;

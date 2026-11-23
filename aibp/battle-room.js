@@ -754,17 +754,16 @@
     const followup = roll.defenseCount && !roll.defenseRoll;
     const wounds = roll.wounds ?? 0;
     const pendingBp = state.projection?.bpPending && state.projection.bp?.src;
-    const latestPower = state.rolls.find(entry => entry.seat === roll.seat && entry.round === state.round && entry.mode === 'power');
-    const canSettle = state.deckRevision && editable && latestPower?.id === roll.id && roll.bpOutcome === undefined
+    const pendingPower = dice.pendingPowerRoll(state, roll.seat);
+    const showBp = state.deckRevision && editable && pendingPower?.id === roll.id
       && (pendingBp ? canSettleBp(roll.seat) : canRequestBp(roll.seat));
     const outcome = ['失败', '伤口', '暴击'];
     const result = roll.mode === 'power' ? '<div class="room-wound-result" data-dice-reveal>'
       + '<span>击破结果 · ' + (roll.bpOutcome === undefined ? dice.woundResults[wounds] : outcome[roll.bpOutcome])
       + (roll.wounds === undefined ? '（待确认）' : '') + '</span>'
-      + (canSettle ? '<div class="room-bp-actions">'
-        + (pendingBp ? cardImage('/aibp/' + pendingBp, state.projection.bp.label || '部位牌') + outcome.map((label, value) =>
-          '<button type="button" data-bp-settle="' + value + '"' + attrs
-          + '>' + label + '</button>').join('') : bpDrawButton(roll.seat))
+      + (showBp ? '<div class="room-bp-actions">'
+        + (pendingBp ? cardImage('/aibp/' + pendingBp, state.projection.bp.label || '部位牌') + bpOutcomeButtons(roll)
+          : bpDrawButton(roll.seat))
         + '</div>' : '')
       + (editable && !state.projection && !pendingBp ? '<div role="group" aria-label="记录伤口">' + dice.woundResults.map((label, value) =>
           '<button type="button" data-action="roll-wounds" data-value="' + value + '"' + attrs
@@ -805,14 +804,16 @@
 
   function canRequestBp(seat) {
     const turn = state.turn;
-    return Boolean(state.heroes[seat]) && state.heroes[seat].condition !== 'dead' && turn?.phase !== 'apostle'
-      && (state.bpSeat == null || state.bpSeat === seat) && (turn?.seat == null || turn.seat === seat) && !turn?.finished.includes(seat);
+    const inTurn = turn?.phase !== 'apostle'
+      && (turn?.seat == null || turn.seat === seat) && !turn?.finished?.includes(seat);
+    return Boolean(state.heroes[seat]) && state.heroes[seat].condition !== 'dead'
+      && dice.canUseBodyPart(state, seat, state.bpSeat) && (inTurn || dice.pendingPowerRoll(state, seat));
   }
 
   function canSettleBp(seat) {
     return Boolean(state.projection?.bpPending && state.projection.bp?.src && state.heroes[seat])
       && (actor.role === 'host' || state.heroes[seat].condition !== 'dead')
-      && (state.bpSeat === seat || (state.bpSeat == null && (actor.role === 'host' || canRequestBp(seat))));
+      && dice.canUseBodyPart(state, seat, state.bpSeat);
   }
 
   function bpDrawButton(seat) {
@@ -820,14 +821,29 @@
       + (state.deckRevision ? '>揭示 BP' : ' disabled>等待初始化牌堆') + '</button>';
   }
 
-  function powerPartCard(seat) {
+  function bpOutcomeButtons(roll) {
+    return ['失败', '伤口', '暴击'].map((label, value) =>
+      '<button type="button" data-bp-settle="' + value + '" data-roll-id="' + escape(roll.id)
+      + '" data-seat="' + roll.seat + '">' + label + '</button>').join('');
+  }
+
+  function powerPartCard(seat, latestResult) {
     const projection = state.projection;
     const bp = projection?.bp;
     const caption = bp?.src ? projection.bpPending === true ? '当前部位牌' : '最后揭示的部位牌' : '部位牌';
+    const roll = dice.pendingPowerRoll(state, seat);
+    const outcome = projection?.bpPending && roll && roll.id !== latestResult?.id && canSettleBp(seat)
+      ? '<div class="room-bp-actions">' + bpOutcomeButtons(roll) + '</div>' : '';
+    let control = '';
+    if (!projection?.bpPending) {
+      control = canRequestBp(seat) ? bpDrawButton(seat) : '<small>投掷威力骰后可揭示 BP</small>';
+    } else if (roll && !canSettleBp(seat)) {
+      control = '<small>等待当前部位牌结算</small>';
+    }
     return '<aside class="room-power-card"><h4>' + caption + '</h4>'
       + (bp?.src ? cardImage('/aibp/' + bp.src, bp.label || '部位牌')
         : '<small>' + (projection ? '尚未揭示' : '等待房主同步') + '</small>')
-      + (!projection?.bpPending && canRequestBp(seat) ? bpDrawButton(seat) : '') + '</aside>';
+      + control + outcome + '</aside>';
   }
 
   function kratosReminder(hero) {
@@ -892,13 +908,16 @@
         + (key === 'dodge' ? '<img class="room-mode-icon" src="room-dice-art/dodge.webp" alt="">'
           : '<span class="room-mode-icon" aria-hidden="true"></span>') + entry.name + '</button>').join('') + '</div>';
     const power = rollMode === 'power';
+    const pendingPower = dice.pendingPowerRoll(state, seat);
+    const showSeparateBp = !power && pendingPower && pendingPower.id !== last?.id;
     renderSections(panel, [
       '<h3>掷骰</h3>', actor.role === 'host' && heroSeatButtons(seat, 'roll'), modes,
       power ? '<div class="room-power-workspace"></div>' : form, latestResult,
+      showSeparateBp && powerPartCard(seat, last),
       notes[rollMode] && '<p class="room-dice-help">' + notes[rollMode] + '</p>',
       ['attack', 'power'].includes(rollMode) && kratosReminder(state.heroes[seat]), powerPool,
     ]);
-    if (power) renderSections(panel.querySelector('.room-power-workspace'), [powerPartCard(seat), form]);
+    if (power) renderSections(panel.querySelector('.room-power-workspace'), [powerPartCard(seat, last), form]);
     const currentForm = panel.querySelector('form[data-roll]');
     if (currentForm !== previousForm) restoreDiceDraft(currentForm, seat);
   }
@@ -973,8 +992,10 @@
     if (actor?.role !== 'host' || !state.deckRevision || state.closed || state.squad?.phase !== 'battle') return false;
     const seat = state.bpSeat ?? state.turn?.seat ?? rollSeat;
     if (!mode) {
-      if (!canRequestBp(seat)) { say('请在对应的泰坦回合揭示部位牌。'); return true; }
-      send({ id: crypto.randomUUID(), type: 'bp-request', seat, round: state.round });
+      const activeSeat = state.turn?.seat;
+      const drawSeat = state.bpSeat ?? activeSeat ?? (dice.pendingPowerRoll(state, rollSeat) ? rollSeat : undefined);
+      if (drawSeat !== undefined && !canRequestBp(drawSeat)) { say('请在对应的泰坦回合揭示部位牌。'); return true; }
+      send({ id: crypto.randomUUID(), type: 'bp-request', seat: drawSeat, round: state.round });
       return true;
     }
     const value = ['discard', 'defeat', 'critical'].indexOf(mode);
@@ -983,9 +1004,9 @@
       say('请先揭示并核对当前部位牌。');
       return true;
     }
-    const roll = state.rolls.find(entry => entry.seat === seat && entry.round === state.round && entry.mode === 'power');
+    const roll = dice.pendingPowerRoll(state, seat);
     send({ id: crypto.randomUUID(), type: 'bp-settle', seat, round: state.round,
-      ...(roll && roll.bpOutcome === undefined && { roll: roll.id }), value, card: state.projection.bp.src });
+      ...(roll && { roll: roll.id }), value, card: state.projection.bp.src });
     return true;
   };
 
@@ -1547,11 +1568,6 @@
   });
 
   window.addEventListener('aibp-room-projection', syncProjection);
-  content.addEventListener('click', event => {
-    const button = event.target.closest('[data-bp-request]');
-    if (!button || button.disabled || !state || state.closed) return;
-    send({ id: crypto.randomUUID(), type: 'bp-request', seat: Number(button.dataset.bpRequest), round: state.round });
-  });
   function resumeConnection() {
     if (document.hidden || !credentials?.token || !state || state.closed) return;
     if (socket?.readyState >= WebSocket.CLOSING) disconnectSocket?.();
@@ -1583,6 +1599,11 @@
     if (button.dataset.equipmentSeat !== undefined) {
       equipmentSeat = Number(button.dataset.equipmentSeat);
       render();
+      return;
+    }
+    if (button.dataset.bpRequest !== undefined) {
+      if (button.disabled || !state || state.closed) return;
+      send({ id: crypto.randomUUID(), type: 'bp-request', seat: Number(button.dataset.bpRequest), round: state.round });
       return;
     }
     if (button.dataset.bpSettle !== undefined) {

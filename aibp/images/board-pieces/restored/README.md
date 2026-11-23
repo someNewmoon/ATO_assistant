@@ -2,9 +2,11 @@
 
 The selected `hekaton-v1.webp` is used for both the Hekaton logo and its board piece. It was encoded from the selected transparent PNG with a 1024px maximum edge. The artwork faces south at rest.
 
-Generated with the built-in `image_gen` tool, not the CLI. One edit call per input: `hekaton-top.png`, `labyrinthauros-top.png`, `temenos-top.png`, `pursuer-top.png` from the existing hosted card-art pack. Originals are unchanged.
+The Cycle I board also uses the selected `labyrinthauros-v1.webp`, `pursuer-v1.webp`, and `temenos-v5-devouring.webp`. They use the same transparent WebP encoding. The Labyrinthauros head and the Pursuer beak point southeast in their source images. Temenos retains the south-facing reference and draws at 110% to keep the tentacles visible. The renderer rotates each image to the game-facing angle and draws the direction arrow and footprint independently.
 
-Outputs: `hekaton-hd.webp`, `labyrinthauros-hd.webp`, `temenos-hd.webp`, `pursuer-hd.webp`. The generated transparent PNGs were encoded as WebP at 1024px maximum edge, quality 0.94, preserving alpha. The runtime uses the complete restored illustration without the earlier hand-drawn clip path.
+The earlier restorations below were generated with the built-in `image_gen` tool, not the CLI. One edit call per input: `hekaton-top.png`, `labyrinthauros-top.png`, `temenos-top.png`, `pursuer-top.png` from the existing hosted card-art pack. Originals are unchanged.
+
+Earlier outputs: `hekaton-hd.webp`, `labyrinthauros-hd.webp`, `temenos-hd.webp`, `pursuer-hd.webp`. The generated transparent PNGs were encoded as WebP at 1024px maximum edge, quality 0.94, preserving alpha. The runtime draws the full artwork with its transparent outline.
 
 ## Prompt set
 

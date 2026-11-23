@@ -18,7 +18,10 @@
       image.setAttribute("href", sprite.restored);
       image.setAttribute("width", "100"); image.setAttribute("height", "100");
       image.setAttribute("preserveAspectRatio", "xMidYMid meet"); svg.appendChild(image);
-      svg.style.transform = "rotate(" + (facing - sprite.nativeFace * 90) + "deg)";
+      const artworkFacing = sprite.artworkFacing ?? sprite.nativeFace * 90;
+      const rotation = facing - artworkFacing;
+      svg.style.transform = `rotate(${rotation}deg)`;
+      if (sprite.artworkScale) svg.style.scale = sprite.artworkScale;
       return svg;
     }
     const defs = document.createElementNS(svgNS, "defs");

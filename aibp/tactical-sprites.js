@@ -32,8 +32,8 @@ Object.assign(window.BattleBoardSprites.labyrinthauros, {
   artworkFacing: 135, // Horned head points down and right.
 });
 Object.assign(window.BattleBoardSprites.temenos, {
-  restored: '../aibp/images/board-pieces/restored/temenos-v6-massive-body.webp',
-  artworkFacing: 180, // The radial mouth keeps the previous south-facing reference.
+  restored: '../aibp/images/board-pieces/restored/temenos-v7-original-style.webp',
+  artworkFacing: 180, // Keep the established south-facing source reference.
   artworkScale: 1.1,
 });
 Object.assign(window.BattleBoardSprites.pursuer, {

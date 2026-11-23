@@ -755,7 +755,8 @@
     const wounds = roll.wounds ?? 0;
     const pendingBp = state.projection?.bpPending && state.projection.bp?.src;
     const latestPower = state.rolls.find(entry => entry.seat === roll.seat && entry.round === state.round && entry.mode === 'power');
-    const canSettle = state.deckRevision && editable && latestPower?.id === roll.id && roll.bpOutcome === undefined && canRequestBp(roll.seat);
+    const canSettle = state.deckRevision && editable && latestPower?.id === roll.id && roll.bpOutcome === undefined
+      && (pendingBp ? canSettleBp(roll.seat) : canRequestBp(roll.seat));
     const outcome = ['失败', '伤口', '暴击'];
     const result = roll.mode === 'power' ? '<div class="room-wound-result" data-dice-reveal>'
       + '<span>击破结果 · ' + (roll.bpOutcome === undefined ? dice.woundResults[wounds] : outcome[roll.bpOutcome])
@@ -806,6 +807,12 @@
     const turn = state.turn;
     return Boolean(state.heroes[seat]) && state.heroes[seat].condition !== 'dead' && turn?.phase !== 'apostle'
       && (state.bpSeat == null || state.bpSeat === seat) && (turn?.seat == null || turn.seat === seat) && !turn?.finished.includes(seat);
+  }
+
+  function canSettleBp(seat) {
+    return Boolean(state.projection?.bpPending && state.projection.bp?.src && state.heroes[seat])
+      && (actor.role === 'host' || state.heroes[seat].condition !== 'dead')
+      && (state.bpSeat === seat || (state.bpSeat == null && (actor.role === 'host' || canRequestBp(seat))));
   }
 
   function bpDrawButton(seat) {
@@ -965,20 +972,20 @@
   window.submitAibpRoomBp = mode => {
     if (actor?.role !== 'host' || !state.deckRevision || state.closed || state.squad?.phase !== 'battle') return false;
     const seat = state.bpSeat ?? state.turn?.seat ?? rollSeat;
-    if (!canRequestBp(seat)) { say('请在对应的泰坦回合操作部位牌。'); return true; }
     if (!mode) {
+      if (!canRequestBp(seat)) { say('请在对应的泰坦回合揭示部位牌。'); return true; }
       send({ id: crypto.randomUUID(), type: 'bp-request', seat, round: state.round });
       return true;
     }
     const value = ['discard', 'defeat', 'critical'].indexOf(mode);
     if (value < 0) return false;
-    const roll = state.rolls.find(entry => entry.seat === seat && entry.round === state.round && entry.mode === 'power');
-    if (!roll || roll.bpOutcome !== undefined) {
-      if (mode === 'discard' && !state.projection?.bpPending) return false;
-      say('请先完成这名泰坦的威力投掷。');
+    if (!canSettleBp(seat)) {
+      say('请先揭示并核对当前部位牌。');
       return true;
     }
-    send({ id: crypto.randomUUID(), type: 'bp-settle', seat, round: state.round, roll: roll.id, value, card: state.projection?.bp?.src });
+    const roll = state.rolls.find(entry => entry.seat === seat && entry.round === state.round && entry.mode === 'power');
+    send({ id: crypto.randomUUID(), type: 'bp-settle', seat, round: state.round,
+      ...(roll && roll.bpOutcome === undefined && { roll: roll.id }), value, card: state.projection.bp.src });
     return true;
   };
 

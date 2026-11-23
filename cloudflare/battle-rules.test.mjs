@@ -282,11 +282,24 @@ test('Worker 独立揭示、结算部位牌并激化，完整牌堆只对房主�
     assert.equal(viewer.hostBattleDeck, undefined);
     assert.ok(!JSON.stringify(viewer).includes('HEKATON_BP_I_002.jpg'));
     assert.throws(() => reducer.apply(r, host, { type: 'room-projection', deckRevision: 1, deck: data, projection: r.projection }), /牌堆已更新/);
-    reducer.apply(r, player, { type: 'bp-settle', id: 'settled', round: 1, roll: 'power', value: outcome, card: current._room.face.src });
+    const manual = level === 'III' && outcome === 1;
+    if (manual) r.rolls = [];
+    const settlement = { type: 'bp-settle', id: 'settled', round: 1,
+      ...(manual ? {} : { roll: 'power' }), seat: 0, value: outcome, card: current._room.face.src };
+    reducer.apply(r, player, { type: 'turn-finish', seat: 0, round: 1, phase: 'titans' });
+    assert.throws(() => reducer.apply(r, player, { type: 'bp-request', id: 'another', round: 1 }), /泰坦回合/);
+    if (manual) assert.throws(() => reducer.apply(r, player, settlement), /威力投掷/);
+    else assert.throws(() => reducer.apply(r, { role: 'player', seat: 1 }, settlement), /威力投掷|核对当前部位牌/);
+    reducer.apply(r, manual ? host : player, settlement);
     assert.equal(r.projection.bpPending, false);
     assert.equal(r.projection.damage.total, damage);
-    assert.equal(r.rolls[0].bpOutcome, outcome);
-    assert.equal(r.rolls[0].wounds, damage);
+    if (manual) assert.equal(r.secondAbility.roll, null);
+    else {
+      assert.equal(r.rolls[0].bpOutcome, outcome);
+      assert.equal(r.rolls[0].wounds, damage);
+    }
+    assert.equal(r.battleStats[0].damage, damage);
+    assert.equal(r.turn.seat, null);
     assert.equal(r.secondAbility.id, 'settled');
     assert.equal(r.pool.opening, 3);
     assert.equal(r.battleDeck.revision, 3);

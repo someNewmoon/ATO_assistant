@@ -578,21 +578,40 @@ export class BattleRoom extends DurableObject {
     if (typeof body.type === "string" && body.type.startsWith("board-")) return applyRoomBoard(room, actor, body);
     if (body.type === 'bp-request' || body.type === 'bp-settle') {
       const seat = actor.role === 'player' ? actor.seat : body.seat;
-      if (actor.role === 'viewer' || !room.heroes[seat] || room.heroes[seat].condition === 'dead') reject('请选择正在攻击的泰坦。', 403);
-      if (body.round !== room.round || room.turn?.phase === 'apostle'
-          || (room.turn?.seat != null && room.turn.seat !== seat)
-          || room.turn?.finished.includes(seat)) reject('请在自己的泰坦回合揭示 BP。', 409);
+      const reveal = body.type === 'bp-request';
+      if (actor.role === 'viewer' || !Number.isInteger(seat) || !room.heroes[seat]
+          || ((reveal || actor.role !== 'host') && room.heroes[seat].condition === 'dead')) {
+        reject('请选择正在攻击的泰坦。', 403);
+      }
+      const turn = room.turn;
+      const inTurn = turn?.phase !== 'apostle'
+        && (turn?.seat == null || turn.seat === seat) && !turn?.finished?.includes(seat);
+      if (body.round !== room.round) reject('轮次已更新，请重新操作。', 409);
+      if (reveal && !inTurn) reject('请在自己的泰坦回合揭示 BP。', 409);
       const deck = room.battleDeck;
       if (!deck) reject('请由房主打开本场 AIBP，先同步牌堆。', 409);
-      if (body.type === 'bp-settle') {
-        const roll = room.rolls.find(entry => entry.seat === seat && entry.round === room.round && entry.mode === 'power');
-        if (!roll || roll.id !== body.roll || roll.bpOutcome !== undefined) reject('只能结算这次攻击最新的威力投掷。', 409);
+      if (!reveal && actor.role === 'player' && deck.bpSeat == null && !inTurn) {
+        reject('请由房主结算未认领的部位牌。', 409);
+      }
+      if (reveal) {
+        if (!revealRoomBp(deck, seat, randomInt)) return;
+        claimTurn(room, seat);
+      } else {
+        const latest = room.rolls.find(entry => entry.seat === seat && entry.round === room.round && entry.mode === 'power');
+        const roll = latest?.bpOutcome === undefined ? latest : undefined;
+        const manual = actor.role === 'host' && body.roll === undefined && !roll;
+        if (!manual && (!roll || roll.id !== body.roll)) reject('只能结算这次攻击最新的威力投掷。', 409);
         if (![0, 1, 2].includes(body.value)) reject('请选择有效的部位牌结算结果。');
-        setRollWounds(room, roll, settleRoomBp(deck, { seat, card: body.card, value: body.value }, randomInt));
-        roll.bpOutcome = body.value;
-        room.secondAbility = { id: body.id, roll: roll.id, seat, round: room.round };
-      } else if (!revealRoomBp(deck, seat, randomInt)) return;
-      claimTurn(room, seat);
+        const wounds = settleRoomBp(deck, { seat, card: body.card, value: body.value }, randomInt);
+        if (roll) {
+          setRollWounds(room, roll, wounds);
+          roll.bpOutcome = body.value;
+        } else {
+          const stats = battleStats(room)[seat];
+          stats.damage = (stats.damage ?? 0) + wounds;
+        }
+        room.secondAbility = { id: body.id, roll: roll?.id ?? null, seat, round: room.round };
+      }
       deck.revision++;
       deck.operation = body.id;
       room.projection = roomDeckProjection(deck, room.projection);

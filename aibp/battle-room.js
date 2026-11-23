@@ -324,7 +324,7 @@
     button.setAttribute('aria-haspopup', 'dialog');
     button.addEventListener('click', () => {
       activeTool = key;
-      toolsDialog.querySelector('h3').textContent = label;
+      toolsDialog.querySelector('h3').innerHTML = (key === 'apostle' ? bossIdentityArt() : '') + escape(label);
       toolsStatus.textContent = '';
       renderTools();
       toolsDialog.showModal();
@@ -932,10 +932,14 @@
     return true;
   };
 
+  function bossIdentityArt() {
+    const logo = window.BattleBoardSprites?.forApostle?.(state.board?.apostle)?.icon;
+    return logo ? '<img class="boss-identity-art" src="' + escape(logo) + '" alt="">' : '';
+  }
+
   function roomProjection() {
     const projection = state.projection;
-    const logo = window.BattleBoardSprites?.forApostle?.(state.board?.apostle ?? projection?.apostle)?.icon;
-    const heading = '<h3>' + (logo ? '<img class="boss-identity-art" src="' + escape(logo) + '" alt="">' : '') + '骇物战况</h3>';
+    const heading = '<h3>' + bossIdentityArt() + '骇物战况</h3>';
     if (!projection) return state.board ? '<section class="room-projection">' + heading + '<p>等待房主同步 AIBP 战况。</p></section>' : '';
     const { title, level, panel, signature, ai, bp, aiDeck, bpDeck, damage } = projection;
     const bossArt = (src, label) => src ? cardImage('/aibp/' + src, label) : '';

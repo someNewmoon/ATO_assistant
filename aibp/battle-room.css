@@ -256,44 +256,6 @@ body.aibp-room-only > .app > main > :not(#battleRoom) { display: none !important
   font-size: .75rem;
   font-weight: 800;
 }
-.room-die-cube {
-  position: relative;
-  width: 48px;
-  height: 48px;
-  filter: drop-shadow(0 2px 2px #1d120f52);
-}
-.room-die-cube::before, .room-die-cube::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-}
-.room-die-cube::before {
-  clip-path: polygon(35px 13px, 45px 5px, 45px 37px, 35px 45px);
-  background: linear-gradient(110deg, var(--die-side-light), var(--die-side-dark));
-}
-.room-die-cube::after {
-  clip-path: polygon(3px 10px, 13px 2px, 45px 5px, 35px 13px);
-  background: linear-gradient(150deg, var(--die-top-light), var(--die-top-dark));
-}
-.room-die-pips {
-  position: absolute;
-  left: 3px;
-  top: 10px;
-  width: 32px;
-  height: 32px;
-  transform-origin: left top;
-  transform: skewY(5.4deg);
-  border-radius: 2px;
-  background-size: 300% 300%;
-  box-shadow: inset 0 1px 2px #ffffff69, inset 0 -2px 3px #30161254;
-}
-.room-die-cube.is-red { --die-top-light: #ffc6aa; --die-top-dark: #f26f53; --die-side-light: #cb3a29; --die-side-dark: #77261d; }
-.room-die-cube.is-black { --die-top-light: #939396; --die-top-dark: #4b4b52; --die-side-light: #34353b; --die-side-dark: #101116; }
-.room-die-cube.is-white { --die-top-light: #fff; --die-top-dark: #e8e8e1; --die-side-light: #bcbebc; --die-side-dark: #858986; }
-.room-die-cube.is-red .room-die-pips { background-image: url("room-dice-art/red.webp"); }
-.room-die-cube.is-black .room-die-pips { background-image: url("room-dice-art/black.webp"); }
-.room-die-cube.is-white .room-die-pips { background-image: url("room-dice-art/white.webp"); }
-.room-die-number { display: grid; place-items: center; border: 1px solid var(--room-border); border-radius: 7px; font-weight: 700; }
 .room-die-conversions { display: flex; gap: 4px; }
 .battle-room .room-die-conversions button { min-height: 27px; padding: 2px 4px; font-size: .75rem; }
 .battle-room-rolls ol:has(.room-roll) { max-height: 32rem; list-style: none; padding-inline-start: 0; }

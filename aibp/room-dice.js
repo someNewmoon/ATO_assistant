@@ -8,6 +8,7 @@
     black: [[2,2,1], [2,1,0], [0,1,1], [1,1,0], [2,0,1], [1,1,0]],
     white: [[1,2,1], [2,1,1], [1,1,1], [1,3,0], [2,3,0], [3,2,1]],
   };
+  const pipLayouts = [[], [5], [1, 9], [1, 5, 9], [1, 3, 7, 9], [1, 3, 5, 7, 9], [1, 3, 4, 6, 7, 9]];
   const names = { d10: '数字骰', crit: '白色关键骰', red: '红威力骰', black: '黑威力骰', white: '白威力骰', armor: '普通 d6' };
   const limits = { d10: 6, armor: 20, red: 6, black: 4, white: 4 };
   const modes = {
@@ -71,7 +72,11 @@
     if (die.kind === 'd10' || die.kind === 'crit') {
       return '<img class="room-die-face" src="' + dir + artKind + '-' + number + '.svg" alt="' + names[die.kind] + ' ' + number + '">';
     }
-    return '<span class="room-die-face room-die-number" aria-label="普通 d6 ' + number + '">' + number + '</span>';
+    if (die.kind !== 'armor' || number > 6) return '';
+    const pips = pipLayouts[number].map(position => '<span class="room-pip" style="grid-area:'
+      + Math.ceil(position / 3) + '/' + ((position - 1) % 3 + 1) + '"></span>').join('');
+    return '<span class="room-die-face room-die-cube is-armor" role="img" aria-label="普通 d6 ' + number
+      + '"><span class="room-die-pips">' + pips + '</span></span>';
   }
 
   function storyFaces(roll) {

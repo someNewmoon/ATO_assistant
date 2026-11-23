@@ -650,6 +650,13 @@
     return path ? '<img class="roll-hero-avatar" src="../hero/assets/' + escape(path) + '" alt="">' : '';
   }
 
+  function heroSeatButtons(seat, purpose) {
+    const label = purpose === 'roll' ? '选择掷骰英雄' : '选择英雄装备';
+    return '<div class="room-seat-tabs" role="group" aria-label="' + label + '">'
+      + state.heroes.map((hero, index) => '<button type="button" data-' + purpose + '-seat="' + index + '" aria-pressed="'
+        + (index === seat) + '">' + rollAvatar(index) + escape(hero.name) + '</button>').join('') + '</div>';
+  }
+
   function reactions(roll, latest) {
     const by = actor.role === 'host' ? 'host' : 'seat:' + actor.seat;
     const editable = roll.id && actor.role !== 'viewer' && !state.closed && dice.rollOwner(roll, state.squad?.hostSeat) !== by;
@@ -803,8 +810,6 @@
     if (state.closed || actor.role === 'viewer') return '';
     const seat = actor.role === 'host' ? rollSeat : actor.seat;
     const drafts = readDiceDraft(seat, rollMode);
-    const options = actor.role === 'host' ? state.heroes.map((hero, index) =>
-      '<option value="' + index + '"' + (seat === index ? ' selected' : '') + '>' + escape(hero.name) + '</option>').join('') : '';
     const fields = dice.modes[rollMode].kinds.map(kind => {
       const label = kind === 'd10' ? '总数量（含 1 枚白色关键骰）' : dice.names[kind];
       const minimum = kind === 'd10' || kind === 'armor' || rollMode === 'defense' ? 1 : 0;
@@ -821,7 +826,7 @@
     };
     const form = '<form data-roll class="battle-room-dice"><div>' + fields + followup
       + '<button type="submit">投掷' + dice.modes[rollMode].name + '</button></div></form>';
-    return '<section class="room-dice-panel" id="room-dice"><h3>掷骰</h3>' + (options ? '<label>英雄 <select data-roll-seat>' + options + '</select></label>' : '')
+    return '<section class="room-dice-panel" id="room-dice"><h3>掷骰</h3>' + (actor.role === 'host' ? heroSeatButtons(seat, 'roll') : '')
       + '<div class="room-dice-modes" role="group" aria-label="投掷用途">' + Object.entries(dice.modes)
         .map(([key, entry]) => '<button type="button" data-roll-mode="' + key + '" aria-pressed="' + (key === rollMode) + '">'
           + (key === 'dodge' ? '<img class="room-mode-icon" src="room-dice-art/dodge.webp" alt="">'
@@ -1129,9 +1134,7 @@
       + (Object.values(state.pool).every(value => value === 0) ? ' disabled' : '') + '>一键清空</button>' : '';
     const heroes = state.heroes.map(heroCard);
     const shownSeat = host ? equipmentSeat : seat;
-    const heroTabs = host ? '<div class="room-seat-tabs" role="group" aria-label="选择英雄装备">'
-      + state.heroes.map((hero, index) => '<button type="button" data-equipment-seat="' + index + '" aria-pressed="'
-        + (index === shownSeat) + '">' + rollAvatar(index) + escape(hero.name) + '</button>').join('') + '</div>' : '';
+    const heroTabs = host ? heroSeatButtons(shownSeat, 'equipment') : '';
     const own = heroes[shownSeat] ? '<h3 class="battle-room-heading">' + (host ? '泰坦与装备' : '我的英雄')
       + '</h3>' + heroTabs + heroes[shownSeat] : '';
     const teammates = heroes.filter((_, index) => index !== shownSeat);
@@ -1330,12 +1333,6 @@
       }
       return;
     }
-    if (event.target.matches('[data-roll-seat]')) {
-      rollSeat = Number(event.target.value);
-      parentRoll = '';
-      render();
-      return;
-    }
     if (event.target.matches('[data-condition]')) {
       void send({ id: crypto.randomUUID(), type: 'condition', seat: Number(event.target.dataset.condition), value: event.target.value });
     }
@@ -1366,6 +1363,15 @@
   root.addEventListener('click', async event => {
     const button = event.target.closest('button');
     if (!button || (!summary.contains(button) && !content.contains(button) && !toolsBody.contains(button))) return;
+    if (button.dataset.rollSeat !== undefined && actor?.role === 'host') {
+      const selected = Number(button.dataset.rollSeat);
+      if (state.heroes[selected] && selected !== rollSeat) {
+        rollSeat = selected;
+        parentRoll = '';
+        render();
+      }
+      return;
+    }
     if (button.dataset.equipmentSeat !== undefined) {
       equipmentSeat = Number(button.dataset.equipmentSeat);
       render();

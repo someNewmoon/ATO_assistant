@@ -561,3 +561,15 @@ test('only a white ten in an attack or dodge earns the matching critical badge',
   assert.equal(dice.criticalLabel('dodge', { kind: 'crit', value: 9 }), '');
   assert.equal(dice.criticalLabel('dodge', { ...whiteTen, rerolled: true }), '关键闪避');
 });
+
+test('ordinary d6 uses standard pip locations for every face', () => {
+  const expected = ['2/2', '1/1 3/3', '1/1 2/2 3/3', '1/1 1/3 3/1 3/3',
+    '1/1 1/3 2/2 3/1 3/3', '1/1 1/3 2/1 2/3 3/1 3/3'];
+  for (const [index, positions] of expected.entries()) {
+    const value = index + 1;
+    const markup = dice.faceMarkup({ kind: 'armor', value }, '');
+    assert.match(markup, new RegExp('aria-label="普通 d6 ' + value + '"'));
+    assert.equal([...markup.matchAll(/grid-area:([^"]+)/g)].map(match => match[1]).join(' '), positions);
+  }
+  assert.equal(dice.faceMarkup({ kind: 'armor', value: 7 }, ''), '');
+});

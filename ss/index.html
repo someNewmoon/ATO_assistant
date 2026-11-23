@@ -1,6 +1,7 @@
 <!doctype html>
 <html lang="zh-CN">
 <head>
+  <link rel="stylesheet" href="../aibp/die-cube.css?v=1">
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>ATO 第二屏幕</title>
@@ -27,14 +28,10 @@
 .squad-roll-avatar{height:1.5em;width:1.5em;border-radius:50%;object-fit:cover;object-position:top}
 .squad-roll-faces{display:flex;flex-wrap:wrap;gap:.3rem;margin-block:.3rem}
 .squad-roll-faces .room-die-face{display:grid;place-items:center;width:1.65em;height:1.65em;object-fit:contain;background-size:300% 300%}
-.squad-roll-faces .is-red{background-image:url('../aibp/room-dice-art/red.webp')}
-.squad-roll-faces .is-black{background-image:url('../aibp/room-dice-art/black.webp')}
-.squad-roll-faces .is-white{background-image:url('../aibp/room-dice-art/white.webp')}
 .squad-roll-votes,.squad-roll-vote-group{display:flex;align-items:center;flex-wrap:wrap;gap:.3rem}
 .squad-roll-votes{margin-top:.35rem;gap:.55rem}
 .squad-roll-voter{display:inline-grid;place-items:center;width:1.2em;height:1.2em;border-radius:50%;overflow:hidden;background:#41564a;font-size:.85em}
 .squad-roll-voter img{width:100%;height:100%;object-fit:cover;object-position:top}
-.squad-roll-faces .room-die-number{background:#e8d5ad;color:#33271e;border-radius:.25em;font-weight:800}
 .squad-check-overlay article[data-failed]{border-color:#de9c8d}
 .squad-projection-battle{position:fixed;inset:0;width:100%;height:100%;border:0;z-index:2100;background:#eee9e0}
 .squad-projection-prep{position:fixed;top:1rem;left:1rem;z-index:1100;color:#2c3e32;background:#f9f2e1;border-radius:.5rem;padding:.5rem .8rem}
@@ -125,7 +122,7 @@
   <script src="../story/assets/cloud-scans.js?v=1"></script>
   <script src="./app.js?v=20261120-official-scans"></script>
   <script src="../hero/hero-catalog.js"></script>
-  <script src="../aibp/room-dice.js?v=20261119-battle-turn"></script>
+  <script src="../aibp/room-dice.js?v=20261123-d6"></script>
   <script src="./squad-projection.js?v=bp-results-20261120-official-scans"></script>
   <script src="../assets/ato-terms.js?v=20261110-loop-terms"></script>
   <script src="../assets/english-terms.js?v=20261011-english4"></script>

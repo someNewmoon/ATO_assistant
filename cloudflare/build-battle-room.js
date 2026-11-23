@@ -12,7 +12,7 @@ const scripts = [
   'aibp/room-board.js', 'aibp/squad-link.js', 'aibp/kratos-tables.js', 'aibp/battle-room.js',
   'assets/ato-terms.js', 'assets/term-language.js',
 ];
-const styles = ['battle_map_control.css', 'battle_tactics.css', 'battle-room.css'];
+const styles = ['battle_map_control.css', 'battle_tactics.css', 'battle-room.css', 'die-cube.css'];
 
 function findById(node, id) {
   if (node.attrs?.some(attr => attr.name === 'id' && attr.value === id)) return node;

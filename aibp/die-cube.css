@@ -1,0 +1,54 @@
+.room-die-cube {
+  position: relative;
+  width: 48px;
+  height: 48px;
+  filter: drop-shadow(0 2px 2px #1d120f52);
+}
+.room-die-cube::before, .room-die-cube::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+}
+.room-die-cube::before {
+  clip-path: polygon(73% 27%, 94% 10%, 94% 77%, 73% 94%);
+  background: linear-gradient(110deg, var(--die-side-light), var(--die-side-dark));
+}
+.room-die-cube::after {
+  clip-path: polygon(6% 21%, 27% 4%, 94% 10%, 73% 27%);
+  background: linear-gradient(150deg, var(--die-top-light), var(--die-top-dark));
+}
+.room-die-pips {
+  position: absolute;
+  left: 6%;
+  top: 21%;
+  width: 67%;
+  height: 67%;
+  transform-origin: left top;
+  transform: skewY(5.4deg);
+  border-radius: 2px;
+  background-size: 300% 300%;
+  box-shadow: inset 0 1px 2px #ffffff69, inset 0 -2px 3px #30161254;
+}
+.room-die-cube.is-red { --die-top-light: #ffc6aa; --die-top-dark: #f26f53; --die-side-light: #cb3a29; --die-side-dark: #77261d; }
+.room-die-cube.is-black { --die-top-light: #939396; --die-top-dark: #4b4b52; --die-side-light: #34353b; --die-side-dark: #101116; }
+.room-die-cube.is-white { --die-top-light: #fff; --die-top-dark: #e8e8e1; --die-side-light: #bcbebc; --die-side-dark: #858986; }
+.room-die-cube.is-red .room-die-pips { background-image: url("room-dice-art/red.webp"); }
+.room-die-cube.is-black .room-die-pips { background-image: url("room-dice-art/black.webp"); }
+.room-die-cube.is-white .room-die-pips { background-image: url("room-dice-art/white.webp"); }
+.room-die-cube.is-armor { --die-top-light: #fffdf3; --die-top-dark: #e6dcc8; --die-side-light: #cabca4; --die-side-dark: #85745c; }
+.room-die-cube.is-armor .room-die-pips {
+  display: grid;
+  grid: repeat(3, 1fr) / repeat(3, 1fr);
+  place-items: center;
+  box-sizing: border-box;
+  padding: 6%;
+  background: linear-gradient(145deg, #fffdf5, #e4d9c1);
+}
+.room-pip {
+  width: 60%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: #372c23;
+  box-shadow: inset 0 1px 1px #130e0b80, 0 1px 0 #fff;
+}
+.squad-story-roll-art .room-die-cube { display: block; width: 38px; height: 38px; }

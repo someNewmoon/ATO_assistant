@@ -37,7 +37,6 @@ button,.squad-action{cursor:pointer}button:disabled{opacity:.52;cursor:default}.
 .squad-story-roll-art { display:flex; align-items:center; flex-wrap:wrap; gap:.25rem; margin-bottom:.22rem; }
 .squad-story-roll-art > img, .squad-story-roll-art .room-die-face { width:30px; height:30px; object-fit:contain; }
 .squad-story-roll-art > img:not(.room-die-face) { border-radius:50%; object-fit:cover; object-position:top; }
-.squad-story-roll-art .room-die-number { display:grid; place-items:center; border:1px solid var(--line); border-radius:5px; }
 .squad-gear { display:grid; grid-template-columns:repeat(auto-fill,minmax(min(100%,8.5rem),1fr)); gap:.55rem; padding:.15rem; }
 .squad-gear .squad-gear-card { display:flex; flex-direction:column; gap:.3rem; min-width:0; border:1px solid var(--line); border-radius:.6rem; padding:.45rem; }
 .squad-gear-card:has(input:checked) { outline:2px solid #557c63; outline-offset:-2px; }

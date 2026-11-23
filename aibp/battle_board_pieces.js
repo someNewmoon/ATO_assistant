@@ -1,8 +1,4 @@
 (function () {
-  const spriteKeys = {
-    HEKATON: "hekaton", LABYRINTHAUROS: "labyrinthauros",
-    ALPHA_TEMENOS: "temenos", HERMESIAN_PURSUER: "pursuer",
-  };
   const svgNS = "http://www.w3.org/2000/svg";
   const accents = ["#79d1ef", "#f1c57d", "#b8df97", "#d8a8f9"];
   let nextClip = 0;
@@ -168,7 +164,7 @@
       }
       layer.appendChild(marker);
     }
-    token(pieces.apostle, size, "骇物", null, sprites[spriteKeys[apostle]]);
+    token(pieces.apostle, size, "骇物", null, sprites.forApostle?.(apostle));
     pieces.titans.forEach((piece, index) => {
       if (deadSeats.includes(index)) return;
       const titan = roster?.[index];

@@ -99,7 +99,7 @@
           ? root.ATO_THEATRE_TERMS.boss(id, variant, names.en) : label;
         return span;
       });
-      const logo = id === "HEKATON" && root.BattleBoardSprites?.hekaton?.restored;
+      const logo = root.BattleBoardSprites?.forApostle?.(id)?.icon;
       if (logo) {
         const img = root.document.createElement("img");
         img.className = "boss-identity-art";

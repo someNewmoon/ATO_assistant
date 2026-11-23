@@ -25,18 +25,31 @@ path:'M1059 141Q1066 134 1073 142L1078 147 1083 145 1090 148 1096 155 1099 162 1
 // Artwork bearings are clockwise from the top of the source image.
 Object.assign(window.BattleBoardSprites.hekaton, {
   restored: '../aibp/images/board-pieces/restored/hekaton-v1.webp',
+  icon: '../aibp/images/board-pieces/restored/hekaton-v1-icon.webp',
   artworkFacing: 180,
 });
 Object.assign(window.BattleBoardSprites.labyrinthauros, {
   restored: '../aibp/images/board-pieces/restored/labyrinthauros-v1.webp',
+  icon: '../aibp/images/board-pieces/restored/labyrinthauros-v1-icon.webp',
   artworkFacing: 135, // Horned head points down and right.
 });
 Object.assign(window.BattleBoardSprites.temenos, {
-  restored: '../aibp/images/board-pieces/restored/temenos-v8-massive-tentacles.webp',
+  restored: '../aibp/images/board-pieces/restored/temenos-v7-original-style.webp',
+  icon: '../aibp/images/board-pieces/restored/temenos-v7-original-style-icon.webp',
   artworkFacing: 180, // Keep the established south-facing source reference.
   artworkScale: 1.1,
 });
 Object.assign(window.BattleBoardSprites.pursuer, {
   restored: '../aibp/images/board-pieces/restored/pursuer-v1.webp',
+  icon: '../aibp/images/board-pieces/restored/pursuer-v1-icon.webp',
   artworkFacing: 135, // The beak points down and right.
 });
+
+const apostleSpriteKeys = {
+  HEKATON: 'hekaton',
+  LABYRINTHAUROS: 'labyrinthauros',
+  ALPHA_TEMENOS: 'temenos',
+  HERMESIAN_PURSUER: 'pursuer',
+};
+window.BattleBoardSprites.forApostle = (id) =>
+  Object.hasOwn(apostleSpriteKeys, id) ? window.BattleBoardSprites[apostleSpriteKeys[id]] : undefined;

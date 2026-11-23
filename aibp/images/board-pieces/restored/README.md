@@ -1,8 +1,8 @@
 # Panel overhead image restorations
 
-The selected `hekaton-v1.webp` is used for both the Hekaton logo and its board piece. It was encoded from the selected transparent PNG with a 1024px maximum edge. The artwork faces south at rest.
+The final Cycle I board models use the selected `hekaton-v1.webp`, `labyrinthauros-v1.webp`, `pursuer-v1.webp`, and `temenos-v7-original-style.webp`. Each has a 1024px maximum edge and an alpha channel. AIBP selection, battle summaries, and the campaign record use matching transparent 160px thumbnails from the same masters.
 
-The Cycle I board also uses the selected `labyrinthauros-v1.webp`, `pursuer-v1.webp`, and `temenos-v8-massive-tentacles.webp`. They use the same transparent WebP encoding. The Labyrinthauros head and the Pursuer beak point southeast in their source images. Temenos retains the south-facing reference and draws at 110% to keep the tentacles visible. The renderer rotates each image to the game-facing angle and draws the direction arrow and footprint independently.
+The Labyrinthauros head and the Pursuer beak point southeast in their source images. Hekaton and Temenos use a south-facing source reference. Temenos draws at 110% to keep the tentacles visible. The renderer rotates each image to the game-facing angle and draws the direction arrow and footprint independently.
 
 The earlier restorations below were generated with the built-in `image_gen` tool, not the CLI. One edit call per input: `hekaton-top.png`, `labyrinthauros-top.png`, `temenos-top.png`, `pursuer-top.png` from the existing hosted card-art pack. Originals are unchanged.
 

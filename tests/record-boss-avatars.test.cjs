@@ -15,6 +15,8 @@ const vm = require('node:vm');
 
 const source = fs.readFileSync(path.join(__dirname, '../record/index.html'), 'utf8').replace(/\r\n/g, '\n');
 
+const sprites = fs.readFileSync(path.join(__dirname, '../aibp/tactical-sprites.js'), 'utf8');
+
 function fn(name) {
   const match = source.match(new RegExp(`^    function ${name}\\([^]*?^    }`, 'm'));
   assert.ok(match, name);
@@ -83,6 +85,7 @@ function harness() {
     buildItemIcon: () => element('span'),
   });
   vm.runInContext([
+    sprites,
     source.slice(source.indexOf('    const bossAvatarFiles = '), source.indexOf('    function makeTrackTitle')),
     fn('makeBossAvatar'),
     fn('makeTrackTitle'),
@@ -94,7 +97,7 @@ test('boss avatars load their own files, fall back to the title on error, and do
   const h = harness();
   const title = h.makeTitle('赫卡同', 'Hekaton', { bossKey: 'hekaton' });
   const icon = title.children[0];
-  assert.equal(icon.src, '../aibp/images/board-pieces/restored/hekaton-v1.webp');
+  assert.equal(icon.src, '../aibp/images/board-pieces/restored/hekaton-v1-icon.webp');
   assert.equal(icon.style.visibility, 'hidden', '加载完成前不显示');
   icon.fire('error');
   assert.ok(!title.classList.contains('with-icon'), '缺图后标题退回纯文字');

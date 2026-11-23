@@ -934,7 +934,7 @@
 
   function roomProjection() {
     const projection = state.projection;
-    const logo = state.board?.apostle === 'HEKATON' && window.BattleBoardSprites?.hekaton?.restored;
+    const logo = window.BattleBoardSprites?.forApostle?.(state.board?.apostle ?? projection?.apostle)?.icon;
     const heading = '<h3>' + (logo ? '<img class="boss-identity-art" src="' + escape(logo) + '" alt="">' : '') + '骇物战况</h3>';
     if (!projection) return state.board ? '<section class="room-projection">' + heading + '<p>等待房主同步 AIBP 战况。</p></section>' : '';
     const { title, level, panel, signature, ai, bp, aiDeck, bpDeck, damage } = projection;

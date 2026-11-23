@@ -1903,6 +1903,7 @@
   <script src="../assets/cycle-symbols.js?v=20261115-module-logo"></script>
   <script src="../assets/campaign-session.js?v=20260917"></script>
   <script src="enemy-evolution.js?v=20261120"></script>
+  <script src="../aibp/tactical-sprites.js?v=20261123-cycle-one-final"></script>
   <script src="../technology/gear-inventory.js?v=20261120-titan-management"></script>
   <script src="../assets/campaign-notes.js?v=20261015"></script>
   <script src="../assets/record-attachments.js?v=20261009"></script>
@@ -4075,8 +4076,8 @@
 
     function makeBossAvatar(title, bossKey) {
       const fileName = bossAvatarFiles[bossKey];
-      const src = bossKey === "hekaton" ? "../aibp/images/board-pieces/restored/hekaton-v1.webp"
-        : fileName && `./assets/boss-avatars/${fileName}?v=cardbacks-restored-20261023`;
+      const src = window.BattleBoardSprites?.[bossKey]?.icon
+        || (fileName && `./assets/boss-avatars/${fileName}?v=cardbacks-restored-20261023`);
       if (!src || missingBossAvatars.has(bossKey)) return null;
       const icon = document.createElement("img");
       icon.className = "track-boss-avatar";

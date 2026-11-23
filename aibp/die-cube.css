@@ -2,7 +2,7 @@
   position: relative;
   width: 48px;
   height: 48px;
-  filter: drop-shadow(0 2px 2px #1d120f52);
+  filter: drop-shadow(1px 2px 1px #24191470);
 }
 .room-die-cube::before, .room-die-cube::after {
   content: "";
@@ -11,11 +11,15 @@
 }
 .room-die-cube::before {
   clip-path: polygon(73% 27%, 94% 10%, 94% 77%, 73% 94%);
-  background: linear-gradient(110deg, var(--die-side-light), var(--die-side-dark));
+  background:
+    linear-gradient(90deg, transparent 72%, #251b1780 73%, transparent 77%),
+    linear-gradient(112deg, var(--die-side-light), var(--die-side-dark) 84%);
 }
 .room-die-cube::after {
   clip-path: polygon(6% 21%, 27% 4%, 94% 10%, 73% 27%);
-  background: linear-gradient(150deg, var(--die-top-light), var(--die-top-dark));
+  background:
+    linear-gradient(5.4deg, transparent 0 23%, #fff5 23.5% 25%, transparent 26%),
+    linear-gradient(158deg, var(--die-top-light), var(--die-top-dark) 80%);
 }
 .room-die-pips {
   position: absolute;
@@ -25,17 +29,23 @@
   height: 67%;
   transform-origin: left top;
   transform: skewY(5.4deg);
-  border-radius: 2px;
+  border-radius: .5px;
   background-size: 300% 300%;
-  box-shadow: inset 0 1px 2px #ffffff69, inset 0 -2px 3px #30161254;
+  box-shadow:
+    inset 1px 1px #ffffff69,
+    inset -1px -1px #30161285,
+    inset 0 -3px 5px #30161236;
 }
-.room-die-cube.is-red { --die-top-light: #ffc6aa; --die-top-dark: #f26f53; --die-side-light: #cb3a29; --die-side-dark: #77261d; }
-.room-die-cube.is-black { --die-top-light: #939396; --die-top-dark: #4b4b52; --die-side-light: #34353b; --die-side-dark: #101116; }
-.room-die-cube.is-white { --die-top-light: #fff; --die-top-dark: #e8e8e1; --die-side-light: #bcbebc; --die-side-dark: #858986; }
-.room-die-cube.is-red .room-die-pips { background-image: url("room-dice-art/red.webp"); }
+.room-die-cube.is-red { --die-top-light: #d99684; --die-top-dark: #a75143; --die-side-light: #81372d; --die-side-dark: #432018; }
+.room-die-cube.is-black { --die-top-light: #87898a; --die-top-dark: #4b4e51; --die-side-light: #353637; --die-side-dark: #0a0a0c; }
+.room-die-cube.is-white { --die-top-light: #fff; --die-top-dark: #deded6; --die-side-light: #b2b6b3; --die-side-dark: #666a66; }
+.room-die-cube.is-red .room-die-pips {
+  background-image: url("room-dice-art/red.webp");
+  filter: saturate(.62) brightness(.89);
+}
 .room-die-cube.is-black .room-die-pips { background-image: url("room-dice-art/black.webp"); }
 .room-die-cube.is-white .room-die-pips { background-image: url("room-dice-art/white.webp"); }
-.room-die-cube.is-armor { --die-top-light: #fffdf3; --die-top-dark: #e6dcc8; --die-side-light: #cabca4; --die-side-dark: #85745c; }
+.room-die-cube.is-armor { --die-top-light: #fffdf3; --die-top-dark: #e1d6bf; --die-side-light: #b4a58e; --die-side-dark: #665944; }
 .room-die-cube.is-armor .room-die-pips {
   display: grid;
   grid: repeat(3, 1fr) / repeat(3, 1fr);

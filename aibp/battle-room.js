@@ -1211,7 +1211,7 @@
   }
 
   function screenHero(hero, seat) {
-    const stats = Object.entries(statNames).map(([key, label]) => '<span>'
+    const stats = Object.entries(statNames).map(([key, label]) => '<span data-screen-stat="' + key + '">'
       + marker('../hero/assets/tri_' + key + '.png', label) + '<strong>' + hero.stats[key] + '</strong></span>').join('');
     const markers = Object.entries(titanMarkerNames).filter(([key]) => hero.markers?.[key])
       .map(([key, label]) => label + ' ' + hero.markers[key]);
@@ -1225,6 +1225,67 @@
       + (trauma ? '<ul class="room-screen-trauma">' + trauma + '</ul>' : '') + '</article>';
   }
 
+  let latestScreenActivity;
+  const screenAlerts = new Map();
+
+  function screenActivityKind(entry) {
+    if (entry.kind === 'roll' || entry.kind === 'reroll') return 'roll';
+    if (entry.kind === 'room-projection' && /^AI(?: |、|$)/.test(entry.detail)) return 'ai';
+    return null;
+  }
+
+  function screenActivityDetail(entry) {
+    return (entry.detail || '').replace(/^AI (?=AI\b)/, '');
+  }
+
+  function renderScreenActivity(log, alerts) {
+    const activity = state.activity || [];
+    const index = activity.findIndex(entry => entry.id === latestScreenActivity);
+    const incoming = latestScreenActivity === undefined ? [] : activity.slice(0, index < 0 ? activity.length : index);
+    latestScreenActivity = activity[0]?.id ?? null;
+    const atEnd = log.scrollHeight - log.scrollTop - log.clientHeight < 12;
+    const entries = [...activity].reverse();
+    const items = entries.map(entry => {
+      const hero = entry.seat == null ? '' : state.heroes[entry.seat]?.name;
+      const detail = screenActivityDetail(entry);
+      return '<li><small>第 ' + entry.round + ' 轮</small><p><strong>' + escape(hero || entry.by || '房主')
+        + '</strong> · ' + escape(entry.label) + (detail ? ' · ' + escape(detail) : '') + '</p></li>';
+    }).join('');
+    renderMarkup(log, items || '<li>等待战斗操作。</li>');
+    if (atEnd) log.scrollTop = log.scrollHeight;
+
+    for (const kind of ['ai', 'roll']) {
+      const alert = alerts.querySelector('[data-screen-alert="' + kind + '"]');
+      const entry = incoming.find(item => screenActivityKind(item) === kind);
+      if (entry) {
+        const prior = screenAlerts.get(kind);
+        clearTimeout(prior?.timer);
+        const hero = state.heroes[entry.seat];
+        const ai = state.projection?.aiPending && state.projection.ai;
+        const roll = kind === 'roll' && (state.rolls || []).find(item =>
+          entry.kind === 'roll' ? item.id === entry.id : item.id === state.lastBattleRollId && item.seat === entry.seat);
+        const art = kind === 'ai' && ai?.src
+          ? '<img class="room-screen-ai-card" src="/aibp/' + escape(ai.src) + '" alt="' + escape(ai.label || 'AI 卡牌') + '">'
+          : roll ? '<div class="room-screen-dice">' + roll.dice.map(die => dice.faceMarkup(die, './room-dice-art/')).join('') + '</div>' : '';
+        const title = kind === 'ai' ? '揭示 AI' : [hero?.name, entry.label].filter(Boolean).join(' · ');
+        alert.innerHTML = '<strong>' + escape(title) + '</strong><span>' + escape(screenActivityDetail(entry)) + '</span>' + art;
+        alert.hidden = false;
+        const timer = setTimeout(() => {
+          alert.hidden = true;
+          alert.replaceChildren();
+          screenAlerts.delete(kind);
+          log.querySelector('[data-screen-highlight="' + kind + '"]')?.removeAttribute('data-screen-highlight');
+        }, kind === 'ai' ? 8000 : 6000);
+        screenAlerts.set(kind, { id: entry.id, timer });
+      }
+    }
+    for (const [i, entry] of entries.entries()) {
+      const kind = screenActivityKind(entry);
+      if (kind && screenAlerts.get(kind)?.id === entry.id) log.children[i].dataset.screenHighlight = kind;
+      else log.children[i].removeAttribute('data-screen-highlight');
+    }
+  }
+
   function renderViewer() {
     document.body.classList.add('room-viewer');
     turnWindow.hidden = true;
@@ -1235,10 +1296,14 @@
     renderMarkup(summary, '<header class="battle-room-head"><h2>' + escape(state.title) + '</h2><p>'
       + escape(heading) + '</p></header>');
     if (!content.querySelector('.room-screen-layout')) {
-      content.innerHTML = '<div class="room-screen-layout"><section><h3>队伍状态</h3><div data-screen-heroes></div></section>'
+      content.innerHTML = '<div class="room-screen-layout"><div class="room-screen-sidebar">'
+        + '<section><h3>队伍状态</h3><div data-screen-heroes></div></section>'
+        + '<section><h3>战斗简报</h3><ol class="room-screen-log" tabindex="0" aria-label="按时间排列的战斗简报"></ol></section></div>'
         + '<section><h3>战斗面板</h3><div data-screen-fight></div><div data-screen-board></div>'
-        + '<div data-screen-projection></div></section>'
-        + '<section><h3>战斗简报</h3><ol class="room-screen-log" tabindex="0" aria-label="按时间排列的战斗简报"></ol></section></div>';
+        + '<div data-screen-projection></div></section></div>'
+        + '<aside class="room-screen-alerts" aria-label="战斗提示">'
+        + '<article data-screen-alert="ai" aria-live="polite" hidden></article>'
+        + '<article data-screen-alert="roll" aria-live="polite" hidden></article></aside>';
       content.querySelector('[data-screen-board]').append(boardMount);
     }
     renderMarkup(content.querySelector('[data-screen-heroes]'), state.heroes.map(screenHero).join(''));
@@ -1248,15 +1313,7 @@
       + escape(state.battleGoal) + '</p>' : '') + '<div class="room-screen-stats" aria-label="克拉托斯池">' + pool + '</div>');
     renderMarkup(content.querySelector('[data-screen-projection]'), roomProjection());
 
-    const log = content.querySelector('.room-screen-log');
-    const latest = log.scrollHeight - log.scrollTop - log.clientHeight < 12;
-    const items = [...(state.activity || [])].reverse().map(entry => {
-      const hero = entry.seat == null ? '' : state.heroes[entry.seat]?.name;
-      return '<li><small>第 ' + entry.round + ' 轮</small><p><strong>' + escape(hero || entry.by || '房主')
-        + '</strong> · ' + escape(entry.label) + (entry.detail ? ' · ' + escape(entry.detail) : '') + '</p></li>';
-    }).join('');
-    renderMarkup(log, items || '<li>等待战斗操作。</li>');
-    if (latest) log.scrollTop = log.scrollHeight;
+    renderScreenActivity(content.querySelector('.room-screen-log'), content.querySelector('.room-screen-alerts'));
     updateStatus();
   }
 

@@ -146,6 +146,7 @@
     cards.battle(battle.map(roll => ({ roll, content: battleRoll(roll, room.heroes, hostSeat) })));
     if (language !== preference) { preference = language; api.language(language); }
     applySecondScreenTheme({ cycleId: cycle });
+    overlay.hidden = phase === 'battle';
     if (phase === 'battle') {
       prep.hidden = true;
       fight.hidden = false;

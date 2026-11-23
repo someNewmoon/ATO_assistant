@@ -1,41 +1,92 @@
 (function () {
   const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)');
 
-  // Match the silhouette of the settled D10 art with an unnumbered,
-  // faceted body. The two finishes share the same geometry.
-  const d10Facets = [
-    ['50% 2%, 9% 28%, 20% 63%', '#f5e9d3, #bdafa1', '#829fae, #354e5e'],
-    ['9% 28%, 3% 69%, 50% 98%, 20% 63%', '#d6cabc, #7d7d78', '#486271, #1a2935'],
-    ['50% 2%, 91% 28%, 97% 69%, 50% 98%, 80% 63%', '#989e9d, #54616a', '#375462, #111e2a'],
-    ['20% 63%, 80% 63%, 50% 98%', '#eee3cb, #8e9190', '#577182, #203846'],
-    ['50% 2%, 80% 63%, 20% 63%', '#fffdf5, #d8cbb6 66%, #a8ada8', '#9cb6c0, #537485 62%, #293f4e'],
-  ];
+  // A pentagonal trapezohedron has two poles and a ring of ten alternating
+  // vertices. Each kite joins one pole to three vertices on the ring.
+  const fullTurn = 2 * Math.PI;
+  const slope = 1.1 * (1 - Math.cos(Math.PI / 5)) / (1 + Math.cos(Math.PI / 5));
+  const d10Vertices = Array.from({ length: 10 }, (_, index) => {
+    const angle = index * fullTurn / 10;
+    return [Math.cos(angle), Math.sin(angle), index % 2 ? -slope : slope];
+  }).concat([[0, 0, 1.1], [0, 0, -1.1]]);
+  const d10Faces = Array.from({ length: 10 }, (_, index) => {
+    const prior = (index + 9) % 10, next = (index + 1) % 10;
+    return index % 2 ? [10, prior, index, next] : [11, next, index, prior];
+  });
 
   function blankD10(face) {
-    const node = document.createElement('span');
+    const node = document.createElement('canvas');
     node.className = face.className;
-    const white = face.src.includes('/crit-');
-    Object.assign(node.style, { display: 'block', position: 'relative', filter: 'drop-shadow(0 2px 1px #19243267)' });
+    const { width, height } = face.getBoundingClientRect();
+    const scale = Math.min(window.devicePixelRatio || 1, 2);
+    node.width = Math.ceil(width * scale);
+    node.height = Math.ceil(height * scale);
+    const context = node.getContext('2d');
+    if (!context) return null;
+    context.scale(scale, scale);
+    node.style.filter = 'drop-shadow(0 2px 1px #19243267)';
+    const ivory = face.src.includes('/crit-');
+    const pigment = ivory ? [240, 228, 207] : [107, 145, 163];
+    const tint = light => `rgb(${pigment.map(channel => Math.min(255, Math.round(channel * light))).join(',')})`;
+    const radius = Math.min(width, height) * .39;
+    const camera = 5;
 
-    const shell = document.createElement('span');
-    Object.assign(shell.style, {
-      position: 'absolute', inset: '0',
-      clipPath: 'polygon(50% 2%, 91% 28%, 97% 69%, 50% 98%, 3% 69%, 9% 28%)',
-      background: white ? '#737a7a' : '#273e4c',
-    });
-    for (const [index, [points, ivory, steel]] of d10Facets.entries()) {
-      const facet = document.createElement('span');
-      Object.assign(facet.style, {
-        position: 'absolute', inset: '1px',
-        clipPath: `polygon(${points})`,
-        background: `repeating-linear-gradient(${96 + index * 11}deg, #ffffff15 0 .65px, transparent .65px 2.2px), `
-          + 'radial-gradient(ellipse at 28% 22%, #ffffff73, transparent 52%), '
-          + `linear-gradient(143deg, ${white ? ivory : steel})`,
+    function draw(progress, index) {
+      const direction = index % 2 ? -1 : 1;
+      const eased = 1 - (1 - progress) ** 1.75;
+      const pitch = .55 + fullTurn * 1.28 * eased;
+      const yaw = -.45 + direction * fullTurn * .67 * eased;
+      const bank = -.15 + direction * (eased * 1.15 + index * .2);
+      const cp = Math.cos(pitch), sp = Math.sin(pitch);
+      const cy = Math.cos(yaw), sy = Math.sin(yaw);
+      const cb = Math.cos(bank), sb = Math.sin(bank);
+      const vertices = d10Vertices.map(([x, y, z]) => {
+        const v = y * cp - z * sp, w = y * sp + z * cp;
+        const u = x * cy + w * sy;
+        return [u * cb - v * sb, u * sb + v * cb, w * cy - x * sy];
       });
-      shell.append(facet);
+      const project = ([x, y, z]) => {
+        const size = radius * camera / (camera - z);
+        return [width / 2 + x * size, height / 2 - y * size];
+      };
+
+      context.clearRect(0, 0, width, height);
+      for (const face of d10Faces) {
+        const [a, b, c] = face.map(vertex => vertices[vertex]);
+        const [ux, uy, uz] = b.map((value, axis) => value - a[axis]);
+        const [vx, vy, vz] = c.map((value, axis) => value - a[axis]);
+        const nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+        if (nx * -a[0] + ny * -a[1] + nz * (camera - a[2]) <= 0) continue;
+        const light = Math.max(0, (-nx * .35 + ny * .56 + nz * .75) / Math.hypot(nx, ny, nz));
+        const tone = .48 + light * .61;
+        const [top, left, tip, right] = face.map(vertex => project(vertices[vertex]));
+        const gradient = context.createLinearGradient(...top, ...tip);
+        gradient.addColorStop(0, tint(tone * 1.19));
+        gradient.addColorStop(1, tint(tone * .87));
+        context.beginPath();
+        context.moveTo(...top);
+        [left, tip, right].forEach(point => context.lineTo(...point));
+        context.closePath();
+        context.fillStyle = gradient;
+        context.fill();
+        context.strokeStyle = tint(tone * .8);
+        context.lineWidth = .7;
+        context.stroke();
+
+        // Pull the grain along the face as it turns in space.
+        context.beginPath();
+        for (let row = 1; row < 8; row++) {
+          const t = row / 8;
+          context.moveTo(top[0] + (left[0] - top[0]) * t, top[1] + (left[1] - top[1]) * t);
+          context.lineTo(right[0] + (tip[0] - right[0]) * t, right[1] + (tip[1] - right[1]) * t);
+        }
+        context.strokeStyle = 'rgba(255,255,255,.11)';
+        context.lineWidth = .45;
+        context.stroke();
+      }
     }
-    node.append(shell);
-    return { node };
+
+    return { node, draw };
   }
 
   function makePreview(face) {
@@ -61,7 +112,7 @@
   }
 
   function animateFace(face, preview, index) {
-    const { node, values, show } = preview;
+    const { node, values, show, draw } = preview;
     const direction = index % 2 ? 1 : -1;
     const delay = Math.min(index * 28, 112);
     node.setAttribute('aria-hidden', 'true');
@@ -74,15 +125,35 @@
     face.replaceWith(node);
     const timers = values ? [86, 165, 252, 359].map((time, frame) =>
       setTimeout(() => show(values[(index + frame + 1) % values.length]), delay + time)) : [];
-    const animation = node.animate([
+    const tumble = [
       { transform: `perspective(240px) translate(${direction * 14}px, -18px) rotateX(-85deg) rotateZ(${direction * 55}deg) scale(.7)`, opacity: .3 },
       { transform: `perspective(240px) translateY(-10px) rotateX(230deg) rotateZ(${-direction * 24}deg) scale(.93)`, opacity: .74, offset: .42 },
       { transform: `perspective(240px) translateY(3px) rotateX(365deg) rotateZ(${direction * 6}deg) scale(1.08)`, opacity: 1, offset: .78 },
       { transform: 'perspective(240px) translateY(0) rotateX(360deg) rotateZ(0) scale(1)', opacity: 1 },
-    ], { duration: 490, delay, easing: 'cubic-bezier(.2,.65,.32,1)', fill: 'backwards' });
+    ];
+    const bounce = [
+      { transform: `translate(${direction * 12}px, -14px) scale(.78)` },
+      { transform: 'translateY(-9px) scale(.94)', offset: .42 },
+      { transform: 'translateY(3px) scale(1.04)', offset: .81 },
+      { transform: 'translateY(0) scale(1)' },
+    ];
+    const duration = draw ? 620 : 490;
+    const animation = node.animate(draw ? bounce : tumble, { duration, delay, easing: 'cubic-bezier(.2,.65,.32,1)', fill: 'backwards' });
+    let frame;
+    if (draw) {
+      const paint = () => {
+        if (!node.isConnected) return;
+        const progress = Math.min(1, Math.max(0, ((animation.currentTime || 0) - delay) / duration));
+        draw(progress, index);
+        if (progress < 1) frame = requestAnimationFrame(paint);
+      };
+      paint();
+    }
+
     return {
       finished: animation.finished.catch(() => {}),
       reveal() {
+        if (frame !== undefined) cancelAnimationFrame(frame);
         timers.forEach(clearTimeout);
         node.replaceWith(face);
         if (control) control.inert = false;

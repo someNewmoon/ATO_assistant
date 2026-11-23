@@ -1512,6 +1512,7 @@
   }
 
   function stopSpeech() {
+    window.ATO_STORY_RULE_HIGHLIGHTS?.cancelNarration();
     activeSpeechToken += 1;
     if (activeNativeTts && window.ATOAndroid) window.ATOAndroid.stopStoryTts();
     activeNativeTts = false;
@@ -3300,6 +3301,7 @@
       if (token !== activeSpeechToken) return;
       pushTtsStatus(`朗读失败：${String(error.message || error)}`, "error");
       finishSpeech(token);
+      return false;
     }
   }
 
@@ -4055,6 +4057,7 @@
   }
 
   function showEntry(entry, pushHistory, revealOnMobile = pushHistory) {
+    if (activeEntry && activeEntry.key !== entry.key) stopSpeech();
     if (pushHistory && activeEntry && activeEntry.key !== entry.key) {
       historyStack.push({
         bookId: entryBookId(activeEntry),
@@ -4794,6 +4797,22 @@
     const sourceText = getSpeechEntryText(entry);
     const spokenSource = mixedMediaRuntime()?.speechText?.(mixedMediaContext(entry), sourceText, storyText) || sourceText;
     const text = prepareSpeechText(spokenSource);
+    const rules = window.ATO_STORY_RULE_HIGHLIGHTS;
+    const plan = rules?.narrationPlan(storyText);
+    if (plan && !(plan.length === 1 && typeof plan[0] === "string" && prepareSpeechText(plan[0]) === text)) {
+      if (!plan.length) {
+        pushTtsStatus("当前段落暂无可朗读的正文。", "warn");
+        return;
+      }
+      // Pre-recorded audio cannot pause at a result or omit rule highlights.
+      return rules.playNarration(plan, async content => {
+        const filtered = prepareSpeechText(content);
+        if (!filtered) return true;
+        const token = activeSpeechToken + 1;
+        const completed = await speakText(filtered);
+        return completed !== false && token === activeSpeechToken;
+      });
+    }
     if (!text) {
       pushTtsStatus("当前版本暂无可朗读正文。", "warn");
       return;

@@ -421,6 +421,7 @@ function renderMixedStoryBody(story, text) {
   }
   // 段首 (拇指)/(圈) 换原书图标；与故事页同一套显示层处理，源文本不动。
   window.ATO_STORY_MARKS?.decorate?.(elements.storyBody);
+  window.ATO_STORY_RULE_HIGHLIGHTS?.decorate(elements.storyBody);
   elements.storyBody.scrollTop = 0;
   elements.storyBody.scrollLeft = 0;
 }

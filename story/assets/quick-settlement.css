@@ -128,18 +128,6 @@
 #storySettlementBill [data-delta=gain] { color: var(--record-accent); }
 #storySettlementBill [data-delta=loss] { color: var(--record-red); }
 
-.story-rule-mark {
-  background: color-mix(in srgb, #dbab45 27%, transparent);
-  color: inherit;
-  border-radius: 2px;
-  box-decoration-break: clone;
-  -webkit-box-decoration-break: clone;
-}
-.story-rule-mark[data-rule-kind=check] {
-  background: color-mix(in srgb, #64aab1 27%, transparent);
-}
-.story-rule-highlights-off .story-rule-mark { background: transparent; }
-
 .story-settlement-save-actions { display: flex; flex-wrap: wrap; gap: 6px; }
 
 .campaign-toolbox {

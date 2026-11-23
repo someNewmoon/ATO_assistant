@@ -824,7 +824,8 @@
     return '<section class="room-dice-panel" id="room-dice"><h3>掷骰</h3>' + (options ? '<label>英雄 <select data-roll-seat>' + options + '</select></label>' : '')
       + '<div class="room-dice-modes" role="group" aria-label="投掷用途">' + Object.entries(dice.modes)
         .map(([key, entry]) => '<button type="button" data-roll-mode="' + key + '" aria-pressed="' + (key === rollMode) + '">'
-          + (key === 'dodge' ? '<img src="room-dice-art/dodge.webp" alt="">' : '') + entry.name + '</button>').join('') + '</div>'
+          + (key === 'dodge' ? '<img class="room-mode-icon" src="room-dice-art/dodge.webp" alt="">'
+            : '<span class="room-mode-icon" aria-hidden="true"></span>') + entry.name + '</button>').join('') + '</div>'
       + (rollMode === 'power' ? '<div class="room-power-workspace">' + powerPartCard(seat) + form + '</div>' : form) + latestResult
       + (notes[rollMode] ? '<p class="room-dice-help">' + notes[rollMode] + '</p>' : '')
       + (['attack', 'power'].includes(rollMode) ? kratosReminder(state.heroes[seat]) : '') + powerPool + '</section>';

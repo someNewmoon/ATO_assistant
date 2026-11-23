@@ -62,8 +62,9 @@
     const natural = naturalFace(die);
     const index = faceIndex(die);
     if (natural && index >= 0 && Object.hasOwn(faces, die.kind)) {
-      return '<span class="room-die-face is-' + die.kind + '" role="img" aria-label="' + faceLabel(natural)
-        + '" style="background-position:' + index % 3 * 50 + '% ' + (index < 3 ? 50 : 100) + '%"></span>';
+      return '<span class="room-die-face room-die-cube is-' + die.kind + '" role="img" aria-label="' + faceLabel(natural)
+        + '"><span class="room-die-pips" style="background-position:' + index % 3 * 50 + '% ' + (index < 3 ? 50 : 100)
+        + '%"></span></span>';
     }
     const number = Number(die.value);
     if (!Number.isInteger(number) || number < 1 || number > 10) return '';

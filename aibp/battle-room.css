@@ -205,7 +205,27 @@ body.aibp-room-only > .app > main > :not(#battleRoom) { display: none !important
 .room-dice-panel h3 { margin-bottom: 6px; }
 .room-dice-modes, .room-dice-results { display: flex; flex-wrap: wrap; gap: 6px; margin-block: 6px; }
 .room-dice-panel :is(label, .room-dice-modes button) { display: inline-flex; align-items: center; gap: 6px; }
-.room-dice-modes img { width: 18px; height: 18px; object-fit: contain; }
+.room-mode-icon { width: 18px; height: 18px; flex: 0 0 18px; object-fit: contain; }
+.room-dice-modes span.room-mode-icon { background: #735339; }
+[data-roll-mode="attack"] .room-mode-icon {
+  clip-path: polygon(91% 4%, 96% 9%, 87% 36%, 50% 70%, 60% 80%, 51% 90%, 39% 79%, 19% 99%, 8% 88%, 28% 68%, 17% 56%, 27% 46%, 37% 56%, 73% 14%);
+}
+[data-roll-mode="power"] .room-mode-icon {
+  clip-path: polygon(47% 3%, 84% 3%, 62% 39%, 88% 39%, 28% 98%, 42% 56%, 18% 56%);
+}
+[data-roll-mode="defense"] .room-mode-icon {
+  clip-path: polygon(50% 3%, 91% 19%, 86% 59%, 71% 82%, 50% 98%, 29% 82%, 14% 59%, 9% 19%);
+}
+[data-roll-mode="check"] .room-mode-icon {
+  clip-path: polygon(6% 53%, 22% 39%, 40% 58%, 81% 14%, 97% 30%, 40% 90%);
+}
+.room-dice-modes [data-roll-mode="armor"] .room-mode-icon {
+  border-radius: 4px;
+  background:
+    radial-gradient(circle at 28% 27%, #fff 0 1.3px, transparent 1.8px),
+    radial-gradient(circle at 50% 50%, #fff 0 1.3px, transparent 1.8px),
+    radial-gradient(circle at 72% 73%, #fff 0 1.3px, transparent 1.8px), #735339;
+}
 .room-dice-modes [aria-pressed="true"], [data-select-die][aria-pressed="true"] {
   outline: 2px solid #3486ae;
   outline-offset: -2px;
@@ -236,9 +256,43 @@ body.aibp-room-only > .app > main > :not(#battleRoom) { display: none !important
   font-size: .75rem;
   font-weight: 800;
 }
-.room-die-face.is-red { background-image: url("room-dice-art/red.webp"); }
-.room-die-face.is-black { background-image: url("room-dice-art/black.webp"); }
-.room-die-face.is-white { background-image: url("room-dice-art/white.webp"); }
+.room-die-cube {
+  position: relative;
+  width: 48px;
+  height: 48px;
+  filter: drop-shadow(0 2px 2px #1d120f52);
+}
+.room-die-cube::before, .room-die-cube::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+}
+.room-die-cube::before {
+  clip-path: polygon(35px 13px, 45px 5px, 45px 37px, 35px 45px);
+  background: linear-gradient(110deg, var(--die-side-light), var(--die-side-dark));
+}
+.room-die-cube::after {
+  clip-path: polygon(3px 10px, 13px 2px, 45px 5px, 35px 13px);
+  background: linear-gradient(150deg, var(--die-top-light), var(--die-top-dark));
+}
+.room-die-pips {
+  position: absolute;
+  left: 3px;
+  top: 10px;
+  width: 32px;
+  height: 32px;
+  transform-origin: left top;
+  transform: skewY(5.4deg);
+  border-radius: 2px;
+  background-size: 300% 300%;
+  box-shadow: inset 0 1px 2px #ffffff69, inset 0 -2px 3px #30161254;
+}
+.room-die-cube.is-red { --die-top-light: #ffc6aa; --die-top-dark: #f26f53; --die-side-light: #cb3a29; --die-side-dark: #77261d; }
+.room-die-cube.is-black { --die-top-light: #939396; --die-top-dark: #4b4b52; --die-side-light: #34353b; --die-side-dark: #101116; }
+.room-die-cube.is-white { --die-top-light: #fff; --die-top-dark: #e8e8e1; --die-side-light: #bcbebc; --die-side-dark: #858986; }
+.room-die-cube.is-red .room-die-pips { background-image: url("room-dice-art/red.webp"); }
+.room-die-cube.is-black .room-die-pips { background-image: url("room-dice-art/black.webp"); }
+.room-die-cube.is-white .room-die-pips { background-image: url("room-dice-art/white.webp"); }
 .room-die-number { display: grid; place-items: center; border: 1px solid var(--room-border); border-radius: 7px; font-weight: 700; }
 .room-die-conversions { display: flex; gap: 4px; }
 .battle-room .room-die-conversions button { min-height: 27px; padding: 2px 4px; font-size: .75rem; }

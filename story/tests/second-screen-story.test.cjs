@@ -88,6 +88,7 @@ function ssContext() {
     storyTitle: makeElement(),
     storyEntryId: makeElement(),
     storyBody: makeElement(),
+    storyScanToggle: makeElement(),
     battleView: makeElement(),
   };
   const context = vm.createContext({
@@ -95,6 +96,7 @@ function ssContext() {
     activeMode: 'map',
     storyRenderKey: '',
     storyRendered: false,
+    storyTextOverride: false,
     mixedStoryGeneration: 0,
     latestStoryScreen: null,
     document: { createElement: tag => ({ tag, src: '', alt: '' }) },
@@ -107,7 +109,7 @@ function ssContext() {
   return context;
 }
 
-test('官方版有扫描图时第二屏只看扫描图', () => {
+test('官方版优先投屏正文，勾选后可改投扫描件', () => {
   const ctx = storyContext({
     storyVersion: '官方版',
     officialEntries: new Map([['c1:entry', {
@@ -117,11 +119,25 @@ test('官方版有扫描图时第二屏只看扫描图', () => {
       officialScan: { src: SCAN, status: 'exact' },
     }]]),
   });
+  const defaults = ctx.buildSecondScreenStorySnapshot();
+  assert.equal(defaults.imagesOnly, false);
+  assert.equal(defaults.text, '官方正文');
+  ctx.secondScreenStoryContentToggle = { checked: true };
   const snapshot = ctx.buildSecondScreenStorySnapshot();
   assert.equal(snapshot.imagesOnly, true);
   assert.deepEqual([...snapshot.images], ['/story/data/ato-storybook-key-scans/c1-0-0.jpg']);
   assert.equal(snapshot.text, '');
+  assert.equal(snapshot.fallbackText, '官方正文');
   assert.equal(snapshot.title, '官方标题');
+});
+
+test('缺少官方正文时仍可投屏该段的扫描件', () => {
+  const ctx = storyContext({
+    storyVersion: '官方版',
+    secondScreenStoryContentToggle: { checked: false },
+    officialEntries: new Map([['c1:entry', { officialScan: { src: SCAN } }]]),
+  });
+  assert.equal(ctx.buildSecondScreenStorySnapshot().imagesOnly, true);
 });
 
 test('官方版没有对应扫描图时第二屏显示正文', () => {
@@ -210,6 +226,24 @@ test('第二屏只有拿到本站扫描图才走只看扫描图的分支', () =>
   assert.equal(ctx.elements.storyBody.children[0].src, 'http://localhost:8080/story/data/ato-storybook-key-scans/c1-0-0.jpg');
 });
 
+test('已投屏的扫描件可以切回正文，轮询不会恢复扫描件', () => {
+  const ctx = ssContext();
+  const story = { id: 'A', imagesOnly: true, images: ['/story/data/ato-storybook-key-scans/c1-0-0.jpg'], fallbackText: '官方正文' };
+  ctx.openStory({ story, storyRevision: 1 });
+  assert.equal(ctx.elements.storyScanToggle.hidden, false);
+  assert.equal(ctx.elements.storyScanToggle.textContent, '显示正文');
+
+  ctx.storyTextOverride = true;
+  ctx.openStory(ctx.latestStoryScreen, true);
+  ctx.openStory({ story, storyRevision: 2 });
+  assert.equal(ctx.elements.storyBody.textContent, '官方正文');
+  assert.equal(ctx.elements.storyView.classList.contains('images-only'), false);
+  assert.equal(ctx.elements.storyScanToggle.textContent, '查看扫描件');
+
+  ctx.openStory({ story: { ...story, id: 'B' }, storyRevision: 3 });
+  assert.equal(ctx.elements.storyView.classList.contains('images-only'), true);
+});
+
 test('第二屏拿不到扫描图时显示正文', () => {
   const ctx = ssContext();
   ctx.openStory({
@@ -279,6 +313,7 @@ function storyPageContext() {
   };
   const context = vm.createContext({
     __timers: timers,
+    cloudStory: false,
     secondScreenSnapshotUrl: '../api/campaign-state.php?section=story',
     SECOND_SCREEN_SNAPSHOT_ATTEMPTS: 3,
     SECOND_SCREEN_STORY_MODE_TITLE: '勾选后第二屏显示当前故事文本，取消勾选后显示地图',

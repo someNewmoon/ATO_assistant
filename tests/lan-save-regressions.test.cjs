@@ -312,12 +312,12 @@ test('late errors from an old story image cannot overwrite newer story content',
   const elements=Object.fromEntries(['unavailableView','mapStage','battleView','storyView','storyBody','storyBookTitle','storySection','storyTitle','storyEntryId'].map(k=>[k,element()]));
   const c=context('ss/app.js',['escapeStoryText','storyTablesHtml','renderMixedStoryBody','mixedMediaRuntime','hasStorySnapshot','openStory'],{
     elements,activeMode:'map',storyRenderKey:'',storyRendered:false,storyScanImages:s=>s.images||[],fitStoryTextToViewport:noop,
-    mixedStoryGeneration:0,latestStoryScreen:null,window:{},
+    mixedStoryGeneration:0,latestStoryScreen:null,storyTextOverride:false,URL,window:{},
     document:{createElement:()=>{const img={addEventListener:(name,fn)=>{img[name]=fn;}};images.push(img);return img;}},
   });
-  c.openStory({storyRevision:1,story:{id:'A',imagesOnly:true,images:['scan-A'],fallbackText:'Old A'}});
+  c.openStory({storyRevision:1,story:{id:'A',imagesOnly:true,images:['http://localhost/scan-A.jpg'],fallbackText:'Old A'}});
   c.openStory({storyRevision:2,story:{id:'B',text:'New B'}});
   images[0].error();assert.equal(elements.storyBody.textContent,'New B');
-  c.openStory({storyRevision:3,story:{id:'C',title:'Title C',imagesOnly:true,images:['scan-C'],fallbackText:'Fallback C'}});
+  c.openStory({storyRevision:3,story:{id:'C',title:'Title C',imagesOnly:true,images:['http://localhost/scan-C.jpg'],fallbackText:'Fallback C'}});
   images[1].error();assert.equal(elements.storyBody.textContent,'Fallback C');assert.equal(elements.storyTitle.textContent,'Title C');
 });

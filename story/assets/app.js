@@ -129,9 +129,9 @@
   let secondScreenSnapshotFailure = "";
   let secondScreenModeFailure = "";
   let secondScreenModeBusy = false;
-  let secondScreenStoryImagesPreference = true;
+  let secondScreenStoryImagesPreference = false;
   try {
-    secondScreenStoryImagesPreference = localStorage.getItem("ato-second-screen-story-content-v1") !== "text";
+    secondScreenStoryImagesPreference = localStorage.getItem("ato-second-screen-story-content-v1") === "image";
   } catch {
     // 浏览器隐私模式可能禁止 localStorage；本页仍可正常使用本次切换。
   }
@@ -3538,13 +3538,11 @@
   function buildSecondScreenStorySnapshot() {
     if (!activeEntry) return null;
     const displayEntry = getDisplayEntry(activeEntry);
-    const scan = officialEntries.get(`${currentBook()?.id}:${activeEntry.key}`)?.officialScan;
-    // 官方版优先让第二屏看官方扫描图，但扫描图不是每个条目都有（官方 PDF 未收录的
-    // 条目就没有）。这时必须退回正文，否则第二屏只剩标题、正文一片空白。官方扫描图
-    // 开关默认开启；测试或旧嵌入页没有这个控件时也保持原来的默认行为。
-    const showOfficialScan = typeof secondScreenStoryContentToggle === "undefined"
-      ? true
-      : Boolean(secondScreenStoryContentToggle?.checked);
+    const official = officialEntries.get(`${currentBook()?.id}:${activeEntry.key}`);
+    const scan = official?.officialScan;
+    // 默认投屏正文。没有正文的条目仍可投屏原书扫描件。
+    const showOfficialScan = !official?.officialText?.trim()
+      || (typeof secondScreenStoryContentToggle !== "undefined" && secondScreenStoryContentToggle?.checked);
     const imagesOnly = storyVersion === "官方版"
       && supportsOfficialVersion()
       && showOfficialScan

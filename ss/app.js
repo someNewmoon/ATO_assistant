@@ -39,6 +39,7 @@ const elements = {
   storyTitle: document.querySelector("#storyTitle"),
   storyEntryId: document.querySelector("#storyEntryId"),
   storyBody: document.querySelector("#storyBody"),
+  storyScanToggle: document.querySelector("#storyScanToggle"),
   battleView: document.querySelector("#battleView"),
   battleSidebarContent: document.querySelector(".battle-sidebar-content"),
   battleBoardFrame: document.querySelector("#battleBoardFrame"),
@@ -77,6 +78,7 @@ let battleRenderKey = "";
 let storyRenderKey = "";
 let storyRendered = false;
 let latestStoryScreen = null;
+let storyTextOverride = false;
 let activeMode = "map";
 let latestBattleScale = 1;
 let latestBattleRotation = 0;
@@ -373,7 +375,7 @@ function storyScanImages(story) {
 // 存档里连快照都没有（故事页从没发过、发送失败，或第二屏跟故事页不是同一个账号）时，
 // story 会是 PHP 兜底的空数组，这里必须把「没有快照」跟「这条目空着」分开处理。
 function hasStorySnapshot(story) {
-  return Boolean(story.id || story.title || story.text || story.imagesOnly);
+  return Boolean(story.id || story.title || story.text || story.fallbackText || story.imagesOnly);
 }
 
 // 正文里的管道表格（原书排版遗留，见 story/assets/story-tables.js）。
@@ -424,8 +426,7 @@ function renderMixedStoryBody(story, text) {
 }
 
 let mixedStoryGeneration = 0;
-function openStory(screen) {
-  latestStoryScreen = screen;
+function openStory(screen, forceRender = false) {
   const previousMode = activeMode;
   activeMode = "story";
   const story = screen.story && typeof screen.story === "object" && !Array.isArray(screen.story)
@@ -435,16 +436,24 @@ function openStory(screen) {
   elements.mapStage.hidden = true;
   elements.battleView.hidden = true;
   elements.storyView.hidden = false;
-  // 官方版是「只看扫描图」，但该条目没有对应扫描图时必须退回正文：
-  // 只按 story.imagesOnly 走图，第二屏会只剩标题、正文一片空白。
   const scans = storyScanImages(story);
-  const imagesOnly = Boolean(story.imagesOnly) && scans.length > 0;
+  const prefersScans = Boolean(story.imagesOnly) && scans.length > 0;
+  const text = typeof story.text === "string" && story.text.trim() ? story.text
+    : typeof story.fallbackText === "string" ? story.fallbackText : "";
+  const hasText = Boolean(text?.trim()) && !text.trimStart().startsWith("【官方版暂无正文】");
   // Polls which only refresh revision/time must not close an open image.
   const renderKey = JSON.stringify([story.id, story.title, story.bookTitle, story.section,
-    story.text, story.fallbackText, story.mixedMedia, imagesOnly, scans]);
+    story.text, story.fallbackText, story.mixedMedia, prefersScans, scans]);
   if (!hasStorySnapshot(story) && storyRendered) return;
-  if (renderKey === storyRenderKey && previousMode === "story") return;
+  latestStoryScreen = screen;
+  if (renderKey === storyRenderKey && previousMode === "story" && !forceRender) return;
+  if (renderKey !== storyRenderKey) storyTextOverride = false;
   storyRenderKey = renderKey;
+  const imagesOnly = prefersScans && !storyTextOverride;
+  if (elements.storyScanToggle) {
+    elements.storyScanToggle.hidden = !prefersScans || !hasText;
+    elements.storyScanToggle.textContent = imagesOnly ? "显示正文" : "查看扫描件";
+  }
   const mixedGeneration = ++mixedStoryGeneration;
   mixedMediaRuntime()?.dispose?.(elements.storyBody);
   if (!hasStorySnapshot(story)) {
@@ -476,8 +485,9 @@ function openStory(screen) {
     const failImage = () => {
       if (!isCurrent() || ++failedImages < scans.length) return;
       elements.storyView.classList.toggle("images-only", false);
+      if (elements.storyScanToggle) elements.storyScanToggle.hidden = true;
       elements.storyBody.replaceChildren();
-      renderMixedStoryBody(story, story.fallbackText || "官方扫描图加载失败，请回到故事页重新选择该条目。");
+      renderMixedStoryBody(story, text || "官方扫描图加载失败，请回到故事页重新选择该条目。");
       fitStoryTextToViewport();
     };
     for (const src of scans) {
@@ -502,9 +512,10 @@ function openStory(screen) {
       elements.storyBody.append(image);
     }
     elements.storyBody.scrollTop = 0;
+    fitStoryTextToViewport();
     return;
   }
-  renderMixedStoryBody(story, story.text || story.fallbackText
+  renderMixedStoryBody(story, text
     || (story.imagesOnly ? "该条目暂无对应的官方扫描图与正文。" : "该条目暂无正文文本。"));
   fitStoryTextToViewport();
 }
@@ -1018,6 +1029,12 @@ window.addEventListener("message", (event) => {
   if (event.data?.type === "ato-second-screen-updated" && activeMode === "map") openMap();
 });
 
+elements.storyScanToggle?.addEventListener("click", () => {
+  if (activeMode !== "story" || !latestStoryScreen) return;
+  storyTextOverride = !storyTextOverride;
+  openStory(latestStoryScreen, true);
+});
+
 window.addEventListener("resize", () => {
   if (activeMode === "aibp") applyBattleLayout();
   if (activeMode === "story") fitStoryTextToViewport();
@@ -1033,8 +1050,7 @@ if (!new URLSearchParams(window.location?.search || "").get("squad")) checkConne
 // snapshot. It must never restore an older snapshot or switch display modes.
 window.addEventListener("ato-mixed-media-map-ready", () => {
   if (activeMode !== "story" || !latestStoryScreen) return;
-  storyRenderKey = "";
   const top = elements.storyBody.scrollTop, left = elements.storyBody.scrollLeft;
-  openStory(latestStoryScreen);
+  openStory(latestStoryScreen, true);
   elements.storyBody.scrollTop = top; elements.storyBody.scrollLeft = left;
 });

@@ -128,7 +128,8 @@
     if (data.room.id !== id || (state && data.room.revision < state.revision)) return;
     if (state?.revision === data.room.revision && actor) return;
     const first = !actor;
-    const wasFighting = state?.squad?.phase === 'battle';
+    const prior = state;
+    const wasFighting = prior?.squad?.phase === 'battle';
     state = data.room;
     actor = data.actor;
     if (first && actor.role === 'host') equipmentSeat = rollSeat = personalSeat() ?? 0;
@@ -149,6 +150,7 @@
     if (actor.role === 'host' && state.board) window.setAibpRoomBattleLevel?.(state.board.apostle, state.board.level);
     roomBoard?.sync(state, actor);
     render();
+    if (!first && prior && actor.role !== 'viewer') animateLatestRoll(prior);
     const second = state.secondAbility;
     const mySecond = second && second.id !== lastSecondAbility
       && (actor.role === 'player' ? actor.seat === second.seat : actor.role === 'host' && rollSeat === second.seat);
@@ -629,6 +631,20 @@
     return dice.faceMarkup(die, '../aibp/room-dice-art/');
   }
 
+  function animateLatestRoll(prior) {
+    const latest = state.rolls.find(roll => roll.id === state.lastBattleRollId);
+    if (!latest) return;
+    const previous = prior.rolls.find(roll => roll.id === latest.id);
+    const rerolled = die => die.rerolled && previous?.dice.some(old => old.id === die.id && !old.rerolled);
+    const changed = new Set(latest.dice.filter(die => !previous || rerolled(die)).map(die => die.id));
+    if (!changed.size) return;
+    const card = content.querySelector('.room-roll[data-motion-roll="' + CSS.escape(latest.id) + '"]');
+    if (!card) return;
+    const faces = Array.from(card.querySelectorAll('[data-motion-die]'))
+      .filter(die => changed.has(die.dataset.motionDie)).map(die => die.querySelector('.room-die-face'));
+    window.ATO_DICE_MOTION?.play(faces.filter(Boolean));
+  }
+
   function rollAvatar(seat) {
     const path = heroPortrait(state.heroes[seat]);
     return path ? '<img class="roll-hero-avatar" src="../hero/assets/' + escape(path) + '" alt="">' : '';
@@ -676,7 +692,7 @@
       const original = result ? dice.faces[die.kind]?.[die.original] : die.original;
       const originalLabel = Array.isArray(original) ? faceLabel(original) : original;
       const art = faceArt(die);
-      return '<div class="room-die"><small>' + dice.names[die.kind] + '</small>'
+      return '<div class="room-die" data-motion-die="' + escape(die.id) + '"><small>' + dice.names[die.kind] + '</small>'
         + (canSelect ? '<button type="button" data-select-die' + dieAttrs + ' aria-pressed="' + Boolean(selection?.has(die.id))
           + '" aria-label="选中' + dice.names[die.kind] + '重掷">' + art + '</button>' : art)
         + '<span>' + (result ? result.map((n, i) => n + ['ϟ', '△', '●'][i]).join(' ') : die.value) + '</span>'
@@ -707,7 +723,7 @@
     const feedback = reactions(roll, latest);
     const heading = '<h4>' + rollAvatar(roll.seat) + escape(roll.hero) + (mode ? ' · ' + mode : '')
       + ' <small>第 ' + roll.round + ' 轮</small></h4>';
-    return '<li class="room-roll">' + (quickFeedback ? '<div class="room-roll-head">' + heading + feedback + '</div>' : heading)
+    return '<li class="room-roll" data-motion-roll="' + escape(roll.id) + '">' + (quickFeedback ? '<div class="room-roll-head">' + heading + feedback + '</div>' : heading)
       + '<div class="room-dice-results">' + faces + '</div><p>' + rollSummary(roll) + '</p>'
       + (followup ? '<p class="room-dice-help">已配置 ' + roll.defenseCount + ' 枚防御红骰，请按闪避结果确认是否投掷。</p>' : '')
       + (editable && (roll.mode === 'attack' || followup) ? '<button type="button" data-roll-followup="'

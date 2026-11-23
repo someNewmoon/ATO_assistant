@@ -1683,6 +1683,30 @@
       gap: 8px;
     }
 
+    .adventure-roll-tray {
+      display: flex;
+      gap: 14px;
+      align-items: center;
+      min-height: 72px;
+      margin: 0 0 12px;
+      padding: 8px 14px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: radial-gradient(ellipse at 12% 100%, #c3a16b38, transparent 70%), #f5efe5;
+    }
+    .adventure-roll-face {
+      display: grid;
+      place-items: center;
+      width: 54px;
+      height: 54px;
+      clip-path: polygon(50% 0, 88% 20%, 100% 55%, 81% 87%, 50% 100%, 19% 87%, 0 55%, 12% 20%);
+      background: linear-gradient(148deg, #f4deae, #c18a43 53%, #865024);
+      color: #352014;
+      font-size: 24px;
+      font-weight: 900;
+      transform-origin: center 70%;
+    }
+
     .adventure-roll-branch { margin: 0 0 12px; }
     .adventure-roll-branch .survey-constant-title { font-size: 15px; }
     .adventure-roll-branch .survey-constant-boxes { gap: 2px; }
@@ -3098,6 +3122,7 @@
   <dialog id="adventureRollDialog" class="card-track-dialog" aria-labelledby="adventureRollTitle" aria-describedby="adventureRollOutcome">
     <form method="dialog">
       <h2 id="adventureRollTitle">D10 掷骰结果</h2>
+      <div class="adventure-roll-tray" aria-hidden="true"></div>
       <p id="adventureRollOutcome"></p>
       <div class="adventure-roll-branch" data-term-scope="survey-record" hidden></div>
       <section class="adventure-roll-preview" aria-labelledby="adventureRollTrackTitle" hidden>
@@ -3163,6 +3188,7 @@
   <script src="./assets/exploration-card-rules.js?v=20261018-card-audit1"></script>
   <script src="./assets/exploration-card-resource-rules.js?v=20261013-automation5"></script>
   <script src="./assets/exploration-card-effects.js?v=20261120-ledger"></script>
+  <script src="./assets/dice-motion.js?v=1" defer></script>
   <script src="./assets/campaign-session.js?v=20260917"></script>
   <script src="./assets/exploration-card-conditions.js?v=20261018-card-audit1"></script>
   <script src="./assets/exploration-card-options.js?v=20261117-resource-types1"></script>
@@ -9158,8 +9184,16 @@
         noteElement.hidden = !note;
         noteElement.textContent = note || "";
       }
+      const tray = dialog.querySelector(".adventure-roll-tray");
+      tray.replaceChildren(...result.faces.map(value => {
+        const face = document.createElement("span");
+        face.className = "adventure-roll-face";
+        face.textContent = String(value);
+        return face;
+      }));
       dialog.returnValue = "cancel";
       dialog.showModal();
+      window.ATO_DICE_MOTION?.play(tray.children);
       return new Promise(resolve => {
         dialog.addEventListener("close", () => resolve(dialog.returnValue), { once: true });
       });

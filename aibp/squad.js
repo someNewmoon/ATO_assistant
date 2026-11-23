@@ -296,7 +296,7 @@
     }
     const log = content.querySelector('[data-team-log]');
     const latest = squad.checks.find(roll => roll.seat === seat);
-    log.innerHTML = squad.checks.map(roll => '<li>' + storyRollArt(roll) + rollLine(roll)
+    log.innerHTML = squad.checks.map(roll => '<li data-motion-roll="' + e(roll.id) + '">' + storyRollArt(roll) + rollLine(roll)
       + (roll === latest && latest.target !== null && !latest.replaces && squad.phase !== 'battle'
         ? ' ' + button('reroll', '命运 +1 并重掷', latest.id) : '') + '</li>').join('') || '<li>暂无检定或掷骰。</li>';
     window.ATO_LANGUAGE?.refresh();
@@ -353,11 +353,18 @@
 
   function accept(data) {
     if (data.room.id !== id || (room && data.room.revision <= room.revision)) return;
+    const previousRoll = room?.squad?.checks?.[0]?.id;
+    const hadRoom = Boolean(room);
     room = data.room;
     actor = data.actor;
     if (!room.squad || !['host', 'player'].includes(actor.role)) throw new Error('这个链接不属于联机小队成员。');
     applyLanguage(room.squad.language);
     render();
+    const latestRoll = room.squad.checks?.[0]?.id;
+    if (hadRoom && latestRoll && latestRoll !== previousRoll) {
+      const row = content.querySelector('[data-motion-roll="' + CSS.escape(latestRoll) + '"]');
+      if (row) window.ATO_DICE_MOTION?.play(row.querySelectorAll('.room-die-face'));
+    }
   }
 
   let hostStockRefresh;

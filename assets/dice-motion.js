@@ -1,6 +1,43 @@
 (function () {
   const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)');
 
+  // Match the silhouette of the settled D10 art with an unnumbered,
+  // faceted body. The two finishes share the same geometry.
+  const d10Facets = [
+    ['50% 2%, 9% 28%, 20% 63%', '#f5e9d3, #bdafa1', '#829fae, #354e5e'],
+    ['9% 28%, 3% 69%, 50% 98%, 20% 63%', '#d6cabc, #7d7d78', '#486271, #1a2935'],
+    ['50% 2%, 91% 28%, 97% 69%, 50% 98%, 80% 63%', '#989e9d, #54616a', '#375462, #111e2a'],
+    ['20% 63%, 80% 63%, 50% 98%', '#eee3cb, #8e9190', '#577182, #203846'],
+    ['50% 2%, 80% 63%, 20% 63%', '#fffdf5, #d8cbb6 66%, #a8ada8', '#9cb6c0, #537485 62%, #293f4e'],
+  ];
+
+  function blankD10(face) {
+    const node = document.createElement('span');
+    node.className = face.className;
+    const white = face.src.includes('/crit-');
+    Object.assign(node.style, { display: 'block', position: 'relative', filter: 'drop-shadow(0 2px 1px #19243267)' });
+
+    const shell = document.createElement('span');
+    Object.assign(shell.style, {
+      position: 'absolute', inset: '0',
+      clipPath: 'polygon(50% 2%, 91% 28%, 97% 69%, 50% 98%, 3% 69%, 9% 28%)',
+      background: white ? '#737a7a' : '#273e4c',
+    });
+    for (const [index, [points, ivory, steel]] of d10Facets.entries()) {
+      const facet = document.createElement('span');
+      Object.assign(facet.style, {
+        position: 'absolute', inset: '1px',
+        clipPath: `polygon(${points})`,
+        background: `repeating-linear-gradient(${96 + index * 11}deg, #ffffff15 0 .65px, transparent .65px 2.2px), `
+          + 'radial-gradient(ellipse at 28% 22%, #ffffff73, transparent 52%), '
+          + `linear-gradient(143deg, ${white ? ivory : steel})`,
+      });
+      shell.append(facet);
+    }
+    node.append(shell);
+    return { node };
+  }
+
   function makePreview(face) {
     const value = Number(face.dataset.diceValue);
     if (!Number.isInteger(value)) return null;
@@ -20,16 +57,7 @@
       };
     }
 
-    const node = document.createElement('span');
-    node.className = face.className;
-    const white = face.src.includes('/crit-');
-    Object.assign(node.style, {
-      display: 'block',
-      clipPath: 'polygon(50% 0, 91% 27%, 97% 69%, 50% 100%, 3% 69%, 9% 27%)',
-      background: white ? 'linear-gradient(145deg, #fffdf3 37%, #b9c0c2 38%, #f0eee3 71%, #a0a9ae 72%)'
-        : 'linear-gradient(145deg, #91a9b5 37%, #223b49 38%, #476274 71%, #192d38 72%)',
-    });
-    return { node };
+    return blankD10(face);
   }
 
   function animateFace(face, preview, index) {

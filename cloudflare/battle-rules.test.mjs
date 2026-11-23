@@ -5,6 +5,7 @@ import { mkdtemp, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import dice from '../aibp/room-dice.js';
 
 // Exercise the real Worker reducers; only the Cloudflare base class is replaced.
 // Run: cd cloudflare && node --test battle-rules.test.mjs
@@ -549,4 +550,14 @@ test('绝望和神浆独立计数，可从旧状态直接增加，队员不能�
   assert.deepEqual(r.heroes[0].markers, { despair: 0, ambrosia: 1 });
   assert.deepEqual(r.heroes[0].stats, original);
   assert.equal(r.heroes[1].markers, undefined);
+});
+
+test('only a white ten in an attack or dodge earns the matching critical badge', () => {
+  const whiteTen = { kind: 'crit', value: 10 };
+  assert.equal(dice.criticalLabel('attack', whiteTen), '关键命中');
+  assert.equal(dice.criticalLabel('dodge', whiteTen), '关键闪避');
+  assert.equal(dice.criticalLabel('check', whiteTen), '');
+  assert.equal(dice.criticalLabel('attack', { kind: 'd10', value: 10 }), '');
+  assert.equal(dice.criticalLabel('dodge', { kind: 'crit', value: 9 }), '');
+  assert.equal(dice.criticalLabel('dodge', { ...whiteTen, rerolled: true }), '关键闪避');
 });

@@ -228,7 +228,7 @@
   function storyRollArt(roll) {
     const dice = window.ATO_ROOM_DICE;
     return '<div class="squad-story-roll-art">' + portrait(room.heroes[roll.seat]) + dice.storyFaces(roll)
-      .map(die => dice.faceMarkup(die, '../aibp/room-dice-art/')).join('') + '</div>';
+      .map(die => dice.faceMarkup(die, '../aibp/room-dice-art/', die.kind === 'd10' ? 'crit' : die.kind)).join('') + '</div>';
   }
 
   function rollLine(roll) {

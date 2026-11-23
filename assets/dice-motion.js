@@ -17,6 +17,20 @@
         easing: 'cubic-bezier(.2,.65,.32,1)',
         fill: 'backwards',
       });
+      const critical = face.closest('[data-motion-die]')?.querySelector('.room-critical-result');
+      if (critical?.animate) {
+        const timing = { duration: 550, delay: 390 + Math.min(index * 28, 112), easing: 'ease-out' };
+        face.animate([
+          { filter: 'drop-shadow(0 0 0 transparent)' },
+          { filter: 'drop-shadow(0 0 12px #ffbb38)', offset: .32 },
+          { filter: 'drop-shadow(0 0 0 transparent)' },
+        ], timing);
+        critical.animate([
+          { transform: 'scale(.92)', opacity: .55 },
+          { transform: 'scale(1.16)', opacity: 1, offset: .38 },
+          { transform: 'scale(1)', opacity: 1 },
+        ], timing);
+      }
     });
   }
 

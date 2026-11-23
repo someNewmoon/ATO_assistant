@@ -95,7 +95,7 @@
       min-height: 100vh;
     }
 
-    aside {
+    .app > aside {
       position: sticky;
       top: 0;
       height: 100vh;
@@ -146,7 +146,7 @@
       grid-template-columns: minmax(0, 1fr);
     }
 
-    body.sidebar-collapsed aside {
+    body.sidebar-collapsed .app > aside {
       display: none;
     }
 
@@ -160,7 +160,7 @@
     }
 
     body[data-theatre-battle] .app { grid-template-columns: minmax(0, 1fr); }
-    body[data-theatre-battle] aside,
+    body[data-theatre-battle] .app > aside,
     body[data-theatre-battle] #sidebarToggle,
     body[data-theatre-battle] .second-screen-mode-toggle,
     body[data-theatre-battle] #newCampaignButton,
@@ -1470,7 +1470,7 @@
         grid-template-columns: 1fr;
       }
 
-      aside {
+      .app > aside {
         position: static;
         height: auto;
         border-right: 0;
@@ -2423,7 +2423,7 @@
   <link rel="stylesheet" href="battle_tactics.css?v=20261119-battle-turn">
   <link rel="stylesheet" href="../api/cycle-theme.css">
   <script src="../assets/theme.js?v=20261114-light-sidebar1" defer></script>
-  <link rel="stylesheet" href="editorial.css?v=20261105-pile-row-alignment1">
+  <link rel="stylesheet" href="editorial.css?v=20261123-sidebar">
   <link rel="stylesheet" href="../assets/card-art.css?v=20261017-fan-fringe5">
   <link rel="stylesheet" href="../hero/battle-roster.css">
   <script src="../assets/fan-card-trims-data.js?v=20261020-fan-scan3" defer></script>
@@ -2440,7 +2440,7 @@
   <script src="../assets/mobile/layout.js?v=20261028-apk-portrait1" defer></script>
   <script src="../assets/mobile/play.js?v=20261114-theatre-return" defer></script>
   <link rel="stylesheet" href="room-recap.css">
-  <link rel="stylesheet" href="battle-room.css?v=20261120-player-panel">
+  <link rel="stylesheet" href="battle-room.css?v=20261123-critical">
   <script src="theatre-battle.js?v=2"></script>
   <script src="../theatre/terms.js?v=2"></script>
 </head>
@@ -2948,12 +2948,12 @@
   <script src="room-board.js?v=20261119-board-ping" defer></script>
   <script src="room-card-state.js" defer></script>
   <script src="../technology/battle-config.js" defer></script>
-  <script src="../assets/dice-motion.js?v=1" defer></script>
-  <script src="room-dice.js?v=20261119-battle-turn" defer></script>
+  <script src="../assets/dice-motion.js?v=2" defer></script>
+  <script src="room-dice.js?v=20261123-critical" defer></script>
   <script src="squad-link.js?v=20261120-live-recovery" defer></script>
   <script src="../record/enemy-evolution.js?v=20261120"></script>
   <script src="kratos-tables.js?v=20261120-titan-patterns" defer></script>
-  <script src="battle-room.js?v=20261120-worker-bp" defer></script>
+  <script src="battle-room.js?v=20261123-critical" defer></script>
   <script src="../technology/gear-inventory.js?v=20261120-player-kit"></script>
   <script src="../assets/campaign-notes.js?v=20261015-aibp-summary1"></script>
   <script src="../assets/cycle-symbols.js?v=20261115-module-logo"></script>

@@ -53,7 +53,12 @@
     return faces[die.kind]?.findIndex(face => face.every((value, index) => value === die.symbols?.[index])) ?? -1;
   }
 
-  function faceMarkup(die, dir) {
+  function criticalLabel(mode, die) {
+    if (die.kind !== 'crit' || die.value !== 10) return '';
+    return mode === 'attack' ? '关键命中' : mode === 'dodge' ? '关键闪避' : '';
+  }
+
+  function faceMarkup(die, dir, artKind = die.kind) {
     const natural = naturalFace(die);
     const index = faceIndex(die);
     if (natural && index >= 0 && Object.hasOwn(faces, die.kind)) {
@@ -63,7 +68,7 @@
     const number = Number(die.value);
     if (!Number.isInteger(number) || number < 1 || number > 10) return '';
     if (die.kind === 'd10' || die.kind === 'crit') {
-      return '<img class="room-die-face" src="' + dir + die.kind + '-' + number + '.svg" alt="' + names[die.kind] + ' ' + number + '">';
+      return '<img class="room-die-face" src="' + dir + artKind + '-' + number + '.svg" alt="' + names[die.kind] + ' ' + number + '">';
     }
     return '<span class="room-die-face room-die-number" aria-label="普通 d6 ' + number + '">' + number + '</span>';
   }
@@ -100,5 +105,5 @@
     }));
   }
 
-  return { faces, names, limits, modes, naturalFace, remainingFace, canReroll, faceIndex, faceLabel, rollSummary, woundResults, faceMarkup, storyFaces, rollOwner, latestByHero, reactionGroups };
+  return { faces, names, limits, modes, naturalFace, remainingFace, canReroll, faceIndex, faceLabel, rollSummary, woundResults, criticalLabel, faceMarkup, storyFaces, rollOwner, latestByHero, reactionGroups };
 });

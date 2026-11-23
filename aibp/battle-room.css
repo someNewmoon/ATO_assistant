@@ -227,6 +227,15 @@ body.aibp-room-only > .app > main > :not(#battleRoom) { display: none !important
 }
 .battle-room .room-die [data-select-die] { min-height: 0; padding: 2px; }
 .room-die-face { display: block; width: 42px; height: 42px; object-fit: contain; background-size: 300% 300%; }
+.room-critical-result {
+  padding: 2px 5px;
+  border: 1px solid #d8a13f;
+  border-radius: 4px;
+  background: #ffedbd;
+  color: #633507;
+  font-size: .75rem;
+  font-weight: 800;
+}
 .room-die-face.is-red { background-image: url("room-dice-art/red.webp"); }
 .room-die-face.is-black { background-image: url("room-dice-art/black.webp"); }
 .room-die-face.is-white { background-image: url("room-dice-art/white.webp"); }
@@ -390,6 +399,7 @@ body.aibp-room-only > .app > main > :not(#battleRoom) { display: none !important
 }
 
 .room-power-workspace { display: grid; grid-template-columns: min(25%, 8.5rem) minmax(0, 1fr); align-items: start; gap: .65rem; margin-block: .5rem; }
+.room-power-card { min-width: 0; padding: .5rem; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); }
 .room-power-card h4 { margin: 0 0 .3rem; font-size: .83rem; }
 .room-power-card .battle-room-card-art { width: 100%; padding: 0; }
 .room-power-card img { display: block; width: 100%; height: auto; }

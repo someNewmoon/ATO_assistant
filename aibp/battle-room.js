@@ -692,10 +692,12 @@
       const original = result ? dice.faces[die.kind]?.[die.original] : die.original;
       const originalLabel = Array.isArray(original) ? faceLabel(original) : original;
       const art = faceArt(die);
+      const critical = dice.criticalLabel(roll.mode, die);
       return '<div class="room-die" data-motion-die="' + escape(die.id) + '"><small>' + dice.names[die.kind] + '</small>'
         + (canSelect ? '<button type="button" data-select-die' + dieAttrs + ' aria-pressed="' + Boolean(selection?.has(die.id))
           + '" aria-label="选中' + dice.names[die.kind] + '重掷">' + art + '</button>' : art)
         + '<span>' + (result ? result.map((n, i) => n + ['ϟ', '△', '●'][i]).join(' ') : die.value) + '</span>'
+        + (critical ? '<strong class="room-critical-result">' + critical + '</strong>' : '')
         + (die.rerolled ? '<small>已重掷 · 原掷 ' + escape(originalLabel) + '</small>' : '')
         + (editable && result ? '<div class="room-die-conversions">'
           + (result[1] ? '<button type="button" data-action="convert" data-symbol="potential"' + dieAttrs + ' title="将一枚潜力转为威力">△ → ϟ</button>' : '')

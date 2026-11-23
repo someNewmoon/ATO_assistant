@@ -26,6 +26,7 @@
     const id = "battle-piece-clip-" + ++nextClip;
     clip.setAttribute("id", id);
     path.setAttribute("d", sprite.path);
+    if (sprite.clipRule) path.setAttribute("clip-rule", sprite.clipRule);
     clip.appendChild(path);
     defs.appendChild(clip);
     const image = document.createElementNS(svgNS, "image");

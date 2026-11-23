@@ -827,16 +827,30 @@
       + '</section>';
   }
 
-  function diceForm(powerPool) {
-    if (state.closed || actor.role === 'viewer') return '';
+  function updateDiceSteps(input) {
+    for (const button of input.parentElement.querySelectorAll('[data-dice-step]')) {
+      button.disabled = Number(button.dataset.delta) < 0
+        ? Number(input.value) <= Number(input.min) : Number(input.value) >= Number(input.max);
+    }
+  }
+
+  function restoreDiceDraft(form, seat) {
+    const draft = readDiceDraft(seat, rollMode);
+    for (const input of form.querySelectorAll('input[type="number"]')) {
+      input.value = draft[input.name] ?? input.min;
+      updateDiceSteps(input);
+    }
+  }
+
+  function renderDicePanel(panel, powerPool) {
     const seat = actor.role === 'host' ? rollSeat : actor.seat;
-    const drafts = readDiceDraft(seat, rollMode);
+    const previousForm = panel.querySelector('form[data-roll]');
     const fields = dice.modes[rollMode].kinds.map(kind => {
       const label = kind === 'd10' ? '总数量（含 1 枚白色关键骰）' : dice.names[kind];
       const minimum = kind === 'd10' || kind === 'armor' || rollMode === 'defense' ? 1 : 0;
-      return diceCountField(kind, label, minimum, dice.limits[kind], drafts[kind] ?? minimum);
+      return diceCountField(kind, label, minimum, dice.limits[kind], minimum);
     }).join('');
-    const followup = rollMode === 'dodge' ? diceCountField('defenseCount', '预计防御红骰', 0, 6, drafts.defenseCount ?? 0) : '';
+    const followup = rollMode === 'dodge' ? diceCountField('defenseCount', '预计防御红骰', 0, 6, 0) : '';
     const last = dice.latestByHero(state.rolls, state.lastBattleRollId).find(roll => roll.seat === seat);
     const latestResult = '<section class="room-personal-result"><h4>最新投掷</h4>'
       + (last ? '<ol class="room-last-rolls">' + rollCard(last, true) + '</ol>' : '<p>该英雄本场尚未掷骰。</p>') + '</section>';
@@ -845,16 +859,22 @@
       dodge: '先结算闪避，根据结果决定是否投掷防御红骰。',
       power: '先揭示部位卡牌。重掷和转换潜力后，对照永世力场选结果，再按牌面结算骇物响应、伤口和激化。结算后清空克拉托斯池，再进入第二能力时段。',
     };
-    const form = '<form data-roll class="battle-room-dice"><div>' + fields + followup
+    const form = '<form data-roll data-dice-seat="' + seat + '" class="battle-room-dice"><div>' + fields + followup
       + '<button type="submit">投掷' + dice.modes[rollMode].name + '</button></div></form>';
-    return '<section class="room-dice-panel" id="room-dice"><h3>掷骰</h3>' + (actor.role === 'host' ? heroSeatButtons(seat, 'roll') : '')
-      + '<div class="room-dice-modes" role="group" aria-label="投掷用途">' + Object.entries(dice.modes)
-        .map(([key, entry]) => '<button type="button" data-roll-mode="' + key + '" aria-pressed="' + (key === rollMode) + '">'
-          + (key === 'dodge' ? '<img class="room-mode-icon" src="room-dice-art/dodge.webp" alt="">'
-            : '<span class="room-mode-icon" aria-hidden="true"></span>') + entry.name + '</button>').join('') + '</div>'
-      + (rollMode === 'power' ? '<div class="room-power-workspace">' + powerPartCard(seat) + form + '</div>' : form) + latestResult
-      + (notes[rollMode] ? '<p class="room-dice-help">' + notes[rollMode] + '</p>' : '')
-      + (['attack', 'power'].includes(rollMode) ? kratosReminder(state.heroes[seat]) : '') + powerPool + '</section>';
+    const modes = '<div class="room-dice-modes" role="group" aria-label="投掷用途">' + Object.entries(dice.modes)
+      .map(([key, entry]) => '<button type="button" data-roll-mode="' + key + '" aria-pressed="' + (key === rollMode) + '">'
+        + (key === 'dodge' ? '<img class="room-mode-icon" src="room-dice-art/dodge.webp" alt="">'
+          : '<span class="room-mode-icon" aria-hidden="true"></span>') + entry.name + '</button>').join('') + '</div>';
+    const power = rollMode === 'power';
+    renderSections(panel, [
+      '<h3>掷骰</h3>', actor.role === 'host' && heroSeatButtons(seat, 'roll'), modes,
+      power ? '<div class="room-power-workspace"></div>' : form, latestResult,
+      notes[rollMode] && '<p class="room-dice-help">' + notes[rollMode] + '</p>',
+      ['attack', 'power'].includes(rollMode) && kratosReminder(state.heroes[seat]), powerPool,
+    ]);
+    if (power) renderSections(panel.querySelector('.room-power-workspace'), [powerPartCard(seat), form]);
+    const currentForm = panel.querySelector('form[data-roll]');
+    if (currentForm !== previousForm) restoreDiceDraft(currentForm, seat);
   }
 
   window.getAibpBattleRecap = () => squadLink?.recapMarkup(state?.squad?.recap?.battleNumber === state?.squad?.battleNumber
@@ -1138,6 +1158,39 @@
     renderedMarkup.set(target, { markup, sources, nodes: [...target.childNodes] });
   }
 
+  const renderedSections = new WeakMap();
+  function renderSections(target, sections) {
+    const previous = renderedSections.get(target);
+    const current = previous?.nodes.filter(Boolean);
+    const intact = current?.length === target.childNodes.length
+      && current.every((node, index) => node === target.childNodes[index]);
+    if (!intact) target.replaceChildren();
+    const nodes = [];
+    let anchor = null;
+    let template;
+    // Stable slots let unrelated state updates skip parsing unchanged sections.
+    for (let index = sections.length - 1; index >= 0; index--) {
+      const html = sections[index];
+      const old = intact ? previous.nodes[index] : null;
+      if (!html) {
+        old?.remove();
+        nodes[index] = null;
+        continue;
+      }
+      if (old && previous.sections[index] === html) {
+        anchor = nodes[index] = old;
+        continue;
+      }
+      template ||= document.createElement('template');
+      template.innerHTML = html;
+      const node = template.content.firstElementChild;
+      if (old) old.replaceWith(node);
+      else target.insertBefore(node, anchor);
+      anchor = nodes[index] = node;
+    }
+    renderedSections.set(target, { sections, nodes });
+  }
+
   function screenHero(hero, seat) {
     const stats = Object.entries(statNames).map(([key, label]) => '<span>'
       + marker('../hero/assets/tri_' + key + '.png', label) + '<strong>' + hero.stats[key] + '</strong></span>').join('');
@@ -1207,8 +1260,8 @@
     const heroes = state.heroes.map(heroCard);
     const shownSeat = host ? equipmentSeat : seat;
     const heroTabs = host ? heroSeatButtons(shownSeat, 'equipment') : '';
-    const own = heroes[shownSeat] ? '<h3 class="battle-room-heading">' + (host ? '泰坦与装备' : '我的英雄')
-      + '</h3>' + heroTabs + heroes[shownSeat] : '';
+    const own = heroes[shownSeat];
+    const ownHeading = own && '<h3 class="battle-room-heading">' + (host ? '泰坦与装备' : '我的英雄') + '</h3>';
     const teammates = heroes.filter((_, index) => index !== shownSeat);
     const overview = role === 'player'
       ? '<details class="battle-room-team"' + (content.querySelector('.battle-room-team')?.open ? ' open' : '')
@@ -1240,16 +1293,18 @@
           + '</strong> · 先结算响应与激化，再清空旧标记（按卡文保留例外），之后加入本次标记。</p>' : '')
       + '<div>' + pool + '</div></section>';
     const poolByDice = edit && (personal || !!own || rollMode === 'power');
-    const dicePanel = diceForm(poolByDice ? poolSection : '');
-    const primary = personal ? dicePanel + own + teamActivity()
-      : (poolByDice ? '' : poolSection) + dicePanel + own
-        + argoAbilities() + roomTrauma()
-        + (edit ? rollLog + teamActivity() : '');
-    renderMarkup(content, goal + primary + (role !== 'player' ? '<h3 class="battle-room-heading">状态总览</h3>' : '') + overview
-      + (edit ? '' : rollLog) + (state.squad ? '<p><a href="' + escape(squadLink.link('/aibp/squad', id)) + '">返回联机小队</a></p>' : ''));
+    renderSections(content, [
+      goal, !personal && !poolByDice && poolSection,
+      edit && '<section class="room-dice-panel" id="room-dice"></section>',
+      ownHeading, own && heroTabs, own, !personal && argoAbilities(), !personal && roomTrauma(),
+      !personal && edit && rollLog, edit && teamActivity(),
+      role !== 'player' && '<h3 class="battle-room-heading">状态总览</h3>', overview, !edit && rollLog,
+      state.squad && '<p><a href="' + escape(squadLink.link('/aibp/squad', id)) + '">返回联机小队</a></p>',
+    ]);
+    if (edit) renderDicePanel(content.querySelector('#room-dice'), poolByDice ? poolSection : '');
     renderTools();
     renderTurn();
-    if (focus >= 0) {
+    if (focus >= 0 && active !== document.activeElement) {
       const target = focusRoot.querySelectorAll('button,select,input')[focus];
       if (target && (!selection || target.name === selection)) target.focus({ preventScroll: true });
     }
@@ -1385,9 +1440,7 @@
   content.addEventListener('input', event => {
     if (event.target.form?.matches('[data-roll]')) {
       const input = event.target;
-      for (const button of input.parentElement.querySelectorAll('[data-dice-step]')) {
-        button.disabled = Number(button.dataset.delta) < 0 ? Number(input.value) <= Number(input.min) : Number(input.value) >= Number(input.max);
-      }
+      updateDiceSteps(input);
       const seat = actor.role === 'host' ? rollSeat : actor.seat;
       saveDiceDraft(seat, rollMode, Object.fromEntries(new FormData(event.target.form)));
     }
@@ -1474,14 +1527,15 @@
     if (mode || rollFollowup) {
       rollMode = mode || rollFollowup;
       parentRoll = rollFollowup ? rollId : '';
-      if (rollFollowup) {
-        rollSeat = Number(seat);
-        const source = state.rolls.find(roll => roll.id === rollId);
-        if (rollMode === 'defense' && source) saveDiceDraft(rollSeat, 'defense', { red: source.defenseCount });
-      }
+      const source = rollFollowup && state.rolls.find(roll => roll.id === rollId);
+      const defense = rollMode === 'defense' && source;
+      if (rollFollowup) rollSeat = Number(seat);
+      if (defense) saveDiceDraft(rollSeat, 'defense', { red: source.defenseCount });
       if (rollFollowup && toolsDialog.open) toolsDialog.close();
       render();
-      content.querySelector('[data-roll] input')?.focus();
+      const form = content.querySelector('form[data-roll]');
+      if (defense && form) restoreDiceDraft(form, rollSeat);
+      form?.querySelector('input')?.focus();
       return;
     }
     if (action === 'roll-wounds') {

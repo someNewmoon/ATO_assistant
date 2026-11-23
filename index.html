@@ -3183,7 +3183,7 @@
   <script src="./assets/exploration-card-rules.js?v=20261018-card-audit1"></script>
   <script src="./assets/exploration-card-resource-rules.js?v=20261013-automation5"></script>
   <script src="./assets/exploration-card-effects.js?v=20261120-ledger"></script>
-  <script src="./assets/dice-motion.js?v=2" defer></script>
+  <script src="./assets/dice-motion.js?v=3" defer></script>
   <script src="./assets/campaign-session.js?v=20260917"></script>
   <script src="./assets/exploration-card-conditions.js?v=20261018-card-audit1"></script>
   <script src="./assets/exploration-card-options.js?v=20261117-resource-types1"></script>
@@ -9184,15 +9184,15 @@
         const face = document.createElement("img");
         face.className = "adventure-roll-face";
         face.alt = "";
+        face.dataset.diceValue = value;
         face.src = `./aibp/room-dice-art/crit-${value}.svg`;
         return face;
       });
       tray.replaceChildren(...faces);
       dialog.returnValue = "cancel";
       dialog.showModal();
-      void Promise.all(faces.map(face => face.decode().catch(() => {}))).then(() => {
-        if (dialog.open && faces.every(face => face.parentElement === tray)) window.ATO_DICE_MOTION?.play(faces);
-      });
+      const actions = dialog.querySelector(".adventure-roll-actions");
+      void window.ATO_DICE_MOTION?.play(faces, [outcome, branchPanel, panel, ...actions.querySelectorAll('[value="confirm"], [value="reroll"]')]);
       return new Promise(resolve => {
         dialog.addEventListener("close", () => resolve(dialog.returnValue), { once: true });
       });

@@ -59,24 +59,27 @@
     return mode === 'attack' ? '关键命中' : mode === 'dodge' ? '关键闪避' : '';
   }
 
+  function pipMarkup(number) {
+    return (pipLayouts[number] || []).map(position => '<span class="room-pip" style="grid-area:'
+      + Math.ceil(position / 3) + '/' + ((position - 1) % 3 + 1) + '"></span>').join('');
+  }
+
   function faceMarkup(die, dir, artKind = die.kind) {
     const natural = naturalFace(die);
     const index = faceIndex(die);
     if (natural && index >= 0 && Object.hasOwn(faces, die.kind)) {
-      return '<span class="room-die-face room-die-cube is-' + die.kind + '" role="img" aria-label="' + faceLabel(natural)
+      return '<span class="room-die-face room-die-cube is-' + die.kind + '" data-dice-value="' + index + '" role="img" aria-label="' + faceLabel(natural)
         + '"><span class="room-die-pips" style="background-position:' + index % 3 * 50 + '% ' + (index < 3 ? 50 : 100)
         + '%"></span></span>';
     }
     const number = Number(die.value);
     if (!Number.isInteger(number) || number < 1 || number > 10) return '';
     if (die.kind === 'd10' || die.kind === 'crit') {
-      return '<img class="room-die-face" src="' + dir + artKind + '-' + number + '.svg" alt="' + names[die.kind] + ' ' + number + '">';
+      return '<img class="room-die-face" data-dice-value="' + number + '" src="' + dir + artKind + '-' + number + '.svg" alt="' + names[die.kind] + ' ' + number + '">';
     }
     if (die.kind !== 'armor' || number > 6) return '';
-    const pips = pipLayouts[number].map(position => '<span class="room-pip" style="grid-area:'
-      + Math.ceil(position / 3) + '/' + ((position - 1) % 3 + 1) + '"></span>').join('');
-    return '<span class="room-die-face room-die-cube is-armor" role="img" aria-label="普通 d6 ' + number
-      + '"><span class="room-die-pips">' + pips + '</span></span>';
+    return '<span class="room-die-face room-die-cube is-armor" data-dice-value="' + number + '" role="img" aria-label="普通 d6 ' + number
+      + '"><span class="room-die-pips">' + pipMarkup(number) + '</span></span>';
   }
 
   function storyFaces(roll) {
@@ -111,5 +114,5 @@
     }));
   }
 
-  return { faces, names, limits, modes, naturalFace, remainingFace, canReroll, faceIndex, faceLabel, rollSummary, woundResults, criticalLabel, faceMarkup, storyFaces, rollOwner, latestByHero, reactionGroups };
+  return { faces, names, limits, modes, naturalFace, remainingFace, canReroll, faceIndex, faceLabel, rollSummary, woundResults, criticalLabel, pipMarkup, faceMarkup, storyFaces, rollOwner, latestByHero, reactionGroups };
 });

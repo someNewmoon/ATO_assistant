@@ -594,7 +594,7 @@
       + Object.entries(conditionNames).map(([key, label]) => '<option value="' + key + '"' + (key === hero.condition ? ' selected' : '') + '>' + label + '</option>').join('')
       + '</select>' : '<small>' + conditionNames[hero.condition] + '</small>';
     const last = state.rolls.find(roll => roll.seat === seat);
-    const summary = last && (!own || !editable) ? '<p class="battle-room-result">最近一次掷骰 · ' + rollSummary(last) + '</p>' : '';
+    const summary = last && (!own || !editable) ? '<p class="battle-room-result" data-dice-summary="' + escape(last.id) + '">最近一次掷骰 · ' + rollSummary(last) + '</p>' : '';
     const hasExhausted = hero.gear.some(item => findGearSlot(item, 'exhausted') >= 0)
       || hero.mnemos.some(card => card.state === 'exhausted') || Object.values(hero.patternCards || {}).includes('exhausted');
     const readyGear = editable && (hero.gear.length || hero.mnemos.length || patterns.length)
@@ -638,11 +638,21 @@
     const rerolled = die => die.rerolled && previous?.dice.some(old => old.id === die.id && !old.rerolled);
     const changed = new Set(latest.dice.filter(die => !previous || rerolled(die)).map(die => die.id));
     if (!changed.size) return;
-    const card = content.querySelector('.room-roll[data-motion-roll="' + CSS.escape(latest.id) + '"]');
+    const id = CSS.escape(latest.id);
+    const cards = [...root.querySelectorAll('.room-roll[data-motion-roll="' + id + '"]')];
+    const card = cards.find(node => toolsDialog.open && toolsBody.contains(node) && node.getClientRects().length)
+      || cards.find(node => node.getClientRects().length);
     if (!card) return;
     const faces = Array.from(card.querySelectorAll('[data-motion-die]'))
       .filter(die => changed.has(die.dataset.motionDie)).map(die => die.querySelector('.room-die-face'));
-    window.ATO_DICE_MOTION?.play(faces.filter(Boolean));
+    const summaries = root.querySelectorAll('[data-dice-summary="' + id + '"]');
+    const activity = state.activity?.[0];
+    const activityDetail = activity && ['roll', 'reroll'].includes(activity.kind)
+      && activity.id !== prior.activity?.[0]?.id
+      ? content.querySelector('[data-dice-activity="' + CSS.escape(activity.id) + '"]') : null;
+    void window.ATO_DICE_MOTION?.play(faces.filter(Boolean), [
+      ...cards.filter(node => node !== card), ...card.querySelectorAll('[data-dice-reveal]'), ...summaries, activityDetail,
+    ]);
   }
 
   function rollAvatar(seat) {
@@ -684,7 +694,7 @@
     return '<section class="battle-room-rolls room-team-activity"><h3>队友操作</h3><ol>'
       + recent.map(entry => '<li>' + (entry.seat === null ? '' : rollAvatar(entry.seat))
         + '<span><strong>' + escape(entry.by || '队友') + '</strong> · ' + escape(entry.label)
-        + (entry.detail ? ' · ' + escape(entry.detail) : '') + '</span></li>').join('') + '</ol></section>';
+        + (entry.detail ? '<span data-dice-activity="' + escape(entry.id) + '"> · ' + escape(entry.detail) + '</span>' : '') + '</span></li>').join('') + '</ol></section>';
   }
 
   function rollCard(roll, latest, quickFeedback = false) {
@@ -703,10 +713,10 @@
       return '<div class="room-die" data-motion-die="' + escape(die.id) + '"><small>' + dice.names[die.kind] + '</small>'
         + (canSelect ? '<button type="button" data-select-die' + dieAttrs + ' aria-pressed="' + Boolean(selection?.has(die.id))
           + '" aria-label="选中' + dice.names[die.kind] + '重掷">' + art + '</button>' : art)
-        + '<span>' + (result ? result.map((n, i) => n + ['ϟ', '△', '●'][i]).join(' ') : die.value) + '</span>'
-        + (critical ? '<strong class="room-critical-result">' + critical + '</strong>' : '')
-        + (die.rerolled ? '<small>已重掷 · 原掷 ' + escape(originalLabel) + '</small>' : '')
-        + (editable && result ? '<div class="room-die-conversions">'
+        + '<span data-dice-reveal>' + (result ? result.map((n, i) => n + ['ϟ', '△', '●'][i]).join(' ') : die.value) + '</span>'
+        + (critical ? '<strong class="room-critical-result" data-dice-reveal>' + critical + '</strong>' : '')
+        + (die.rerolled ? '<small data-dice-reveal>已重掷 · 原掷 ' + escape(originalLabel) + '</small>' : '')
+        + (editable && result ? '<div class="room-die-conversions" data-dice-reveal>'
           + (result[1] ? '<button type="button" data-action="convert" data-symbol="potential"' + dieAttrs + ' title="将一枚潜力转为威力">△ → ϟ</button>' : '')
           + (result[2] ? '<button type="button" data-action="convert" data-symbol="dot"' + dieAttrs + ' title="将一枚●转为威力">● → ϟ</button>' : '') + '</div>' : '')
         + '</div>';
@@ -717,7 +727,7 @@
     const latestPower = state.rolls.find(entry => entry.seat === roll.seat && entry.round === state.round && entry.mode === 'power');
     const canSettle = state.deckRevision && editable && latestPower?.id === roll.id && roll.bpOutcome === undefined && canRequestBp(roll.seat);
     const outcome = ['失败', '伤口', '暴击'];
-    const result = roll.mode === 'power' ? '<div class="room-wound-result">'
+    const result = roll.mode === 'power' ? '<div class="room-wound-result" data-dice-reveal>'
       + '<span>击破结果 · ' + (roll.bpOutcome === undefined ? dice.woundResults[wounds] : outcome[roll.bpOutcome])
       + (roll.wounds === undefined ? '（待确认）' : '') + '</span>'
       + (canSettle ? '<div class="room-bp-actions">'
@@ -733,11 +743,11 @@
     const heading = '<h4>' + rollAvatar(roll.seat) + escape(roll.hero) + (mode ? ' · ' + mode : '')
       + ' <small>第 ' + roll.round + ' 轮</small></h4>';
     return '<li class="room-roll" data-motion-roll="' + escape(roll.id) + '">' + (quickFeedback ? '<div class="room-roll-head">' + heading + feedback + '</div>' : heading)
-      + '<div class="room-dice-results">' + faces + '</div><p>' + rollSummary(roll) + '</p>'
+      + '<div class="room-dice-results">' + faces + '</div><p data-dice-reveal>' + rollSummary(roll) + '</p>'
       + (followup ? '<p class="room-dice-help">已配置 ' + roll.defenseCount + ' 枚防御红骰，请按闪避结果确认是否投掷。</p>' : '')
-      + (editable && (roll.mode === 'attack' || followup) ? '<button type="button" data-roll-followup="'
+      + (editable && (roll.mode === 'attack' || followup) ? '<button type="button" data-dice-reveal data-roll-followup="'
         + (followup ? 'defense' : 'power') + '"' + attrs + '>' + (followup ? '准备投掷防御红骰' : '命中后准备投掷威力骰') + '</button>' : '')
-      + (editable && roll.dice.some(dice.canReroll) ? '<div class="room-reroll-controls"><button type="button" data-action="reroll"' + attrs
+      + (editable && roll.dice.some(dice.canReroll) ? '<div class="room-reroll-controls" data-dice-reveal><button type="button" data-action="reroll"' + attrs
         + (selection?.size ? '' : ' disabled') + '>重掷所选骰子' + (selection?.size ? '（' + selection.size + '）' : '') + '</button>'
         + (['attack', 'dodge'].includes(roll.mode) ? '<div class="room-reroll-fate">'
           + marker('../hero/assets/tri_fate.png', '命运') + buttons('stat', 'fate', state.heroes[roll.seat].stats.fate, roll.seat, '命运', 30, true)

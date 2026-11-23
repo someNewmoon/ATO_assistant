@@ -296,9 +296,14 @@
     }
     const log = content.querySelector('[data-team-log]');
     const latest = squad.checks.find(roll => roll.seat === seat);
-    log.innerHTML = squad.checks.map(roll => '<li data-motion-roll="' + e(roll.id) + '">' + storyRollArt(roll) + rollLine(roll)
+    const markup = squad.checks.map(roll => '<li data-motion-roll="' + e(roll.id) + '">' + storyRollArt(roll)
+      + '<span data-dice-reveal>' + rollLine(roll)
       + (roll === latest && latest.target !== null && !latest.replaces && squad.phase !== 'battle'
-        ? ' ' + button('reroll', '命运 +1 并重掷', latest.id) : '') + '</li>').join('') || '<li>暂无检定或掷骰。</li>';
+        ? ' ' + button('reroll', '命运 +1 并重掷', latest.id) : '') + '</span></li>').join('') || '<li>暂无检定或掷骰。</li>';
+    if (log.dataset.state !== markup) {
+      log.innerHTML = markup;
+      log.dataset.state = markup;
+    }
     window.ATO_LANGUAGE?.refresh();
   }
 
@@ -363,7 +368,7 @@
     const latestRoll = room.squad.checks?.[0]?.id;
     if (hadRoom && latestRoll && latestRoll !== previousRoll) {
       const row = content.querySelector('[data-motion-roll="' + CSS.escape(latestRoll) + '"]');
-      if (row) window.ATO_DICE_MOTION?.play(row.querySelectorAll('.room-die-face'));
+      if (row) void window.ATO_DICE_MOTION?.play(row.querySelectorAll('.room-die-face'), row.querySelectorAll('[data-dice-reveal]'));
     }
   }
 

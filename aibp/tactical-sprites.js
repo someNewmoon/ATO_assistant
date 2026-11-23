@@ -36,7 +36,7 @@ Object.assign(window.BattleBoardSprites.labyrinthauros, {
 Object.assign(window.BattleBoardSprites.temenos, {
   restored: '../aibp/images/board-pieces/restored/temenos-v7-original-style.webp',
   icon: '../aibp/images/board-pieces/restored/temenos-v7-original-style-icon.webp',
-  artworkFacing: 180, // Keep the established south-facing source reference.
+  artworkFacing: 300, // The open maw is above and left of the center in V7.
   artworkScale: 1.1,
 });
 Object.assign(window.BattleBoardSprites.pursuer, {

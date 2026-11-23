@@ -144,7 +144,7 @@
     redDie: 'kratos-abilities/redDie.png', retain: 'kratos-abilities/retain.png',
     black: 'kratos-abilities/black.png', retainAny: 'kratos-abilities/retainAny.png',
     reposition: 'kratos-abilities/reposition.png', burden: 'kratos-abilities/burden.png',
-    diversion: 'battle-markers/diversion.webp', motivate: 'battle-markers/rouse.webp',
+    diversion: 'battle-markers/diversion.webp', motivate: 'kratos-abilities/motivate.png',
   };
 
   function forTitan(titan) {

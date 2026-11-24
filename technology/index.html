@@ -1092,6 +1092,7 @@ button.gear-group-name:hover {
 <link rel="stylesheet" href="editorial.css?v=20261001-cycle-menu">
 <link rel="stylesheet" href="tech-tree.css?v=20261002-content-paper">
 <link rel="stylesheet" href="arsenal.css?v=20261120-copy-limits">
+<link rel="stylesheet" href="arsenal-loadout.css?v=20261124-folio">
 <link rel="stylesheet" href="../hero/battle-roster.css">
 <link rel="stylesheet" href="../assets/card-art.css?v=20261017-corners1">
 <script src="../assets/card-art.js?v=20261017-corners1" defer></script>
@@ -2279,14 +2280,24 @@ function editArsenalLoadout(heroId, catalog) {
   const templates = inventory.loadoutTemplates(record);
   const roster = inventory.loadoutTitans(record);
   const dialog = document.createElement('dialog');
-  dialog.className = 'arsenal-loadout-dialog';
+  dialog.className = 'arsenal-loadout-dialog loadout-folio';
   dialog.setAttribute('aria-labelledby', 'arsenalEditLoadoutTitle');
   const portrait = heroes.heroPortrait(hero);
+  const primaryGroups = ['arm', 'armor', 'aid'];
+  const stockGroups = inventory.groupGear(catalog.filter(item => item.part.key !== 'titan' && item.quantity > 0), item => item.part.key);
   dialog.innerHTML = `<header class="arsenal-player-identity">
     ${portrait ? `<img src="../hero/assets/${esc(portrait)}" alt="">` : ''}
-    <h2 id="arsenalEditLoadoutTitle">${esc(heroes.heroDisplayName(hero))}的配装</h2></header>
+    <div class="folio-heading">
+      <span class="folio-kicker">军械库 / 英雄配装</span>
+      <h2 id="arsenalEditLoadoutTitle">${esc(heroes.heroDisplayName(hero))}的配装</h2>
+    </div>
+    <div class="folio-counter" role="status">已分配 <strong data-loadout-total>0</strong> 件</div>
+  </header>
     <form>
-      <fieldset>
+      <fieldset aria-label="英雄配装">
+        <div class="folio-columns">
+          <section class="folio-panel folio-titan">
+            <h3 class="folio-title">泰坦与面板</h3>
         ${legacy?.length ? `<label>沿用旧配装<select name="legacy" aria-label="沿用旧配装"><option value="">新配装</option>${legacy.map(([id, loadout]) => `<option value="${id}">${esc(loadout.player || `席位 ${id}`)}</option>`).join('')}</select></label>` : ''}
         <label>泰坦<select name="titan" aria-label="泰坦"></select></label>
         <label data-titan-panel-field hidden>梦行者面板
@@ -2301,16 +2312,31 @@ function editArsenalLoadout(heroId, catalog) {
           <small data-trauma-source></small>
         </details>
         ${heroes.mnemosHtml(hero)}
+          </section>
+          <section class="folio-panel folio-assigned">
+            <h3 class="folio-title">我的装备</h3>
         ${templates.length ? `<label>导入配装模板<select name="template"><option value="">选择模板</option>${templates.map(item => `<option value="${esc(item.id)}">${esc(item.name)}</option>`).join('')}</select></label><small>模板仅填入当前草稿，保存时检查库存；不会覆盖原模板。</small>` : ''}
-        <h3>我的装备</h3><ul class="arsenal-assigned-cards" aria-label="已分配装备"></ul>
-        <label>搜索库存<input name="query" type="search" placeholder="装备名称、别名或编号"></label>
-        <div data-loadout-choices></div>
+            <ul class="arsenal-assigned-cards" aria-label="已分配装备"></ul>
+          </section>
+          <section class="folio-panel folio-supply">
+            <h3 class="folio-title">装备库存</h3>
+            <label>搜索库存<input name="query" type="search" placeholder="装备名称、别名或编号"></label>
+            <div class="folio-filters">
+              <div class="folio-categories" role="group" aria-label="装备分类">
+                <button type="button" class="folio-category" data-loadout-category="" aria-pressed="true">全部</button>
+                ${stockGroups.map(group => `<button type="button" class="folio-category" data-loadout-category="${esc(group.key)}" aria-pressed="false">${esc(group.label)}</button>`).join('')}
+              </div>
+              <label class="folio-available"><input type="checkbox" name="availableOnly">只看可分配</label>
+            </div>
+            <div data-loadout-choices></div>
+          </section>
+        </div>
         <div class="arsenal-loadout-actions">
+          <p class="arsenal-message" role="status"></p>
           <button type="button" class="tool-btn" data-close-loadout>取消</button>
           <button type="submit" class="tool-btn">保存配装</button>
         </div>
       </fieldset>
-      <p class="arsenal-message" role="status"></p>
     </form>`;
   const form = dialog.querySelector('form');
   const fields = dialog.querySelector('fieldset');
@@ -2323,7 +2349,7 @@ function editArsenalLoadout(heroId, catalog) {
         + esc(holder.name) + ' ×' + holder.count + '</span>';
     }).join('');
   }
-  const message = dialog.querySelector('[role="status"]');
+  const message = dialog.querySelector('.arsenal-message');
   const titan = form.elements.namedItem('titan');
   const panel = form.elements.namedItem('titanPanel');
   const trauma = dialog.querySelector('[data-loadout-trauma]');
@@ -2332,6 +2358,10 @@ function editArsenalLoadout(heroId, catalog) {
   const traumaTrack = trauma.querySelector('[data-trauma-track]');
   const traumaSource = trauma.querySelector('[data-trauma-source]');
   const query = form.elements.namedItem('query');
+  const availableOnly = form.elements.namedItem('availableOnly');
+  const categories = dialog.querySelector('.folio-categories');
+  const total = dialog.querySelector('[data-loadout-total]');
+  let category = '';
   function renderTitans() {
     const others = otherLoadouts();
     const groups = new Map();
@@ -2389,31 +2419,55 @@ function editArsenalLoadout(heroId, catalog) {
 
   function renderGearChoices() {
     const needle = query.value.trim().toLowerCase();
-    const items = catalog.filter(item => item.part.key !== 'titan' && item.quantity > 0 && item.searchText.includes(needle));
-    choices.innerHTML = inventory.groupGear(items, item => item.part.key).map(group =>
-      '<section><h4>' + esc(group.label) + '</h4><div class="arsenal-kit-grid">' + group.items.map(item => {
+    const groups = stockGroups.filter(group => !category || category === group.key);
+    choices.innerHTML = groups.map(group => {
+      const cards = group.items.filter(item => item.searchText.includes(needle)).map(item => {
         const id = item.gearId;
         const holders = holdersByGear.get(id) || [];
         const free = item.quantity - holders.reduce((sum, holder) => sum + holder.count, 0) - (draft.gear[id] || 0);
+        if (availableOnly.checked && free <= 0) return '';
         return '<article class="arsenal-kit-card">' + loadoutArt(id, item.name) + '<strong>' + esc(item.name) + '</strong>'
           + '<small>剩余 ' + Math.max(0, free) + ' / 库存 ' + item.quantity + '</small>'
           + (holders.length ? '<span class="arsenal-gear-owners">' + avatars(holders) + '</span>' : '')
           + '<button type="button" class="tool-btn" data-add-loadout-gear="' + esc(id) + '" aria-label="分配一件' + esc(item.name) + '"'
           + (free > 0 ? '' : ' disabled') + '>＋ 分配</button></article>';
-      }).join('') + '</div></section>').join('') || '<p>没有符合条件的装备。</p>';
+      }).join('');
+      return cards ? '<section><h4>' + esc(group.label) + '</h4><div class="arsenal-kit-grid">' + cards + '</div></section>' : '';
+    }).join('') || '<p class="folio-gear-empty">没有符合筛选条件的装备。</p>';
   }
 
   function renderAssignedGear() {
-    list.innerHTML = Object.entries(draft.gear).map(([id, amount]) => {
-      const name = getGearName(id);
-      const stocked = stock[id]?.quantity > 0;
-      return `<li>${stocked ? loadoutArt(id, name) : ''}<strong>${esc(name)} ×${amount}</strong>${stocked ? '' : '<small>旧配装 · 库存为零</small>'}<button type="button" class="tool-btn"
-        data-release-gear="${esc(id)}" aria-label="${esc(`释放一件${name}`)}">移除一件</button></li>`;
-    }).join('') || '<li>未分配装备</li>';
+    const assigned = Object.entries(draft.gear);
+    const groups = new Map(inventory.groupGear(assigned, ([id]) => gearPart(id).key)
+      .map(group => [group.key, group.items]));
+    total.textContent = assigned.reduce((sum, [, amount]) => sum + amount, 0);
+    list.innerHTML = Object.entries(inventory.gearGroups).map(([key, label]) => {
+      const items = groups.get(key) || [];
+      if (!items.length && !primaryGroups.includes(key)) return '';
+      const count = items.reduce((sum, [, amount]) => sum + amount, 0);
+      const rows = items.map(([id, amount]) => {
+        const name = getGearName(id);
+        const stocked = stock[id]?.quantity > 0;
+        return `<li>${stocked ? loadoutArt(id, name) : ''}<strong>${esc(name)} ×${amount}</strong>${stocked ? '' : '<small>旧配装 · 库存为零</small>'}<button type="button" class="tool-btn"
+          data-release-gear="${esc(id)}" aria-label="${esc(`释放一件${name}`)}">移除一件</button></li>`;
+      }).join('');
+      return `<li class="folio-gear-group">
+        <h4 class="folio-gear-heading">${esc(label)} <span>${count} 件</span></h4>
+        ${rows ? `<ul class="folio-gear-rows" aria-label="${esc(label)}">${rows}</ul>` : '<p class="folio-gear-empty">未分配</p>'}
+      </li>`;
+    }).join('');
     renderGearChoices();
   }
 
   query.addEventListener('input', renderGearChoices);
+  availableOnly.addEventListener('change', renderGearChoices);
+  categories.addEventListener('click', event => {
+    const button = event.target.closest('[data-loadout-category]');
+    if (!button) return;
+    category = button.dataset.loadoutCategory;
+    for (const option of categories.children) option.setAttribute('aria-pressed', String(option === button));
+    renderGearChoices();
+  });
   dialog.addEventListener('click', event => {
     const id = event.target.closest('[data-preview-gear]')?.dataset.previewGear;
     if (id) showGearImageModal(gearImageSrc(id), getGearName(id));

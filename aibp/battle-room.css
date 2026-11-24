@@ -449,6 +449,10 @@ body.aibp-room-only > .app > main > :not(#battleRoom) { display: none !important
 .room-turn-window li small { display: block; color: #e0d7bb; }
 .room-turn-window .roll-hero-avatar { width: 1.75rem; height: 1.75rem; }
 .room-turn-window button { white-space: nowrap; }
+.room-ai-guide { display: grid; gap: .35rem; padding-block: .45rem; }
+.room-ai-guide > strong { color: var(--accent-strong); }
+.room-ai-guide > .battle-room-card-art { max-width: 8rem; }
+.room-ai-guide > .battle-room-card-art img { max-height: 7rem; }
 .room-turn-controls { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .4rem; }
 .room-turn-window:not([open]) [data-turn-status], .room-turn-window [data-turn-status]:empty { display: none; }
 .room-turn-window [data-turn-status] { display: block; color: #ffd1bd; padding: 0 .65rem .45rem; }

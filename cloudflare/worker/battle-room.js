@@ -3,9 +3,10 @@ import { DurableObject } from 'cloudflare:workers';
 import heroCatalog from '../../hero/hero-catalog.js';
 import inventory from '../../technology/gear-inventory.js';
 import cardState from '../../aibp/room-card-state.js';
+import aiGuide from '../../aibp/ai-turn-guide.js';
 import roomDice from '../../aibp/room-dice.js';
 import { roomProjection } from './room-projection.js';
-import { prepareRoomDeck, revealRoomAi, revealRoomBp, roomDeckProjection, settleRoomBp } from './room-deck.js';
+import { discardRoomAi, prepareRoomDeck, revealRoomAi, revealRoomBp, roomDeckProjection, settleRoomBp } from './room-deck.js';
 import { applyTurn, claimTurn, setTurnPhase } from './room-turn.js';
 import { battleRecap, battleStats, countReaction, setRollWounds } from './room-recap.js';
 import battleConfig from '../../technology/battle-config.js';
@@ -173,7 +174,16 @@ function recordBattleActivity(room, actor, body, previousProjection) {
   const hero = room.heroes[seat];
   let detail = '';
   const projection = room.projection;
-  if (body.type === 'ai-request') {
+  if (body.type === 'ai-guide') {
+    label = body.value === 'begin' ? '开始逐步结算' : body.value === 'extra' ? '结算额外指令技' : '完成骇物步骤';
+    detail = aiGuide.steps[body.value]?.[0] || '';
+  } else if (body.type === 'ai-guide-discard') {
+    label = '弃置 AI';
+    detail = previousProjection?.ai?.label;
+    if (previousProjection?.aiDeck.count === 0 && projection?.aiDeck.count) {
+      detail = [detail, '弃牌洗回牌堆'].filter(Boolean).join(' · ');
+    }
+  } else if (body.type === 'ai-request') {
     if (previousProjection?.aiPending || !projection?.aiPending) return;
     detail = projection.ai?.label;
   } else if (body.type === 'bp-request') {
@@ -578,12 +588,24 @@ export class BattleRoom extends DurableObject {
     if (room.squad && body.type !== 'public-lobby'
       && (room.squad.phase !== 'battle' || body.battleNumber !== room.squad.battleNumber)) reject('当前战斗已结束或已经切换。', 409);
     if (body.expectedRound !== undefined && body.expectedRound !== room.round) reject('轮次已更新，请重新操作。', 409);
-    if (['turn-phase', 'turn-take', 'turn-finish'].includes(body.type)) return applyTurn(room, actor, body);
+    if (['turn-phase', 'turn-take', 'turn-finish', 'ai-guide'].includes(body.type)) return applyTurn(room, actor, body);
     if (typeof body.type === 'string' && body.type.startsWith('trauma-')) return applyTrauma(room, actor, body, randomInt);
     if (typeof body.type === "string" && body.type.startsWith("board-")) return applyRoomBoard(room, actor, body);
+    if (body.type === 'ai-guide-discard') {
+      if (actor.role !== 'host') reject('指令技由房主确认弃置。', 403);
+      const deck = room.battleDeck;
+      if (!deck || room.turn?.phase !== 'apostle' || room.turn.aiGuide !== 'discard') reject('当前无法弃置指令技。', 409);
+      discardRoomAi(deck, body.card, randomInt);
+      deck.revision++;
+      deck.operation = body.id;
+      room.projection = roomDeckProjection(deck, room.projection);
+      room.turn.aiGuide = 'other';
+      return;
+    }
     if (body.type === 'ai-request') {
       if (actor.role !== 'host') reject('只有房主可以揭示 AI。', 403);
       if (room.turn?.phase !== 'apostle') reject('请在骇物轮次揭示 AI。', 409);
+      if (room.turn.aiGuide && room.turn.aiGuide !== 'draw') reject('请按当前骇物步骤结算。', 409);
       const deck = room.battleDeck;
       if (!deck) reject('请先在 AIBP 初始化骇物牌堆。', 409);
       if (['DEMIDJINN', 'TITAN_X'].includes(deck.data.apostle)) reject('这只骇物要在 AIBP 按特殊规则揭示 AI。', 409);
@@ -591,6 +613,7 @@ export class BattleRoom extends DurableObject {
         deck.revision++;
         deck.operation = body.id;
         room.projection = roomDeckProjection(deck, room.projection);
+        if (room.turn.aiGuide === 'draw') room.turn.aiGuide = 'target';
       }
       return;
     }
@@ -648,6 +671,7 @@ export class BattleRoom extends DurableObject {
         delete room.bpRequest;
       }
       room.projection = room.battleDeck ? roomDeckProjection(room.battleDeck, projection) : projection;
+      if (room.turn?.aiGuide === 'draw' && room.projection.aiPending) room.turn.aiGuide = 'target';
       return;
     }
     if (body.type === 'public-lobby') {

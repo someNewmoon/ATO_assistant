@@ -738,3 +738,44 @@ test('ordinary d6 uses standard pip locations for every face', () => {
   }
   assert.equal(dice.faceMarkup({ kind: 'armor', value: 7 }, ''), '');
 });
+
+test('循环一逐步结算由房主确认，核对牌面并洗回空的指令技牌堆', () => {
+  for (const apostle of ['HEKATON', 'LABYRINTHAUROS', 'HERMESIAN_PURSUER', 'ALPHA_TEMENOS']) {
+    const r = room();
+    r.board = api.setupRoomBoard({ apostle, level: 1 }, 2);
+    const src = 'ps/' + apostle + '/' + apostle + '_AI_I_001.jpg';
+    const card = { fileName: src.split('/').at(-1), level: 'I', _room: { face: { src, label: 'AI I 001' } } };
+    const pile = deck => ({ deck, discard: [], removed: [], supply: {} });
+    r.battleDeck = api.prepareRoomDeck({ apostle, AI: pile([card]), BP: pile([]), lastRevealed: {}, tokens: [] }, apostle);
+    const apply = (actor, type, fields = {}) => reducer.apply(r, actor, {
+      id: crypto.randomUUID(), type, round: r.round, phase: r.turn?.phase ?? null, ...fields,
+    });
+    const confirm = value => apply(host, 'ai-guide', { value });
+    apply(host, 'turn-phase', { value: 'apostle' });
+    assert.throws(() => apply(player, 'ai-guide', { value: 'begin' }), /房主/);
+    confirm('begin');
+    assert.throws(() => apply(host, 'ai-request'), /当前骇物步骤/);
+    assert.throws(() => confirm('target'), /步骤/);
+    assert.throws(() => apply(host, 'turn-phase', { value: 'titans' }), /逐步结算/);
+    confirm('start');
+    assert.throws(() => confirm('draw'), /牌面/);
+    for (let pass = 0; pass < 2; pass++) {
+      apply(host, 'ai-request');
+      assert.equal(r.turn.aiGuide, 'target');
+      assert.equal(r.projection.aiPending, true);
+      assert.throws(() => apply(host, 'ai-guide-discard', { card: src }), /无法弃置/);
+      for (const step of ['target', 'move', 'evade', 'effects', 'after']) confirm(step);
+      assert.throws(() => apply(host, 'ai-guide-discard', { card: src.replace('001', '002') }), /指令技已更新/);
+      apply(host, 'ai-guide-discard', { card: src });
+      assert.equal(r.turn.aiGuide, 'other');
+      assert.equal(r.projection.aiPending, false);
+      assert.equal(r.projection.aiDeck.count, 1);
+      if (pass === 0) confirm('extra');
+    }
+    confirm('other');
+    confirm('end');
+    apply(host, 'turn-phase', { value: 'titans' });
+    assert.equal(r.turn.phase, 'titans');
+    assert.equal(r.turn.aiGuide, undefined);
+  }
+});

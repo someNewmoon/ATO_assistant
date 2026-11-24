@@ -26,6 +26,7 @@
   const titanMarkerNames = { despair: '绝望', ambrosia: '神浆' };
   const poolNames = { opening: '伺机', break: '破势', diversion: '分神', rouse: '激励', black: '破坏', fire: '火焰', hope: '希望' };
   const conditionNames = { standing: '站立', down: '倒地', rising: '起身', dead: '死亡' };
+  const aiGuide = window.ATO_AI_TURN_GUIDE;
   const dice = window.ATO_ROOM_DICE;
   const { faceLabel, rollSummary } = dice;
   let id = isLink ? routeId : '';
@@ -404,12 +405,16 @@
     const button = event.target.closest('[data-turn-action]');
     if (!button || !state || state.closed) return;
     const { turnAction: type, seat, value } = button.dataset;
+    if (type === 'ai-guide-discard') {
+      send({ id: crypto.randomUUID(), type, card: state.projection?.ai?.src });
+      return;
+    }
     if (type === 'draw-ai') {
       if (turnAiAction || state.projection?.aiPending) return;
       const apostle = state.board?.apostle;
       if (!state.deckRevision || ['DEMIDJINN', 'TITAN_X'].includes(apostle)) {
         if (projectionAction) { say('牌堆正在同步，请稍后再揭示 AI。'); return; }
-        const result = window.drawAibpRoomCard?.('AI', apostle);
+        const result = window.drawAibpRoomCard?.('AI', apostle, { preview: !state.turn?.aiGuide });
         if (!result) { say('请在 AIBP 检查当前骇物和 AI 牌堆。'); return; }
         syncProjection();
         say('');
@@ -434,8 +439,11 @@
     const titans = turn?.phase === 'titans';
     const host = actor.role === 'host';
     const aiRound = (state.squad?.battleNumber || 0) + ':' + state.round;
-    const shouldDrawAi = host && turn?.phase === 'apostle' && !state.projection?.aiPending && Boolean(window.drawAibpRoomCard);
-    if (shouldDrawAi && promptedAiRound !== aiRound) {
+    const guideAvailable = turn?.phase === 'apostle' && aiGuide.bosses.includes(state.board?.apostle);
+    const step = guideAvailable && turn.aiGuide;
+    const shouldDrawAi = host && turn?.phase === 'apostle' && !state.projection?.aiPending
+      && Boolean(window.drawAibpRoomCard || (guideAvailable && state.deckRevision));
+    if (host && (guideAvailable || shouldDrawAi) && promptedAiRound !== aiRound) {
       promptedAiRound = aiRound;
       turnWindow.open = true;
     }
@@ -461,16 +469,45 @@
         + '<span>' + escape(hero.name) + '<small>' + (dead ? '死亡' : current ? '行动中' : acted ? '已结束' : '待行动')
         + '</small></span>' + actions + '</li>';
     }).join('');
-    const controls = host ? (!turn ? action('turn-phase', '进入骇物轮次', ' data-value="apostle"')
+    const drawAi = () => action('draw-ai', '抽取 AI', turnAiAction || !shouldDrawAi ? ' disabled' : '');
+    const guideAction = (value, label) => action('ai-guide', label, ' data-value="' + value + '"');
+    let controls = '';
+    let guidance = '';
+    if (guideAvailable) {
+      if (!step && host) controls = guideAction('begin', '开始逐步结算');
+      if (step) {
+        const [title, detail, confirm] = aiGuide.steps[step];
+        const projection = state.projection;
+        const current = projection?.ai;
+        const showCard = ['target', 'move', 'evade', 'effects', 'after', 'discard'].includes(step);
+        guidance = '<div class="room-ai-guide"><strong>' + title + '</strong>' + (detail ? '<p>' + detail + '</p>' : '')
+          + (showCard && current?.src ? cardImage('/aibp/' + current.src, current.label || '当前 AI') : '')
+          + '</div>';
+        if (host) {
+          if (step === 'ready') controls = action('turn-phase', confirm, ' data-value="titans"');
+          else if (step === 'draw' && !projection?.aiPending) {
+            controls = drawAi();
+            if (!shouldDrawAi) guidance += '<p>请先由房主在 AIBP 同步牌堆。</p>';
+          } else if (step === 'discard' && projection?.aiPending) {
+            if (state.deckRevision && current?.src) controls = action('ai-guide-discard', '弃置当前 AI');
+          } else {
+            controls = guideAction(step, confirm);
+            if (step === 'other') controls += guideAction('extra', '结算额外 AI');
+          }
+        }
+      }
+    } else if (host) {
+      controls = !turn ? action('turn-phase', '进入骇物轮次', ' data-value="apostle"')
         + action('turn-phase', '进入泰坦轮次', ' data-value="titans"')
-      : !titans ? (shouldDrawAi ? action('draw-ai', '抽取 AI', turnAiAction ? ' disabled' : '') : '') + action('turn-phase', '结束骇物轮次', ' data-value="titans"')
+      : !titans ? (shouldDrawAi ? drawAi() : '') + action('turn-phase', '结束骇物轮次', ' data-value="titans"')
         : action('round', '下一轮 · 骇物行动',
-          ' title="开始下一轮，回正阿尔戈能力"' + (everyoneFinished ? '' : ' disabled'))) : '';
-    const hint = !turn ? '' : !titans ? (shouldDrawAi ? '<p>骇物轮开始，请揭示 AI。</p>' : '')
-      + '<p>泰坦仍可结算闪避、击退和推斥。</p>'
+          ' title="开始下一轮，回正阿尔戈能力"' + (everyoneFinished ? '' : ' disabled'));
+    }
+    const hint = !turn ? '' : !titans ? '<p>泰坦仍可结算闪避、击退和推斥。</p>'
       : everyoneFinished ? '<p>结算本轮结束效果后，由房主开启下一轮。</p>'
         : activeSeat === null ? '<p>首次主动移动或投掷攻击／威力骰会认领回合。</p>' : '';
-    const next = '<ul>' + roster + '</ul>' + hint + (controls ? '<div class="room-turn-controls">' + controls + '</div>' : '');
+    const actions = controls ? '<div class="room-turn-controls">' + controls + '</div>' : '';
+    const next = guidance + actions + '<ul>' + roster + '</ul>' + hint;
     if (turnMarkup !== next) {
       turnMarkup = next;
       turnWindow.querySelector('[data-turn-body]').innerHTML = next;
@@ -1534,7 +1571,7 @@
           turnAiAction = null;
           renderTurn();
           const card = state.projection?.aiPending && state.projection.ai;
-          if (card?.src && !window.openAibpRoomAi?.(state.board?.apostle)) {
+          if (card?.src && !state.turn?.aiGuide && !window.openAibpRoomAi?.(state.board?.apostle)) {
             window.ATO_BATTLE_ASSETS?.zoom('/aibp/' + card.src, card.label || '抽取的 AI');
           }
         }
@@ -1551,7 +1588,7 @@
           }
         } else if (error instanceof RejectedAction) {
           if (action.id === turnAiAction) turnAiAction = null;
-          if (error.status === 409 && ['ai-request', 'bp-request', 'bp-settle'].includes(action.type)) await refreshRoomState();
+          if (error.status === 409 && ['ai-request', 'ai-guide', 'ai-guide-discard', 'bp-request', 'bp-settle'].includes(action.type)) await refreshRoomState();
           if (error.status === 401 && lostSeat()) break;
           if (!state.squad || state.squad.phase === 'battle') render();
         } else {

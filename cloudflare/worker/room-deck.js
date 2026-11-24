@@ -170,6 +170,20 @@ export function revealRoomAi(deck, randomInt) {
   return true;
 }
 
+export function discardRoomAi(deck, source, randomInt) {
+  const data = deck.data;
+  const ai = data.AI;
+  const card = pending(data, 'AI');
+  if (!card || card._room?.face?.src !== source) fail('当前指令技已更新，请重试。');
+  const index = ai.deck.findIndex(entry => same(card, entry));
+  if (index < 0) fail('找不到当前指令技，请在 AIBP 核对牌堆。');
+  ai.discard.push(ai.deck.splice(index, 1)[0]);
+  ai.pending = null;
+  delete ai.pendingMode;
+  delete ai.comboFollowup;
+  if (!ai.deck.length) discardIntoDeck(ai, randomInt);
+}
+
 export function revealRoomBp(deck, seat, randomInt, allowHandoff = false) {
   const data = deck.data;
   let bp = piles(data).BP;

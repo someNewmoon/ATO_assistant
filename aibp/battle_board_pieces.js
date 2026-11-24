@@ -43,7 +43,7 @@
     return svg;
   }
 
-  function drawTrail(layer, trail, boss = false) {
+  function drawTrail(layer, trail, boss = false, suggested = false) {
     const route = trail?.route;
     if (!route || route.length < 2) return;
     const document = layer.ownerDocument;
@@ -52,9 +52,10 @@
     svg.setAttribute("preserveAspectRatio", "none");
     svg.setAttribute("class", "battle-piece-trail" + (boss ? " battle-piece-boss-trail" : ""));
     svg.setAttribute("role", "img");
+    if (suggested) svg.classList.add("battle-piece-suggested-route");
     const square = ({ column, row }) => String.fromCharCode(64 + row) + column;
-    svg.setAttribute("aria-label", (boss ? "骇物正交移动路线 " : "泰坦移动路线 ") + route.map(square).join(" → "));
-    svg.style.setProperty("--piece-accent", boss ? "#f4a284" : accents[trail.seat]);
+    svg.setAttribute("aria-label", (suggested ? "AI 建议路线 " : boss ? "骇物正交移动路线 " : "泰坦移动路线 ") + route.map(square).join(" → "));
+    svg.style.setProperty("--piece-accent", suggested ? "#f9d478" : boss ? "#f4a284" : accents[trail.seat]);
     const line = document.createElementNS(svgNS, "polyline");
     line.setAttribute("points", route.map(({ column, row }) => (column - 0.5) + "," + (14.5 - row)).join(" "));
     line.setAttribute("vector-effect", "non-scaling-stroke");
@@ -66,11 +67,11 @@
       dot.setAttribute("r", index === 0 ? 0.32 : 0.12);
       dot.setAttribute("class", index === 0 ? "trail-origin" : "trail-step");
       svg.appendChild(dot);
-      if (boss && index > 0) {
+      if (boss && (index > 0 || suggested)) {
         const label = document.createElementNS(svgNS, "text");
-        label.setAttribute("x", column - .5); label.setAttribute("y", 14.4 - row);
+        label.setAttribute("x", column - .5); label.setAttribute("y", (index === 0 ? 14.60 : 14.4) - row);
         label.setAttribute("class", "trail-step-number"); label.setAttribute("text-anchor", "middle");
-        label.textContent = String(index); svg.appendChild(label);
+        label.textContent = index === 0 ? "起" : String(index); svg.appendChild(label);
       }
     }
     layer.appendChild(svg);
@@ -96,16 +97,41 @@
     layer.appendChild(svg);
   }
 
+  function drawRouteGhost(layer, route, sprite, size) {
+    if (!route?.finalCenter) return;
+    const { column, row } = route.finalCenter;
+    const document = layer.ownerDocument;
+    const ghost = document.createElement("span");
+    ghost.className = "battle-piece battle-piece-route-ghost";
+    ghost.style.left = (column - 0.5) * 5 + "%";
+    ghost.style.top = (14.5 - row) / 14 * 100 + "%";
+    ghost.style.width = size * 5 + "%";
+    ghost.style.height = size / 14 * 100 + "%";
+    ghost.setAttribute("aria-hidden", "true");
+    if (sprite) ghost.appendChild(spriteNode(document, sprite, route.facing));
+    const arrow = document.createElement("span");
+    arrow.className = "battle-piece-facing";
+    arrow.style.transform = "translate(-50%, -50%) rotate(" + route.facing + "deg)";
+    arrow.textContent = "▲";
+    ghost.appendChild(arrow);
+    layer.appendChild(ghost);
+  }
+
   function render(layer, pieces, {
-    apostle, size = 1, selected = 0, mode, names = [], roster, portraits = [], deadSeats = [], priorityTarget, priorityVisible, trail, bossTrail, onSelect, onSelectBoss,
+    apostle, size = 1, selected = 0, mode, names = [], roster, portraits = [], deadSeats = [], priorityTarget, priorityVisible, aiTarget, aiRoute, pendingCollisionSeats = [], trail, bossTrail, onSelect, onSelectBoss,
   } = {}) {
     layer.replaceChildren();
     layer.hidden = false;
-    if (!deadSeats.includes(trail?.seat)) drawTrail(layer, trail);
-    drawTrail(layer, bossTrail, true);
-    if (priorityVisible) drawPriorityLink(layer, pieces.apostle, pieces.titans[priorityTarget]);
+    if (aiRoute) {
+      drawTrail(layer, { route: aiRoute.centers }, true, true);
+    } else {
+      if (!deadSeats.includes(trail?.seat)) drawTrail(layer, trail);
+      drawTrail(layer, bossTrail, true);
+      if (priorityVisible) drawPriorityLink(layer, pieces.apostle, pieces.titans[priorityTarget]);
+    }
     const document = layer.ownerDocument;
     const sprites = window.BattleBoardSprites || {};
+    drawRouteGhost(layer, aiRoute, sprites.forApostle?.(apostle), size);
     function token(piece, span, name, index, sprite, fallback) {
       const boss = index === null;
       const select = boss ? onSelectBoss : onSelect && (() => onSelect(index));
@@ -120,14 +146,25 @@
       }
       marker.className = "battle-piece " + (boss ? "battle-piece-apostle" : "battle-piece-titan");
       marker.classList.toggle("is-selected", boss ? mode?.startsWith("apostle-") : selected === index && mode?.startsWith("titan-"));
+      marker.classList.toggle("is-ai-target", !boss && index === aiTarget);
+      marker.classList.toggle("is-ai-route-crossed", !boss && aiRoute?.crossedSeats?.includes(index));
+      const pendingCollision = !boss && pendingCollisionSeats.includes(index);
       if (!boss) marker.style.setProperty("--piece-accent", accents[index]);
       marker.style.left = (piece.column - 0.5) * 5 + "%";
       marker.style.top = (14 - piece.row + 0.5) / 14 * 100 + "%";
       marker.style.width = span * 5 + "%";
       marker.style.height = span / 14 * 100 + "%";
       const square = String.fromCharCode(64 + Math.ceil(piece.row)) + Math.ceil(piece.column);
-      marker.setAttribute("aria-label", name + " " + square);
-      marker.title = name + " " + square;
+      marker.title = name + " " + square + (pendingCollision ? " · 待结算冲撞" : "");
+      marker.setAttribute("aria-label", marker.title);
+      marker.classList.toggle("is-ai-collision-pending", pendingCollision);
+      if (pendingCollision) {
+        const badge = document.createElement("span");
+        badge.className = "battle-piece-collision-badge";
+        badge.setAttribute("aria-hidden", "true");
+        badge.textContent = "冲";
+        marker.appendChild(badge);
+      }
       if (sprite) marker.appendChild(spriteNode(document, sprite, piece.facing));
       else if (fallback) {
         const image = document.createElement("img");
@@ -153,7 +190,8 @@
         priority.title = "首要目标";
         priority.setAttribute("aria-hidden", "true");
         marker.appendChild(priority);
-        marker.setAttribute("aria-label", name + " " + square + " · 首要目标");
+        marker.title += " · 首要目标";
+        marker.setAttribute("aria-label", marker.title);
       }
       if (boss) {
         const facing = document.createElement("span");

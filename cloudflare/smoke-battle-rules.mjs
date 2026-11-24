@@ -90,7 +90,7 @@ try {
   assert.equal((await action('squad-phase', { phase: 'prep' })).status, 200);
   const next = await action('squad-start', { board: { apostle: 'LABYRINTHAUROS', level: 1 } });
   assert.equal(next.status, 200); assert.equal(next.body.room.squad.battleNumber, 2);
-  assert.equal(next.body.room.heroes[0].stats.danger, 9); assert.equal(next.body.room.trauma.drawn.length, 0);
+  assert.equal(next.body.room.heroes[0].stats.danger, 0); assert.equal(next.body.room.trauma.drawn.length, 0);
   assert.equal(next.body.room.pool.opening, 0);
   assert.equal(next.body.room.trauma.counts.obol, 2);
   assert.equal(next.body.room.trauma.catalog.find(card => card.id === 'light_bleeding').inPlay, false);

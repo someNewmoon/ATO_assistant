@@ -7,7 +7,7 @@ import aiGuide from '../../aibp/ai-turn-guide.js';
 import roomDice from '../../aibp/room-dice.js';
 import { roomProjection } from './room-projection.js';
 import { discardRoomAi, prepareRoomDeck, revealRoomAi, revealRoomBp, roomDeckProjection, settleRoomBp } from './room-deck.js';
-import { applyTurn, claimTurn, setTurnPhase } from './room-turn.js';
+import { applyTurn, claimTurn, finishAiMovement, setTurnPhase } from './room-turn.js';
 import { battleRecap, battleStats, countReaction, setRollWounds } from './room-recap.js';
 import battleConfig from '../../technology/battle-config.js';
 import techDictionary from '../../technology/tech_card_dictionary.min.json';
@@ -162,6 +162,7 @@ function publicSquadLoadouts(room) {
 const activityLabels = {
   'turn-phase': '切换轮次', 'turn-take': '开始英雄回合', 'turn-finish': '结束英雄回合',
   'board-move': '移动泰坦', 'board-undo-move': '撤回上一步', 'board-apostle-move': '移动骇物',
+  'board-ai-route': '执行推荐移动', 'board-ai-trample-confirm': '确认冲撞',
   'board-apostle-undo': '撤回骇物移动', 'board-face': '调整骇物朝向', 'priority-target': '调整首要目标', round: '开启新一轮',
   stat: '调整三曲盘', 'titan-marker': '调整泰坦标记', condition: '调整泰坦状态', gear: '使用装备', 'gear-card': '调整装备卡', 'gear-ready-all': '回正所有横置卡牌',
   'mnemos-card': '调整旧忆卡', 'pattern-card': '调整样式卡牌', 'argo-use': '使用阿尔戈能力', 'argo-undo': '撤回阿尔戈能力',
@@ -176,8 +177,10 @@ function recordBattleActivity(room, actor, body, previousProjection) {
   let detail = '';
   const projection = room.projection;
   if (body.type === 'ai-guide') {
-    label = body.value === 'begin' ? '开始逐步结算' : body.value === 'extra' ? '结算额外指令技' : '完成骇物步骤';
-    detail = aiGuide.steps[body.value]?.[0] || '';
+    label = ({ begin: '开始逐步结算', extra: '结算额外指令技', hope: '希望终结 · 执行招牌技',
+      'signature-begin': '开始结算招牌技', 'signature-resolve': '招牌技已结算' })[body.value] || '完成骇物步骤';
+    detail = [aiGuide.steps[body.value]?.[0], Number.isInteger(body.target) ? room.heroes[body.target]?.name : '']
+      .filter(Boolean).join(' · ');
   } else if (body.type === 'ai-guide-discard') {
     label = '弃置 AI';
     detail = previousProjection?.ai?.label;
@@ -220,6 +223,10 @@ function recordBattleActivity(room, actor, body, previousProjection) {
     const { row, column } = body.point;
     detail = Number.isInteger(row) ? String.fromCharCode(64 + row) + column : '落点（列 ' + column + ' · 行 ' + row + '）';
   }
+  if (body.type === 'board-ai-route') {
+    const movement = room.turn.aiMovement;
+    detail = movement.steps + ' 格' + (movement.pending ? ' · 待结算冲撞 ' + movement.crossedSeats.length + ' 位泰坦' : '');
+  }
   if (body.type === 'board-face') detail = { 0: '朝上', 90: '朝右', 180: '朝下', 270: '朝左' }[body.facing];
   if (body.type === 'priority-target') detail = body.locked ? '锁定' : '未锁定';
   if (body.type === 'condition') detail = { standing: '站立', down: '倒地', rising: '起身', dead: '死亡' }[hero.condition];
@@ -253,7 +260,7 @@ function combatPatch(room, { type, id, seat, key, delta }) {
   } else if (type === 'condition') {
     hero = { seat, fields: { condition: room.heroes[seat].condition } };
     changes = { board: room.board, turn: room.turn, priorityTarget: priorityTarget(room) };
-  } else if (['board-move', 'board-undo-move', 'board-end-move'].includes(type)) {
+  } else if (['board-move', 'board-undo-move', 'board-end-move', 'board-ai-route', 'board-ai-trample-confirm'].includes(type)) {
     changes = { board: room.board, turn: room.turn };
   } else return null;
 
@@ -268,11 +275,13 @@ function cardActionPatch(room, body, previousDeckRevision) {
   let changes, roll;
   if (body.type === 'ai-guide') {
     changes = { turn: room.turn };
+    if (aiGuide.resolvesMovement(body.value) || body.value === 'signature-begin') changes.board = room.board;
   } else if (body.type === 'turn-finish') {
     changes = { turn: room.turn, board: room.board };
   } else if (['ai-request', 'ai-guide-discard', 'bp-request', 'bp-settle'].includes(body.type)) {
     changes = { turn: room.turn, projection: room.projection,
       deckRevision: room.battleDeck.revision, bpSeat: room.battleDeck.bpSeat ?? null };
+    if (body.type === 'ai-guide-discard') changes.board = room.board;
     if (body.type === 'bp-settle') {
       changes.secondAbility = room.secondAbility;
       if (room.squad) changes.damageBySeat = room.heroes.map((_, seat) => room.battleStats?.[seat]?.damage ?? 0);
@@ -639,18 +648,21 @@ export class BattleRoom extends DurableObject {
     if (body.type === 'ai-guide-discard') {
       if (actor.role !== 'host') reject('指令技由房主确认弃置。', 403);
       const deck = room.battleDeck;
-      if (!deck || room.turn?.phase !== 'apostle' || room.turn.aiGuide !== 'discard') reject('当前无法弃置指令技。', 409);
+      if (!deck || room.turn?.phase !== 'apostle' || aiGuide.stepFor(room.turn.aiGuide) !== 'resolve') reject('当前无法弃置指令技。', 409);
+      if (room.turn.aiMovement?.pending) reject('请先处理并确认本次冲撞。', 409);
       discardRoomAi(deck, body.card, randomInt);
+      finishAiMovement(room);
       deck.revision++;
       deck.operation = body.id;
       room.projection = roomDeckProjection(deck, room.projection);
       room.turn.aiGuide = 'other';
+      delete room.turn.aiTarget;
       return;
     }
     if (body.type === 'ai-request') {
       if (actor.role !== 'host') reject('只有房主可以揭示 AI。', 403);
       if (room.turn?.phase !== 'apostle') reject('请在骇物轮次揭示 AI。', 409);
-      if (room.turn.aiGuide && room.turn.aiGuide !== 'draw') reject('请按当前骇物步骤结算。', 409);
+      if (room.turn.aiGuide && !['start', 'draw'].includes(room.turn.aiGuide)) reject('请按当前骇物步骤结算。', 409);
       const deck = room.battleDeck;
       if (!deck) reject('请先在 AIBP 初始化骇物牌堆。', 409);
       if (['DEMIDJINN', 'TITAN_X'].includes(deck.data.apostle)) reject('这只骇物要在 AIBP 按特殊规则揭示 AI。', 409);
@@ -658,7 +670,7 @@ export class BattleRoom extends DurableObject {
         deck.revision++;
         deck.operation = body.id;
         room.projection = roomDeckProjection(deck, room.projection);
-        if (room.turn.aiGuide === 'draw') room.turn.aiGuide = 'target';
+        if (room.turn.aiGuide) room.turn.aiGuide = 'target';
       }
       return;
     }
@@ -716,7 +728,7 @@ export class BattleRoom extends DurableObject {
         delete room.bpRequest;
       }
       room.projection = room.battleDeck ? roomDeckProjection(room.battleDeck, projection) : projection;
-      if (room.turn?.aiGuide === 'draw' && room.projection.aiPending) room.turn.aiGuide = 'target';
+      if (['start', 'draw'].includes(room.turn?.aiGuide) && room.projection.aiPending) room.turn.aiGuide = 'target';
       return;
     }
     if (body.type === 'public-lobby') {
@@ -727,6 +739,7 @@ export class BattleRoom extends DurableObject {
     if (body.type === 'round' || body.type === 'end') {
       if (actor.role !== 'host') reject('只有房主可以执行此操作。', 403);
       if (body.type === 'round') {
+        if (aiGuide.isInsertedSignature(room.turn?.aiGuide)) reject('请先完成当前招牌技。', 409);
         if (body.phase !== undefined && (body.round !== room.round || room.turn?.phase !== 'titans')) {
           reject('轮次已更新，请重试。', 409);
         }
@@ -912,14 +925,27 @@ export class BattleRoom extends DurableObject {
   }
 
   roll(room, hero, seat, body, actor) {
-    const { counts, mode, parentRoll, defenseCount = 0 } = body;
+    const { counts, mode, parentRoll, weapon, extraAttack, defenseCount = 0 } = body;
     const { limits, modes } = roomDice;
     const modeRule = Object.hasOwn(modes, mode) && modes[mode];
     if (mode !== undefined && !modeRule) reject('投掷用途无效。');
     if (!object(counts) || !Object.keys(counts).every(kind => Object.hasOwn(limits, kind)
         && (!modeRule || modeRule.kinds.includes(kind)))) reject('骰子类型无效。');
+    if (weapon !== undefined && (mode !== 'attack' || !hero.gear.some(item => item.id === weapon)
+        || roomGearCategory(weapon)?.split('_')[0] !== 'arm')) reject('请选择该英雄装备的武器。');
     if (!Number.isInteger(defenseCount) || defenseCount < 0 || defenseCount > limits.red
         || (defenseCount && mode !== 'dodge')) reject('防御红骰数量无效。');
+    if (extraAttack !== undefined && (extraAttack !== true || mode !== 'attack')) reject('请先声明并投掷额外攻击。');
+    const parent = parentRoll && room.rolls.find(roll => roll.id === parentRoll && roll.seat === seat);
+    if (parentRoll && (!parent || !modeRule?.parentMode || parent.mode !== modeRule.parentMode
+        || (mode === 'power' && parent.round !== room.round) || (mode === 'defense' && parent.defenseRoll))) {
+      reject('关联投掷已结算或不存在。', 409);
+    }
+    const extra = extraAttack === true || (mode === 'power' && parent?.extraAttack === true);
+    const activeAttack = mode === 'attack' || mode === 'power';
+    if (activeAttack && (hero.condition === 'dead' || (!extra && !roomDice.canAttackNormally(room.turn, seat)))) {
+      reject('普通攻击和威力须在该泰坦可行动的回合结算。', 409);
+    }
     const dice = [];
     for (const [kind, count] of Object.entries(counts)) {
       if (!Number.isInteger(count) || count < 0 || count > limits[kind]) reject('骰子数量无效。');
@@ -930,25 +956,23 @@ export class BattleRoom extends DurableObject {
       }
     }
     if (!dice.length) reject('请选择至少一枚骰子。');
-    const parent = parentRoll && room.rolls.find(roll => roll.id === parentRoll && roll.seat === seat);
-    if (parentRoll && (!parent || !modeRule?.parentMode || parent.mode !== modeRule.parentMode
-        || (mode === 'defense' && (!parent.defenseCount || parent.defenseRoll)))) {
-      reject('关联投掷已结算或不存在。', 409);
-    }
     const roll = { id: body.id, seat, hero: hero.name, round: room.round, mode, dice,
       by: actor.role === 'host' ? 'host' : 'seat:' + seat };
+    if (weapon) roll.weapon = weapon;
+    if (extra) roll.extraAttack = true;
     if (parent) {
       roll.parentRoll = parent.id;
       if (mode === 'defense') parent.defenseRoll = roll.id;
     }
     if (defenseCount) roll.defenseCount = defenseCount;
-    if (mode === 'attack' || mode === 'power') claimTurn(room, seat);
+    if (activeAttack && !extra) claimTurn(room, seat);
     battleStats(room)[seat].rolls++;
     room.lastBattleRollId = roll.id;
     room.rolls.unshift(roll);
     if (room.rolls.length > 30) {
       const keep = new Set(roomDice.latestByHero(room.rolls, room.lastBattleRollId));
-      const oldest = room.rolls.findLastIndex(entry => !keep.has(entry));
+      const linkedDodges = new Set([...keep].flatMap(entry => entry.mode === 'defense' && entry.parentRoll ? [entry.parentRoll] : []));
+      const oldest = room.rolls.findLastIndex(entry => !keep.has(entry) && !linkedDodges.has(entry.id));
       room.rolls.splice(oldest, 1);
     }
   }
@@ -964,7 +988,9 @@ export class BattleRoom extends DurableObject {
   changeRoll(room, seat, body) {
     const roll = room.rolls.find(entry => entry.id && entry.id === body.roll && entry.seat === seat);
     if (!roll) reject('找不到该英雄的这次投掷。', 409);
+    if (!roomDice.canAdjustRoll(roll, room.turn, room.round)) reject('当前无法调整这次攻击或威力投掷。', 409);
     if (body.type === 'reroll') {
+      if (roll.mode === 'defense') reject('护甲投掷不能重掷。');
       if (!Array.isArray(body.ids) || !body.ids.length || body.ids.length > roll.dice.length) reject('请先选齐要重掷的骰子。');
       const dice = [...new Set(body.ids)].map(id => roll.dice.find(die => die.id === id));
       if (!dice.every(roomDice.canReroll)) reject('所选骰子已经重掷、转换或不存在。', 409);
@@ -975,6 +1001,7 @@ export class BattleRoom extends DurableObject {
     const die = roll.dice.find(entry => entry.id === body.die);
     const result = die && roomDice.remainingFace(die);
     if (!result) reject('只能转换威力骰。');
+    if (roll.mode === 'defense') reject('护甲投掷只计潜力。');
     const conversions = { potential: ['converted', 1], dot: ['dotConverted', 2] };
     if (!Object.hasOwn(conversions, body.symbol)) reject('未知骰面符号。');
     const [field, index] = conversions[body.symbol];

@@ -992,9 +992,10 @@
 
   function facingToTargetFromFootprint(center, size, target, fallback) {
     const delta = footprintDeltaToTarget(center, size, target);
-    if (delta.h > 0 && delta.v === 0) return facingFromStep("h", Math.sign(delta.dx));
-    if (delta.v > 0 && delta.h === 0) return facingFromStep("v", Math.sign(delta.dy));
-    return fallback;
+    const valid = [];
+    if (delta.h > 0) valid.push(facingFromStep("h", Math.sign(delta.dx)));
+    if (delta.v > 0) valid.push(facingFromStep("v", Math.sign(delta.dy)));
+    return valid.includes(fallback) ? fallback : (valid[0] ?? fallback);
   }
 
   function buildMovementPath({ kind, firstAxis, sourceCenter, size, target, destination, limit, reach, facing }) {
@@ -1003,6 +1004,7 @@
     let nextAxis = firstAxis;
     let steps = 0;
     let lastFacing = null;
+    let firstFacing = null;
     const maxSteps = limit === Infinity ? COLUMNS + ROWS + size : Math.max(0, Math.floor(Number(limit) || 0));
     const stopReach = Math.max(0, Math.floor(Number(reach) || 0));
     const done = () => {
@@ -1017,9 +1019,7 @@
         : footprintDeltaToTarget(current, size, target);
       const hasH = delta.h > 0;
       const hasV = delta.v > 0;
-      let axis = hasH && hasV ? nextAxis : (hasH ? "h" : "v");
-      if (axis === "h" && !hasH) axis = "v";
-      if (axis === "v" && !hasV) axis = "h";
+      const axis = hasH && hasV ? nextAxis : (hasH ? "h" : "v");
       const sign = axis === "h" ? Math.sign(delta.dx) : Math.sign(delta.dy);
       if (!sign) break;
       current = axis === "h"
@@ -1027,6 +1027,7 @@
         : { column: current.column, row: current.row + sign };
       centers.push({ column: current.column, row: current.row });
       lastFacing = facingFromStep(axis, sign);
+      firstFacing ??= lastFacing;
       steps += 1;
       if (hasH && hasV) nextAxis = axis === "h" ? "v" : "h";
     }
@@ -1038,7 +1039,7 @@
       : (finalDelta.distance <= stopReach
         ? (steps === 0 ? "already-in-range" : "in-range")
         : (limit === 0 ? "speed-zero" : "speed-limit"));
-    const finalFacing = kind === "rules" && finalDelta.distance <= stopReach
+    const finalFacing = kind === "rules"
       ? facingToTargetFromFootprint(current, size, target, lastFacing ?? facing)
       : (lastFacing ?? noMoveFacing(kind, current, size, target, destination, facing));
     return {
@@ -1051,6 +1052,7 @@
       finalCenter: current,
       finalFootprint: losSourceCells(current, size),
       facing: finalFacing,
+      firstFacing,
       stopReason,
     };
   }
@@ -1082,6 +1084,18 @@
       buildMovementPath({ ...options, kind: "direct", firstAxis: "v", limit: Infinity, destination: directDestination }),
     ]);
     return { target, sourceCenter, directDestination, size: footprintSize, rules, direct };
+  }
+
+  function rankApostleRoutes(paths, titanCells) {
+    if (!paths.length) return [];
+    const shortest = Math.min(...paths.map(path => path.steps));
+    return paths.filter(path => path.steps === shortest).map(path => {
+      const crossed = new Set(path.footprints.slice(1).flatMap(cells => cells.map(({ c, r }) => cellKey(c, r))));
+      const collisions = titanCells.filter(({ column, row }) => crossed.has(cellKey(column, row)));
+      const end = new Set(path.finalFootprint.map(({ c, r }) => cellKey(c, r)));
+      return { ...path, collisions: collisions.length, crossedSeats: collisions.map(cell => cell.seat),
+        endSeats: collisions.filter(({ column, row }) => end.has(cellKey(column, row))).map(cell => cell.seat) };
+    }).sort((a, b) => a.collisions - b.collisions);
   }
 
   // ---- shared overlay (aibp 主控台 + ss 第二屏共用) ----------------------
@@ -1482,6 +1496,7 @@
     computeTitanMoves,
     computeDistanceMap,
     computeApostleMovePaths,
+    rankApostleRoutes,
     elevatedOcc,
     mazesenseOcc,
     segmentBlocked,

@@ -15,7 +15,7 @@
     attack: { name: '攻击', kinds: ['d10'] },
     power: { name: '威力', kinds: ['red', 'black', 'white'], parentMode: 'attack' },
     dodge: { name: '闪避', kinds: ['d10'] },
-    defense: { name: '防御', kinds: ['red'], parentMode: 'dodge' },
+    defense: { name: '护甲', kinds: ['red', 'black', 'white'], parentMode: 'dodge' },
     check: { name: '检定', kinds: ['d10'] },
     armor: { name: '普通 d6', kinds: ['armor'] },
   };
@@ -42,7 +42,21 @@
   function rollSummary(roll) {
     const strengths = roll.dice.map(remainingFace).filter(Boolean);
     if (!strengths.length) return roll.dice.map(die => names[die.kind] + ' ' + die.value).join('、');
+    if (roll.mode === 'defense') {
+      const potential = roll.dice.reduce((sum, die) => sum + (naturalFace(die)?.[1] ?? 0), 0);
+      return potential + ' 潜力 · 减免 ' + potential + ' 凶险';
+    }
     return faceLabel(strengths.reduce((sum, face) => sum.map((value, index) => value + face[index]), [0, 0, 0]));
+  }
+
+  function canAttackNormally(turn, seat) {
+    return !turn || (turn.phase === 'titans' && (turn.seat == null || turn.seat === seat)
+      && !turn.finished?.includes(seat));
+  }
+
+  function canAdjustRoll(roll, turn, round) {
+    return (roll.mode !== 'attack' && roll.mode !== 'power')
+      || (roll.round === round && (roll.extraAttack === true || canAttackNormally(turn, roll.seat)));
   }
 
   function canReroll(die) {
@@ -123,5 +137,5 @@
     }));
   }
 
-  return { faces, names, limits, modes, naturalFace, remainingFace, canReroll, faceIndex, faceLabel, rollSummary, woundResults, criticalLabel, pipMarkup, faceMarkup, storyFaces, rollOwner, pendingPowerRoll, canUseBodyPart, latestByHero, reactionGroups };
+  return { faces, names, limits, modes, naturalFace, remainingFace, canReroll, canAttackNormally, canAdjustRoll, faceIndex, faceLabel, rollSummary, woundResults, criticalLabel, pipMarkup, faceMarkup, storyFaces, rollOwner, pendingPowerRoll, canUseBodyPart, latestByHero, reactionGroups };
 });

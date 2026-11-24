@@ -24,28 +24,93 @@ export function claimTurn(room, seat) {
   if (canClaimTurn(room, seat)) room.turn.seat = seat;
 }
 
+export function finishAiMovement(room) {
+  if (room.turn.aiMovement?.pending) throw new ApiError(409, '请先处理并确认本次冲撞。');
+  delete room.turn.aiMovement;
+  delete room.turn.aiManualMovementEnded;
+  if (room.board) delete room.board.apostleMovement;
+}
+
+function validAiTarget(room, target) {
+  return target === null || (Number.isInteger(target) && room.heroes[target] && room.heroes[target].condition !== 'dead');
+}
+
+function confirmInsertedSignature(room, action) {
+  const { turn } = room;
+  const { value, target, signatureId } = action;
+  if (turn?.phase !== 'titans') throw new ApiError(409, '请在泰坦回合结算临时招牌技。');
+  if (value === 'signature-begin' && !turn.aiSignatureId) {
+    if (!room.board || !room.projection?.signature) throw new ApiError(409, '本场招牌技尚未同步。');
+    finishAiMovement(room);
+    turn.aiSignatureId = action.id;
+    turn.aiGuide = 'signature-target';
+    delete turn.aiTarget;
+    return;
+  }
+  if (turn.aiSignatureId && signatureId === turn.aiSignatureId && value === turn.aiGuide) {
+    if (value === 'signature-target' && validAiTarget(room, target)) {
+      turn.aiTarget = target;
+      turn.aiGuide = 'signature-resolve';
+      return;
+    }
+    if (value === 'signature-resolve') {
+      finishAiMovement(room);
+      delete turn.aiGuide;
+      delete turn.aiTarget;
+      delete turn.aiSignatureId;
+      return;
+    }
+  }
+  throw new ApiError(409, '当前招牌技步骤已变化，请核对后继续。');
+}
+
 function confirmAiStep(room, actor, action) {
   const { turn } = room;
   if (actor.role !== 'host') throw new ApiError(403, '骇物行动由房主确认。');
+  if (action.value === 'signature-begin' || guide.isInsertedSignature(action.value)) return confirmInsertedSignature(room, action);
   if (turn?.phase !== 'apostle' || !guide.bosses.includes(room.board?.apostle)) {
     throw new ApiError(409, '当前骇物轮次无法使用逐步结算。');
   }
-  const step = turn.aiGuide;
+  const step = guide.stepFor(turn.aiGuide);
   const pending = room.projection?.aiPending;
-  if (action.value === 'begin' && !step) {
+  const { value, target } = action;
+  if (value === 'begin' && !step) {
     turn.aiGuide = pending ? 'target' : 'start';
     return;
   }
-  if (action.value === 'extra' && step === 'other') {
+  if (value === 'start' && step === 'start') {
     turn.aiGuide = pending ? 'target' : 'draw';
     return;
   }
-  if (action.value !== step || !step || step === 'ready'
-      || (step === 'draw' && !pending) || (['discard', 'other', 'end'].includes(step) && pending)) {
-    throw new ApiError(409, '当前步骤或指令技牌面已变化，请核对后继续。');
+  if (value === 'extra' && step === 'other') {
+    delete turn.aiTarget;
+    turn.aiGuide = pending ? 'target' : 'draw';
+    return;
   }
-  const steps = Object.keys(guide.steps);
-  turn.aiGuide = steps[steps.indexOf(step) + 1];
+  if (value === 'hope' && step === 'other' && !pending && room.projection?.hopeEnds) {
+    delete turn.aiTarget;
+    turn.aiGuide = 'hope-target';
+    return;
+  }
+  if (value === step && ['target', 'hope-target'].includes(step)
+      && validAiTarget(room, target)) {
+    turn.aiTarget = target;
+    turn.aiGuide = step === 'target' ? 'resolve' : 'hope-resolve';
+    return;
+  }
+  if (value === 'resolve' && step === 'resolve' && !pending) {
+    finishAiMovement(room);
+    turn.aiGuide = 'other';
+    delete turn.aiTarget;
+    return;
+  }
+  if (value === 'hope-resolve' && step === 'hope-resolve' && !pending) {
+    finishAiMovement(room);
+    turn.aiGuide = 'ready';
+    delete turn.aiTarget;
+    return;
+  }
+  throw new ApiError(409, '当前步骤、目标或指令技牌面已变化，请核对后继续。');
 }
 
 export function applyTurn(room, actor, action) {
@@ -56,7 +121,9 @@ export function applyTurn(room, actor, action) {
   if (type === 'ai-guide') return confirmAiStep(room, actor, action);
   if (type === 'turn-phase') {
     if (actor.role !== 'host') throw new ApiError(403, '轮次由房主切换。');
-    if (turn?.aiGuide && (turn.aiGuide !== 'ready' || room.projection?.aiPending)) {
+    const step = guide.stepFor(turn?.aiGuide);
+    if (step && (room.projection?.aiPending
+      || (step !== 'ready' && !(step === 'other' && !room.projection?.hopeEnds)))) {
       throw new ApiError(409, '请先完成骇物轮次的逐步结算。');
     }
     if ((!turn && ['apostle', 'titans'].includes(value)) || (turn?.phase === 'apostle' && value === 'titans')) {

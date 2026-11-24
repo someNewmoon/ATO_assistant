@@ -3,20 +3,67 @@
 
   const bosses = ['HEKATON', 'LABYRINTHAUROS', 'HERMESIAN_PURSUER', 'ALPHA_TEMENOS'];
   const steps = {
-    start: ['轮次开始效果', '先检查面板、特性和本场规则的轮次开始效果。', '开始效果已处理'],
-    draw: ['揭示指令技', '从指令技牌堆揭示当前牌。按牌面或特性处理抽牌例外。', '抽取 AI'],
-    target: ['确定目标', '按当前牌的目标条件从上到下检查。用版图核对视线、盲区和首要目标；没有合格目标时按牌面处理。', '目标已确认'],
-    move: ['骇物移动', '按牌面处理转向、移动和落点。没有移动指示时可直接确认。', '移动已处理'],
-    evade: ['攻击与闪避', '核对攻击范围和受影响的泰坦。需要闪避时，由对应玩家投骰；超出范围或无需闪避时按牌面处理。', '闪避已处理'],
-    effects: ['攻击后果', '按玩家已确认的判定处理命中、凶险、创伤、击倒和强制移动等攻击效果。', '攻击后果已处理'],
-    after: ['攻击后效果', '单独核对攻击后效果。即使没发动攻击或完全闪避，也要检查是否仍需处理；按牌面和适用的取消规则执行。', '攻击后效果已处理'],
-    discard: ['处理当前指令技', '通常弃置当前 AI。牌面另有去向时，先在 AIBP 按牌面处理。', '确认牌面已处理'],
-    other: ['结算其他行动', '检查特性、惯常、招牌技或额外攻击。若需揭示另一张 AI，可再次进入指令技流程。', '其他行动已处理'],
-    end: ['轮次结束效果', '处理本场规则的轮次结束效果，核对标记和阿尔戈能力。', '结束效果已处理'],
-    ready: ['可以进入泰坦轮次', '', '结束骇物轮次'],
+    start: ['开始骇物轮次', '先处理轮次开始效果，再抽取指令技。'],
+    draw: ['揭示指令技', '按牌面或特性处理抽牌例外。'],
+    target: ['确定目标', '按牌面从上到下核对目标条件，选定一位泰坦后可预览移动路线。'],
+    resolve: ['结算指令技', '按牌面移动、攻击并依次处理闪避、攻击后果和攻击后效果。'],
+    other: ['轮次结束前', '检查其他行动、额外指令技和轮次结束效果。'],
+    'hope-target': ['希望终结 · 确定目标', '现在执行招牌技，按招牌技重新选择目标。'],
+    'hope-resolve': ['希望终结 · 结算招牌技', '按招牌技结算移动、攻击、闪避和其他效果。'],
+    'signature-target': ['招牌技 · 确定目标', '按牌面选择目标。'],
+    'signature-resolve': ['招牌技 · 结算', '按牌面结算移动、闪避、攻击后果和其他效果。'],
+    ready: ['可以进入泰坦轮次', '确认本轮剩余的结束效果已经处理。'],
   };
+  const previousSteps = { move: 'resolve', evade: 'resolve', effects: 'resolve', after: 'resolve', discard: 'resolve', end: 'other' };
+  const stepFor = step => previousSteps[step] || step;
+  const isInsertedSignature = step => step === 'signature-target' || step === 'signature-resolve';
+  const usesSignature = step => isInsertedSignature(step) || step === 'hope-target' || step === 'hope-resolve';
+  const resolvesMovement = step => ['resolve', 'hope-resolve', 'signature-resolve'].includes(stepFor(step));
 
-  const api = { bosses, steps };
+  function apostleRoutes(room, reach, terrain, los) {
+    const { board, heroes, turn, projection } = room;
+    if (turn?.aiManualMovementEnded) return [];
+    const pieces = board?.map?.pieces;
+    const target = pieces?.titans?.[turn?.aiTarget];
+    const profile = terrain?.getApostleProfile(board?.apostle, board?.level);
+    if (!target || !pieces.apostle || !profile || !los || heroes[turn.aiTarget]?.condition === 'dead') return [];
+    const modifier = (projection?.tokens || []).reduce((value, token) =>
+      value + (token.file === 'SP+.png' ? token.count : token.file === 'SP-.png' ? -token.count : 0), 0);
+    const limit = profile.speed === Infinity ? Infinity : Math.max(0, (Number(profile.speed) || 0) + modifier);
+    // Rebuild from the original square so a hand-moved segment cannot restart the zig-zag.
+    const active = board.apostleMovement;
+    const walked = active?.route || [];
+    const used = Math.max(0, walked.length - 1);
+    const sameCell = (a, b) => a?.column === b.column && a?.row === b.row;
+    if (used && !sameCell(walked.at(-1), pieces.apostle)) return [];
+    const speed = Math.min(limit, active?.remaining == null ? Infinity : active.remaining + used);
+    const paths = los.computeApostleMovePaths({
+      sourceAnchor: walked[0] || pieces.apostle, targetAnchor: target, size: profile.size, speed, reach, facing: pieces.apostle.facing,
+    });
+    const continuations = (paths?.rules || []).filter(path => walked.every((cell, i) => sameCell(path.centers[i], cell)))
+      .map(path => {
+        if (!used) return path;
+        const centers = path.centers.slice(used);
+        const [origin, next] = centers;
+        const firstFacing = !next ? null : next.column !== origin.column
+          ? (next.column > origin.column ? 90 : 270) : (next.row > origin.row ? 0 : 180);
+        return { ...path, label: '接续已走路线', centers, steps: centers.length - 1,
+          footprints: path.footprints.slice(used), firstFacing };
+      });
+    const titans = pieces.titans.flatMap((piece, seat) =>
+      piece && heroes[seat]?.condition !== 'dead' ? [{ ...piece, seat }] : []);
+    return los.rankApostleRoutes(continuations, titans)
+      .map(path => ({ ...path, speed: Number.isFinite(limit) ? limit : null }));
+  }
+
+  function routeStamp(room, route) {
+    const step = stepFor(room.turn.aiGuide);
+    const card = usesSignature(step) ? room.projection?.signature : room.projection?.ai?.src;
+    return JSON.stringify([room.board.layoutRevision, room.board.apostleMovement?.id, step, room.turn.aiSignatureId, card,
+      room.turn.aiTarget, route.centers, route.facing, route.crossedSeats, route.endSeats, route.stopReason]);
+  }
+
+  const api = { bosses, steps, stepFor, isInsertedSignature, usesSignature, resolvesMovement, apostleRoutes, routeStamp };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.ATO_AI_TURN_GUIDE = api;
 })(globalThis);

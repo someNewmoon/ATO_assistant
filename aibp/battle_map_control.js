@@ -248,6 +248,8 @@
           apostle, size: window.BattleTerrain.getApostleProfile(apostle, level)?.size || 1,
           selected: losState.selectedTitan, mode: losState.mode, names: options.titanNames?.(), roster: options.titanRoster?.(),
           portraits: options.heroPortraits?.(), deadSeats: options.deadSeats?.(), priorityTarget, priorityVisible,
+          aiTarget: options.aiTarget?.(), aiRoute: options.aiRoute?.(),
+          pendingCollisionSeats: options.pendingCollisionSeats?.(),
           trail: options.getTitanTrail?.() || (nativeTitanTrail?.map === options.getMap() ? nativeTitanTrail.move : null),
           bossTrail: options.getApostleTrail?.() || (nativeApostleTrail?.map === options.getMap() ? nativeApostleTrail.move : null),
           onSelectBoss: !forced && losState.mode !== "apostle-move" && editBoard() && tactics ? () => setTacticalMode("apostle-move") : undefined,

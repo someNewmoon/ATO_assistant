@@ -32,7 +32,7 @@
   gap: 6px 12px;
   flex-wrap: wrap;
 }
-.battle-room-head > div:last-child, .battle-room-links { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.battle-room-links { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .battle-room-links { margin: 12px 0; }
 .battle-room a { color: inherit; text-decoration: underline; text-underline-offset: .18em; }
 .battle-room .battle-room-heading { margin: 12px 0 8px; }
@@ -61,7 +61,9 @@
 .battle-room :is(.battle-room-stats, .battle-room-pool > div, .battle-room-dice > div) { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; }
 .battle-room-pool header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
 .battle-room-rolls ol { max-height: 12rem; overflow-y: auto; margin: 7px 0 0; padding-inline-start: 1.6em; }
-.battle-room-team > summary { cursor: pointer; margin-bottom: 8px; }
+.room-battle-history, .battle-room-team { margin-top: .65rem; }
+:is(.battle-room-team, .room-battle-history) > summary { cursor: pointer; font-weight: 700; }
+.battle-room-team[open] > summary { margin-bottom: 8px; }
 .battle-room-result { font-size: .92em; }
 .battle-room [data-room-retry] { margin-top: 10px; }
 
@@ -335,22 +337,26 @@ body.aibp-room-only > .app > main > :not(#battleRoom) { display: none !important
 
 .battle-room.battle-room-personal { padding-bottom: calc(7rem + env(safe-area-inset-bottom, 0px)); }
 .room-tool-dock {
-  --room-nav-surface: #263c36;
-  --room-nav-border: #577269;
-  --room-nav-text: #fff5e4;
-  position: fixed; z-index: 990; display: grid; gap: .4rem;
+  position: fixed; z-index: 990; display: grid; justify-items: end; gap: .5rem;
   right: max(.65rem, env(safe-area-inset-right, 0px)); bottom: calc(.65rem + env(safe-area-inset-bottom, 0px));
   width: max-content; max-width: calc(100vw - 1.3rem); box-sizing: border-box;
-  padding: .35rem; border-radius: 14px; background: var(--room-nav-surface); box-shadow: 0 3px 18px #0005;
+  pointer-events: none;
 }
-.room-primary-nav, .room-secondary-nav { display: flex; gap: .4rem; flex-wrap: wrap; justify-content: flex-end; }
+.room-primary-nav, .room-tool-actions {
+  display: flex; gap: .35rem; flex-wrap: wrap; justify-content: flex-end;
+  max-width: 100%; box-sizing: border-box; padding: .3rem;
+  border-radius: .8rem; pointer-events: auto; box-shadow: 0 2px 10px #0004;
+}
+.room-primary-nav { background: #263c36; }
+.room-tool-actions { background: #f2e6d7; border: 1px solid #cbb59d; }
 .battle-room .room-tool-dock :is(a, button) {
-  min-height: 40px; padding: .42rem .64rem; border: 1px solid var(--room-nav-border); border-radius: 999px;
+  min-height: 40px; padding: .4rem .6rem; border: 1px solid #577269; border-radius: .6rem;
   box-sizing: border-box; text-decoration: none; display: grid; place-items: center;
-  background: #344f46; color: var(--room-nav-text);
+  background: #344f46; color: #fff5e4;
 }
-.battle-room .room-tool-dock .room-secondary-nav button { background: var(--room-nav-surface); font-size: .78rem; }
-.battle-room .room-tool-dock :is(a, button):hover { background: #405e54; }
+.battle-room .room-primary-nav a:hover { background: #405e54; }
+.battle-room .room-tool-actions button { background: #fff8ef; color: #503829; border-color: #cbb59d; font-size: .78rem; }
+.battle-room .room-tool-actions button:hover { background: #fffdf7; }
 .room-tool-dock[hidden], .battle-room .room-tool-dock [hidden], .room-tool-sheet:not([open]) { display: none; }
 .room-tool-sheet {
   position: fixed; inset: auto max(.55rem, env(safe-area-inset-right, 0px)) calc(.55rem + env(safe-area-inset-bottom, 0px)) auto;
@@ -437,9 +443,13 @@ body.aibp-room-only > .app > main > :not(#battleRoom) { display: none !important
 
 .room-turn-bar { position: fixed; z-index: 991; top: max(.5rem, env(safe-area-inset-top)); right: max(.5rem, env(safe-area-inset-right)); max-width: min(29rem, calc(100vw - 1rem)); display: flex; align-items: start; gap: .3rem; }
 .room-turn-bar[hidden] { display: none; }
-.room-turn-bar > button { flex: none; height: auto; min-height: 2.3rem; padding: .38rem .65rem; border-radius: .6rem; white-space: nowrap; }
+.room-turn-boss-link { display: grid; place-items: center; color: #fff5e4; background: #263c36; text-decoration: none; }
+.room-turn-bar > :is(button, a) { flex: none; height: auto; min-height: 2.3rem; padding: .38rem .65rem; border-radius: .6rem; white-space: nowrap; }
 .room-turn-window { min-width: 0; border: 1px solid var(--room-border); border-radius: .7rem; color: #fff5e4; background: #263c36; box-shadow: 0 2px 10px #0005; }
-.room-turn-window[open] { max-height: min(70dvh, 24rem); overflow: auto; }
+.room-turn-window[open] {
+  max-height: calc(100dvh - max(.5rem, env(safe-area-inset-top)) - max(.5rem, env(safe-area-inset-bottom)));
+  overflow: auto;
+}
 .room-turn-window summary { padding: .5rem .68rem; cursor: pointer; font-weight: 700; }
 .room-turn-window [data-turn-body] { padding: 0 .65rem .6rem; font-size: .88rem; }
 .room-turn-window ul { display: grid; gap: .3rem; margin: 0; padding: 0; list-style: none; }
@@ -448,11 +458,26 @@ body.aibp-room-only > .app > main > :not(#battleRoom) { display: none !important
 .room-turn-window li span { flex: 1; }
 .room-turn-window li small { display: block; color: #e0d7bb; }
 .room-turn-window .roll-hero-avatar { width: 1.75rem; height: 1.75rem; }
-.room-turn-window button { white-space: nowrap; }
-.room-ai-guide { display: grid; gap: .35rem; padding-block: .45rem; }
-.room-ai-guide > strong { color: var(--accent-strong); }
-.room-ai-guide > .battle-room-card-art { max-width: 8rem; }
-.room-ai-guide > .battle-room-card-art img { max-height: 7rem; }
+.room-turn-window button { white-space: normal; }
+.room-ai-guide { display: grid; align-items: start; gap: .6rem; padding-block: .35rem; }
+.room-ai-guide:has(> .battle-room-card-art) { grid-template-columns: clamp(3.75rem, 16vw, 6.5rem) minmax(0, 1fr); }
+.room-ai-step { display: grid; min-width: 0; justify-items: start; gap: .35rem; }
+.room-ai-step > strong { color: #ffe09d; }
+.room-ai-step > p { margin: 0; }
+@media (min-width: 700px) {
+  .room-turn-bar:has(.room-turn-window[open] .room-ai-guide > .battle-room-card-art) {
+    max-width: min(42rem, calc(100vw - 1rem));
+  }
+}
+.room-ai-move-actions { display: flex; flex-wrap: wrap; gap: .4rem; }
+.room-ai-collisions { border-inline-start: 3px solid #ff9b7b; padding: .35rem .5rem; background: #542e28; }
+.room-ai-collisions ul { margin-block: .25rem; }
+.room-ai-collisions p { margin-block: .25rem; }
+.room-ai-collision-preview { color: #ffd1bd; }
+.room-ai-guide label { display: flex; flex-wrap: wrap; align-items: center; gap: .35rem; }
+.room-ai-guide :is(select, input) { background: #fff7e8; color: #342d24; }
+.room-ai-guide input { width: 4rem; }
+.room-ai-guide > .battle-room-card-art img { max-height: none; }
 .room-turn-controls { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .4rem; }
 .room-turn-window:not([open]) [data-turn-status], .room-turn-window [data-turn-status]:empty { display: none; }
 .room-turn-window [data-turn-status] { display: block; color: #ffd1bd; padding: 0 .65rem .45rem; }
@@ -461,11 +486,20 @@ body.aibp-room-only > .app > main > :not(#battleRoom) { display: none !important
   .battle-room:has(.room-turn-bar:not([hidden])) { padding-top: 3.25rem; }
 }
 
-.room-power-workspace { display: grid; grid-template-columns: min(25%, 8.5rem) minmax(0, 1fr); align-items: start; gap: .65rem; margin-block: .5rem; }
+.room-personal-result:has(.room-power-card) {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) clamp(11rem, 27%, 16rem);
+  align-items: start;
+  gap: .45rem 1rem;
+}
+.room-personal-result > h4 { grid-column: 1 / -1; }
+@media (max-width: 600px) {
+  .room-personal-result:has(.room-power-card) { grid-template-columns: minmax(0, 1fr); }
+}
 .room-power-card { min-width: 0; padding: .5rem; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); }
 .room-power-card h4 { margin: 0 0 .3rem; font-size: .83rem; }
-.room-power-card .battle-room-card-art { width: 100%; padding: 0; }
-.room-power-card img { display: block; width: 100%; height: auto; }
+.battle-room .room-power-card .battle-room-card-art { max-width: 15rem; }
+.room-power-card img { max-height: none; aspect-ratio: auto; }
 .room-tactical-board [data-board-finish-turn] { border-color: #dca974; font-weight: 700; }
 
 .room-board-ping-bar { display: flex; gap: .55rem; align-items: center; flex-wrap: wrap; }
@@ -498,10 +532,30 @@ body.aibp-room-only > .app > main > :not(#battleRoom) { display: none !important
 }
 .room-kratos-reminder h4, .room-kratos-reminder p { margin: 0 0 .35rem; }
 .room-kratos-reminder ul { list-style: none; padding: 0; margin: .3rem 0; }
-.room-kratos-reminder li { display: flex; flex-wrap: wrap; align-items: center; gap: .35rem .7rem; padding: .25rem .35rem; }
-.room-kratos-reminder li div, .room-kratos-reminder li div > span { display: inline-flex; align-items: center; flex-wrap: wrap; gap: .3rem; }
+.room-kratos-reminder li {
+  display: grid; grid-template-columns: max-content minmax(0, 1fr); align-items: start;
+  gap: .5rem .85rem; padding: .4rem .5rem; border-inline-start: 3px solid transparent;
+}
+.room-kratos-reminder li > strong { padding-block: .3rem; }
+.room-kratos-options { display: flex; align-items: center; flex-wrap: wrap; gap: .4rem; }
+.room-kratos-option {
+  display: inline-flex; align-items: center; flex-wrap: wrap; gap: .3rem .4rem;
+  padding: .28rem .45rem; border: 1px solid var(--room-border); border-radius: .4rem; background: var(--room-surface);
+}
+.room-kratos-plus { color: #9c3f26; }
+.room-kratos-or { padding-inline: .15rem; font-weight: 700; }
+@media (max-width: 490px) {
+  .room-kratos-reminder li { grid-template-columns: minmax(0, 1fr); gap: .25rem; }
+}
 .room-kratos-reminder .room-kratos-latest { border-inline-start: 3px solid #9c3f26; }
-.room-kratos-reminder .battle-room-marker img { width: 1.45rem; height: 1.45rem; object-fit: contain; }
+.room-kratos-effect { display: inline-flex; align-items: center; gap: .28rem; }
+.room-kratos-effect :is(img, .room-kratos-glyph) {
+  flex: none; width: 1.45rem; height: 1.45rem; object-fit: contain; border-radius: .25rem;
+}
+.room-kratos-glyph {
+  display: inline-grid; place-items: center; background: #252728; color: #fff;
+  font-size: 1rem; font-weight: 700; line-height: 1;
+}
 .room-kratos-reminder summary { cursor: pointer; }
 
 .room-battle-goal { margin: .75rem 0; padding: .65rem .85rem; border: 1px solid var(--line); border-radius: 8px; }
@@ -519,7 +573,6 @@ body.aibp-room-only > .app > main > :not(#battleRoom) { display: none !important
 .room-seat-tabs button { display: inline-flex; align-items: center; gap: 5px; }
 .room-seat-tabs button[aria-pressed="true"] { border-color: #e5ad67; background: #65452c; color: #fff3df; }
 .room-seat-tabs img { width: 1.75rem; height: 1.75rem; border-radius: 50%; object-fit: cover; }
-.room-bp-actions button.battle-room-card-art { flex-basis: 4rem; }
 .room-projection [data-projection-deck] { min-width: 0; }
 .room-projection-panel img { object-fit: contain; }
 #room-kratos-pool { scroll-margin-top: 4.25rem; }
@@ -594,3 +647,71 @@ body.room-viewer > .app > main { padding: 8px; }
 .room-equipment-head, .room-reroll-controls, .room-reroll-fate { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .room-equipment-head { justify-content: space-between; }
 .room-reroll-fate .battle-room-marker img { width: 1.25rem; height: 1.25rem; }
+
+.room-ai-targets { display: flex; flex-wrap: wrap; gap: .35rem; }
+.room-ai-targets button { display: inline-flex; align-items: center; gap: .35rem; }
+.room-roll-reference { display: grid; gap: .45rem; }
+.room-roll-reference > div { display: flex; flex-wrap: wrap; gap: .6rem; align-items: center; }
+.room-roll-reference ul { display: flex; flex-wrap: wrap; gap: .5rem; list-style: none; padding: 0; margin: 0; }
+.room-roll-reference .battle-room-card-art { max-width: 8rem; }
+.room-roll-reference .battle-room-card-art img { max-height: 8rem; }
+.battle-room ~ #viewer { scroll-margin-top: 3.5rem; }
+.room-jump-panel { border: 1px solid var(--room-border); border-radius: 8px; padding: .55rem; }
+.room-jump-panel summary { cursor: pointer; font-weight: 700; }
+.room-dice-modes .room-dice-end-turn { margin-inline-start: .6rem; border-color: #987746; }
+
+body.aibp-active-online-battle .battle-map-layout { grid-template-columns: minmax(0, 1fr); }
+body.aibp-active-online-battle .battle-map-layout > #battleMapControl,
+body.aibp-active-online-battle #heroBattleRoster { display: none; }
+.room-ai-route-options { display: flex; flex-wrap: wrap; gap: .35rem; }
+.room-ai-route-options button { display: grid; gap: .15rem; text-align: start; }
+.room-ai-route-options button[aria-pressed="true"] { border-color: #dfb36a; box-shadow: inset 0 0 0 1px #dfb36a; }
+.room-weapon-options li, .room-defense-cards li { display: grid; align-content: start; gap: .25rem; max-width: 11rem; }
+.room-weapon-options li > [data-attack-weapon] { width: 100%; text-align: start; }
+.room-weapon-options [data-attack-weapon] small, .room-defense-cards li small { display: block; }
+.room-weapon-options [data-attack-weapon][aria-pressed="true"] {
+  background: var(--accent-soft, #ede0ca); border-color: #99663f; box-shadow: inset 0 0 0 1px #99663f;
+}
+.room-roll-reference [data-weapon-hits] { max-width: 4.5rem; }
+.room-roll-reference > .room-defense-cards { display: grid; justify-items: start; }
+.room-roll-reference > [data-roll-mode="defense"] { justify-self: start; }
+
+.room-armor-results {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 17rem), 1fr));
+  align-items: start; gap: .65rem;
+}
+.room-armor-results > section { min-width: 0; padding: .45rem; border: 1px solid var(--room-border); border-radius: .45rem; }
+.room-armor-results h5 { margin: 0; font-size: .9rem; }
+
+.battle-room [data-extra-attack][aria-pressed="true"] {
+  border-color: #99663f; background: var(--accent-soft, #ede0ca); box-shadow: inset 0 0 0 1px #99663f;
+}
+
+.room-roll-next {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .4rem .55rem;
+  margin-top: .4rem;
+}
+
+.room-ai-defense,
+.room-roll-next-defense {
+  padding: .5rem .65rem;
+  border: 1px solid #c9b297;
+  border-inline-start: 3px solid #b38959;
+  background: #f5ead8;
+  color: #513c2c;
+}
+.room-ai-defense { display: grid; gap: .3rem; margin-block: .25rem; }
+.room-ai-defense small { font-size: .76rem; }
+.room-ai-defense button[data-turn-action="guide-defense"],
+.room-roll-next-defense button[data-trauma-dialog="hit"],
+.room-personal-result [data-roll-followup] {
+  background: #4b3527 !important;
+  color: #fff1d8 !important;
+  border-color: #4b3527 !important;
+  font-weight: 650;
+}
+#room-dice { scroll-margin-top: 18px; }

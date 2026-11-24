@@ -6,6 +6,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import dice from '../aibp/room-dice.js';
+import gearRolls from '../aibp/gear-roll-profiles.js';
+import guide from '../aibp/ai-turn-guide.js';
+import los from '../aibp/battle_los.js';
+import terrain from '../ss/terrain-data.js';
 
 // Exercise the real Worker reducers; only the Cloudflare base class is replaced.
 // Run: cd cloudflare && node --test battle-rules.test.mjs
@@ -721,6 +725,73 @@ test('回合由首个主动行动认领，其他队员的操作不会抢走回�
   assert.deepEqual(r.turn, { phase: 'apostle', seat: null, finished: [] });
 });
 
+test('普通攻击及威力检查回合，额外攻击威力继承来源且不会认领回合', () => {
+  const r = room();
+  r.turn = { phase: 'titans', seat: 0, finished: [] };
+  const teammate = { role: 'player', seat: 1 };
+  const roll = (seat, id, mode, counts, extra = {}) => reducer.apply(r, seat ? teammate : player,
+    { type: 'roll', id, mode, seat, counts, ...extra });
+  assert.throws(() => roll(1, 'blocked', 'attack', { d10: 1 }), /该泰坦可行动/);
+  assert.throws(() => roll(1, 'blocked-power', 'power', { red: 1 }), /该泰坦可行动/);
+  assert.throws(() => roll(1, 'fake-power', 'power', { red: 1 }, { extraAttack: true }), /请先声明/);
+  assert.equal(r.rolls.length, 0);
+  roll(0, 'ordinary', 'attack', { d10: 1 });
+  roll(0, 'ordinary-power', 'power', { red: 1 }, { parentRoll: 'ordinary' });
+  roll(1, 'dodge', 'dodge', { d10: 1 });
+  roll(1, 'armor', 'defense', { red: 1 }, { parentRoll: 'dodge' });
+  assert.equal(r.turn.seat, 0);
+  roll(1, 'extra', 'attack', { d10: 1 }, { extraAttack: true });
+  roll(1, 'extra-power', 'power', { red: 1 }, { parentRoll: 'extra' });
+  assert.equal(r.rolls[0].extraAttack, true);
+  assert.equal(r.turn.seat, 0);
+  r.turn.finished.push(0);
+  r.turn.seat = null;
+  assert.throws(() => roll(0, 'finished-power', 'power', { red: 1 }, { parentRoll: 'ordinary' }), /该泰坦可行动/);
+  const ordinary = r.rolls.find(entry => entry.id === 'ordinary');
+  assert.throws(() => reducer.apply(r, player, { type: 'reroll', seat: 0, roll: ordinary.id,
+    ids: [ordinary.dice[0].id] }), /无法调整/);
+  r.turn.phase = 'apostle';
+  assert.throws(() => roll(1, 'boss-turn', 'attack', { d10: 1 }), /该泰坦可行动/);
+  roll(1, 'boss-turn-extra', 'attack', { d10: 1 }, { extraAttack: true });
+  assert.equal(r.turn.seat, null);
+});
+
+test('泰坦回合可插入招牌技并结算移动，保留现有行动席位和移动进度', () => {
+  const r = room();
+  r.board = api.setupRoomBoard({ apostle: 'HERMESIAN_PURSUER', level: 1 }, 2);
+  r.turn = { phase: 'titans', seat: 0, finished: [1] };
+  r.projection = { signature: 'ps/HERMESIAN_PURSUER/SIGNATURE.jpg', aiPending: false };
+  r.board.map.pieces.apostle = { column: 2.5, row: 2.5, facing: 0 };
+  r.board.map.pieces.titans = [{ column: 7, row: 4 }, { column: 4, row: 2 }];
+  const titanMoves = { 0: { id: 'active-titan' } };
+  r.board.titanMoves = titanMoves;
+  const act = (actor, value, fields = {}) => reducer.apply(r, actor,
+    { type: 'ai-guide', round: 1, phase: 'titans', value, ...fields });
+  const move = (fields) => reducer.apply(r, host, fields);
+  const originalTurn = structuredClone(r.turn);
+  assert.throws(() => act(player, 'signature-begin', { id: 'player-signature' }), /房主/);
+  act(host, 'signature-begin', { id: 'signature-a' });
+  assert.equal(r.turn.aiGuide, 'signature-target');
+  assert.throws(() => act(host, 'signature-begin', { id: 'duplicate' }), /已变化/);
+  assert.throws(() => act(host, 'signature-target', { signatureId: 'expired', target: 0 }), /已变化/);
+  act(host, 'signature-target', { signatureId: 'signature-a', target: 0 });
+  assert.equal(r.turn.seat, 0);
+  assert.deepEqual(r.turn.finished, [1]);
+  const route = guide.apostleRoutes(r, 1, terrain, los).find(path => path.id === 'horizontal-first');
+  move({ type: 'board-ai-route', id: 'signature-move', reach: 1, route: route.id, stamp: guide.routeStamp(r, route) });
+  assert.equal(r.turn.aiMovement.pending, true);
+  assert.throws(() => act(host, 'signature-resolve', { signatureId: 'signature-a' }), /先处理并确认/);
+  move({ type: 'board-ai-trample-confirm', move: 'signature-move' });
+  act(host, 'signature-resolve', { signatureId: 'signature-a' });
+  assert.deepEqual(r.turn, originalTurn);
+  assert.strictEqual(r.board.titanMoves, titanMoves);
+  assert.equal(r.board.lastApostleMove.id, 'signature-move');
+  act(host, 'signature-begin', { id: 'signature-b' });
+  act(host, 'signature-target', { signatureId: 'signature-b', target: null });
+  act(host, 'signature-resolve', { signatureId: 'signature-b' });
+  assert.deepEqual(r.turn, originalTurn);
+});
+
 test('骇物轮次的非主动移动可经过其他泰坦，单独记步且不认领回合', () => {
   const r = room();
   r.board = api.setupRoomBoard({ apostle: 'HEKATON', level: 1 }, 2);
@@ -739,6 +810,126 @@ test('骇物轮次的非主动移动可经过其他泰坦，单独记步且不�
     point: { column: 2, row: 3 }, speed: 2 });
   assert.equal(r.turn.seat, 0);
   assert.equal(r.board.titanMoves[0].remaining, 1);
+});
+
+test('推荐移动执行所选逐格路线，冲撞待确认时保留标记并阻止推进', () => {
+  const r = room();
+  r.board = api.setupRoomBoard({ apostle: 'HERMESIAN_PURSUER', level: 1 }, 2);
+  r.turn = { phase: 'apostle', seat: null, finished: [], aiGuide: 'resolve', aiTarget: 0 };
+  const pieces = r.board.map.pieces;
+  const origin = { column: 2.5, row: 2.5, facing: 270 };
+  pieces.apostle = { ...origin };
+  pieces.titans = [{ column: 7, row: 4 }, { column: 4, row: 2 }];
+
+  const [safe, collision] = guide.apostleRoutes(r, 1, terrain, los);
+  assert.equal(safe.id, 'vertical-first');
+  assert.deepEqual(safe.crossedSeats, []);
+  assert.equal(collision.id, 'horizontal-first');
+  assert.deepEqual(collision.crossedSeats, [1]);
+  assert.deepEqual(collision.endSeats, []);
+  const action = { type: 'board-ai-route', id: 'guided', reach: 1, route: collision.id, stamp: guide.routeStamp(r, collision) };
+  assert.throws(() => reducer.apply(r, player, action), /房主/);
+  assert.throws(() => reducer.apply(r, host, { ...action, stamp: 'stale' }), /路线已更新/);
+  assert.deepEqual(pieces.apostle, origin);
+
+  reducer.apply(r, host, action);
+  assert.deepEqual(r.board.lastApostleMove.route, collision.centers);
+  assert.deepEqual(pieces.apostle, { ...collision.finalCenter, facing: collision.facing });
+  assert.equal(r.turn.aiMovement.pending, true);
+  assert.deepEqual(r.turn.aiMovement.crossedSeats, [1]);
+  assert.equal(r.heroes[1].condition, 'standing');
+  assert.equal(r.heroes[1].stats.danger, 0);
+  assert.throws(() => reducer.apply(r, host, action), /已经执行过/);
+
+  reducer.apply(r, host, { type: 'board-apostle-undo', move: action.id });
+  assert.deepEqual(pieces.apostle, origin);
+  assert.equal(r.turn.aiMovement, undefined);
+  reducer.apply(r, host, { ...action, id: 'retried', stamp: guide.routeStamp(r, collision) });
+  const finish = { type: 'ai-guide', round: 1, phase: 'apostle', value: 'resolve' };
+  assert.throws(() => reducer.apply(r, host, finish), /先处理并确认/);
+  assert.throws(() => reducer.apply(r, host, { type: 'board-ai-trample-confirm', move: 'guided' }), /已更新/);
+  reducer.apply(r, host, { type: 'board-ai-trample-confirm', move: 'retried' });
+  assert.equal(r.turn.aiMovement.pending, false);
+  reducer.apply(r, host, finish);
+  assert.equal(r.turn.aiGuide, 'other');
+  assert.equal(r.turn.aiMovement, undefined);
+  assert.equal(r.board.apostleMovement, undefined);
+  assert.deepEqual(r.board.lastApostleMove.route, collision.centers);
+});
+
+test('截图版图的常规路线只有横向和纵向起步，地形不改变最短路线', () => {
+  const r = room();
+  r.board = api.setupRoomBoard({ apostle: 'HERMESIAN_PURSUER', level: 1 }, 2);
+  r.turn = { phase: 'apostle', aiGuide: 'resolve', aiTarget: 1 };
+  r.board.map.pieces.apostle = { column: 8.5, row: 6.5, facing: 180 };
+  r.board.map.pieces.titans = [{ column: 8, row: 5 }, { column: 13, row: 5 }];
+  const withTerrain = guide.apostleRoutes(r, 1, terrain, los);
+  assert.deepEqual(withTerrain.map(path => [path.id, path.steps, path.crossedSeats]), [
+    ['horizontal-first', 4, []], ['vertical-first', 4, [0]],
+  ]);
+  const coords = centers => centers.map(({ column, row }) => [column, row]);
+  assert.deepEqual(coords(withTerrain[0].centers), [[8.5, 6.5], [9.5, 6.5], [9.5, 5.5], [10.5, 5.5], [11.5, 5.5]]);
+  assert.deepEqual(coords(withTerrain[1].centers), [[8.5, 6.5], [8.5, 5.5], [9.5, 5.5], [10.5, 5.5], [11.5, 5.5]]);
+  assert(r.board.map.terrain.length > 0);
+  r.board.map.terrain = [];
+  assert.deepEqual(guide.apostleRoutes(r, 1, terrain, los), withTerrain);
+});
+
+test('推荐移动从已走路线接续换轴，拒绝未对齐时连续同轴的前缀', () => {
+  const r = room();
+  r.board = api.setupRoomBoard({ apostle: 'HERMESIAN_PURSUER', level: 1 }, 2);
+  r.turn = { phase: 'apostle', seat: null, finished: [], aiGuide: 'resolve', aiTarget: 0 };
+  const start = { column: 2.5, row: 2.5 };
+  const right = { column: 3.5, row: 2.5 };
+  const again = { column: 4.5, row: 2.5 };
+  r.board.map.pieces.apostle = { ...start, facing: 90 };
+  r.board.map.pieces.titans = [{ column: 9, row: 6 }, { column: 19, row: 9 }];
+
+  const shortest = guide.apostleRoutes(r, 1, terrain, los).find(path => path.id === 'horizontal-first');
+  reducer.apply(r, host, { type: 'board-apostle-move', id: 'right', from: start, point: right, speed: 6 });
+  const [continuation] = guide.apostleRoutes(r, 1, terrain, los);
+  assert.equal(guide.apostleRoutes(r, 1, terrain, los).length, 1);
+  assert.equal(continuation.firstFacing, 0);
+  assert.deepEqual(continuation.centers, shortest.centers.slice(1, 7));
+  assert.equal(continuation.stopReason, 'speed-limit');
+  reducer.apply(r, host, { type: 'board-apostle-move', id: 'again', from: right, point: again, move: 'right' });
+  assert.deepEqual(guide.apostleRoutes(r, 1, terrain, los), []);
+  reducer.apply(r, host, { type: 'board-apostle-undo', move: 'again' });
+  const [valid] = guide.apostleRoutes(r, 1, terrain, los);
+  reducer.apply(r, host, { type: 'board-ai-route', id: 'continue', reach: 1, route: valid.id, stamp: guide.routeStamp(r, valid) });
+  assert.deepEqual(r.board.lastApostleMove.route, shortest.centers.slice(0, 7));
+  assert.equal(r.board.apostleMovement.remaining, 0);
+});
+
+test('手动结束骇物移动后，本次指令技不重新推荐或补发速度', () => {
+  const r = room();
+  r.board = api.setupRoomBoard({ apostle: 'HERMESIAN_PURSUER', level: 1 }, 2);
+  r.turn = { phase: 'apostle', seat: null, finished: [], aiGuide: 'resolve', aiTarget: 0 };
+  const start = { column: 2.5, row: 2.5 };
+  r.board.map.pieces.apostle = { ...start, facing: 90 };
+  r.board.map.pieces.titans = [{ column: 9, row: 6 }, { column: 19, row: 9 }];
+  reducer.apply(r, host, { type: 'board-apostle-move', id: 'manual', from: start, point: { column: 3.5, row: 2.5 }, speed: 1 });
+  reducer.apply(r, host, { type: 'board-apostle-end', move: 'manual' });
+  assert.equal(r.turn.aiManualMovementEnded, true);
+  assert.deepEqual(guide.apostleRoutes(r, 1, terrain, los), []);
+  reducer.apply(r, host, { type: 'ai-guide', phase: 'apostle', round: 1, value: 'resolve' });
+  assert.equal(r.turn.aiManualMovementEnded, undefined);
+  assert.equal(r.board.lastApostleMove.id, 'manual');
+});
+
+test('目标已在远程攻击范围内时只调整朝向，招牌技也可使用推荐移动', () => {
+  const r = room();
+  r.board = api.setupRoomBoard({ apostle: 'HERMESIAN_PURSUER', level: 1 }, 2);
+  r.turn = { phase: 'apostle', seat: null, finished: [], aiGuide: 'hope-resolve', aiTarget: 0 };
+  r.board.map.pieces.apostle = { column: 2.5, row: 2.5, facing: 270 };
+  r.board.map.pieces.titans = [{ column: 4, row: 4 }, { column: 9, row: 9 }];
+  const [route] = guide.apostleRoutes(r, 2, terrain, los);
+  assert.equal(route.steps, 0);
+  assert.equal(route.facing, 90);
+  reducer.apply(r, host, { type: 'board-ai-route', id: 'turn-only', reach: 2, route: route.id, stamp: guide.routeStamp(r, route) });
+  assert.deepEqual(r.board.map.pieces.apostle, { column: 2.5, row: 2.5, facing: 90 });
+  assert.equal(r.turn.aiMovement.pending, false);
+  assert.equal(r.board.apostleMovement, undefined);
 });
 
 test('版图点位由房主或队员标记，经校验且不改变棋子、移动或回合', () => {
@@ -779,6 +970,44 @@ test('绝望和神浆独立计数，可从旧状态直接增加，队员不能�
   assert.equal(r.heroes[1].markers, undefined);
 });
 
+test('武器基础攻击骰与每次命中／单次奖励威力分别读取', () => {
+  const [count, perHit, bonus] = gearRolls.weapons.AJ0247;
+  assert.equal(count, 2);
+  assert.deepEqual(gearRolls.power(perHit, bonus, 2), { red: 3, black: 0, white: 0, raw: 0 });
+  assert.deepEqual(gearRolls.power('b', 'r+', 2), { red: 1, black: 2, white: 0, raw: 1 });
+  assert.deepEqual(gearRolls.power(perHit, bonus, 0), { red: 0, black: 0, white: 0, raw: 0 });
+  assert.equal(gearRolls.weapons.BJ0900[1], undefined);
+  assert.deepEqual(gearRolls.defenseKeywords.AJ0211, ['格挡 1']);
+});
+
+test('攻击保存当前英雄的武器，护甲可接在无预填防御骰的闪避之后', () => {
+  const r = room();
+  r.heroes[0].gear.push({ id: 'AJ0247', count: 1, used: 0 });
+  const roll = (id, mode, counts, extra = {}) => reducer.apply(r, player, { type: 'roll', id, seat: 0, mode, counts, ...extra });
+  assert.throws(() => roll('bad-weapon', 'attack', { d10: 2 }, { weapon: 'AJ0181' }), /装备的武器/);
+  roll('weapon-attack', 'attack', { d10: 2 }, { weapon: 'AJ0247' });
+  assert.equal(r.rolls[0].weapon, 'AJ0247');
+  roll('weapon-power', 'power', { red: 3 }, { parentRoll: 'weapon-attack' });
+  assert.equal(r.rolls[0].parentRoll, 'weapon-attack');
+  roll('evade', 'dodge', { d10: 2 });
+  roll('armor', 'defense', { red: 1, black: 1, white: 1 }, { parentRoll: 'evade' });
+  assert.deepEqual(r.rolls[0].dice.map(die => die.kind), ['red', 'black', 'white']);
+  const total = r.rolls[0].dice.reduce((sum, die) => sum + dice.naturalFace(die)[1], 0);
+  assert.equal(dice.rollSummary(r.rolls[0]), total + ' 潜力 · 减免 ' + total + ' 凶险');
+  assert.equal(dice.rollSummary({ mode: 'defense', dice: [{ kind: 'red', face: 3 }] }), '0 潜力 · 减免 0 凶险');
+  assert.equal(dice.rollSummary({ mode: 'defense', dice: [{ kind: 'red', face: 2 }] }), '1 潜力 · 减免 1 凶险');
+  assert.throws(() => roll('duplicate', 'defense', { red: 1 }, { parentRoll: 'evade' }), /已结算/);
+  assert.throws(() => reducer.apply(r, player, { type: 'reroll', seat: 0, roll: 'armor',
+    ids: [r.rolls[0].dice[0].id] }), /护甲投掷不能重掷/);
+  assert.throws(() => reducer.apply(r, player, { type: 'convert', seat: 0, roll: 'armor',
+    die: r.rolls[0].dice[0].id, symbol: 'potential' }), /只计潜力/);
+  for (let i = 0; i < 31; i++) {
+    reducer.apply(r, { role: 'player', seat: 1 }, { type: 'roll', id: 'teammate-' + i, seat: 1, mode: 'check', counts: { d10: 1 } });
+  }
+  assert.equal(r.rolls.find(entry => entry.id === 'armor').parentRoll, 'evade');
+  assert.equal(r.rolls.find(entry => entry.id === 'evade').defenseRoll, 'armor');
+});
+
 test('only a white ten in an attack or dodge earns the matching critical badge', () => {
   const whiteTen = { kind: 'crit', value: 10 };
   assert.equal(dice.criticalLabel('attack', whiteTen), '关键命中');
@@ -816,17 +1045,17 @@ test('循环一逐步结算由房主确认，核对牌面并洗回空的指令�
     apply(host, 'turn-phase', { value: 'apostle' });
     assert.throws(() => apply(player, 'ai-guide', { value: 'begin' }), /房主/);
     confirm('begin');
-    assert.throws(() => apply(host, 'ai-request'), /当前骇物步骤/);
     assert.throws(() => confirm('target'), /步骤/);
     assert.throws(() => apply(host, 'turn-phase', { value: 'titans' }), /逐步结算/);
-    confirm('start');
-    assert.throws(() => confirm('draw'), /牌面/);
     for (let pass = 0; pass < 2; pass++) {
       apply(host, 'ai-request');
       assert.equal(r.turn.aiGuide, 'target');
       assert.equal(r.projection.aiPending, true);
       assert.throws(() => apply(host, 'ai-guide-discard', { card: src }), /无法弃置/);
-      for (const step of ['target', 'move', 'evade', 'effects', 'after']) confirm(step);
+      assert.throws(() => confirm('target'), /目标/);
+      apply(host, 'ai-guide', { value: 'target', target: 1 });
+      assert.equal(r.turn.aiGuide, 'resolve');
+      assert.equal(r.turn.aiTarget, 1);
       assert.throws(() => apply(host, 'ai-guide-discard', { card: src.replace('001', '002') }), /指令技已更新/);
       apply(host, 'ai-guide-discard', { card: src });
       assert.equal(r.turn.aiGuide, 'other');
@@ -834,8 +1063,18 @@ test('循环一逐步结算由房主确认，核对牌面并洗回空的指令�
       assert.equal(r.projection.aiDeck.count, 1);
       if (pass === 0) confirm('extra');
     }
-    confirm('other');
-    confirm('end');
+    if (apostle === 'HERMESIAN_PURSUER') {
+      r.projection.hopeEnds = true;
+      r.projection.signature = 'ps/HERMESIAN_PURSUER/HERMESIAN_PURSUER_SIGNATURE_X_001.jpg';
+      assert.throws(() => apply(host, 'turn-phase', { value: 'titans' }), /逐步结算/);
+      confirm('hope');
+      assert.equal(r.turn.aiGuide, 'hope-target');
+      apply(host, 'ai-guide', { value: 'hope-target', target: 0 });
+      assert.equal(r.turn.aiGuide, 'hope-resolve');
+      confirm('hope-resolve');
+      assert.equal(r.turn.aiGuide, 'ready');
+      assert.equal(r.battleDeck.data.AI.deck.length, 1, '招牌技不进入指令技牌堆');
+    }
     apply(host, 'turn-phase', { value: 'titans' });
     assert.equal(r.turn.phase, 'titans');
     assert.equal(r.turn.aiGuide, undefined);

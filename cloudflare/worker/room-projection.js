@@ -50,6 +50,7 @@ export function roomProjection(value, apostle) {
     level: text(value.level, 12),
     panel: image(value.panel),
     signature: image(value.signature),
+    ...(value.hopeEnds === true && { hopeEnds: true }),
     ...(Array.isArray(value.tokens) && { tokens: publicTokens(value.tokens) }),
     ai: card(value.ai),
     ...(value.sharedDeck === true && { sharedDeck: true }),

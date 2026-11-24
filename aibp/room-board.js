@@ -1,6 +1,6 @@
 (function () {
   function create(mount, send) {
-    let room, actor, control, panel, map, stamp = "", overlayStamp = "";
+    let room, actor, control, panel, settings, map, stamp = "", overlayStamp = "";
     const reference = document.getElementById("battleMapControl")
       || document.getElementById("battleRoomBoardTemplate")?.content.querySelector("#battleMapControl");
     const open = document.createElement("button");
@@ -15,20 +15,21 @@
 
     const toolbar = document.createElement("div");
     toolbar.className = "room-board-turn-tools";
-    const target = document.createElement("label");
-    target.append("首要目标 ");
-    const targetSelect = document.createElement("select");
-    target.append(targetSelect);
-    const lock = document.createElement("label");
-    const lockInput = document.createElement("input");
-    lockInput.type = "checkbox";
-    lock.append(lockInput, " 锁定标记");
-    const confirm = () => {
-      if (targetSelect.value !== "") send({ type: "priority-target", seat: Number(targetSelect.value), locked: lockInput.checked });
-    };
-    targetSelect.addEventListener("change", confirm);
-    lockInput.addEventListener("change", confirm);
-    toolbar.append(target, lock);
+    const targetLabel = document.createElement("strong");
+    targetLabel.textContent = "首要目标";
+    const targets = document.createElement("div");
+    targets.className = "room-seat-tabs";
+    targets.setAttribute("role", "group");
+    targets.setAttribute("aria-label", "首要目标");
+    const lock = document.createElement("button");
+    lock.type = "button";
+    lock.textContent = "锁定标记";
+    lock.dataset.priorityLock = "";
+    lock.addEventListener("click", () => {
+      if (!canEdit() || !Number.isInteger(room.priorityTarget?.seat)) return;
+      send({ type: "priority-target", seat: room.priorityTarget.seat, locked: !room.priorityTarget.locked });
+    });
+    toolbar.append(targetLabel, targets, lock);
     mount.prepend(toolbar);
 
     const canEdit = () => actor?.role === "host" && !room.closed;
@@ -37,6 +38,7 @@
       active, mode, selectedTitan, weaponControls, titanSpeeds, forced, elevated,
     });
 
+    let aiRoute, aiRouteStamp = "";
     let selectingPoint = false;
     let shownPing = null;
     let pingTimer;
@@ -110,9 +112,18 @@
       panel = reference.cloneNode(true);
       panel.id = "roomBattleMapControl";
       panel.querySelector("[data-battle-map-los-control]").hidden = true;
-      for (const node of panel.querySelectorAll("[data-board-host-only], .battle-map-head-actions")) {
-        if (!canEdit()) node.hidden = true;
-      }
+      settings = document.createElement("details");
+      settings.className = "room-board-settings";
+      settings.hidden = !canEdit();
+      const settingsSummary = document.createElement("summary");
+      settingsSummary.textContent = "版图与地形设置";
+      const layoutOptions = panel.querySelector(".battle-map-head-actions");
+      const terrainTools = panel.querySelectorAll(".battle-map-side > [data-board-host-only]:not([data-battle-map-los-control])");
+      settings.append(settingsSummary, layoutOptions, ...terrainTools, open);
+      panel.querySelector(".battle-map-side").append(settings);
+      const terrainMode = panel.querySelector('[data-board-mode=""]');
+      terrainMode.hidden = !canEdit();
+      terrainMode.addEventListener("click", () => { settings.open = true; });
       panel.querySelector(".battle-movement-actions").append(finishTurn);
       grid = panel.querySelector("[data-battle-map-board]");
       panel.querySelector(".battle-map-head").append(pingBar);
@@ -153,6 +164,9 @@
           window.ATO_GEAR_INVENTORY.dreamwalkerPanel(titan)?.name || titan?.name || name),
         titanRoster: () => room.heroes.map(hero => hero.titan),
         priorityTarget: () => room.priorityTarget?.seat,
+        aiTarget: () => room.turn?.aiTarget,
+        aiRoute: () => aiRoute,
+        pendingCollisionSeats: () => room.turn?.aiMovement?.pending ? room.turn.aiMovement.crossedSeats : [],
         deadSeats: () => room.heroes.flatMap((hero, seat) => hero.condition === "dead" ? [seat] : []),
         heroPortraits: () => room.heroes.map(hero => {
           const path = window.ATO_HERO_CATALOG.heroPortrait(hero);
@@ -206,7 +220,8 @@
         mount.hidden = !room.board && !canEdit();
         mount.classList.toggle("room-tactical-read-only", actor.role === "viewer" || room.closed);
         open.hidden = !canEdit();
-        if (open.parentNode !== mount) mount.append(open);
+        if (!room.board && open.parentNode !== mount) mount.append(open);
+        if (settings) settings.hidden = !canEdit();
         if (!canPing() || previousBattle !== room.squad?.battleNumber || previous?.apostle !== room.board?.apostle) {
           selectingPoint = false;
         }
@@ -217,25 +232,44 @@
         finishTurn.hidden = room.turn?.phase !== "titans" || !Number.isInteger(seat) || !canMove(seat);
         const livingRoster = room.heroes.map(hero => hero.condition === 'dead' ? null : hero.name);
         const nextBoardStamp = room.board === previous ? boardStamp : JSON.stringify(room.board);
-        const stateKey = JSON.stringify([actor.role, room.closed, room.turn?.phase, room.priorityTarget, livingRoster]);
+        const stateKey = JSON.stringify([actor.role, room.closed, room.turn?.phase, room.priorityTarget, room.turn?.aiTarget, room.turn?.aiMovement, livingRoster]);
         if (nextBoardStamp === boardStamp && stateKey === stamp) return;
         boardStamp = nextBoardStamp;
         stamp = stateKey;
-        target.hidden = !canEdit();
-        lock.hidden = !canEdit();
         const rosterKey = JSON.stringify(livingRoster);
         if (rosterKey !== livingRosterKey) {
-          const living = livingRoster.flatMap((name, seat) => name === null ? [] : [new Option(name, seat)]);
-          targetSelect.replaceChildren(...living);
-          lockInput.disabled = !living.length;
+          const buttons = livingRoster.flatMap((name, seat) => {
+            if (name === null) return [];
+            const button = document.createElement("button");
+            button.type = "button";
+            button.dataset.prioritySeat = String(seat);
+            const portrait = window.ATO_HERO_CATALOG.heroPortrait(room.heroes[seat]);
+            if (portrait) {
+              const image = document.createElement("img");
+              image.src = "../hero/assets/" + portrait;
+              image.alt = "";
+              button.append(image);
+            }
+            button.append(name);
+            button.addEventListener("click", () => {
+              if (!canEdit() || room.priorityTarget?.seat === seat) return;
+              send({ type: "priority-target", seat, locked: room.priorityTarget?.locked === true });
+            });
+            return [button];
+          });
+          targets.replaceChildren(...buttons);
           livingRosterKey = rosterKey;
         }
-        targetSelect.value = room.priorityTarget?.seat ?? '';
-        lockInput.checked = room.priorityTarget?.locked === true;
+        for (const button of targets.children) {
+          button.setAttribute("aria-pressed", String(Number(button.dataset.prioritySeat) === room.priorityTarget?.seat));
+        }
+        lock.disabled = !Number.isInteger(room.priorityTarget?.seat);
+        lock.setAttribute("aria-pressed", String(room.priorityTarget?.locked === true));
         toolbar.hidden = !canEdit();
         map = room.board.map;
         const existing = Boolean(control);
         if (!existing) setup();
+        if (open.parentNode !== settings) settings.append(open);
         if (actor.role === "player" && existing && previous?.apostle === room.board.apostle
             && previousBattle === room.squad?.battleNumber) control.render();
         else {
@@ -248,6 +282,13 @@
         if (existing && Number.isInteger(previousSeat) && room.turn?.finished.includes(previousSeat)) {
           control.closeFinishedMovement(previousSeat);
         }
+      },
+      setAiRoute(route) {
+        const next = JSON.stringify(route) || "";
+        if (next === aiRouteStamp) return;
+        aiRouteStamp = next;
+        aiRoute = route;
+        control?.render();
       },
       openForcedMovement(seat) {
         if (!control || room.turn?.phase !== "apostle" || !canMove(seat) || !control.openTitanMovement(seat)) return false;

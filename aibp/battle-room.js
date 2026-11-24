@@ -10,6 +10,7 @@
   const squadId = params.get('squad');
   const routeId = params.get('battle');
   let roomLanguage;
+  const hostPersonalView = params.get('personal') === '1';
   const invite = fragment.get('invite') || '';
   const quickJoin = params.get('quick') === '1';
   const viewKey = fragment.get('view') || '';
@@ -28,6 +29,7 @@
   const conditionNames = { standing: '站立', down: '倒地', rising: '起身', dead: '死亡' };
   const aiGuide = window.ATO_AI_TURN_GUIDE;
   const dice = window.ATO_ROOM_DICE;
+  const gearRolls = window.ATO_GEAR_ROLL_PROFILES;
   const { faceLabel, rollSummary } = dice;
   let id = isLink ? routeId : '';
   let credentials = null;
@@ -55,6 +57,7 @@
   let lastSecondAbility;
 
   let parentRoll = '';
+  let extraAttack = false;
   let armedCard = '';
   let pending = false;
   let writing = false;
@@ -156,6 +159,7 @@
     const wasFighting = prior?.squad?.phase === 'battle';
     state = data.room;
     actor = data.actor;
+    document.body.classList.toggle('aibp-active-online-battle', !state.closed && (!state.squad || state.squad.phase === 'battle'));
     if (first && actor.role === 'host') equipmentSeat = rollSeat = personalSeat() ?? 0;
     const language = state.squad?.language || state.language;
     if (language && language !== roomLanguage) { roomLanguage = language; squadLink?.language(language); }
@@ -352,12 +356,15 @@
   traumaDialog.className = 'room-trauma-dialog';
   root.appendChild(traumaDialog);
 
-  const toolNames = { rolls: '战斗掷骰记录', apostle: '骇物面板', argo: '阿尔戈能力', trauma: '创伤牌库' };
+  const toolNames = { rolls: '战斗掷骰记录', argo: '阿尔戈能力', apostle: '骇物面板', trauma: '创伤牌库' };
+  const fullBossPanel = document.getElementById('viewer');
   const dock = document.createElement('div');
   dock.className = 'room-tool-dock';
   dock.hidden = true;
   const toolLinks = document.createElement('div');
-  toolLinks.className = 'room-secondary-nav';
+  toolLinks.className = 'room-tool-actions';
+  toolLinks.setAttribute('role', 'group');
+  toolLinks.setAttribute('aria-label', '战斗功能');
   const toolsDialog = document.createElement('dialog');
   toolsDialog.className = 'room-tool-sheet';
   toolsDialog.id = 'room-tool-sheet';
@@ -368,7 +375,7 @@
   const toolsStatus = toolsDialog.querySelector('[data-tools-status]');
   let activeTool;
   let toolsMarkup;
-  for (const [key, label] of Object.entries(toolNames)) {
+  function toolButton(key, label = toolNames[key]) {
     const button = document.createElement('button');
     button.type = 'button';
     button.textContent = label;
@@ -377,21 +384,28 @@
     button.setAttribute('aria-haspopup', 'dialog');
     button.addEventListener('click', () => {
       activeTool = key;
-      toolsDialog.querySelector('h3').innerHTML = (key === 'apostle' ? bossIdentityArt() : '') + escape(label);
+      toolsDialog.querySelector('h3').textContent = toolNames[key];
       toolsStatus.textContent = '';
       renderTools();
       toolsDialog.showModal();
-      if (key === 'apostle') void refreshRoomState();
     });
-    toolLinks.append(button);
+    return button;
   }
-  const bossShortcut = toolLinks.querySelector('[data-tool="apostle"]');
-  bossShortcut.textContent = '骇物';
-  bossShortcut.title = '查看招牌技、属性和状态';
+
+  const bossShortcut = toolButton('apostle', '骇物');
+  bossShortcut.className = 'room-turn-boss-link';
+  const bossTool = toolButton('apostle');
+  const bossJump = document.createElement('a');
+  bossJump.href = '#viewer';
+  bossJump.textContent = toolNames.apostle;
+  bossJump.addEventListener('click', () => { turnWindow.open = false; });
+  toolLinks.append(toolButton('rolls'), toolButton('argo'), bossTool, toolButton('trauma'));
+
   const quick = document.createElement('nav');
   quick.className = 'room-primary-nav';
-  quick.setAttribute('aria-label', '常用操作');
+  quick.setAttribute('aria-label', '战斗导航');
   quick.innerHTML = '<a href="#room-movement">移动</a><a href="#room-dice">掷骰</a><a href="#room-status">状态</a><a href="#room-equipment">装备</a>';
+  quick.append(bossJump);
   const movementShortcut = quick.querySelector('a[href="#room-movement"]');
   function forcedMovementSeat() {
     const seat = personalSeat();
@@ -426,10 +440,62 @@
   let turnHeading = '';
   let turnMarkup = '';
   let promptedAiRound = '';
+  let aiRange = 1;
+  let aiRouteId = '';
+  let aiManualMovement = false;
+  let aiPlanKey = '';
+  turnWindow.addEventListener('change', event => {
+    if (!event.target.matches('[data-ai-range]')) return;
+    aiRange = Math.max(1, Math.min(20, Math.floor(Number(event.target.value) || 1)));
+    aiRouteId = '';
+    renderTurn();
+  });
   turnWindow.addEventListener('click', event => {
-    const button = event.target.closest('[data-turn-action]');
+    const button = event.target.closest('[data-turn-action], [data-ai-route]');
     if (!button || !state || state.closed) return;
+    if (button.dataset.aiRoute) {
+      aiRouteId = button.dataset.aiRoute;
+      renderTurn();
+      turnWindow.querySelector('[data-ai-route="' + aiRouteId + '"]')?.focus({ preventScroll: true });
+      return;
+    }
     const { turnAction: type, seat, value } = button.dataset;
+    if (type === 'guide-defense') {
+      if (actor.role !== 'host' || !canOpenGuidedDefense(state.turn)) return;
+      const target = state.turn.aiTarget;
+      if (Number.isInteger(target)) rollSeat = target;
+      rollMode = 'dodge';
+      parentRoll = '';
+      extraAttack = false;
+      turnWindow.open = false;
+      render();
+      const panel = content.querySelector('#room-dice');
+      panel?.scrollIntoView({ block: 'start' });
+      panel?.querySelector('form[data-roll] input:not([type="hidden"])')?.focus({ preventScroll: true });
+      return;
+    }
+    if (type === 'ai-manual-movement') {
+      aiManualMovement = !aiManualMovement;
+      renderTurn();
+      turnWindow.querySelector('[data-turn-action="ai-manual-movement"]')?.focus({ preventScroll: true });
+      return;
+    }
+    const selection = button.dataset.aiTarget || '';
+    if (type === 'ai-guide' && ['target', 'hope-target', 'signature-target'].includes(value) && !selection) {
+      say('请选择本次目标，或选择按牌面处理。');
+      return;
+    }
+    if (type === 'ai-face') {
+      send({ id: crypto.randomUUID(), type: 'board-face', facing: Number(value) });
+      return;
+    }
+    if (type === 'board-ai-route' || type === 'board-ai-trample-confirm') {
+      if (actions.some(action => action.type === type)) return;
+      send({ id: crypto.randomUUID(), type, ...(type === 'board-ai-route'
+        ? { route: value, reach: aiRange, stamp: button.dataset.routeStamp }
+        : { move: value }) });
+      return;
+    }
     if (type === 'ai-guide-discard') {
       send({ id: crypto.randomUUID(), type, card: state.projection?.ai?.src });
       return;
@@ -453,8 +519,39 @@
       return;
     }
     send({ id: crypto.randomUUID(), type, round: state.round, phase: state.turn?.phase ?? null,
-      ...(seat !== undefined && { seat: Number(seat) }), ...(value && { value }) });
+      ...(seat !== undefined && { seat: Number(seat) }), ...(value && { value }),
+      ...(type === 'ai-guide' && aiGuide.isInsertedSignature(value) && { signatureId: state.turn.aiSignatureId }),
+      ...(selection && { target: selection === 'manual' ? null : Number(selection) }) });
   });
+
+  const aiHeadings = { 0: '上', 90: '右', 180: '下', 270: '左' };
+
+  function aiMovementResult(move, host, action) {
+    const outOfRange = ['speed-limit', 'speed-zero'].includes(move.stopReason);
+    const result = '<p>已执行 · ' + move.steps + ' 格 · 朝' + aiHeadings[move.facing]
+      + (outOfRange ? ' · 目标仍在填写的攻击范围外，请核对是否跳过攻击' : '') + '</p>';
+    if (!move.pending) return result;
+    const heroes = move.crossedSeats.map(seat => '<li>' + rollAvatar(seat) + '<span>' + escape(state.heroes[seat]?.name || '')
+      + (move.endSeats.includes(seat) ? ' · 骇物落点重叠，另结算绝对击退' : '') + '</span></li>').join('');
+    return result + '<section class="room-ai-collisions"><strong>待结算冲撞</strong><ul>' + heroes + '</ul>'
+      + '<p>每位受冲撞的泰坦获得 1 凶险并被击倒。按牌面核对例外后确认。</p>'
+      + (host ? action('board-ai-trample-confirm', '确认冲撞已结算', ' data-value="' + escape(move.id) + '"') : '') + '</section>';
+  }
+
+  function renderAiTargetChoice(step) {
+    const button = (target, label, portrait = '') => '<button type="button" data-turn-action="ai-guide" data-value="' + step
+      + '" data-ai-target="' + target + '">' + portrait + escape(label) + '</button>';
+    return '<div class="room-ai-targets" role="group" aria-label="选择本次目标">'
+      + state.heroes.map((hero, seat) => hero.condition === 'dead' ? '' : button(String(seat), hero.name, rollAvatar(seat))).join('')
+      + button('manual', '无单一目标／按牌面') + '</div>';
+  }
+
+  function canOpenGuidedDefense(turn) {
+    if (!aiGuide.resolvesMovement(turn?.aiGuide) || turn.aiMovement?.pending) return false;
+    const target = turn.aiTarget;
+    if (!Number.isInteger(target)) return true;
+    return state.heroes[target]?.condition !== 'dead' && Boolean(turn.aiMovement || turn.aiManualMovementEnded);
+  }
 
   function renderTurn() {
     turnBar.hidden = state.closed;
@@ -464,8 +561,9 @@
     const titans = turn?.phase === 'titans';
     const host = actor.role === 'host';
     const aiRound = (state.squad?.battleNumber || 0) + ':' + state.round;
-    const guideAvailable = turn?.phase === 'apostle' && aiGuide.bosses.includes(state.board?.apostle);
-    const step = guideAvailable && turn.aiGuide;
+    const signatureActive = titans && aiGuide.isInsertedSignature(turn.aiGuide);
+    const guideAvailable = signatureActive || (turn?.phase === 'apostle' && aiGuide.bosses.includes(state.board?.apostle));
+    const step = guideAvailable && aiGuide.stepFor(turn.aiGuide);
     const shouldDrawAi = host && turn?.phase === 'apostle' && !state.projection?.aiPending
       && Boolean(window.drawAibpRoomCard || (guideAvailable && state.deckRevision));
     if (host && (guideAvailable || shouldDrawAi) && promptedAiRound !== aiRound) {
@@ -476,7 +574,8 @@
     const label = !turn ? '等待房主设置轮次' : !titans ? '骇物轮次'
       : activeSeat !== null ? '泰坦轮次 · ' + state.heroes[activeSeat].name
         : everyoneFinished ? '泰坦轮次 · 全员已结束' : '泰坦轮次 · 等待认领';
-    const heading = '第 ' + state.round + ' 轮 · ' + label;
+    const heading = '第 ' + state.round + ' 轮 · ' + label
+      + (signatureActive ? ' · 招牌技结算中' : '') + (turn?.aiMovement?.pending ? ' · 待结算冲撞' : '');
     if (turnHeading !== heading) {
       turnHeading = heading;
       turnWindow.querySelector('summary').textContent = heading;
@@ -495,29 +594,93 @@
         + '</small></span>' + actions + '</li>';
     }).join('');
     const drawAi = () => action('draw-ai', '抽取 AI', turnAiAction || !shouldDrawAi ? ' disabled' : '');
-    const guideAction = (value, label) => action('ai-guide', label, ' data-value="' + value + '"');
+    const guideAction = (value, label) => action('ai-guide', label, ' data-value="' + value + '"'
+      + (aiGuide.resolvesMovement(value) && turn.aiMovement?.pending ? ' disabled' : ''));
     let controls = '';
     let guidance = '';
+    const planKey = [state.squad?.battleNumber, state.round, step, turn?.aiSignatureId, turn?.aiTarget].join(':');
+    if (aiPlanKey !== planKey) {
+      aiPlanKey = planKey;
+      aiRange = 1;
+      aiRouteId = '';
+      aiManualMovement = false;
+    }
+    let route;
     if (guideAvailable) {
       if (!step && host) controls = guideAction('begin', '开始逐步结算');
       if (step) {
-        const [title, detail, confirm] = aiGuide.steps[step];
+        const [title, detail] = aiGuide.steps[step];
         const projection = state.projection;
-        const current = projection?.ai;
-        const showCard = ['target', 'move', 'evade', 'effects', 'after', 'discard'].includes(step);
-        guidance = '<div class="room-ai-guide"><strong>' + title + '</strong>' + (detail ? '<p>' + detail + '</p>' : '')
-          + (showCard && current?.src ? cardImage('/aibp/' + current.src, current.label || '当前 AI') : '')
-          + '</div>';
-        if (host) {
-          if (step === 'ready') controls = action('turn-phase', confirm, ' data-value="titans"');
-          else if (step === 'draw' && !projection?.aiPending) {
-            controls = drawAi();
-            if (!shouldDrawAi) guidance += '<p>请先由房主在 AIBP 同步牌堆。</p>';
-          } else if (step === 'discard' && projection?.aiPending) {
-            if (state.deckRevision && current?.src) controls = action('ai-guide-discard', '弃置当前 AI');
+        const signature = aiGuide.usesSignature(step);
+        const current = signature ? { src: projection?.signature, label: '招牌技' } : projection?.ai;
+        const targeting = ['target', 'hope-target', 'signature-target'].includes(step);
+        const resolving = aiGuide.resolvesMovement(step);
+        guidance = '<div class="room-ai-guide">'
+          + ((targeting || resolving) && current?.src ? cardImage('/aibp/' + current.src, current.label || '当前 AI') : '')
+          + '<div class="room-ai-step"><strong>' + title + '</strong><p>' + detail + '</p>';
+        if (targeting && host) guidance += renderAiTargetChoice(step);
+        if (resolving && Number.isInteger(turn.aiTarget)) {
+          guidance += '<p>本次目标：<b>' + escape(state.heroes[turn.aiTarget]?.name || '') + '</b></p>';
+          if (turn.aiMovement) {
+            guidance += aiMovementResult(turn.aiMovement, host, action);
+          } else if (turn.aiManualMovementEnded) {
+            guidance += '<p>已结束本次手动移动。</p>';
+          } else if (!host) {
+            guidance += '<p>房主执行移动后，版图会同步路线和冲撞标记。</p>';
+          } else if (aiManualMovement) {
+            guidance += '<p>用版图上的「移动骇物」按牌面结算。</p>'
+              + action('ai-manual-movement', '返回常规路线');
           } else {
-            controls = guideAction(step, confirm);
-            if (step === 'other') controls += guideAction('extra', '结算额外 AI');
+            const routes = aiGuide.apostleRoutes(state, aiRange, window.BattleTerrain, window.BattleLOS);
+            route = routes.find(path => path.id === aiRouteId) || routes[0];
+            guidance += '<label>有效射程（近战 1 格） <input data-ai-range type="number" min="1" max="20" value="' + aiRange + '"></label>';
+            if (route) {
+              guidance += '<div class="room-ai-route-options" role="group" aria-label="常规移动路线">' + routes.map((path, i) =>
+                  '<button type="button" data-ai-route="' + path.id + '" aria-pressed="' + (route === path) + '">'
+                  + '<strong>' + (path.steps ? path.label : '原地就位') + (i === 0 ? ' · 推荐' : '') + '</strong><small>'
+                  + path.steps + ' 格 · ' + (path.collisions ? '冲撞 ' + path.collisions + ' 位泰坦' : '避开泰坦') + '</small></button>').join('')
+                + '</div><small>最短正交路线，未对齐时逐格换轴。地形不影响路线。</small>';
+              if (Object.hasOwn(aiHeadings, route.facing)) {
+                const begin = route.firstFacing;
+                guidance += '<p>' + (route.steps ? '起步朝' + aiHeadings[begin] + ' · ' : '')
+                  + '落点／攻击前朝' + aiHeadings[route.facing] + '</p>';
+                if (route.crossedSeats.length) guidance += '<p class="room-ai-collision-preview">冲撞预览：'
+                  + route.crossedSeats.map(seat => escape(state.heroes[seat].name)
+                    + (route.endSeats.includes(seat) ? '（落点重叠）' : '')).join('、') + '</p>';
+                const routeAttrs = ' data-value="' + route.id + '" data-route-stamp="' + escape(aiGuide.routeStamp(state, route)) + '"';
+                guidance += '<div class="room-ai-move-actions">'
+                  + action('board-ai-route', route.steps ? '按所选路线移动' : '按推荐朝向就位', routeAttrs)
+                  + (route.steps ? action('ai-face', '只转到起步朝向', ' data-value="' + begin + '"') : '') + '</div>';
+              }
+            } else if (state.board?.apostleMovement) {
+              guidance += '<p>已走路线无法按当前目标和射程继续推荐。请撤回不符的步数，或按牌面手动处理。</p>';
+            }
+            guidance += action('ai-manual-movement', '按牌面手动移动');
+          }
+        }
+        if (host && canOpenGuidedDefense(turn)) {
+          guidance += '<div class="room-ai-defense"><strong>攻击结算</strong>'
+            + action('guide-defense', '去闪避／防御')
+            + '<small>先核对剩余命中，再按牌面决定护甲和攻击后效果。</small></div>';
+        }
+        const hope = projection?.hopeEnds;
+        if (step === 'other' && hope) guidance += '<p>希望终结生效，处理完其他行动后执行招牌技。</p>';
+        guidance += '</div></div>';
+        if (host) {
+          if (step === 'start' || step === 'draw') {
+            if (projection?.aiPending) controls = guideAction('start', '确认已揭示');
+            else controls = action('draw-ai', step === 'start' ? '开始效果已处理，抽取 AI' : '抽取 AI',
+              turnAiAction || !shouldDrawAi ? ' disabled' : '');
+            if (!shouldDrawAi && !projection?.aiPending) guidance += '<p>请先由房主在 AIBP 同步牌堆。</p>';
+          } else if (step === 'resolve') {
+            if (projection?.aiPending && state.deckRevision && current?.src) {
+              controls = action('ai-guide-discard', '结算完毕，弃置 AI', turn.aiMovement?.pending ? ' disabled' : '');
+            } else if (!projection?.aiPending) controls = guideAction('resolve', '牌面已处理');
+          } else if (step === 'hope-resolve' || step === 'signature-resolve') controls = guideAction(step, '招牌技已结算');
+          else if (!targeting) {
+            if (step === 'other') controls = guideAction('extra', '结算额外 AI');
+            if (step === 'other' && hope) controls += guideAction('hope', '希望终结 · 执行招牌技');
+            else controls += action('turn-phase', '结束骇物轮次', ' data-value="titans"');
           }
         }
       }
@@ -527,12 +690,14 @@
       : !titans ? (shouldDrawAi ? drawAi() : '') + action('turn-phase', '结束骇物轮次', ' data-value="titans"')
         : action('round', '下一轮 · 骇物行动',
           ' title="开始下一轮，回正阿尔戈能力"' + (everyoneFinished ? '' : ' disabled'));
+      if (titans && state.board && state.projection?.signature) controls = guideAction('signature-begin', '结算招牌技') + controls;
     }
     const hint = !turn ? '' : !titans ? '<p>泰坦仍可结算闪避、击退和推斥。</p>'
       : everyoneFinished ? '<p>结算本轮结束效果后，由房主开启下一轮。</p>'
         : activeSeat === null ? '<p>首次主动移动或投掷攻击／威力骰会认领回合。</p>' : '';
     const actions = controls ? '<div class="room-turn-controls">' + controls + '</div>' : '';
-    const next = guidance + actions + '<ul>' + roster + '</ul>' + hint;
+    roomBoard?.setAiRoute(route);
+    const next = guidance + actions + (step && !signatureActive ? '' : '<ul>' + roster + '</ul>') + hint;
     if (turnMarkup !== next) {
       turnMarkup = next;
       turnWindow.querySelector('[data-turn-body]').innerHTML = next;
@@ -547,6 +712,9 @@
     if (!personal && toolsDialog.open) toolsDialog.close();
     movementShortcut.hidden = !state.board;
     bossShortcut.hidden = !state.board;
+    const canJumpToBoss = actor.role === 'host' && !hostPersonalView && fullBossPanel;
+    bossJump.hidden = !state.board || !canJumpToBoss;
+    bossTool.hidden = !state.board || Boolean(canJumpToBoss);
     const forced = forcedMovementSeat() !== null;
     if (forced !== (movementShortcut.dataset.forced === 'true')) {
       movementShortcut.dataset.forced = String(forced);
@@ -558,21 +726,14 @@
     if (!personal || !activeTool) return;
     const markup = {
       rolls: latestHeroRolls,
-      apostle: () => roomProjection(true) || '<p>骇物面板尚未准备。</p>',
       argo: () => argoAbilities() || '<p>本场尚未准备阿尔戈能力。</p>',
-      trauma: () => {
-        const traumaSeat = seat ?? (actor.role === 'host' ? equipmentSeat : null);
-        return roomTrauma() + (state.heroes[traumaSeat] ? traumaControls(state.heroes[traumaSeat], traumaSeat, true) : '')
-          || '<p>创伤牌库尚未准备。</p>';
-      },
+      apostle: () => roomProjection(true),
+      trauma: traumaToolMarkup,
     }[activeTool]();
     if (markup !== toolsMarkup) {
       const focused = toolsBody.contains(document.activeElement) ? document.activeElement : null;
       const focusKey = focused?.dataset.action || focused?.dataset.traumaDialog;
-      const comparisonWasOpen = toolsBody.querySelector('.room-boss-levels')?.open;
       toolsBody.innerHTML = markup;
-      const comparison = toolsBody.querySelector('.room-boss-levels');
-      if (comparison) comparison.open = Boolean(comparisonWasOpen);
       toolsMarkup = markup;
       if (focusKey) [...toolsBody.querySelectorAll('button:not(:disabled)')].find(button =>
         (button.dataset.action || button.dataset.traumaDialog) === focusKey
@@ -629,6 +790,12 @@
     return '<section class="room-trauma-summary"><h3>创伤牌库</h3><small>故事集 ' + escape(cycle.slice(1)) + (tutorial ? ' · 教程' : '')
       + ' · ' + Object.entries(counts).map(([deck, count]) => traumaDecks[deck] + ' ' + count).join(' · ') + '</small>'
       + (actor.role === 'host' && !state.closed ? '<button type="button" data-trauma-dialog="manage">调整本场牌库</button> <a href="/aibp/trauma" target="_blank" rel="noopener">存档牌库</a>' : '') + latest + '</section>';
+  }
+
+  function traumaToolMarkup() {
+    const seat = personalSeat() ?? (actor.role === 'host' ? equipmentSeat : null);
+    const hero = state.heroes[seat];
+    return roomTrauma() + (hero ? traumaControls(hero, seat, !state.closed) : '');
   }
 
   function openTraumaDialog(mode, seat) {
@@ -808,14 +975,16 @@
         + (entry.detail ? '<span data-dice-activity="' + escape(entry.id) + '"> · ' + escape(entry.detail) + '</span>' : '') + '</span></li>').join('') + '</ol></section>';
   }
 
-  function rollCard(roll, latest, quickFeedback = false) {
-    const editable = Boolean(roll.id) && !state.closed && (actor.role === 'host' || (actor.role === 'player' && actor.seat === roll.seat));
+  function rollCard(roll, latest, { quickFeedback = false, showBpControls = true, readOnly = false } = {}) {
+    const editable = !readOnly && Boolean(roll.id) && !state.closed && (actor.role === 'host' || (actor.role === 'player' && actor.seat === roll.seat));
     const selection = selectedDice.get(roll.id);
     const attrs = ' data-roll-id="' + escape(roll.id) + '" data-seat="' + roll.seat + '"';
     const mode = dice.modes[roll.mode]?.name;
+    const canAdjust = editable && dice.canAdjustRoll(roll, state.turn, state.round);
+    const rerollable = canAdjust && roll.mode !== 'defense';
     const faces = roll.dice.map(die => {
       const result = dice.remainingFace(die);
-      const canSelect = editable && dice.canReroll(die);
+      const canSelect = rerollable && dice.canReroll(die);
       const dieAttrs = attrs + ' data-die-id="' + escape(die.id) + '"';
       const original = result ? dice.faces[die.kind]?.[die.original] : die.original;
       const originalLabel = Array.isArray(original) ? faceLabel(original) : original;
@@ -827,38 +996,38 @@
         + '<span data-dice-reveal>' + (result ? result.map((n, i) => n + ['ϟ', '△', '●'][i]).join(' ') : die.value) + '</span>'
         + (critical ? '<strong class="room-critical-result" data-dice-reveal>' + critical + '</strong>' : '')
         + (die.rerolled ? '<small data-dice-reveal>已重掷 · 原掷 ' + escape(originalLabel) + '</small>' : '')
-        + (editable && result ? '<div class="room-die-conversions" data-dice-reveal>'
+        + (canAdjust && result && roll.mode !== 'defense' ? '<div class="room-die-conversions" data-dice-reveal>'
           + (result[1] ? '<button type="button" data-action="convert" data-symbol="potential"' + dieAttrs + ' title="将一枚潜力转为威力">△ → ϟ</button>' : '')
           + (result[2] ? '<button type="button" data-action="convert" data-symbol="dot"' + dieAttrs + ' title="将一枚●转为威力">● → ϟ</button>' : '') + '</div>' : '')
         + '</div>';
     }).join('');
-    const followup = roll.defenseCount && !roll.defenseRoll;
+    const followup = roll.mode === 'dodge' && !roll.defenseRoll && (latest || roll.defenseCount);
     const wounds = roll.wounds ?? 0;
-    const pendingBp = state.projection?.bpPending && state.projection.bp?.src;
     const pendingPower = dice.pendingPowerRoll(state, roll.seat);
-    const showBp = state.deckRevision && editable && pendingPower?.id === roll.id
-      && (pendingBp ? canSettleBp(roll.seat) : canRequestBp(roll.seat));
+    const showBp = showBpControls && state.deckRevision && editable && pendingPower?.id === roll.id
+      && (state.projection?.bpPending ? canSettleBp(roll.seat) : canRequestBp(roll.seat));
     const outcome = ['失败', '伤口', '暴击'];
     const result = roll.mode === 'power' ? '<div class="room-wound-result" data-dice-reveal>'
       + '<span>击破结果 · ' + (roll.bpOutcome === undefined ? dice.woundResults[wounds] : outcome[roll.bpOutcome])
       + (roll.wounds === undefined ? '（待确认）' : '') + '</span>'
       + (showBp ? '<div class="room-bp-actions">'
-        + (pendingBp ? cardImage('/aibp/' + pendingBp, state.projection.bp.label || '部位牌') + bpOutcomeButtons(roll)
-          : bpDrawButton(roll.seat))
+        + (state.projection?.bpPending ? bpOutcomeButtons(roll) : bpDrawButton(roll.seat))
         + '</div>' : '')
-      + (editable && !state.projection && !pendingBp ? '<div role="group" aria-label="记录伤口">' + dice.woundResults.map((label, value) =>
+      + (editable && !state.projection ? '<div role="group" aria-label="记录伤口">' + dice.woundResults.map((label, value) =>
           '<button type="button" data-action="roll-wounds" data-value="' + value + '"' + attrs
           + ' aria-pressed="' + (roll.wounds === value) + '">' + label + '</button>').join('') + '</div>' : '')
       + '</div>' : '';
-    const feedback = reactions(roll, latest);
-    const heading = '<h4>' + rollAvatar(roll.seat) + escape(roll.hero) + (mode ? ' · ' + mode : '')
+    const feedback = readOnly ? '' : reactions(roll, latest);
+    const attackFollowup = roll.mode === 'attack' && roll.round === state.round
+      && (roll.extraAttack || dice.canAttackNormally(state.turn, roll.seat));
+    const rollLabel = roll.extraAttack ? (roll.mode === 'attack' ? '额外攻击' : '额外攻击威力') : mode;
+    const heading = '<h4>' + rollAvatar(roll.seat) + escape(roll.hero) + (rollLabel ? ' · ' + rollLabel : '')
       + ' <small>第 ' + roll.round + ' 轮</small></h4>';
     return '<li class="room-roll" data-motion-roll="' + escape(roll.id) + '">' + (quickFeedback ? '<div class="room-roll-head">' + heading + feedback + '</div>' : heading)
       + '<div class="room-dice-results">' + faces + '</div><p data-dice-reveal>' + rollSummary(roll) + '</p>'
-      + (followup ? '<p class="room-dice-help">已配置 ' + roll.defenseCount + ' 枚防御红骰，请按闪避结果确认是否投掷。</p>' : '')
-      + (editable && (roll.mode === 'attack' || followup) ? '<button type="button" data-dice-reveal data-roll-followup="'
-        + (followup ? 'defense' : 'power') + '"' + attrs + '>' + (followup ? '准备投掷防御红骰' : '命中后准备投掷威力骰') + '</button>' : '')
-      + (editable && roll.dice.some(dice.canReroll) ? '<div class="room-reroll-controls" data-dice-reveal><button type="button" data-action="reroll"' + attrs
+      + (editable && (attackFollowup || followup) ? '<button type="button" data-dice-reveal data-roll-followup="'
+        + (followup ? 'defense' : 'power') + '"' + attrs + '>' + (followup ? '仍受命中时结算护甲' : '命中后准备投掷威力骰') + '</button>' : '')
+      + (rerollable && roll.dice.some(dice.canReroll) ? '<div class="room-reroll-controls" data-dice-reveal><button type="button" data-action="reroll"' + attrs
         + (selection?.size ? '' : ' disabled') + '>重掷所选骰子' + (selection?.size ? '（' + selection.size + '）' : '') + '</button>'
         + (['attack', 'dodge'].includes(roll.mode) ? '<div class="room-reroll-fate">'
           + marker('../hero/assets/tri_fate.png', '命运') + buttons('stat', 'fate', state.heroes[roll.seat].stats.fate, roll.seat, '命运', 30, true)
@@ -869,7 +1038,7 @@
   function latestHeroRolls() {
     const rolls = dice.latestByHero(state.rolls, state.lastBattleRollId);
     const seats = new Set(rolls.map(roll => roll.seat));
-    return '<ol class="room-last-rolls">' + rolls.map(roll => rollCard(roll, true, true)).join('')
+    return '<ol class="room-last-rolls">' + rolls.map(roll => rollCard(roll, true, { quickFeedback: true })).join('')
       + state.heroes.map((hero, seat) => seats.has(seat) ? '' : '<li class="room-roll room-roll-empty"><h4>'
         + rollAvatar(seat) + escape(hero.name) + '</h4><small>本场尚未掷骰</small></li>').join('') + '</ol>';
   }
@@ -909,12 +1078,11 @@
       + '" data-seat="' + roll.seat + '">' + label + '</button>').join('');
   }
 
-  function powerPartCard(seat, latestResult) {
+  function powerPartCard(seat, roll) {
     const projection = state.projection;
     const bp = projection?.bpPending ? projection.bp : null;
     const back = projection?.bpDeck?.back;
-    const roll = dice.pendingPowerRoll(state, seat);
-    const outcome = projection?.bpPending && roll && roll.id !== latestResult?.id && canSettleBp(seat)
+    const outcome = state.deckRevision && bp && roll && canSettleBp(seat)
       ? '<div class="room-bp-actions">' + bpOutcomeButtons(roll) + '</div>' : '';
     let control = '';
     if (!projection?.bpPending) {
@@ -938,12 +1106,16 @@
     const unlocked = table.rows.filter(([threshold]) => threshold <= rage);
     const next = table.rows.find(([threshold]) => threshold > rage);
     function rowMarkup([threshold, options]) {
-      return '<li' + (threshold === unlocked.at(-1)?.[0] ? ' class="room-kratos-latest"' : '') + '><strong>怒气 ' + threshold + '</strong><div>' + options.map(effects =>
-        '<span>' + effects.map(effect => {
+      return '<li' + (threshold === unlocked.at(-1)?.[0] ? ' class="room-kratos-latest"' : '') + '><strong>怒气 ' + threshold
+        + '</strong><div class="room-kratos-options">' + options.map(effects =>
+        '<span class="room-kratos-option">' + effects.map(effect => {
           const icon = kratos.icons[effect];
           const label = escape(kratos.labels[effect]);
-          return icon ? marker('images/' + icon, label) : label;
-        }).join(' + ') + '</span>').join('<small>或</small>') + '</div></li>';
+          const visual = icon ? '<img alt="" src="images/' + icon + '">'
+            : '<span class="room-kratos-glyph" aria-hidden="true">' + escape(kratos.glyphs[effect]) + '</span>';
+          return '<span class="room-kratos-effect">' + visual + '<span>' + label + '</span></span>';
+        }).join('<b class="room-kratos-plus" aria-label="加">+</b>') + '</span>')
+        .join('<small class="room-kratos-or">或</small>') + '</div></li>';
     }
     return '<section class="room-kratos-reminder" aria-label="克拉托斯表能力">'
       + '<h4>克拉托斯表 · ' + escape(table.name) + '</h4><p aria-live="polite">当前怒气 ' + rage
@@ -963,9 +1135,130 @@
   function restoreDiceDraft(form, seat) {
     const draft = readDiceDraft(seat, rollMode);
     for (const input of form.querySelectorAll('input[type="number"]')) {
-      input.value = draft[input.name] ?? input.min;
+      input.value = draft[input.name] ?? input.defaultValue;
       updateDiceSteps(input);
     }
+  }
+
+  function isWeapon(item) { return item.category?.split('_')[0] === 'arm'; }
+
+  function gearProfile(item) {
+    // An ascended card can have a different printed panel.
+    return gearRolls.weapons[item?.id];
+  }
+
+  function gearCardReference(item) {
+    const art = window.ATO_BATTLE_ASSETS;
+    const source = art?.gearSrc(item.id, roomLanguage);
+    return source ? cardImage(source, item.name, '', art.gearThumbSrc(item.id, roomLanguage)) : '';
+  }
+
+  function selectedWeapon(seat) {
+    return state.heroes[seat].gear.find(item => isWeapon(item) && item.id === readDiceDraft(seat, 'attack').weapon);
+  }
+
+  function attackForPower(seat) {
+    const relevant = state.rolls.find(roll => roll.id === parentRoll && roll.mode === 'attack' && roll.seat === seat)
+      || state.rolls.find(roll => roll.mode === 'attack' && roll.round === state.round && roll.seat === seat);
+    return relevant || null;
+  }
+
+  function powerRollParent(seat) {
+    const prior = attackForPower(seat);
+    return prior?.round === state.round
+      && (parentRoll === prior.id || state.rolls.find(roll => roll.seat === seat)?.id === prior.id) ? prior : null;
+  }
+
+  function canSubmitAttack(seat) {
+    if (rollMode !== 'attack' && rollMode !== 'power') return true;
+    if (state.heroes[seat]?.condition === 'dead') return false;
+    const extra = rollMode === 'attack' ? extraAttack : powerRollParent(seat)?.extraAttack;
+    return Boolean(extra) || dice.canAttackNormally(state.turn, seat);
+  }
+
+  function weaponPowerReference(seat) {
+    const attack = attackForPower(seat);
+    const item = attack ? state.heroes[seat].gear.find(gear => gear.id === attack.weapon) : selectedWeapon(seat);
+    if (!item) return '<p class="room-dice-help">攻击时选择武器后，这里会显示该次攻击的武器面板。</p>';
+    const profile = gearProfile(item);
+    const text = (expression) => {
+      const results = gearRolls.power(expression, '', 1);
+      return ['red', 'black', 'white', 'raw'].filter(kind => results[kind])
+        .map(kind => (dice.names[kind] || '原始威力') + ' ' + results[kind]).join(' · ');
+    };
+    const summary = profile?.[1] ? '<p>每次命中 · ' + text(profile[1])
+      + (profile[2] ? '</p><p>有命中时另加 · ' + text(profile[2]) : '') + '</p>'
+      : '<p>威力请按牌面填写。</p>';
+    return '<section class="room-roll-reference"><h4>激活武器 · ' + escape(item.name) + '</h4><div>'
+      + gearCardReference(item) + '<div>' + summary
+      + (profile?.[1] ? '<label>命中数 <input type="number" data-weapon-hits min="1" max="'
+        + (attack?.dice.length ?? dice.limits.d10) + '" value="1"></label> <button type="button" data-fill-weapon-power>带入武器威力骰</button>'
+        + '<small>再按泰坦、能力和牌面条件补入其他骰子。原始威力单独计入。</small><p data-weapon-power-status role="status"></p>' : '')
+      + '</div></div></section>';
+  }
+
+  function rollReference(seat) {
+    const hero = state.heroes[seat];
+    if (!hero) return '';
+    if (rollMode === 'attack') {
+      const weapon = selectedWeapon(seat);
+      const cards = hero.gear.filter(isWeapon).map(item => {
+        const profile = gearProfile(item);
+        return '<li><button type="button" data-attack-weapon="' + escape(item.id) + '" aria-pressed="' + (weapon?.id === item.id)
+          + '">' + escape(item.name) + '<small>' + (profile ? '攻击骰 ' + profile[0] : '骰数按牌面') + '</small></button>'
+          + gearCardReference(item) + '</li>';
+      }).join('');
+      const rage = hero.stats.rage;
+      return '<section class="room-roll-reference"><h4>宣告武器</h4><div>'
+        + '<button type="button" data-action="stat" data-key="rage" data-delta="1" data-seat="' + seat
+        + '"' + (rage >= 30 || hero.condition === 'dead' ? ' disabled' : '') + '>怒气 +1</button>'
+        + '<span>当前怒气 ' + rage + '</span></div>'
+        + (cards ? '<ul class="room-weapon-options">' + cards + '</ul>' : '<p>该英雄未装备武器。</p>') + '</section>';
+    }
+    if (rollMode === 'power') return weaponPowerReference(seat);
+    if (rollMode === 'dodge' || rollMode === 'defense') {
+      const trait = aiGuide.usesSignature(aiGuide.stepFor(state.turn?.aiGuide));
+      const projection = state.projection;
+      const card = trait ? { src: projection?.signature, label: '当前招牌技' } : projection?.aiPending ? projection.ai : null;
+      const defenseCards = hero.gear.map(item => {
+        const keywords = gearRolls.defenseKeywords[item.id];
+        return keywords || item.category?.split('_')[0] === 'armor' || /盾|shield/i.test(item.name)
+          ? '<li>' + gearCardReference(item) + '<span>' + escape(item.name)
+            + (keywords ? '<small>' + escape(keywords.join(' · ')) + '</small>' : '<small>护甲按牌面</small>') + '</span></li>' : '';
+      }).join('');
+      return '<section class="room-roll-reference"><h4>本次闪避参考</h4>'
+        + (card?.src ? cardImage('/aibp/' + card.src, card.label || '当前指令技') : '<p>目前没有待结算的指令技。</p>')
+        + (defenseCards ? '<div class="room-defense-cards"><strong>格挡、加固与护甲装备</strong><ul>' + defenseCards + '</ul></div>' : '')
+        + (rollMode === 'dodge' ? '<button type="button" data-roll-mode="defense">只投护甲</button>' : '')
+        + '</section>';
+    }
+    return '';
+  }
+
+  function fillWeaponPower(button) {
+    const seat = actor.role === 'host' ? rollSeat : actor.seat;
+    const attack = attackForPower(seat);
+    const item = attack ? state.heroes[seat].gear.find(gear => gear.id === attack.weapon) : selectedWeapon(seat);
+    const profile = gearProfile(item);
+    const reference = button.closest('.room-roll-reference');
+    const hitInput = reference.querySelector('[data-weapon-hits]');
+    if (!profile?.[1] || !hitInput.reportValidity() || !hitInput.value) return;
+    const total = gearRolls.power(profile[1], profile[2] || '', Number(hitInput.value));
+    const status = reference.querySelector('[data-weapon-power-status]');
+    for (const [lower, higher] of [['red', 'black'], ['black', 'white']]) {
+      const excess = Math.max(0, total[lower] - dice.limits[lower]);
+      total[lower] -= Math.ceil(excess / 2) * 2;
+      total[higher] += Math.ceil(excess / 2);
+    }
+    if (total.white > dice.limits.white) {
+      status.textContent = '超出白骰上限，请按规则手动调整。';
+      return;
+    }
+    const form = content.querySelector('#room-dice form[data-roll]');
+    const counts = Object.fromEntries(dice.modes.power.kinds.map(kind => [kind, total[kind]]));
+    saveDiceDraft(seat, 'power', counts);
+    restoreDiceDraft(form, seat);
+    status.textContent = total.raw ? '已带入武器骰。另计 ' + total.raw + ' 原始威力。' : '已带入武器骰。';
   }
 
   function renderDicePanel(panel, powerPool) {
@@ -973,35 +1266,72 @@
     const previousForm = panel.querySelector('form[data-roll]');
     const fields = dice.modes[rollMode].kinds.map(kind => {
       const label = kind === 'd10' ? '总数量（含 1 枚白色关键骰）' : dice.names[kind];
-      const minimum = kind === 'd10' || kind === 'armor' || rollMode === 'defense' ? 1 : 0;
-      return diceCountField(kind, label, minimum, dice.limits[kind], minimum);
+      const minimum = kind === 'd10' || kind === 'armor' ? 1 : 0;
+      return diceCountField(kind, label, minimum, dice.limits[kind], rollMode === 'defense' && kind === 'red' ? 1 : minimum);
     }).join('');
-    const followup = rollMode === 'dodge' ? diceCountField('defenseCount', '预计防御红骰', 0, 6, 0) : '';
     const last = dice.latestByHero(state.rolls, state.lastBattleRollId).find(roll => roll.seat === seat);
-    const latestResult = '<section class="room-personal-result"><h4>最新投掷</h4>'
-      + (last ? '<ol class="room-last-rolls">' + rollCard(last, true) + '</ol>' : '<p>该英雄本场尚未掷骰。</p>') + '</section>';
+    const dodgeId = rollMode === 'defense' && parentRoll
+      || (last?.mode === 'defense' && last.parentRoll);
+    const dodge = dodgeId && state.rolls.find(roll => roll.id === dodgeId && roll.seat === seat && roll.mode === 'dodge');
+    const resultList = last
+      ? '<ol class="room-last-rolls">' + rollCard(last, true, { showBpControls: false }) + '</ol>' : '<p>该英雄本场尚未掷骰。</p>';
+    const latestResult = dodge && dodge !== last
+      ? '<div class="room-armor-results"><section><h5>本次闪避结果</h5><ol class="room-last-rolls">'
+        + rollCard(dodge, false, { readOnly: true }) + '</ol></section><section><h5>'
+        + (last?.mode === 'defense' ? '本次护甲结果' : '最新投掷') + '</h5>' + resultList + '</section></div>'
+      : resultList;
     const notes = {
-      attack: '宣告武器，增加 2 怒气并检查首要目标，再投攻击骰。命中后先结算第一能力时段，再揭示部位卡牌。',
-      dodge: '先结算闪避，根据结果决定是否投掷防御红骰。',
+      attack: '宣告武器，增加 1 怒气并检查首要目标，再按武器牌投攻击骰。命中后先结算第一能力时段，再揭示部位卡牌。',
+      dodge: '先投闪避并按牌面结算格挡。仍受命中且会获得凶险时，再投护甲。',
+      defense: '按有效装备和加固效果填写护甲骰。护甲每点潜力（△）减免 1 凶险。同一次攻击只激活一件防御武器。',
       power: '先揭示部位卡牌。重掷和转换潜力后，对照永世力场选结果，再按牌面结算骇物响应、伤口和激化。结算后清空克拉托斯池，再进入第二能力时段。',
     };
-    const form = '<form data-roll data-dice-seat="' + seat + '" class="battle-room-dice"><div>' + fields + followup
-      + '<button type="submit">投掷' + dice.modes[rollMode].name + '</button></div></form>';
+    const weapon = rollMode === 'attack' && selectedWeapon(seat);
+    const canSubmit = canSubmitAttack(seat);
+    const extraToggle = rollMode === 'attack' && '<button type="button" data-extra-attack aria-pressed="' + extraAttack
+      + '">按牌面声明额外攻击</button>';
+    const form = '<form data-roll data-dice-seat="' + seat + '" class="battle-room-dice">'
+      + (weapon ? '<input type="hidden" name="weapon" value="' + escape(weapon.id) + '">' : '')
+      + '<div>' + fields + (extraToggle || '') + '<button type="submit"' + (canSubmit ? '' : ' disabled') + '>投掷'
+      + (rollMode === 'attack' && extraAttack ? '额外攻击' : dice.modes[rollMode].name) + '</button></div>'
+      + (!canSubmit ? '<p class="room-dice-help">'
+        + (state.heroes[seat]?.condition === 'dead' ? '该泰坦已死亡。' : rollMode === 'attack'
+          ? '普通攻击须等该泰坦的回合。' : '威力须在该泰坦回合结算，或从本轮的额外攻击结果进入。') + '</p>' : '') + '</form>';
     const modes = '<div class="room-dice-modes" role="group" aria-label="投掷用途">' + Object.entries(dice.modes)
-      .map(([key, entry]) => '<button type="button" data-roll-mode="' + key + '" aria-pressed="' + (key === rollMode) + '">'
+      .filter(([key]) => key !== 'armor' && key !== 'defense')
+      .map(([key, entry]) => '<button type="button" data-roll-mode="' + key + '" aria-pressed="'
+        + (key === (rollMode === 'defense' ? 'dodge' : rollMode)) + '">'
         + (key === 'dodge' ? '<img class="room-mode-icon" src="room-dice-art/dodge.webp" alt="">'
-          : '<span class="room-mode-icon" aria-hidden="true"></span>') + entry.name + '</button>').join('') + '</div>';
-    const power = rollMode === 'power';
+          : '<span class="room-mode-icon" aria-hidden="true"></span>') + (key === 'dodge' ? '闪避／防御' : entry.name) + '</button>').join('')
+      + (state.turn?.phase === 'titans' && state.turn.seat === seat
+        ? '<button class="room-dice-end-turn" type="button" data-action="turn-finish" data-seat="' + seat + '">结束回合</button>' : '')
+      + '</div>';
+    const showFirstAbility = ['attack', 'power'].includes(rollMode);
     const pendingPower = dice.pendingPowerRoll(state, seat);
-    const showSeparateBp = !power && pendingPower && pendingPower.id !== last?.id;
     renderSections(panel, [
-      '<h3>掷骰</h3>', actor.role === 'host' && heroSeatButtons(seat, 'roll'), modes,
-      power ? '<div class="room-power-workspace"></div>' : form, latestResult,
-      showSeparateBp && powerPartCard(seat, last),
+      '<h3>掷骰</h3>', actor.role === 'host' && !hostPersonalView && heroSeatButtons(seat, 'roll'), modes, rollReference(seat),
+      form, showFirstAbility && powerPool, '<section class="room-personal-result"></section>',
       notes[rollMode] && '<p class="room-dice-help">' + notes[rollMode] + '</p>',
-      ['attack', 'power'].includes(rollMode) && kratosReminder(state.heroes[seat]), powerPool,
+      showFirstAbility && kratosReminder(state.heroes[seat]), !showFirstAbility && powerPool,
     ]);
-    if (power) renderSections(panel.querySelector('.room-power-workspace'), [powerPartCard(seat, last), form]);
+    const incoming = (rollMode === 'dodge' || rollMode === 'defense')
+      && last?.round === state.round && (last.mode === 'dodge' || last.mode === 'defense');
+    const canResolveTrauma = !state.closed && (actor.role === 'host' || (actor.role === 'player' && actor.seat === seat));
+    const traumaCards = incoming ? traumaCardList(seat, canResolveTrauma) : '';
+    const outgoing = rollMode === 'power' && last?.mode === 'power' && last.bpOutcome !== undefined
+      && state.secondAbility?.seat === seat && state.secondAbility.round === state.round;
+    const results = panel.querySelector('.room-personal-result');
+    renderSections(results, [
+      '<h4>' + (dodge === last && dodge ? '本次闪避结果' : dodge ? '闪避与护甲' : '最新投掷') + '</h4>',
+      latestResult,
+      (rollMode === 'power' || pendingPower) && powerPartCard(seat, pendingPower),
+      incoming && canResolveTrauma && state.trauma && state.heroes[seat].condition !== 'dead'
+        && '<div class="room-roll-next room-roll-next-defense"><button type="button" data-trauma-dialog="hit" data-seat="' + seat
+        + '">录入净凶险并结算创伤</button><small>完全闪避时跳过护甲。有命中但净凶险为 0 时，仍按牌面核对其他效果。</small></div>',
+      traumaCards && '<section class="room-trauma-result"><h5>当前创伤</h5><ul class="room-trauma-cards">'
+        + traumaCards + '</ul></section>',
+      outgoing && '<div class="room-roll-next room-roll-next-defense"><a href="#room-kratos-pool">结算响应后前往清池与第二能力时段</a></div>',
+    ]);
     const currentForm = panel.querySelector('form[data-roll]');
     if (currentForm !== previousForm) restoreDiceDraft(currentForm, seat);
   }
@@ -1465,7 +1795,11 @@
     const seat = personalSeat();
     const host = role === 'host';
     const edit = role !== 'viewer' && !state.closed;
-    const links = host && credentials.keys ? '<div class="battle-room-links">'
+    const personalLink = host && Number.isInteger(seat)
+      ? '<a href="' + escape(hostPersonalView
+        ? '/aibp/?battle=' + id + (state.board?.apostle ? '&apostle=' + state.board.apostle : '')
+        : '/aibp/room?battle=' + id + '&personal=1') + '">' + (hostPersonalView ? '返回房主战斗台' : '个人战斗面板') + '</a>' : '';
+    const links = host && credentials.keys ? '<div class="battle-room-links">' + personalLink
       + (!state.closed && !state.squad ? '<button type="button" data-room-copy="invite">复制玩家邀请</button>' : '')
       + '<a href="' + escape(roomLink('view', credentials.keys.viewer)) + '" target="_blank" rel="noopener">打开只读投屏</a>'
       + (state.closed ? '<a href="./">返回 AIBP 开新战斗</a>' : '') + '</div>' : '';
@@ -1477,23 +1811,23 @@
       + (Object.values(state.pool).every(value => value === 0) ? ' disabled' : '') + '>一键清空</button>' : '';
     const heroes = state.heroes.map(heroCard);
     const shownSeat = host ? equipmentSeat : seat;
-    const heroTabs = host ? heroSeatButtons(shownSeat, 'equipment') : '';
+    const heroTabs = host && !hostPersonalView ? heroSeatButtons(shownSeat, 'equipment') : '';
     const own = heroes[shownSeat];
-    const ownHeading = own && '<h3 class="battle-room-heading">' + (host ? '泰坦与装备' : '我的英雄') + '</h3>';
+    const ownHeading = own && '<h3 class="battle-room-heading">' + (host && !hostPersonalView ? '泰坦与装备' : '我的英雄') + '</h3>';
     const teammates = heroes.filter((_, index) => index !== shownSeat);
-    const overview = role === 'player'
-      ? '<details class="battle-room-team"' + (content.querySelector('.battle-room-team')?.open ? ' open' : '')
-        + '><summary>队伍状态</summary><div class="battle-room-grid">' + teammates.join('') + '</div></details>'
-      : '<div class="battle-room-grid">' + teammates.join('') + '</div>';
+    const overview = teammates.length && '<details class="battle-room-team"'
+      + (content.querySelector('.battle-room-team')?.open ? ' open' : '')
+      + '><summary>队伍状态 · ' + teammates.length + ' 位队友</summary><div class="battle-room-grid">' + teammates.join('') + '</div></details>';
     for (const [id, choices] of selectedDice) {
       const roll = state.rolls.find(entry => entry.id === id);
       for (const dieId of choices) if (!roll?.dice.some(die => die.id === dieId && dice.canReroll(die))) choices.delete(dieId);
       if (!choices.size) selectedDice.delete(id);
     }
-    const personal = role === 'player' && edit;
+    const personal = (role === 'player' || (host && hostPersonalView)) && edit;
     const latestRoll = personal ? null : state.rolls.find(roll => roll.id === state.lastBattleRollId) || state.rolls[0];
-    const rolls = latestRoll ? rollCard(latestRoll, true)
-      + state.rolls.filter(roll => roll !== latestRoll).map(roll => rollCard(roll, false)).join('') : '';
+    const logCard = (roll, latest) => rollCard(roll, latest, { showBpControls: roll.seat !== rollSeat });
+    const rolls = latestRoll ? logCard(latestRoll, true)
+      + state.rolls.filter(roll => roll !== latestRoll).map(roll => logCard(roll, false)).join('') : '';
     const rollLog = '<section class="battle-room-rolls"><h3>掷骰记录</h3>'
       + (rolls ? '<ol>' + rolls + '</ol>' : '<p>还没有掷骰。</p>') + '</section>';
     const active = document.activeElement;
@@ -1501,28 +1835,40 @@
     const focus = active && focusRoot.contains(active) ? [...focusRoot.querySelectorAll('button,select,input')].indexOf(active) : -1;
     const selection = focus >= 0 && active.name;
     renderMarkup(summary, '<div class="battle-room-head"><div><h2>' + escape(state.title) + '</h2><p>第 ' + state.round
-      + ' 轮' + (state.closed ? ' · 已结束' : '') + '</p></div><div>' + controls + '</div></div>' + links);
+      + ' 轮' + (state.closed ? ' · 已结束' : '') + '</p></div></div>' + links
+      + (controls ? '<div class="battle-room-links">' + controls + '</div>' : ''));
     const goal = state.battleGoal ? '<section class="room-battle-goal"><h3>战斗目标</h3><p>'
       + escape(state.battleGoal) + '</p></section>' : '';
     const second = state.secondAbility;
     const canFinishTurn = second?.round === state.round && state.turn?.phase === 'titans'
       && state.turn.seat === second.seat && (host ? rollSeat === second.seat : seat === second.seat);
-    const poolSection = '<section class="battle-room-pool" id="room-kratos-pool" tabindex="-1"><header><h3>克拉托斯池</h3>'
-      + clearPool + '</header>' + (second && second.round === state.round
+    const showFirstAbility = edit && ['attack', 'power'].includes(rollMode);
+    const poolSection = '<section class="battle-room-pool" id="room-kratos-pool" tabindex="-1"><header><h3>'
+      + (showFirstAbility && second?.round !== state.round ? '第一能力时段 · ' : '') + '克拉托斯池</h3>' + clearPool + '</header>' + (second && second.round === state.round
         ? '<p class="room-second-ability"><strong>第二能力时段 · ' + escape(state.heroes[second.seat]?.name)
           + '</strong> · 先结算响应与激化，再清空旧标记（按卡文保留例外），之后加入本次标记。</p>'
         + (canFinishTurn ? '<button type="button" data-action="turn-finish" data-seat="' + second.seat + '">结束回合</button>' : '') : '')
       + '<div>' + pool + '</div></section>';
-    const poolByDice = edit && (personal || !!own || rollMode === 'power');
+    const poolByDice = edit && (personal || !!own || showFirstAbility);
+    const activity = edit && teamActivity();
+    const showHistory = edit && (!personal || activity);
     renderSections(content, [
       goal, !personal && !poolByDice && poolSection,
       edit && '<section class="room-dice-panel" id="room-dice"></section>',
-      ownHeading, own && heroTabs, own, !personal && argoAbilities(), !personal && roomTrauma(),
-      !personal && edit && rollLog, edit && teamActivity(),
-      role !== 'player' && '<h3 class="battle-room-heading">状态总览</h3>', overview, !edit && rollLog,
+      ownHeading, own && heroTabs, own, !edit && argoAbilities(),
+      !edit && state.board && '<details class="room-jump-panel"><summary>骇物面板</summary><div data-closed-apostle></div></details>',
+      !edit && '<details class="room-jump-panel"><summary>创伤牌库</summary><div data-closed-trauma></div></details>',
+      showHistory && '<details class="room-battle-history"><summary>战斗记录</summary><div data-room-history></div></details>',
+      overview, !edit && rollLog,
       state.squad && '<p><a href="' + escape(squadLink.link('/aibp/squad', id)) + '">返回联机小队</a></p>',
     ]);
     if (edit) renderDicePanel(content.querySelector('#room-dice'), poolByDice ? poolSection : '');
+    if (showHistory) renderSections(content.querySelector('[data-room-history]'), [!personal && rollLog, activity]);
+    if (!edit) {
+      const bossPanel = content.querySelector('[data-closed-apostle]');
+      if (bossPanel) renderMarkup(bossPanel, roomProjection(true));
+      renderMarkup(content.querySelector('[data-closed-trauma]'), traumaToolMarkup());
+    }
     renderTools();
     renderTurn();
     if (focus >= 0 && active !== document.activeElement) {
@@ -1768,14 +2114,34 @@
 
   root.addEventListener('click', async event => {
     const button = event.target.closest('button');
-    if (!button || (!summary.contains(button) && !content.contains(button) && !toolsBody.contains(button))) return;
+    if (!button || (!summary.contains(button) && !content.contains(button) && !toolsBody.contains(button) && !turnWindow.contains(button))) return;
     if (button.dataset.rollSeat !== undefined && actor?.role === 'host') {
       const selected = Number(button.dataset.rollSeat);
       if (state.heroes[selected] && selected !== rollSeat) {
         rollSeat = selected;
         parentRoll = '';
+        extraAttack = false;
         render();
       }
+      return;
+    }
+    if (button.hasAttribute('data-extra-attack')) {
+      extraAttack = !extraAttack;
+      render();
+      return;
+    }
+    if (button.dataset.attackWeapon !== undefined) {
+      const seat = actor.role === 'host' ? rollSeat : actor.seat;
+      const item = state.heroes[seat].gear.find(gear => isWeapon(gear) && gear.id === button.dataset.attackWeapon);
+      if (!item) return;
+      const current = readDiceDraft(seat, 'attack');
+      saveDiceDraft(seat, 'attack', { ...current, weapon: item.id, d10: gearProfile(item)?.[0] ?? current.d10 });
+      render();
+      restoreDiceDraft(content.querySelector('#room-dice form[data-roll]'), seat);
+      return;
+    }
+    if (button.hasAttribute('data-fill-weapon-power')) {
+      fillWeaponPower(button);
       return;
     }
     if (button.dataset.equipmentSeat !== undefined) {
@@ -1811,12 +2177,13 @@
       return;
     }
     if (mode || rollFollowup) {
+      extraAttack = false;
       rollMode = mode || rollFollowup;
       parentRoll = rollFollowup ? rollId : '';
       const source = rollFollowup && state.rolls.find(roll => roll.id === rollId);
       const defense = rollMode === 'defense' && source;
       if (rollFollowup) rollSeat = Number(seat);
-      if (defense) saveDiceDraft(rollSeat, 'defense', { red: source.defenseCount });
+      if (defense && source.defenseCount) saveDiceDraft(rollSeat, 'defense', { red: source.defenseCount });
       if (rollFollowup && toolsDialog.open) toolsDialog.close();
       render();
       const form = content.querySelector('form[data-roll]');
@@ -1895,11 +2262,16 @@
     const fields = new FormData(form);
     if (form.matches('[data-roll]')) {
       const seat = actor.role === 'host' ? rollSeat : actor.seat;
+      if (!canSubmitAttack(seat)) return;
       saveDiceDraft(seat, rollMode, Object.fromEntries(fields));
       const counts = Object.fromEntries(dice.modes[rollMode].kinds.map(kind => [kind, Number(fields.get(kind))]));
+      const weapon = rollMode === 'attack' && fields.get('weapon');
+      const linked = rollMode === 'power' ? powerRollParent(seat)?.id : parentRoll;
       send({ id: crypto.randomUUID(), type: 'roll', mode: rollMode, seat, counts,
-        defenseCount: Number(fields.get('defenseCount')), ...(parentRoll && { parentRoll }) });
+        ...(weapon && { weapon }), ...(linked && { parentRoll: linked }),
+        ...(rollMode === 'attack' && extraAttack && { extraAttack: true }) });
       parentRoll = '';
+      extraAttack = false;
 
       return;
     }

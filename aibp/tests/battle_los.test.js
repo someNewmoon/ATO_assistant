@@ -832,6 +832,22 @@ test("apostle movement measures from the nearest edge of a 2x2 footprint", () =>
   );
 });
 
+test("apostle movement alternates axes until the footprint is aligned, then takes a straight line", () => {
+  const setup = { sourceAnchor: { column: 5.5, row: 5.5 }, targetAnchor: { column: 12, row: 8 },
+    size: 2, speed: 10, reach: 1, facing: 0 };
+  const melee = LOS.computeApostleMovePaths(setup);
+  assert.deepStrictEqual(melee.rules.map(pathCenters), [
+    ["5.5,5.5", "6.5,5.5", "6.5,6.5", "7.5,6.5", "7.5,7.5", "8.5,7.5", "9.5,7.5", "10.5,7.5"],
+    ["5.5,5.5", "5.5,6.5", "6.5,6.5", "6.5,7.5", "7.5,7.5", "8.5,7.5", "9.5,7.5", "10.5,7.5"],
+  ]);
+  const ranged = LOS.computeApostleMovePaths({ ...setup, reach: 3 });
+  assert.deepStrictEqual(ranged.rules.map(pathCenters), melee.rules.map(path => pathCenters(path).slice(0, 6)));
+  assert(ranged.rules.every(path => path.stopReason === "in-range"));
+  const limited = LOS.computeApostleMovePaths({ ...setup, speed: 3 });
+  assert.deepStrictEqual(limited.rules.map(pathCenters), melee.rules.map(path => pathCenters(path).slice(0, 4)));
+  assert(limited.rules.every(path => path.stopReason === "speed-limit"));
+});
+
 test("apostle movement keeps 3x3 final footprints intact", () => {
   const move = LOS.computeApostleMovePaths({
     sourceAnchor: { column: 5, row: 5 },
@@ -1573,3 +1589,18 @@ for (const { name, fn } of cases) {
 }
 console.log(`\n${passed}/${cases.length} passed` + (failed ? `, ${failed} FAILED` : ""));
 process.exit(failed ? 1 : 0);
+
+{
+  const movement = LOS.computeApostleMovePaths({
+    sourceAnchor: { column: 2, row: 2 }, targetAnchor: { column: 5, row: 4 },
+    size: 1, speed: 6, reach: 1, facing: 0,
+  });
+  const horizontalHazard = { column: 3, row: 2 };
+  const ranked = LOS.rankApostleRoutes(movement.rules, [horizontalHazard]);
+  assert.deepStrictEqual(ranked.map(route => [route.id, route.steps, route.collisions]), [
+    ["vertical-first", 4, 0], ["horizontal-first", 4, 1],
+  ]);
+  const detour = { ...ranked[0], steps: 5 };
+  assert.deepStrictEqual(LOS.rankApostleRoutes([ranked[1], detour], [horizontalHazard])
+    .map(route => route.id), ["horizontal-first"]);
+}

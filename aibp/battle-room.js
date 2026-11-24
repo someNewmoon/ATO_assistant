@@ -540,7 +540,7 @@
     const label = !turn ? '等待房主设置轮次' : !titans ? '骇物轮次'
       : activeSeat !== null ? '泰坦轮次 · ' + state.heroes[activeSeat].name
         : everyoneFinished ? '泰坦轮次 · 全员已结束' : '泰坦轮次 · 等待认领';
-    const heading = '第 ' + state.round + ' 轮 · ' + label;
+    const heading = '第 ' + state.round + ' 轮 · ' + label + (turn?.aiMovement?.pending ? ' · 待结算冲撞' : '');
     if (turnHeading !== heading) {
       turnHeading = heading;
       turnWindow.querySelector('summary').textContent = heading;
@@ -586,10 +586,12 @@
           guidance += '<p>本次目标：<b>' + escape(state.heroes[turn.aiTarget]?.name || '') + '</b></p>';
           if (turn.aiMovement) {
             guidance += aiMovementResult(turn.aiMovement, host, action);
+          } else if (!host) {
+            guidance += '<p>房主执行移动后，版图会同步路线和冲撞标记。</p>';
           } else {
             const routes = aiGuide.apostleRoutes(state, aiRange, window.BattleTerrain, window.BattleLOS);
             route = routes.find(path => path.id === aiRouteId) || routes[0];
-            if (host && route) {
+            if (route) {
               guidance += '<label>按牌面填写攻击范围 <input data-ai-range type="number" min="1" max="20" value="' + aiRange + '"></label>'
                 + '<label>路线 <select data-ai-route>' + routes.map((path, i) => '<option value="' + path.id + '"'
                   + (route === path ? ' selected' : '') + '>' + (i ? '' : '推荐 · ') + path.label + ' · ' + path.steps

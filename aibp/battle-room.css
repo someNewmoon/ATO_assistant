@@ -465,11 +465,20 @@ body.aibp-room-only > .app > main > :not(#battleRoom) { display: none !important
   .battle-room:has(.room-turn-bar:not([hidden])) { padding-top: 3.25rem; }
 }
 
-.room-power-workspace { display: grid; grid-template-columns: min(25%, 8.5rem) minmax(0, 1fr); align-items: start; gap: .65rem; margin-block: .5rem; }
+.room-personal-result:has(.room-power-card) {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) clamp(11rem, 27%, 16rem);
+  align-items: start;
+  gap: .45rem 1rem;
+}
+.room-personal-result > h4 { grid-column: 1 / -1; }
+@media (max-width: 600px) {
+  .room-personal-result:has(.room-power-card) { grid-template-columns: minmax(0, 1fr); }
+}
 .room-power-card { min-width: 0; padding: .5rem; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); }
 .room-power-card h4 { margin: 0 0 .3rem; font-size: .83rem; }
-.room-power-card .battle-room-card-art { width: 100%; padding: 0; }
-.room-power-card img { display: block; width: 100%; height: auto; }
+.battle-room .room-power-card .battle-room-card-art { max-width: 15rem; }
+.room-power-card img { max-height: none; aspect-ratio: auto; }
 .room-tactical-board [data-board-finish-turn] { border-color: #dca974; font-weight: 700; }
 
 .room-board-ping-bar { display: flex; gap: .55rem; align-items: center; flex-wrap: wrap; }
@@ -523,7 +532,6 @@ body.aibp-room-only > .app > main > :not(#battleRoom) { display: none !important
 .room-seat-tabs button { display: inline-flex; align-items: center; gap: 5px; }
 .room-seat-tabs button[aria-pressed="true"] { border-color: #e5ad67; background: #65452c; color: #fff3df; }
 .room-seat-tabs img { width: 1.75rem; height: 1.75rem; border-radius: 50%; object-fit: cover; }
-.room-bp-actions button.battle-room-card-art { flex-basis: 4rem; }
 .room-projection [data-projection-deck] { min-width: 0; }
 .room-projection-panel img { object-fit: contain; }
 #room-kratos-pool { scroll-margin-top: 4.25rem; }

@@ -899,7 +899,7 @@
         + (entry.detail ? '<span data-dice-activity="' + escape(entry.id) + '"> · ' + escape(entry.detail) + '</span>' : '') + '</span></li>').join('') + '</ol></section>';
   }
 
-  function rollCard(roll, latest, quickFeedback = false) {
+  function rollCard(roll, latest, quickFeedback = false, showBpControls = true) {
     const editable = Boolean(roll.id) && !state.closed && (actor.role === 'host' || (actor.role === 'player' && actor.seat === roll.seat));
     const selection = selectedDice.get(roll.id);
     const attrs = ' data-roll-id="' + escape(roll.id) + '" data-seat="' + roll.seat + '"';
@@ -925,19 +925,17 @@
     }).join('');
     const followup = roll.defenseCount && !roll.defenseRoll;
     const wounds = roll.wounds ?? 0;
-    const pendingBp = state.projection?.bpPending && state.projection.bp?.src;
     const pendingPower = dice.pendingPowerRoll(state, roll.seat);
-    const showBp = state.deckRevision && editable && pendingPower?.id === roll.id
-      && (pendingBp ? canSettleBp(roll.seat) : canRequestBp(roll.seat));
+    const showBp = showBpControls && state.deckRevision && editable && pendingPower?.id === roll.id
+      && (state.projection?.bpPending ? canSettleBp(roll.seat) : canRequestBp(roll.seat));
     const outcome = ['失败', '伤口', '暴击'];
     const result = roll.mode === 'power' ? '<div class="room-wound-result" data-dice-reveal>'
       + '<span>击破结果 · ' + (roll.bpOutcome === undefined ? dice.woundResults[wounds] : outcome[roll.bpOutcome])
       + (roll.wounds === undefined ? '（待确认）' : '') + '</span>'
       + (showBp ? '<div class="room-bp-actions">'
-        + (pendingBp ? cardImage('/aibp/' + pendingBp, state.projection.bp.label || '部位牌') + bpOutcomeButtons(roll)
-          : bpDrawButton(roll.seat))
+        + (state.projection?.bpPending ? bpOutcomeButtons(roll) : bpDrawButton(roll.seat))
         + '</div>' : '')
-      + (editable && !state.projection && !pendingBp ? '<div role="group" aria-label="记录伤口">' + dice.woundResults.map((label, value) =>
+      + (editable && !state.projection ? '<div role="group" aria-label="记录伤口">' + dice.woundResults.map((label, value) =>
           '<button type="button" data-action="roll-wounds" data-value="' + value + '"' + attrs
           + ' aria-pressed="' + (roll.wounds === value) + '">' + label + '</button>').join('') + '</div>' : '')
       + '</div>' : '';
@@ -1000,12 +998,11 @@
       + '" data-seat="' + roll.seat + '">' + label + '</button>').join('');
   }
 
-  function powerPartCard(seat, latestResult) {
+  function powerPartCard(seat, roll) {
     const projection = state.projection;
     const bp = projection?.bpPending ? projection.bp : null;
     const back = projection?.bpDeck?.back;
-    const roll = dice.pendingPowerRoll(state, seat);
-    const outcome = projection?.bpPending && roll && roll.id !== latestResult?.id && canSettleBp(seat)
+    const outcome = state.deckRevision && bp && roll && canSettleBp(seat)
       ? '<div class="room-bp-actions">' + bpOutcomeButtons(roll) + '</div>' : '';
     let control = '';
     if (!projection?.bpPending) {
@@ -1097,8 +1094,8 @@
     }).join('');
     const followup = rollMode === 'dodge' ? diceCountField('defenseCount', '预计防御红骰', 0, 6, 0) : '';
     const last = dice.latestByHero(state.rolls, state.lastBattleRollId).find(roll => roll.seat === seat);
-    const latestResult = '<section class="room-personal-result"><h4>最新投掷</h4>'
-      + (last ? '<ol class="room-last-rolls">' + rollCard(last, true) + '</ol>' : '<p>该英雄本场尚未掷骰。</p>') + '</section>';
+    const latestResult = last
+      ? '<ol class="room-last-rolls">' + rollCard(last, true, false, false) + '</ol>' : '<p>该英雄本场尚未掷骰。</p>';
     const notes = {
       attack: '宣告武器，增加 1 怒气并检查首要目标，再按武器牌投攻击骰。命中后先结算第一能力时段，再揭示部位卡牌。',
       dodge: '先结算闪避，根据结果决定是否投掷防御红骰。',
@@ -1114,17 +1111,20 @@
       + (state.turn?.phase === 'titans' && state.turn.seat === seat
         ? '<button class="room-dice-end-turn" type="button" data-action="turn-finish" data-seat="' + seat + '">结束回合</button>' : '')
       + '</div>';
-    const power = rollMode === 'power';
+    const showFirstAbility = ['attack', 'power'].includes(rollMode);
     const pendingPower = dice.pendingPowerRoll(state, seat);
-    const showSeparateBp = !power && pendingPower && pendingPower.id !== last?.id;
     renderSections(panel, [
       '<h3>掷骰</h3>', actor.role === 'host' && !hostPersonalView && heroSeatButtons(seat, 'roll'), modes, rollReference(seat),
-      power ? '<div class="room-power-workspace"></div>' : form, latestResult,
-      showSeparateBp && powerPartCard(seat, last),
+      form, showFirstAbility && powerPool, '<section class="room-personal-result"></section>',
       notes[rollMode] && '<p class="room-dice-help">' + notes[rollMode] + '</p>',
-      ['attack', 'power'].includes(rollMode) && kratosReminder(state.heroes[seat]), powerPool,
+      showFirstAbility && kratosReminder(state.heroes[seat]), !showFirstAbility && powerPool,
     ]);
-    if (power) renderSections(panel.querySelector('.room-power-workspace'), [powerPartCard(seat, last), form]);
+    const results = panel.querySelector('.room-personal-result');
+    renderSections(results, [
+      '<h4>最新投掷</h4>',
+      latestResult,
+      (rollMode === 'power' || pendingPower) && powerPartCard(seat, pendingPower),
+    ]);
     const currentForm = panel.querySelector('form[data-roll]');
     if (currentForm !== previousForm) restoreDiceDraft(currentForm, seat);
   }
@@ -1619,8 +1619,9 @@
     }
     const personal = (role === 'player' || (host && hostPersonalView)) && edit;
     const latestRoll = personal ? null : state.rolls.find(roll => roll.id === state.lastBattleRollId) || state.rolls[0];
-    const rolls = latestRoll ? rollCard(latestRoll, true)
-      + state.rolls.filter(roll => roll !== latestRoll).map(roll => rollCard(roll, false)).join('') : '';
+    const logCard = (roll, latest) => rollCard(roll, latest, false, roll.seat !== rollSeat);
+    const rolls = latestRoll ? logCard(latestRoll, true)
+      + state.rolls.filter(roll => roll !== latestRoll).map(roll => logCard(roll, false)).join('') : '';
     const rollLog = '<section class="battle-room-rolls"><h3>掷骰记录</h3>'
       + (rolls ? '<ol>' + rolls + '</ol>' : '<p>还没有掷骰。</p>') + '</section>';
     const active = document.activeElement;
@@ -1634,13 +1635,14 @@
     const second = state.secondAbility;
     const canFinishTurn = second?.round === state.round && state.turn?.phase === 'titans'
       && state.turn.seat === second.seat && (host ? rollSeat === second.seat : seat === second.seat);
-    const poolSection = '<section class="battle-room-pool" id="room-kratos-pool" tabindex="-1"><header><h3>克拉托斯池</h3>'
-      + clearPool + '</header>' + (second && second.round === state.round
+    const showFirstAbility = edit && ['attack', 'power'].includes(rollMode);
+    const poolSection = '<section class="battle-room-pool" id="room-kratos-pool" tabindex="-1"><header><h3>'
+      + (showFirstAbility && second?.round !== state.round ? '第一能力时段 · ' : '') + '克拉托斯池</h3>' + clearPool + '</header>' + (second && second.round === state.round
         ? '<p class="room-second-ability"><strong>第二能力时段 · ' + escape(state.heroes[second.seat]?.name)
           + '</strong> · 先结算响应与激化，再清空旧标记（按卡文保留例外），之后加入本次标记。</p>'
         + (canFinishTurn ? '<button type="button" data-action="turn-finish" data-seat="' + second.seat + '">结束回合</button>' : '') : '')
       + '<div>' + pool + '</div></section>';
-    const poolByDice = edit && (personal || !!own || rollMode === 'power');
+    const poolByDice = edit && (personal || !!own || showFirstAbility);
     renderSections(content, [
       goal, !personal && !poolByDice && poolSection,
       edit && '<section class="room-dice-panel" id="room-dice"></section>',

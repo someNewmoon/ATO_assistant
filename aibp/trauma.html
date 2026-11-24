@@ -3,13 +3,15 @@
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
   <title>创伤牌库 · ATO Assistant</title>
-  <link rel="stylesheet" href="./squad.css?v=3">
+  <link rel="stylesheet" href="../api/cycle-theme.css">
+  <link rel="stylesheet" href="./squad.css?v=20261124-folio">
+  <script src="../assets/theme.js?v=20261114-light-sidebar1" defer></script>
   <script src="../technology/gear-inventory.js" defer></script>
   <script src="./trauma-library.js" defer></script>
 </head>
-<body>
+<body data-theme-module="squad">
   <main>
-    <header class="squad-head"><a href="/">主控台</a><h1>创伤牌库</h1></header>
+    <header class="squad-head"><h1>创伤牌库</h1><a href="/">主控台</a></header>
     <p id="squadStatus" role="status">正在读取存档…</p>
     <button type="button" data-reload hidden>重新读取</button>
     <section class="squad-panel squad-stack" data-library aria-label="开战牌库" hidden>

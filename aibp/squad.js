@@ -106,9 +106,9 @@
       + (projection ? anchor(projection, '打开共享投屏', ' target="_blank" rel="noopener"') : '')
       + (squad.phase !== 'battle' ? button('visibility', room.publicLobby ? '关闭快速加入' : '开放快速加入', !room.publicLobby) : '')
       + (squad.phase === 'story' ? anchor(storyURL(), '打开故事书') + button('phase', '开启备战', 'prep') : '')
-      + (prep ? anchor(api.link('/aibp/', id), '选择骇物并开战', ' data-open-prep') + button('phase', '返回读剧情', 'story') : '')
+      + (prep ? anchor(api.link('/aibp/', id), '选择骇物并开战', ' data-open-prep data-squad-primary') + button('phase', '返回读剧情', 'story') : '')
       + anchor('/aibp/trauma', '创伤牌库', ' target="_blank" rel="noopener"')
-      + (squad.phase === 'battle' ? anchor(battleURL(actor.role), '打开战斗主控台') : '')
+      + (squad.phase === 'battle' ? anchor(battleURL(actor.role), '打开战斗主控台', ' data-squad-primary') : '')
       + button('disband', '解散小队') + '</div>'
       + (squad.phase === 'story' ? '<details data-story-input><summary>手动投屏段落</summary><form data-form="story" class="squad-form">'
         + '<label>标题 <input name="title" maxlength="240" placeholder="故事段落"></label>'
@@ -264,7 +264,7 @@
         + '<fieldset class="squad-choices"><legend>房主也可认领一个英雄</legend>'
         + room.heroes.map((hero, index) => choice({ ...hero, taken: Boolean(hero.player), reclaimable: Boolean(hero.player) && index !== seat }, index, kitSummary(index))).join('')
         + '</fieldset><button type="submit">认领或接管英雄</button></form></details>' : '';
-      const fight = squad.phase === 'battle' && !isHost ? '<section class="squad-panel">' + anchor(battleURL(actor.role), '进入当前战斗') + '</section>' : '';
+      const fight = squad.phase === 'battle' && !isHost ? '<section class="squad-panel">' + anchor(battleURL(actor.role), '进入当前战斗', ' data-squad-primary') + '</section>' : '';
       content.innerHTML = '<div class="squad-stack"><h2>' + e(room.title) + '</h2>'
         + (isHost ? hostControls() : '<section class="squad-panel">' + anchor(api.link('/ss/', id),
           '打开剧情投屏', ' target="_blank" rel="noopener"') + '</section>') + claim + personal + fight

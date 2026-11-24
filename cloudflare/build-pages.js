@@ -31,7 +31,7 @@ async function addCampaignShell(staging) {
   const shellPages = [
     'index.html', 'record/index.html', 'hero/index.html', 'aibp/index.html',
     'technology/index.html', 'map/index.html', 'story/index.html', 'theatre/index.html',
-    'aibp/trauma.html', 'aibp/squads.html', 'aibp/squad.html', 'briefing/index.html',
+    'aibp/trauma.html', 'aibp/squads.html', 'aibp/squad.html', 'briefing/index.html', 'ss/index.html',
   ];
   const assets = ['campaign-shell.css', 'campaign-shell.js', 'campaign-diplomacy.js'];
   const urls = await Promise.all(assets.map(async asset => {
@@ -44,7 +44,8 @@ async function addCampaignShell(staging) {
     const path = join(staging, page);
     const html = await readFile(path, 'utf8');
     if (!/<\/head>/i.test(html)) throw new Error(`Missing document head: ${page}`);
-    const markup = `<link rel="stylesheet" href="${style}"><script src="${shell}" defer></script>`
+    const markup = `<link rel="stylesheet" href="${style}">`
+      + (page === 'ss/index.html' ? '' : `<script src="${shell}" defer></script>`)
       + (page === 'record/index.html' ? `<script src="${diplomacy}" defer></script>` : '');
     await writeFile(path, html.replace(/<\/head>/i, markup + '</head>'));
   }));

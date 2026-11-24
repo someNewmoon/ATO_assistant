@@ -1,21 +1,41 @@
-:root{color-scheme:light dark;--canvas:#eee9e0;--panel:#fbf8f1;--ink:#322b23;--line:#c9baa7;--accent:#305748;--action-ink:#fff;--muted:#655d52}
-@media(prefers-color-scheme:dark){:root{--canvas:#1b211e;--panel:#252f29;--ink:#f4eee4;--line:#536259;--accent:#abd1b7;--action-ink:#17261e;--muted:#bcbdb2}}
-*{box-sizing:border-box}body{margin:0;background:var(--canvas);color:var(--ink);font:16px system-ui,sans-serif}
-main{max-width:780px;margin:auto;padding:clamp(12px,4vw,28px)}
-.squad-head{display:flex;align-items:center;gap:.8rem;flex-wrap:wrap;border-bottom:1px solid var(--line);padding-bottom:.7rem}
-h1,h2,h3,p{margin:0 0 .5rem}.squad-head h1{margin:0;flex:1;font-size:clamp(1.25rem,5vw,1.9rem)}
-a{color:var(--accent)}button,input,select{font:inherit;color:inherit}button,.squad-action,input,select{min-height:42px;border-radius:7px;border:1px solid var(--line);background:var(--panel);padding:.45rem .65rem}
-button,.squad-action{cursor:pointer}button:disabled{opacity:.52;cursor:default}.squad-action{display:inline-flex;align-items:center;text-decoration:none}.primary,button[type=submit]{background:var(--accent);color:var(--action-ink)}
-#squadStatus{min-height:1.4rem;color:var(--muted);margin:.4rem 0}.squad-stack{display:grid;gap:.75rem}.squad-panel{background:var(--panel);border:1px solid var(--line);border-radius:11px;padding:clamp(10px,3vw,18px)}
+body[data-theme-module="squad"] { color-scheme: light; }
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:16px system-ui,sans-serif}
+main{max-width:940px;margin:auto;padding:clamp(10px,3vw,28px)}
+.squad-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: .55rem .8rem;
+  border-block: 3px double var(--folio-rule, var(--line));
+  padding: .8rem clamp(.7rem, 3vw, 1.25rem);
+  background: var(--folio-sheet, var(--accent-soft));
+}
+.squad-head > a {
+  color: var(--accent-strong);
+  text-underline-offset: .22em;
+  font-size: .85rem;
+}
+#squadPhase:empty { display: none; }
+#squadPhase {
+  border: 1px solid var(--line);
+  padding: .2rem .45rem;
+  background: var(--panel);
+  color: var(--accent-strong);
+  font-size: .82rem;
+}
+h1,h2,h3,p{margin:0 0 .5rem}.squad-head h1{margin:0;flex:1;font-size:clamp(1.4rem,4vw,2rem)}
+a{color:var(--accent)}button,input,select{font:inherit;color:inherit}button,.squad-action,input,select{min-height:42px;border-radius:2px;border:1px solid var(--line);background:var(--panel);padding:.45rem .65rem}
+button,.squad-action{cursor:pointer}button:disabled{opacity:.52;cursor:default}.squad-action{display:inline-flex;align-items:center;text-decoration:none}.primary, [data-squad-primary], button[type=submit]{background:var(--accent-strong);color:#fff}
+#squadStatus{min-height:1.4rem;color:var(--muted);margin:.4rem 0}.squad-stack{display:grid;gap:.75rem}.squad-panel{background:var(--panel);border:1px solid var(--line);border-radius:2px;padding:clamp(10px,3vw,18px)}
 .squad-row{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center}.squad-sub{color:var(--muted);font-size:.88rem}
 .squad-hero{display:flex;align-items:center;gap:.7rem}.squad-hero img{width:56px;height:56px;object-fit:cover;object-position:top;border-radius:50%;border:1px solid var(--line)}.squad-hero h3{margin:0}
-.squad-choices{display:grid;gap:.55rem;border:0;padding:0}.squad-choice{display:grid;grid-template-columns:auto minmax(0,1fr);align-items:center;gap:.6rem;border:1px solid var(--line);border-radius:9px;padding:.55rem}.squad-choice:has(:checked){outline:2px solid var(--accent)}
+.squad-choices{display:grid;gap:.55rem;border:0;padding:0}.squad-choice{display:grid;grid-template-columns:auto minmax(0,1fr);align-items:center;gap:.6rem;border:1px solid var(--line);border-radius:2px;padding:.55rem}.squad-choice:has(:checked){outline:2px solid var(--accent)}
 .squad-attrs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.4rem;margin:.75rem 0 0}.squad-attrs div{display:flex;justify-content:space-between;gap:.25rem;border-bottom:1px solid var(--line)}.squad-attrs dd{margin:0;font-weight:700}
 .squad-form{display:grid;gap:.6rem}.squad-form label{display:grid;gap:.2rem}.squad-field-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(105px,1fr));gap:.5rem}
 .squad-field-grid select,.squad-field-grid input{width:100%;min-width:0}.squad-gear{max-height:60dvh;overflow:auto}
 .squad-log{list-style:none;padding:0;margin:0}.squad-log li{border-top:1px solid var(--line);padding:.45rem 0;overflow-wrap:anywhere}.squad-log strong{margin-right:.3rem}
 [hidden]{display:none!important}
-.squad-form textarea{width:100%;resize:vertical;font:inherit;color:inherit;background:var(--panel);border:1px solid var(--line);border-radius:7px;padding:.5rem}
+.squad-form textarea{width:100%;resize:vertical;font:inherit;color:inherit;background:var(--panel);border:1px solid var(--line);border-radius:2px;padding:.5rem}
 .squad-form summary,.squad-roster summary,[data-story-input] summary{cursor:pointer;margin-block:.45rem}
 
 .squad-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .45rem; }
@@ -38,8 +58,8 @@ button,.squad-action{cursor:pointer}button:disabled{opacity:.52;cursor:default}.
 .squad-story-roll-art > img, .squad-story-roll-art .room-die-face { width:30px; height:30px; object-fit:contain; }
 .squad-story-roll-art > img:not(.room-die-face) { border-radius:50%; object-fit:cover; object-position:top; }
 .squad-gear { display:grid; grid-template-columns:repeat(auto-fill,minmax(min(100%,8.5rem),1fr)); gap:.55rem; padding:.15rem; }
-.squad-gear .squad-gear-card { display:flex; flex-direction:column; gap:.3rem; min-width:0; border:1px solid var(--line); border-radius:.6rem; padding:.45rem; }
-.squad-gear-card:has(input:checked) { outline:2px solid #557c63; outline-offset:-2px; }
+.squad-gear .squad-gear-card { display:flex; flex-direction:column; gap:.3rem; min-width:0; border:1px solid var(--line); border-radius:2px; padding:.45rem; }
+.squad-gear-card:has(input:checked) { outline:2px solid var(--accent); outline-offset:-2px; }
 .squad-gear .squad-gear-card label { display:flex; flex-wrap:wrap; align-items:center; gap:.35rem; border:0; padding:0; }
 .squad-gear .squad-gear-card [hidden] { display:none; }
 .squad-gear-card [data-gear-image] { width:100%; aspect-ratio:3/4; object-fit:contain; order:-1; }
@@ -56,10 +76,43 @@ button,.squad-action{cursor:pointer}button:disabled{opacity:.52;cursor:default}.
 .squad-player-kit > .squad-hero { margin-block: 8px 13px; }
 .squad-kit-titan { display:grid; grid-template-columns:minmax(0, 1fr) auto; gap:12px; align-items:center; }
 .squad-kit-titan > div { display:grid; gap:8px; }
-.squad-kit-titan > img { max-width:min(32vw, 10rem); max-height:9rem; object-fit:contain; border-radius:7px; }
+.squad-kit-titan > img { max-width:min(32vw, 10rem); max-height:9rem; object-fit:contain; border-radius:2px; }
 .squad-reference-cards { display:flex; gap:8px; overflow:auto; }
 .squad-reference-cards figure { flex:0 0 6rem; margin:0; font-size:.78rem; }
 .squad-reference-cards img { display:block; width:100%; border-radius:6px; }
 .squad-player-kit [data-gear-group] > h4 { margin:12px 0 4px; }
 .squad-player-kit .squad-gear { max-height:none; }
 .squad-player-kit [type=submit] { position:sticky; bottom:.7rem; z-index:1; }
+
+.squad-head h1, .squad-stack > h2, .squad-panel > h2, .squad-roster > summary {
+  color: var(--accent-strong);
+  font-family: var(--folio-serif, "Songti SC", "Noto Serif CJK SC", SimSun, Georgia, serif);
+}
+.squad-stack > h2 { margin: 0; }
+.squad-panel > h2 {
+  margin-bottom: .65rem;
+  padding-bottom: .45rem;
+  border-bottom: 1px solid var(--folio-rule, var(--line));
+  font-size: 1.15rem;
+}
+.squad-panel + .squad-panel { margin-top: .65rem; }
+.squad-stack > .squad-panel + .squad-panel { margin-top: 0; }
+.squad-choice:has(:checked), .squad-gear-card:has(input:checked) {
+  background: var(--accent-soft);
+}
+.squad-stats > div { background: var(--folio-sheet, var(--accent-soft)); }
+.squad-panel :is(button:not(:disabled):hover, .squad-action:hover) { border-color: var(--accent); }
+[data-action="disband"] { color: var(--danger); }
+.squad-choice input[type="radio"] {
+  margin: 0;
+  min-height: 0;
+  accent-color: var(--accent);
+}
+:is(a, button, input, select, textarea, summary):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+@media (min-width: 600px) {
+  main:has(.trauma-library-cards) { max-width: 1120px; }
+  .trauma-library-cards [data-gear-image] { max-height: 13rem; }
+}

@@ -625,3 +625,74 @@ body.art-module-shell .campaign-toolbox { inset-inline-start: var(--art-module-i
   body.art-module-shell { padding-inline-start: 0; }
   .art-sidebar { display: none; }
 }
+
+/* The module headers and frames share the battle-room material and hierarchy. */
+body:is(.art-module-shell, [data-theme-module="second-screen"]) {
+  --folio-serif: "Songti SC", "Noto Serif CJK SC", SimSun, Georgia, serif;
+  --folio-rule: color-mix(in srgb, var(--gold) 48%, var(--line));
+  --folio-sheet: color-mix(in srgb, var(--accent-soft) 63%, var(--panel));
+}
+body.art-module-shell:not([data-theme-dark]):is([data-theme-cycle="c1"], :not([data-theme-cycle]):is([data-cycle="c1"], :not([data-cycle]))),
+body[data-theme-module="second-screen"]:not([data-theme-dark])[data-theme-cycle="c1"] {
+  --folio-rule: #b99769;
+  --folio-sheet: #f7efe1;
+}
+
+body.art-module-shell:not([data-theme-dark], .second-screen-map) :is(
+  .app > header.topbar, .page-heading, .reader-head, .masthead, .briefing-head,
+  .app > main > .title-row
+) {
+  border-bottom: 3px double var(--folio-rule);
+}
+body.art-module-shell :is(.reader-head h2, .masthead h1, .briefing-head h1, .app > main > .title-row h2) {
+  font-family: var(--folio-serif);
+}
+body.art-module-shell:not([data-theme-dark], .second-screen-map) :is(
+  .app > header.topbar, .page-heading, .briefing-head, .masthead
+) {
+  padding: clamp(.7rem, 2vw, 1.25rem);
+  background: linear-gradient(105deg, var(--folio-sheet), var(--panel));
+}
+body.art-module-shell:not([data-theme-dark], .second-screen-map) :is(
+  .control-panel, .token-panel, .tree-wrap, .briefing-body .pane, .sheet
+) {
+  border-color: var(--line);
+  border-radius: 2px;
+}
+body.art-module-shell:not([data-theme-dark]) :is(
+  .hero-column .panel-heading, .panel-heading.module-head, .briefing-body .pane-head, .tree-tools
+) {
+  border-bottom: 1px solid var(--folio-rule);
+  background: var(--folio-sheet);
+}
+body.art-module-shell:not([data-theme-dark]) :is(
+  dialog.hero-workflow, dialog.note-dialog, .app main dialog.loot-dialog, dialog#cardPreviewDialog
+) {
+  border: 3px double var(--folio-rule);
+  border-radius: 2px;
+}
+body.art-module-shell:not([data-theme-dark]) .reader {
+  border: 1px solid var(--line);
+  background: var(--panel);
+}
+body.art-module-shell:not([data-theme-dark]) .reader .story-text {
+  color: var(--ink);
+}
+/* Projection shares the typography and rules without taking up stage space. */
+body[data-theme-module="second-screen"]:not([data-theme-dark]) :is(.story-card-head, .battle-terrain-cards-head) {
+  border-bottom: 3px double var(--folio-rule);
+}
+body[data-theme-module="second-screen"]:not([data-theme-dark]) .pair-card {
+  border: 3px double var(--folio-rule);
+  background: var(--folio-sheet);
+}
+body[data-theme-module="second-screen"]:not([data-theme-dark]) :is(.pair-card h1, .story-card h1) {
+  font-family: var(--folio-serif);
+  color: var(--accent-strong);
+}
+body[data-theme-module="second-screen"]:not([data-theme-dark]) .squad-projection-prep {
+  border: 3px double var(--folio-rule);
+  border-radius: 2px;
+  background: var(--folio-sheet);
+  color: var(--ink);
+}

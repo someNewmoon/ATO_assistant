@@ -437,6 +437,45 @@
   turnBar.hidden = true;
   turnBar.append(turnWindow, bossShortcut);
   root.append(turnBar);
+  root.classList.add('room-style-preview');
+  const jump = document.createElement('button');
+  jump.type = 'button';
+  jump.className = 'room-style-round-jump';
+  jump.textContent = '轮次';
+  turnWindow.id = 'room-style-round-window';
+  jump.setAttribute('aria-controls', turnWindow.id);
+  const syncRound = () => jump.setAttribute('aria-expanded', String(turnWindow.open));
+  turnWindow.addEventListener('toggle', syncRound);
+  syncRound();
+  jump.addEventListener('click', () => {
+    turnWindow.open = !turnWindow.open;
+    syncRound();
+    if (turnWindow.open) turnWindow.querySelector('summary')?.focus({ preventScroll: true });
+  });
+  turnWindow.addEventListener('keydown', event => {
+    if (event.key !== 'Escape' || !turnWindow.open) return;
+    turnWindow.open = false;
+    jump.focus({ preventScroll: true });
+  });
+  quick.prepend(jump);
+
+  const disclosure = document.createElement('details');
+  disclosure.className = 'room-style-tools';
+  const label = document.createElement('summary');
+  label.textContent = '战斗工具';
+  disclosure.append(label, toolLinks);
+  disclosure.addEventListener('click', event => {
+    if (event.target.closest('[data-tool]')) disclosure.open = false;
+  });
+  dock.append(disclosure);
+  dock.classList.add('room-style-dock');
+  root.before(dock);
+  new ResizeObserver(() => turnBar.style.setProperty('--round-nav-height', dock.offsetHeight + 'px')).observe(dock);
+  if (params.has('battle')) window.addEventListener('load', () => {
+    const toolbox = document.querySelector('details.campaign-toolbox');
+    if (toolbox) toolbox.open = false;
+  }, { once: true });
+
   let turnHeading = '';
   let turnMarkup = '';
   let promptedAiRound = '';
@@ -706,8 +745,93 @@
     const next = guidance + actions + (step && !signatureActive ? '' : '<ul>' + roster + '</ul>') + hint;
     if (turnMarkup !== next) {
       turnMarkup = next;
-      turnWindow.querySelector('[data-turn-body]').innerHTML = next;
+      const body = turnWindow.querySelector('[data-turn-body]');
+      body.innerHTML = next;
+      renderApostleFlow(body, step, guideAvailable);
     }
+  }
+
+  function renderApostleFlow(body, step, guideAvailable) {
+    if (!guideAvailable) return;
+    let current = 0;
+    if (step === 'other' || step === 'ready') current = 4;
+    else if (step?.endsWith('target')) current = 1;
+    else if (aiGuide.resolvesMovement(step)) {
+      current = body.querySelector('[data-ai-range], [data-turn-action="ai-manual-movement"], .room-ai-collisions') ? 2 : 3;
+    }
+
+    const flow = document.createElement('div');
+    flow.className = 'room-style-ai-flow';
+    const progress = document.createElement('ol');
+    progress.className = 'room-style-ai-progress';
+    progress.setAttribute('aria-label', '指令技结算流程');
+    for (const [i, name] of ['开始与揭示', '确定目标', '移动与冲撞', '攻击与效果', '弃牌与轮末'].entries()) {
+      const item = document.createElement('li');
+      item.textContent = name;
+      if (i === current) item.setAttribute('aria-current', 'step');
+      progress.append(item);
+    }
+    flow.append(progress);
+    if (current === 3 || current === 4) {
+      const checklist = document.createElement('section');
+      checklist.className = 'room-style-ai-checklist';
+      checklist.id = 'room-style-ai-checklist';
+      const label = document.createElement('h4');
+      label.textContent = '攻击与后续结算顺序';
+      const list = document.createElement('ol');
+      for (const instruction of [
+        '按牌面确认谁受到攻击，再投闪避并核对格挡后的剩余命中。',
+        '有剩余命中且会获得凶险时，按需投护甲，再录入净凶险并核对创伤。',
+        '按牌面核对攻击后效果，包括净凶险为 0 时仍会触发的效果。完成后再弃置指令技，或确认招牌技已结算。',
+      ]) {
+        const item = document.createElement('li');
+        item.textContent = instruction;
+        list.append(item);
+      }
+      checklist.append(label, list);
+      const controls = body.querySelector('.room-turn-controls');
+      if (current === 4 && controls) {
+        const hint = document.createElement('p');
+        hint.textContent = '如有遗漏，先在掷骰区选对应泰坦，再补结算本张指令技的效果。';
+        const defense = document.createElement('button');
+        defense.type = 'button';
+        defense.textContent = '打开闪避／防御';
+        defense.addEventListener('click', () => {
+          const dice = root.querySelector('#room-dice');
+          const mode = dice?.querySelector('[data-roll-mode="dodge"]');
+          if (!mode) return;
+          turnWindow.open = false;
+          mode.click();
+          dice.scrollIntoView({ block: 'start' });
+        });
+        checklist.append(hint, defense);
+      }
+      if (controls) {
+        const settle = document.createElement('button');
+        settle.className = 'room-style-ai-settle';
+        settle.type = 'button';
+        settle.textContent = '结算指令技';
+        settle.setAttribute('aria-controls', checklist.id);
+        const update = open => {
+          checklist.hidden = !open;
+          settle.setAttribute('aria-expanded', String(open));
+        };
+        update(turnWindow.dataset.aiChecklistOpen === String(current));
+        settle.addEventListener('click', () => {
+          const open = checklist.hidden;
+          turnWindow.dataset.aiChecklistOpen = open ? String(current) : '';
+          update(open);
+          if (open) {
+            turnWindow.scrollTop += checklist.getBoundingClientRect().top - turnWindow.getBoundingClientRect().top
+              - turnWindow.querySelector('summary').offsetHeight - 6;
+          }
+        });
+        const firstAction = controls.querySelector('button:not([data-turn-action="turn-undo"])');
+        controls.insertBefore(settle, firstAction);
+        flow.append(checklist);
+      }
+    }
+    body.prepend(flow);
   }
 
   function renderTools() {

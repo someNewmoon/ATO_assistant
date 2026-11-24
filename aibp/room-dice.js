@@ -15,7 +15,7 @@
     attack: { name: '攻击', kinds: ['d10'] },
     power: { name: '威力', kinds: ['red', 'black', 'white'], parentMode: 'attack' },
     dodge: { name: '闪避', kinds: ['d10'] },
-    defense: { name: '防御', kinds: ['red'], parentMode: 'dodge' },
+    defense: { name: '护甲', kinds: ['red', 'black', 'white'], parentMode: 'dodge' },
     check: { name: '检定', kinds: ['d10'] },
     armor: { name: '普通 d6', kinds: ['armor'] },
   };
@@ -42,6 +42,10 @@
   function rollSummary(roll) {
     const strengths = roll.dice.map(remainingFace).filter(Boolean);
     if (!strengths.length) return roll.dice.map(die => names[die.kind] + ' ' + die.value).join('、');
+    if (roll.mode === 'defense') {
+      const power = strengths.reduce((sum, face) => sum + face[0], 0);
+      return power + ' 威力 · 减免 ' + power + ' 凶险';
+    }
     return faceLabel(strengths.reduce((sum, face) => sum.map((value, index) => value + face[index]), [0, 0, 0]));
   }
 

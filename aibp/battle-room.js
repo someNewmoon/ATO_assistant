@@ -29,6 +29,7 @@
   const conditionNames = { standing: '站立', down: '倒地', rising: '起身', dead: '死亡' };
   const aiGuide = window.ATO_AI_TURN_GUIDE;
   const dice = window.ATO_ROOM_DICE;
+  const gearRolls = window.ATO_GEAR_ROLL_PROFILES;
   const { faceLabel, rollSummary } = dice;
   let id = isLink ? routeId : '';
   let credentials = null;
@@ -157,6 +158,7 @@
     const wasFighting = prior?.squad?.phase === 'battle';
     state = data.room;
     actor = data.actor;
+    document.body.classList.toggle('aibp-active-online-battle', !state.closed && (!state.squad || state.squad.phase === 'battle'));
     if (first && actor.role === 'host') equipmentSeat = rollSeat = personalSeat() ?? 0;
     const language = state.squad?.language || state.language;
     if (language && language !== roomLanguage) { roomLanguage = language; squadLink?.language(language); }
@@ -443,17 +445,20 @@
   let aiRouteId = '';
   let aiPlanKey = '';
   turnWindow.addEventListener('change', event => {
-    if (event.target.matches('[data-ai-range]')) {
-      aiRange = Math.max(1, Math.min(20, Math.floor(Number(event.target.value) || 1)));
-      aiRouteId = '';
-    } else if (event.target.matches('[data-ai-route]')) {
-      aiRouteId = event.target.value;
-    } else return;
+    if (!event.target.matches('[data-ai-range]')) return;
+    aiRange = Math.max(1, Math.min(20, Math.floor(Number(event.target.value) || 1)));
+    aiRouteId = '';
     renderTurn();
   });
   turnWindow.addEventListener('click', event => {
-    const button = event.target.closest('[data-turn-action]');
+    const button = event.target.closest('[data-turn-action], [data-ai-route]');
     if (!button || !state || state.closed) return;
+    if (button.dataset.aiRoute) {
+      aiRouteId = button.dataset.aiRoute;
+      renderTurn();
+      turnWindow.querySelector('[data-ai-route="' + aiRouteId + '"]')?.focus({ preventScroll: true });
+      return;
+    }
     const { turnAction: type, seat, value } = button.dataset;
     const selection = button.dataset.aiTarget || '';
     if (type === 'ai-guide' && ['target', 'hope-target'].includes(value) && !selection) {
@@ -593,10 +598,11 @@
             route = routes.find(path => path.id === aiRouteId) || routes[0];
             if (route) {
               guidance += '<label>按牌面填写攻击范围 <input data-ai-range type="number" min="1" max="20" value="' + aiRange + '"></label>'
-                + '<label>路线 <select data-ai-route>' + routes.map((path, i) => '<option value="' + path.id + '"'
-                  + (route === path ? ' selected' : '') + '>' + (i ? '' : '推荐 · ') + path.label + ' · ' + path.steps
-                  + ' 格 · ' + (path.collisions ? '冲撞 ' + path.collisions + ' 位泰坦' : '避开泰坦') + '</option>').join('')
-                + '</select></label><small>虚线和半透明模型预览路线与落点。按牌面核对移动、视线和转向例外。</small>';
+                + '<div class="room-ai-route-options" role="group" aria-label="移动路线">' + routes.map((path, i) =>
+                  '<button type="button" data-ai-route="' + path.id + '" aria-pressed="' + (route === path) + '">'
+                  + '<strong>' + (path.steps ? path.label : '原地就位') + (i === 0 ? ' · 推荐' : '') + '</strong><small>'
+                  + path.steps + ' 格 · ' + (path.collisions ? '冲撞 ' + path.collisions + ' 位泰坦' : '避开泰坦') + '</small></button>').join('')
+                + '</div><small>虚线和半透明模型预览路线与落点。按牌面核对移动、视线和转向例外。</small>';
               if (Object.hasOwn(aiHeadings, route.facing)) {
                 const begin = route.firstFacing;
                 guidance += '<p>' + (route.steps ? '起步朝' + aiHeadings[begin] + ' · ' : '')
@@ -942,12 +948,12 @@
         + '<span data-dice-reveal>' + (result ? result.map((n, i) => n + ['ϟ', '△', '●'][i]).join(' ') : die.value) + '</span>'
         + (critical ? '<strong class="room-critical-result" data-dice-reveal>' + critical + '</strong>' : '')
         + (die.rerolled ? '<small data-dice-reveal>已重掷 · 原掷 ' + escape(originalLabel) + '</small>' : '')
-        + (editable && result ? '<div class="room-die-conversions" data-dice-reveal>'
+        + (editable && result && roll.mode !== 'defense' ? '<div class="room-die-conversions" data-dice-reveal>'
           + (result[1] ? '<button type="button" data-action="convert" data-symbol="potential"' + dieAttrs + ' title="将一枚潜力转为威力">△ → ϟ</button>' : '')
           + (result[2] ? '<button type="button" data-action="convert" data-symbol="dot"' + dieAttrs + ' title="将一枚●转为威力">● → ϟ</button>' : '') + '</div>' : '')
         + '</div>';
     }).join('');
-    const followup = roll.defenseCount && !roll.defenseRoll;
+    const followup = roll.mode === 'dodge' && !roll.defenseRoll && (latest || roll.defenseCount);
     const wounds = roll.wounds ?? 0;
     const pendingPower = dice.pendingPowerRoll(state, roll.seat);
     const showBp = showBpControls && state.deckRevision && editable && pendingPower?.id === roll.id
@@ -968,9 +974,8 @@
       + ' <small>第 ' + roll.round + ' 轮</small></h4>';
     return '<li class="room-roll" data-motion-roll="' + escape(roll.id) + '">' + (quickFeedback ? '<div class="room-roll-head">' + heading + feedback + '</div>' : heading)
       + '<div class="room-dice-results">' + faces + '</div><p data-dice-reveal>' + rollSummary(roll) + '</p>'
-      + (followup ? '<p class="room-dice-help">已配置 ' + roll.defenseCount + ' 枚防御红骰，请按闪避结果确认是否投掷。</p>' : '')
       + (editable && (roll.mode === 'attack' || followup) ? '<button type="button" data-dice-reveal data-roll-followup="'
-        + (followup ? 'defense' : 'power') + '"' + attrs + '>' + (followup ? '准备投掷防御红骰' : '命中后准备投掷威力骰') + '</button>' : '')
+        + (followup ? 'defense' : 'power') + '"' + attrs + '>' + (followup ? '仍受命中时结算护甲' : '命中后准备投掷威力骰') + '</button>' : '')
       + (editable && roll.dice.some(dice.canReroll) ? '<div class="room-reroll-controls" data-dice-reveal><button type="button" data-action="reroll"' + attrs
         + (selection?.size ? '' : ' disabled') + '>重掷所选骰子' + (selection?.size ? '（' + selection.size + '）' : '') + '</button>'
         + (['attack', 'dodge'].includes(roll.mode) ? '<div class="room-reroll-fate">'
@@ -1079,37 +1084,117 @@
   function restoreDiceDraft(form, seat) {
     const draft = readDiceDraft(seat, rollMode);
     for (const input of form.querySelectorAll('input[type="number"]')) {
-      input.value = draft[input.name] ?? input.min;
+      input.value = draft[input.name] ?? input.defaultValue;
       updateDiceSteps(input);
     }
+  }
+
+  function isWeapon(item) { return item.category?.split('_')[0] === 'arm'; }
+
+  function gearProfile(item) {
+    // An ascended card can have a different printed panel.
+    return gearRolls.weapons[item?.id];
+  }
+
+  function gearCardReference(item) {
+    const art = window.ATO_BATTLE_ASSETS;
+    const source = art?.gearSrc(item.id, roomLanguage);
+    return source ? cardImage(source, item.name, '', art.gearThumbSrc(item.id, roomLanguage)) : '';
+  }
+
+  function selectedWeapon(seat) {
+    return state.heroes[seat].gear.find(item => isWeapon(item) && item.id === readDiceDraft(seat, 'attack').weapon);
+  }
+
+  function attackForPower(seat) {
+    const relevant = state.rolls.find(roll => roll.id === parentRoll && roll.mode === 'attack' && roll.seat === seat)
+      || state.rolls.find(roll => roll.mode === 'attack' && roll.round === state.round && roll.seat === seat);
+    return relevant || null;
+  }
+
+  function weaponPowerReference(seat) {
+    const attack = attackForPower(seat);
+    const item = attack ? state.heroes[seat].gear.find(gear => gear.id === attack.weapon) : selectedWeapon(seat);
+    if (!item) return '<p class="room-dice-help">攻击时选择武器后，这里会显示该次攻击的武器面板。</p>';
+    const profile = gearProfile(item);
+    const text = (expression) => {
+      const results = gearRolls.power(expression, '', 1);
+      return ['red', 'black', 'white', 'raw'].filter(kind => results[kind])
+        .map(kind => (dice.names[kind] || '原始威力') + ' ' + results[kind]).join(' · ');
+    };
+    const summary = profile?.[1] ? '<p>每次命中 · ' + text(profile[1])
+      + (profile[2] ? '</p><p>有命中时另加 · ' + text(profile[2]) : '') + '</p>'
+      : '<p>威力请按牌面填写。</p>';
+    return '<section class="room-roll-reference"><h4>激活武器 · ' + escape(item.name) + '</h4><div>'
+      + gearCardReference(item) + '<div>' + summary
+      + (profile?.[1] ? '<label>命中数 <input type="number" data-weapon-hits min="1" max="'
+        + (attack?.dice.length ?? dice.limits.d10) + '" value="1"></label> <button type="button" data-fill-weapon-power>带入武器威力骰</button>'
+        + '<small>再按泰坦、能力和牌面条件补入其他骰子。原始威力单独计入。</small><p data-weapon-power-status role="status"></p>' : '')
+      + '</div></div></section>';
   }
 
   function rollReference(seat) {
     const hero = state.heroes[seat];
     if (!hero) return '';
     if (rollMode === 'attack') {
-      const weapons = hero.gear.filter(item => item.category?.split('_')[0] === 'arm');
-      const art = window.ATO_BATTLE_ASSETS;
-      const cards = weapons.map(item => {
-        const source = art?.gearSrc(item.id, roomLanguage);
-        return '<li>' + (source ? cardImage(source, item.name, '', art.gearThumbSrc(item.id, roomLanguage)) : escape(item.name)) + '</li>';
+      const weapon = selectedWeapon(seat);
+      const cards = hero.gear.filter(isWeapon).map(item => {
+        const profile = gearProfile(item);
+        return '<li><button type="button" data-attack-weapon="' + escape(item.id) + '" aria-pressed="' + (weapon?.id === item.id)
+          + '">' + escape(item.name) + '<small>' + (profile ? '攻击骰 ' + profile[0] : '骰数按牌面') + '</small></button>'
+          + gearCardReference(item) + '</li>';
       }).join('');
       const rage = hero.stats.rage;
       return '<section class="room-roll-reference"><h4>宣告武器</h4><div>'
         + '<button type="button" data-action="stat" data-key="rage" data-delta="1" data-seat="' + seat
         + '"' + (rage >= 30 || hero.condition === 'dead' ? ' disabled' : '') + '>怒气 +1</button>'
         + '<span>当前怒气 ' + rage + '</span></div>'
-        + (cards ? '<ul>' + cards + '</ul>' : '<p>该英雄未装备武器。</p>') + '</section>';
+        + (cards ? '<ul class="room-weapon-options">' + cards + '</ul>' : '<p>该英雄未装备武器。</p>') + '</section>';
     }
-    if (rollMode === 'dodge') {
+    if (rollMode === 'power') return weaponPowerReference(seat);
+    if (rollMode === 'dodge' || rollMode === 'defense') {
       const trait = aiGuide.stepFor(state.turn?.aiGuide)?.startsWith('hope-');
       const projection = state.projection;
       const card = trait ? { src: projection?.signature, label: '当前招牌技' } : projection?.aiPending ? projection.ai : null;
+      const defenseCards = hero.gear.map(item => {
+        const keywords = gearRolls.defenseKeywords[item.id];
+        return keywords || item.category?.split('_')[0] === 'armor' || /盾|shield/i.test(item.name)
+          ? '<li>' + gearCardReference(item) + '<span>' + escape(item.name)
+            + (keywords ? '<small>' + escape(keywords.join(' · ')) + '</small>' : '<small>护甲按牌面</small>') + '</span></li>' : '';
+      }).join('');
       return '<section class="room-roll-reference"><h4>本次闪避参考</h4>'
         + (card?.src ? cardImage('/aibp/' + card.src, card.label || '当前指令技') : '<p>目前没有待结算的指令技。</p>')
+        + (defenseCards ? '<div class="room-defense-cards"><strong>格挡、加固与护甲装备</strong><ul>' + defenseCards + '</ul></div>' : '')
+        + (rollMode === 'dodge' ? '<button type="button" data-roll-mode="defense">只投护甲</button>' : '')
         + '</section>';
     }
     return '';
+  }
+
+  function fillWeaponPower(button) {
+    const seat = actor.role === 'host' ? rollSeat : actor.seat;
+    const attack = attackForPower(seat);
+    const item = attack ? state.heroes[seat].gear.find(gear => gear.id === attack.weapon) : selectedWeapon(seat);
+    const profile = gearProfile(item);
+    const reference = button.closest('.room-roll-reference');
+    const hitInput = reference.querySelector('[data-weapon-hits]');
+    if (!profile?.[1] || !hitInput.reportValidity() || !hitInput.value) return;
+    const total = gearRolls.power(profile[1], profile[2] || '', Number(hitInput.value));
+    const status = reference.querySelector('[data-weapon-power-status]');
+    for (const [lower, higher] of [['red', 'black'], ['black', 'white']]) {
+      const excess = Math.max(0, total[lower] - dice.limits[lower]);
+      total[lower] -= Math.ceil(excess / 2) * 2;
+      total[higher] += Math.ceil(excess / 2);
+    }
+    if (total.white > dice.limits.white) {
+      status.textContent = '超出白骰上限，请按规则手动调整。';
+      return;
+    }
+    const form = content.querySelector('#room-dice form[data-roll]');
+    const counts = Object.fromEntries(dice.modes.power.kinds.map(kind => [kind, total[kind]]));
+    saveDiceDraft(seat, 'power', counts);
+    restoreDiceDraft(form, seat);
+    status.textContent = total.raw ? '已带入武器骰。另计 ' + total.raw + ' 原始威力。' : '已带入武器骰。';
   }
 
   function renderDicePanel(panel, powerPool) {
@@ -1117,25 +1202,28 @@
     const previousForm = panel.querySelector('form[data-roll]');
     const fields = dice.modes[rollMode].kinds.map(kind => {
       const label = kind === 'd10' ? '总数量（含 1 枚白色关键骰）' : dice.names[kind];
-      const minimum = kind === 'd10' || kind === 'armor' || rollMode === 'defense' ? 1 : 0;
-      return diceCountField(kind, label, minimum, dice.limits[kind], minimum);
+      const minimum = kind === 'd10' || kind === 'armor' ? 1 : 0;
+      return diceCountField(kind, label, minimum, dice.limits[kind], rollMode === 'defense' && kind === 'red' ? 1 : minimum);
     }).join('');
-    const followup = rollMode === 'dodge' ? diceCountField('defenseCount', '预计防御红骰', 0, 6, 0) : '';
     const last = dice.latestByHero(state.rolls, state.lastBattleRollId).find(roll => roll.seat === seat);
     const latestResult = last
       ? '<ol class="room-last-rolls">' + rollCard(last, true, false, false) + '</ol>' : '<p>该英雄本场尚未掷骰。</p>';
     const notes = {
       attack: '宣告武器，增加 1 怒气并检查首要目标，再按武器牌投攻击骰。命中后先结算第一能力时段，再揭示部位卡牌。',
-      dodge: '先结算闪避，根据结果决定是否投掷防御红骰。',
+      dodge: '先投闪避并按牌面结算格挡。仍受命中且会获得凶险时，再投护甲。',
+      defense: '按有效装备和加固效果填写护甲骰。护甲每点威力减免 1 凶险。同一次攻击只激活一件防御武器。',
       power: '先揭示部位卡牌。重掷和转换潜力后，对照永世力场选结果，再按牌面结算骇物响应、伤口和激化。结算后清空克拉托斯池，再进入第二能力时段。',
     };
-    const form = '<form data-roll data-dice-seat="' + seat + '" class="battle-room-dice"><div>' + fields + followup
-      + '<button type="submit">投掷' + dice.modes[rollMode].name + '</button></div></form>';
+    const weapon = rollMode === 'attack' && selectedWeapon(seat);
+    const form = '<form data-roll data-dice-seat="' + seat + '" class="battle-room-dice">'
+      + (weapon ? '<input type="hidden" name="weapon" value="' + escape(weapon.id) + '">' : '')
+      + '<div>' + fields + '<button type="submit">投掷' + (rollMode === 'defense' ? '护甲' : dice.modes[rollMode].name) + '</button></div></form>';
     const modes = '<div class="room-dice-modes" role="group" aria-label="投掷用途">' + Object.entries(dice.modes)
-      .filter(([key]) => key !== 'armor')
-      .map(([key, entry]) => '<button type="button" data-roll-mode="' + key + '" aria-pressed="' + (key === rollMode) + '">'
+      .filter(([key]) => key !== 'armor' && key !== 'defense')
+      .map(([key, entry]) => '<button type="button" data-roll-mode="' + key + '" aria-pressed="'
+        + (key === (rollMode === 'defense' ? 'dodge' : rollMode)) + '">'
         + (key === 'dodge' ? '<img class="room-mode-icon" src="room-dice-art/dodge.webp" alt="">'
-          : '<span class="room-mode-icon" aria-hidden="true"></span>') + entry.name + '</button>').join('')
+          : '<span class="room-mode-icon" aria-hidden="true"></span>') + (key === 'dodge' ? '闪避／防御' : entry.name) + '</button>').join('')
       + (state.turn?.phase === 'titans' && state.turn.seat === seat
         ? '<button class="room-dice-end-turn" type="button" data-action="turn-finish" data-seat="' + seat + '">结束回合</button>' : '')
       + '</div>';
@@ -1944,6 +2032,20 @@
       }
       return;
     }
+    if (button.dataset.attackWeapon !== undefined) {
+      const seat = actor.role === 'host' ? rollSeat : actor.seat;
+      const item = state.heroes[seat].gear.find(gear => isWeapon(gear) && gear.id === button.dataset.attackWeapon);
+      if (!item) return;
+      const current = readDiceDraft(seat, 'attack');
+      saveDiceDraft(seat, 'attack', { ...current, weapon: item.id, d10: gearProfile(item)?.[0] ?? current.d10 });
+      render();
+      restoreDiceDraft(content.querySelector('#room-dice form[data-roll]'), seat);
+      return;
+    }
+    if (button.hasAttribute('data-fill-weapon-power')) {
+      fillWeaponPower(button);
+      return;
+    }
     if (button.dataset.equipmentSeat !== undefined) {
       equipmentSeat = Number(button.dataset.equipmentSeat);
       render();
@@ -1982,7 +2084,7 @@
       const source = rollFollowup && state.rolls.find(roll => roll.id === rollId);
       const defense = rollMode === 'defense' && source;
       if (rollFollowup) rollSeat = Number(seat);
-      if (defense) saveDiceDraft(rollSeat, 'defense', { red: source.defenseCount });
+      if (defense && source.defenseCount) saveDiceDraft(rollSeat, 'defense', { red: source.defenseCount });
       if (rollFollowup && toolsDialog.open) toolsDialog.close();
       render();
       const form = content.querySelector('form[data-roll]');
@@ -2063,8 +2165,12 @@
       const seat = actor.role === 'host' ? rollSeat : actor.seat;
       saveDiceDraft(seat, rollMode, Object.fromEntries(fields));
       const counts = Object.fromEntries(dice.modes[rollMode].kinds.map(kind => [kind, Number(fields.get(kind))]));
+      const weapon = rollMode === 'attack' && fields.get('weapon');
+      const powerParent = rollMode === 'power' && state.rolls.find(roll => roll.seat === seat)?.mode === 'attack'
+        ? attackForPower(seat)?.id : '';
+      const linked = parentRoll || powerParent;
       send({ id: crypto.randomUUID(), type: 'roll', mode: rollMode, seat, counts,
-        defenseCount: Number(fields.get('defenseCount')), ...(parentRoll && { parentRoll }) });
+        ...(weapon && { weapon }), ...(linked && { parentRoll: linked }) });
       parentRoll = '';
 
       return;

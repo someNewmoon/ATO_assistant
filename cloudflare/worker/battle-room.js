@@ -920,12 +920,14 @@ export class BattleRoom extends DurableObject {
   }
 
   roll(room, hero, seat, body, actor) {
-    const { counts, mode, parentRoll, defenseCount = 0 } = body;
+    const { counts, mode, parentRoll, weapon, defenseCount = 0 } = body;
     const { limits, modes } = roomDice;
     const modeRule = Object.hasOwn(modes, mode) && modes[mode];
     if (mode !== undefined && !modeRule) reject('投掷用途无效。');
     if (!object(counts) || !Object.keys(counts).every(kind => Object.hasOwn(limits, kind)
         && (!modeRule || modeRule.kinds.includes(kind)))) reject('骰子类型无效。');
+    if (weapon !== undefined && (mode !== 'attack' || !hero.gear.some(item => item.id === weapon)
+        || roomGearCategory(weapon)?.split('_')[0] !== 'arm')) reject('请选择该英雄装备的武器。');
     if (!Number.isInteger(defenseCount) || defenseCount < 0 || defenseCount > limits.red
         || (defenseCount && mode !== 'dodge')) reject('防御红骰数量无效。');
     const dice = [];
@@ -940,11 +942,12 @@ export class BattleRoom extends DurableObject {
     if (!dice.length) reject('请选择至少一枚骰子。');
     const parent = parentRoll && room.rolls.find(roll => roll.id === parentRoll && roll.seat === seat);
     if (parentRoll && (!parent || !modeRule?.parentMode || parent.mode !== modeRule.parentMode
-        || (mode === 'defense' && (!parent.defenseCount || parent.defenseRoll)))) {
+        || (mode === 'defense' && parent.defenseRoll))) {
       reject('关联投掷已结算或不存在。', 409);
     }
     const roll = { id: body.id, seat, hero: hero.name, round: room.round, mode, dice,
       by: actor.role === 'host' ? 'host' : 'seat:' + seat };
+    if (weapon) roll.weapon = weapon;
     if (parent) {
       roll.parentRoll = parent.id;
       if (mode === 'defense') parent.defenseRoll = roll.id;
@@ -983,6 +986,7 @@ export class BattleRoom extends DurableObject {
     const die = roll.dice.find(entry => entry.id === body.die);
     const result = die && roomDice.remainingFace(die);
     if (!result) reject('只能转换威力骰。');
+    if (roll.mode === 'defense') reject('护甲投掷只计威力。');
     const conversions = { potential: ['converted', 1], dot: ['dotConverted', 2] };
     if (!Object.hasOwn(conversions, body.symbol)) reject('未知骰面符号。');
     const [field, index] = conversions[body.symbol];

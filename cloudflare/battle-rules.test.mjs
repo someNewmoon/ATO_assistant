@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import dice from '../aibp/room-dice.js';
+import gearRolls from '../aibp/gear-roll-profiles.js';
 import guide from '../aibp/ai-turn-guide.js';
 import los from '../aibp/battle_los.js';
 import terrain from '../ss/terrain-data.js';
@@ -814,6 +815,35 @@ test('绝望和神浆独立计数，可从旧状态直接增加，队员不能�
   assert.deepEqual(r.heroes[0].markers, { despair: 0, ambrosia: 1 });
   assert.deepEqual(r.heroes[0].stats, original);
   assert.equal(r.heroes[1].markers, undefined);
+});
+
+test('武器基础攻击骰与每次命中／单次奖励威力分别读取', () => {
+  const [count, perHit, bonus] = gearRolls.weapons.AJ0247;
+  assert.equal(count, 2);
+  assert.deepEqual(gearRolls.power(perHit, bonus, 2), { red: 3, black: 0, white: 0, raw: 0 });
+  assert.deepEqual(gearRolls.power('b', 'r+', 2), { red: 1, black: 2, white: 0, raw: 1 });
+  assert.deepEqual(gearRolls.power(perHit, bonus, 0), { red: 0, black: 0, white: 0, raw: 0 });
+  assert.equal(gearRolls.weapons.BJ0900[1], undefined);
+  assert.deepEqual(gearRolls.defenseKeywords.AJ0211, ['格挡 1']);
+});
+
+test('攻击保存当前英雄的武器，护甲可接在无预填防御骰的闪避之后', () => {
+  const r = room();
+  r.heroes[0].gear.push({ id: 'AJ0247', count: 1, used: 0 });
+  const roll = (id, mode, counts, extra = {}) => reducer.apply(r, player, { type: 'roll', id, seat: 0, mode, counts, ...extra });
+  assert.throws(() => roll('bad-weapon', 'attack', { d10: 2 }, { weapon: 'AJ0181' }), /装备的武器/);
+  roll('weapon-attack', 'attack', { d10: 2 }, { weapon: 'AJ0247' });
+  assert.equal(r.rolls[0].weapon, 'AJ0247');
+  roll('weapon-power', 'power', { red: 3 }, { parentRoll: 'weapon-attack' });
+  assert.equal(r.rolls[0].parentRoll, 'weapon-attack');
+  roll('evade', 'dodge', { d10: 2 });
+  roll('armor', 'defense', { red: 1, black: 1, white: 1 }, { parentRoll: 'evade' });
+  assert.deepEqual(r.rolls[0].dice.map(die => die.kind), ['red', 'black', 'white']);
+  const total = r.rolls[0].dice.reduce((sum, die) => sum + dice.remainingFace(die)[0], 0);
+  assert.equal(dice.rollSummary(r.rolls[0]), total + ' 威力 · 减免 ' + total + ' 凶险');
+  assert.throws(() => roll('duplicate', 'defense', { red: 1 }, { parentRoll: 'evade' }), /已结算/);
+  assert.throws(() => reducer.apply(r, player, { type: 'convert', seat: 0, roll: 'armor',
+    die: r.rolls[0].dice[0].id, symbol: 'potential' }), /只计威力/);
 });
 
 test('only a white ten in an attack or dodge earns the matching critical badge', () => {

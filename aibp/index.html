@@ -2474,6 +2474,7 @@
   <script src="../assets/mobile/play.js?v=20261114-theatre-return" defer></script>
   <link rel="stylesheet" href="room-recap.css?v=20261125-critical">
   <link rel="stylesheet" href="battle-room.css?v=20261124-member-nav">
+  <link rel="stylesheet" href="table-battle.css?v=20261125">
   <link rel="stylesheet" href="room-style.css?v=20261124-member-nav">
   <link rel="stylesheet" href="./die-cube.css?v=3">
   <script src="theatre-battle.js?v=2"></script>
@@ -2546,6 +2547,8 @@
           <button type="button" id="traitButton">Trait</button>
           <button type="button" id="tokenButton">Token</button>
           <button type="button" id="newCampaignButton">开启新战役</button>
+          <button type="button" id="continueCampaignBattle" hidden>继续战斗</button>
+          <span id="campaignBattleStatus" role="status"></span>
           <a id="theatreBattleReturn" href="../theatre/index.html" hidden><span data-term-variant="fan" data-language-ignore>返回忆识剧场</span><span data-term-variant="official" data-language-ignore hidden>返回幻忆剧场</span><span data-term-variant="en" data-language-ignore hidden>Return to Mnestis Theatre</span></a>
         </div>
       </div>
@@ -2565,6 +2568,31 @@
         <summary>参战英雄与旧忆</summary>
         <div id="heroBattleRosterContent" class="hero-battle-roster-grid"></div>
       </details>
+      <section id="tableBattleBar" class="table-battle-bar" aria-label="实体桌战" hidden>
+        <h3>实体桌战</h3>
+        <nav aria-label="桌战操作">
+          <button type="button" data-table-action="cards">AI／BP 牌桌</button>
+          <button type="button" data-table-action="panel" aria-expanded="false" aria-controls="viewer">骇物面板</button>
+          <button type="button" data-table-action="settle">结束桌战</button>
+          <button type="button" data-table-action="resume" hidden>返回战斗</button>
+          <button type="button" data-table-action="finish" hidden>结束并返回</button>
+        </nav>
+        <p data-table-status role="status"></p>
+      </section>
+
+      <dialog id="tableBattlePrep" class="table-battle-prep" aria-labelledby="tableBattlePrepTitle">
+        <form method="dialog">
+          <h3 id="tableBattlePrepTitle">实体桌战备战</h3>
+          <p data-table-boss></p>
+          <p>按故事书布置实体版图与泰坦。开战后在这里抽取和结算指令技、部位牌。</p>
+          <div class="table-battle-controls">
+            <button value="cancel">取消</button>
+            <button value="setup">查看地形与起始位置</button>
+            <button value="start" class="table-battle-primary">开始桌战</button>
+          </div>
+        </form>
+      </dialog>
+
       <div class="viewer" id="viewer" tabindex="0" aria-label="卡牌展示区，可横向滚动">
         <section class="section">
           <div class="image-wrap" id="panelWrap"></div>
@@ -2585,7 +2613,7 @@
         </section>
       </div>
 
-      <section class="cards-panel">
+      <section class="cards-panel" id="tableBattleCards">
         <div class="aibp-layout">
           <div class="card-column">
             <div class="card-column-head">
@@ -3508,6 +3536,10 @@
     }
 
     let currentApostle = initialApostle();
+    const prepParams = new URLSearchParams(location.search);
+    const requestedPrepLevel = prepParams.get("startLevel");
+    let onlinePrepLevel = prepParams.has("squad") && /^(?:[0-9]|10)$/.test(requestedPrepLevel || "")
+      ? { apostle: currentApostle, level: Number(requestedPrepLevel) } : null;
     let heliosAccessGranted = false;
     let heliosAccountId = "";
     let currentAiView = "弃牌";
@@ -3523,6 +3555,7 @@
     }
     const piles = {};
     let storageKey = "aibp-apostle-viewer-piles-v3";
+    let activeTableBattle = null;
     const secondScreenSnapshotUrl = "../api/campaign-state.php?section=aibp";
     const secondScreenModeUrl = "../api/campaign-state.php?action=second-screen-mode";
     const secondScreenStatusUrl = "../api/campaign-state.php?action=second-screen-status";
@@ -5077,7 +5110,7 @@
       savePiles();
     }
 
-    let roomBattleLevel;
+    let roomBattleLevel = onlinePrepLevel;
     window.setAibpRoomBattleLevel = (apostle, level) => {
       if (!Number.isInteger(level) || roomBattleLevel?.apostle === apostle && roomBattleLevel.level === level) return;
       roomBattleLevel = { apostle, level };
@@ -5168,7 +5201,7 @@
       }
       const blackbeak = currentApostle === "BLACKBEAK";
       const fixedAtOne = fixedLevelOneApostles.has(currentApostle);
-      apostleLevelSelect.disabled = blackbeak;
+      apostleLevelSelect.disabled = blackbeak || Boolean(activeTableBattle);
       Array.from(apostleLevelSelect.options).forEach((option, index) => {
         if (index === 0) return;
         const isHelios = currentApostle === "HELIOS";
@@ -5193,6 +5226,7 @@
           || Number(apostleLevelOverrides[currentApostle]) <= 10)
         ? String(apostleLevelOverrides[currentApostle])
         : "";
+      if (onlinePrepLevel?.apostle === currentApostle) apostleLevelSelect.value = String(onlinePrepLevel.level);
       const recordLevel = recordApostleLevels[currentApostle];
       apostleLevelSelect.options[0].textContent = currentApostle === "HELIOS"
         ? "默认 C4 · Old Haunt"
@@ -7045,7 +7079,8 @@
       breakAiComboButton.disabled = !aiPending || !comboBreak?.canBreak;
       continueAiComboButton.disabled = !aiPending;
       confirmAiButton.hidden = combo && !comboFollowup;
-      confirmAiButton.textContent = combo ? "结算完成" : "弃置";
+      const tableBattle = typeof activeTableBattle !== "undefined" && activeTableBattle;
+      confirmAiButton.textContent = combo ? "结算完成" : tableBattle ? "结算并弃置" : "弃置";
       confirmAiButton.disabled = !aiPending;
       discardBpButton.disabled = !bpPending;
       defeatBpButton.disabled = !bpPending;
@@ -9162,6 +9197,7 @@
 
     function renderApostle(name) {
       if (theatreRequest && theatreBattle?.boss !== name) return;
+      if (activeTableBattle && activeTableBattle.boss !== name) return;
       const request = ++heliosRenderRequest;
       const hidden = HIDDEN_BOSS[name];
       if (hidden && !hidden.granted()) return;
@@ -9776,6 +9812,13 @@
     });
     secondScreenBattleModeToggle?.addEventListener("change", toggleSecondScreenBattleMode);
     apostleLevelSelect.addEventListener("change", () => {
+      if (onlinePrepLevel?.apostle === currentApostle) {
+        if (roomBattleLevel === onlinePrepLevel) roomBattleLevel = undefined;
+        onlinePrepLevel = null;
+        const url = new URL(location.href);
+        url.searchParams.delete("startLevel");
+        history.replaceState(null, "", url);
+      }
       if (theatreRequest && !theatreBattle) return;
       const level = Number(apostleLevelSelect.value);
       if (theatreBattle) {
@@ -9816,6 +9859,39 @@
       renderPanelTokens();
       battleMapControl?.render();
     });
+    window.AIBP_TABLE_DECK = {
+      async selection() {
+        await refreshRecordApostleLevels();
+        return { boss: currentApostle, level: currentApostleLevel(), label: title.textContent.trim() };
+      },
+      async activate(battle) {
+        await refreshRecordApostleLevels();
+        const hidden = HIDDEN_BOSS[battle.boss];
+        if (!apostles.includes(battle.boss) || (hidden && !hidden.granted())) {
+          throw new Error("无法打开本场的骇物资料。");
+        }
+        if (hidden) await window.HeliosAssets.ready(hidden.config(), hidden.extraConfigs());
+        activeScry = null;
+        pendingUndoEntry = null;
+        for (const name of Object.keys(piles)) delete piles[name];
+        for (const name of Object.keys(undoStacks)) delete undoStacks[name];
+        activeTableBattle = battle;
+        roomBattleLevel = { apostle: battle.boss, level: battle.level };
+        defeatBpButton.textContent = "记录损伤";
+        imageZoomBpActions.querySelector('[data-bp-zoom-action="defeat"]').textContent = "记录损伤";
+        storageKey = "ato-aibp-table-deck:" + battle.id;
+        currentApostle = battle.boss;
+        currentAiView = "弃牌";
+        currentBpView = "损伤";
+        loadSavedPiles();
+        renderApostle(battle.boss);
+        restoreScrySession();
+      },
+      hasPending() {
+        const state = piles[currentApostle];
+        return Boolean(state?.AI?.pending || state?.BP?.pending || activeScry);
+      }
+    };
     window.refreshAibpRecordLevels = refreshRecordApostleLevels;
     window.drawAibpRoomCard = (type, apostle, { preview = true } = {}) => {
       if (apostle !== currentApostle || type !== "AI") return null;
@@ -9964,7 +10040,10 @@
     tokenCloseButton.addEventListener("click", () => tokenDialog.close());
     tokenClearButton.addEventListener("click", clearTokenSelection);
     tokenSaveButton.addEventListener("click", saveTokenSelection);
-    newCampaignButton.addEventListener("click", startNewCampaign);
+    newCampaignButton.addEventListener("click", () => {
+      if (window.AIBP_TABLE_BATTLE) void window.AIBP_TABLE_BATTLE.launch();
+      else startNewCampaign();
+    });
     drawAiButton.addEventListener("click", () => drawOrShuffle("AI"));
     aiDrawPreview.addEventListener("click", (event) => {
       if (currentApostle === "DRAGON_OF_PHOBOS" && drawPileBackPreviewCard("AI")) return;
@@ -10065,7 +10144,8 @@
   <script src="ps/other/resouce/bp_resource_map_c1_c3.js?v=20261017a" defer></script>
   <script src="ps/other/resouce/bp_resource_map_c4_c5.js?v=20261018a" defer></script>
   <script src="c45_specials.js?v=room-bp-20261118-battle-recap" defer></script>
-  <script src="bp_loot_calculator_addon.js?v=20261125-damage-recap" defer></script>
+  <script src="bp_loot_calculator_addon.js?v=20261125-encounter" defer></script>
+  <script src="table-battle.js?v=20261125-encounter" defer></script>
   <script src="../story/data/english-source-data.js?v=20261011-english4" defer></script>
   <script src="../assets/ato-terms.js?v=20261110-loop-terms" defer></script>
   <script src="../assets/english-terms.js?v=20261011-english4" defer></script>

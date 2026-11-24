@@ -2027,7 +2027,13 @@ Add these script tags after the main viewer script:
           button.disabled = true;
           button.textContent = "写入中...";
           try {
+            const tableOperation = window.AIBP_TABLE_BATTLE?.settlement();
+            if (tableOperation) result.recordOperation = tableOperation;
             const { added, skipped, cycle } = await addLootResultToRecord(result);
+            if (tableOperation) {
+              window.AIBP_TABLE_BATTLE.settled();
+              lootDialog.close();
+            }
             button.textContent = `已同步到 NAS (${cycle})`;
             window.alert([
               "已添加到阿尔戈号记录表：",

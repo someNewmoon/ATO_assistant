@@ -1,0 +1,71 @@
+.table-battle-bar {
+  display: grid;
+  gap: .55rem;
+  margin-block: .75rem;
+  padding: .75rem 1rem;
+  border: 3px double var(--folio-rule, #b99769);
+  background: var(--folio-sheet, #f7efe1);
+}
+
+.table-battle-bar[hidden],
+body[data-table-battle] :is(#newCampaignButton, #bpLootButton, #battleRoomToggle,
+  #cloudSquadHub, #cloudBattleProjection, #heroBattleRoster, #sidebarToggle, .battle-map-layout,
+  .title-actions .second-screen-mode-toggle, .title-actions .second-screen-sync-status),
+body[data-table-battle]:not([data-table-show-panel]) #viewer,
+body[data-table-battle="settled"] #tableBattleCards {
+  display: none !important;
+}
+
+.table-battle-bar h3, .table-battle-prep h3 {
+  margin: 0;
+  font-family: "Songti SC", "Noto Serif CJK SC", SimSun, Georgia, serif;
+  color: var(--accent-strong);
+}
+
+.table-battle-bar nav, .table-battle-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .4rem;
+}
+
+.table-battle-bar p { margin: 0; color: var(--accent-strong); }
+:is(.table-battle-bar [data-table-status], #campaignBattleStatus):empty { display: none; }
+#campaignBattleStatus { color: var(--accent-strong); white-space: normal; }
+
+body dialog.table-battle-prep {
+  width: min(34rem, calc(100vw - 2rem));
+  padding: 1.15rem;
+  border: 3px double var(--folio-rule, #b99769);
+  background: var(--panel);
+}
+
+body :is(button.table-battle-primary, #continueCampaignBattle, #newCampaignButton,
+  [data-table-action="settle"]):not(:disabled) {
+  background: var(--accent-strong);
+  border-color: var(--accent-strong);
+  color: #fff;
+}
+
+body :is(button.table-battle-primary, #continueCampaignBattle, #newCampaignButton,
+  [data-table-action="settle"]):not(:disabled):hover {
+  background: var(--accent);
+  color: #fff;
+}
+
+body[data-table-battle] #tableBattleCards {
+  scroll-margin-top: 1rem;
+  border: 1px solid var(--folio-rule, #b99769);
+  background: var(--folio-sheet, #f7efe1);
+}
+
+body[data-table-battle] #tableBattleCards .card-column-title {
+  font-family: "Songti SC", "Noto Serif CJK SC", SimSun, Georgia, serif;
+}
+
+body[data-table-battle] #tableBattleCards .card-column:first-child .card-column-title::before { content: "指令技 "; }
+body[data-table-battle] #tableBattleCards .card-column:nth-child(2) .card-column-title::before { content: "部位牌 "; }
+
+body[data-table-battle] :is(.title-row, .title-actions) {
+  flex-wrap: wrap;
+  overflow: visible;
+}

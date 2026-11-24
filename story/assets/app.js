@@ -2180,8 +2180,15 @@
     const links = target.links || [target];
 
     const buttons = links.map((link) => {
-      const href = `../aibp/index.html#${encodeURIComponent(link.apostle)}`;
-      return `<a class="battle-aibp-button" href="${href}" target="_blank" rel="noopener noreferrer">打开${escapeHtml(link.label)}</a>`;
+      const destination = new URL("../aibp/index.html", location.href);
+      const source = new URL("./index.html", location.href);
+      source.searchParams.set("book", currentBook().id);
+      source.searchParams.set("key", entry.key || entry.id);
+      if (squadId) source.searchParams.set("squad", squadId);
+      destination.searchParams.set("storyReturn", source.pathname + source.search);
+      if (squadId) destination.searchParams.set("storySquad", squadId);
+      destination.hash = link.apostle;
+      return `<a class="battle-aibp-button" href="${escapeHtml(destination.href)}" target="_blank" rel="noopener noreferrer">打开${escapeHtml(link.label)}</a>`;
     }).join("");
     return `<div class="battle-aibp-action">${buttons}</div>`;
   }

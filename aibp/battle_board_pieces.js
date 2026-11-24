@@ -67,11 +67,11 @@
       dot.setAttribute("r", index === 0 ? 0.32 : 0.12);
       dot.setAttribute("class", index === 0 ? "trail-origin" : "trail-step");
       svg.appendChild(dot);
-      if (boss && index > 0) {
+      if (boss && (index > 0 || suggested)) {
         const label = document.createElementNS(svgNS, "text");
-        label.setAttribute("x", column - .5); label.setAttribute("y", 14.4 - row);
+        label.setAttribute("x", column - .5); label.setAttribute("y", (index === 0 ? 14.60 : 14.4) - row);
         label.setAttribute("class", "trail-step-number"); label.setAttribute("text-anchor", "middle");
-        label.textContent = String(index); svg.appendChild(label);
+        label.textContent = index === 0 ? "起" : String(index); svg.appendChild(label);
       }
     }
     layer.appendChild(svg);
@@ -122,10 +122,13 @@
   } = {}) {
     layer.replaceChildren();
     layer.hidden = false;
-    if (!deadSeats.includes(trail?.seat)) drawTrail(layer, trail);
-    drawTrail(layer, bossTrail, true);
-    if (aiRoute) drawTrail(layer, { route: aiRoute.centers }, true, true);
-    if (priorityVisible) drawPriorityLink(layer, pieces.apostle, pieces.titans[priorityTarget]);
+    if (aiRoute) {
+      drawTrail(layer, { route: aiRoute.centers }, true, true);
+    } else {
+      if (!deadSeats.includes(trail?.seat)) drawTrail(layer, trail);
+      drawTrail(layer, bossTrail, true);
+      if (priorityVisible) drawPriorityLink(layer, pieces.apostle, pieces.titans[priorityTarget]);
+    }
     const document = layer.ownerDocument;
     const sprites = window.BattleBoardSprites || {};
     drawRouteGhost(layer, aiRoute, sprites.forApostle?.(apostle), size);

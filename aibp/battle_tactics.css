@@ -207,6 +207,7 @@ button.battle-piece { pointer-events: auto; cursor: pointer; min-height: 0; }
 .battle-map-titan-move.is-apostle { color: #fff0d5; border-color: #f2a067; background: #783f2c88; }
 
 .battle-piece.battle-piece-titan.is-ai-target { outline: 3px solid #ffd56e; outline-offset: 2px; }
+.battle-piece-suggested-route { z-index: 3; }
 .battle-piece-suggested-route polyline { stroke-dasharray: 6 4; }
 
 .battle-piece.battle-piece-route-ghost { opacity: .55; border: 2px dashed #ffd56e; background: #96632855; box-shadow: none; }

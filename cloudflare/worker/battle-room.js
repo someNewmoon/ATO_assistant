@@ -977,6 +977,7 @@ export class BattleRoom extends DurableObject {
     const roll = room.rolls.find(entry => entry.id && entry.id === body.roll && entry.seat === seat);
     if (!roll) reject('找不到该英雄的这次投掷。', 409);
     if (body.type === 'reroll') {
+      if (roll.mode === 'defense') reject('护甲投掷不能重掷。');
       if (!Array.isArray(body.ids) || !body.ids.length || body.ids.length > roll.dice.length) reject('请先选齐要重掷的骰子。');
       const dice = [...new Set(body.ids)].map(id => roll.dice.find(die => die.id === id));
       if (!dice.every(roomDice.canReroll)) reject('所选骰子已经重掷、转换或不存在。', 409);

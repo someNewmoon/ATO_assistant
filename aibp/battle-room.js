@@ -938,9 +938,10 @@
     const selection = selectedDice.get(roll.id);
     const attrs = ' data-roll-id="' + escape(roll.id) + '" data-seat="' + roll.seat + '"';
     const mode = dice.modes[roll.mode]?.name;
+    const rerollable = editable && roll.mode !== 'defense';
     const faces = roll.dice.map(die => {
       const result = dice.remainingFace(die);
-      const canSelect = editable && dice.canReroll(die);
+      const canSelect = rerollable && dice.canReroll(die);
       const dieAttrs = attrs + ' data-die-id="' + escape(die.id) + '"';
       const original = result ? dice.faces[die.kind]?.[die.original] : die.original;
       const originalLabel = Array.isArray(original) ? faceLabel(original) : original;
@@ -980,7 +981,7 @@
       + '<div class="room-dice-results">' + faces + '</div><p data-dice-reveal>' + rollSummary(roll) + '</p>'
       + (editable && (roll.mode === 'attack' || followup) ? '<button type="button" data-dice-reveal data-roll-followup="'
         + (followup ? 'defense' : 'power') + '"' + attrs + '>' + (followup ? '仍受命中时结算护甲' : '命中后准备投掷威力骰') + '</button>' : '')
-      + (editable && roll.dice.some(dice.canReroll) ? '<div class="room-reroll-controls" data-dice-reveal><button type="button" data-action="reroll"' + attrs
+      + (rerollable && roll.dice.some(dice.canReroll) ? '<div class="room-reroll-controls" data-dice-reveal><button type="button" data-action="reroll"' + attrs
         + (selection?.size ? '' : ' disabled') + '>重掷所选骰子' + (selection?.size ? '（' + selection.size + '）' : '') + '</button>'
         + (['attack', 'dodge'].includes(roll.mode) ? '<div class="room-reroll-fate">'
           + marker('../hero/assets/tri_fate.png', '命运') + buttons('stat', 'fate', state.heroes[roll.seat].stats.fate, roll.seat, '命运', 30, true)

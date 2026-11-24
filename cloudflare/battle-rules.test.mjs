@@ -884,6 +884,8 @@ test('攻击保存当前英雄的武器，护甲可接在无预填防御骰的�
   const total = r.rolls[0].dice.reduce((sum, die) => sum + dice.remainingFace(die)[0], 0);
   assert.equal(dice.rollSummary(r.rolls[0]), total + ' 威力 · 减免 ' + total + ' 凶险');
   assert.throws(() => roll('duplicate', 'defense', { red: 1 }, { parentRoll: 'evade' }), /已结算/);
+  assert.throws(() => reducer.apply(r, player, { type: 'reroll', seat: 0, roll: 'armor',
+    ids: [r.rolls[0].dice[0].id] }), /护甲投掷不能重掷/);
   assert.throws(() => reducer.apply(r, player, { type: 'convert', seat: 0, roll: 'armor',
     die: r.rolls[0].dice[0].id, symbol: 'potential' }), /只计威力/);
   for (let i = 0; i < 31; i++) {

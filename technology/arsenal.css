@@ -32,26 +32,52 @@ body[data-theme-module="technology"] .arsenal-toolbar .tool-btn:hover:not(:disab
 .arsenal-quantity .gear-resource-btn:disabled { opacity: .45; cursor: not-allowed; }
 .gear-stock { color: var(--accent-strong); font-size: 11px; font-weight: 750; }
 .arsenal-items { padding-top: 10px; }
-.arsenal-loadouts { margin: 0 0 16px; }
-.arsenal-loadouts h2, .arsenal-loadout-dialog h2 { margin: 0 0 10px; color: var(--accent-strong); font-size: 16px; }
+.arsenal-loadouts { margin: 0 0 20px; }
+.arsenal-loadout-heading {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+  gap: 10px; margin-bottom: 12px;
+}
+.arsenal-loadout-heading h2, .arsenal-loadout-dialog h2 { color: var(--accent-strong); font-size: 16px; }
+.arsenal-loadout-heading h2 { margin: 0; }
+.arsenal-loadout-dialog h2 { margin: 0 0 10px; }
+.arsenal-export-status { margin: 0 0 10px; font-size: .86rem; }
+.arsenal-export-status:empty { margin: 0; }
 .arsenal-loadout-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(160px, 100%), 1fr));
-  gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(min(255px, 100%), 1fr));
+  gap: 12px;
 }
 .arsenal-loadout-card {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  align-items: start;
+  gap: 12px;
   min-width: 0;
-  padding: 10px;
+  padding: 14px;
   border: 1px solid var(--line);
+  border-top: 3px solid #8e754e;
+  border-radius: 10px;
   background: var(--panel);
   overflow-wrap: anywhere;
 }
-.arsenal-loadout-card h3 { margin: 0; font-size: 14px; }
-.arsenal-loadout-card .tool-btn { margin-top: auto; }
+.arsenal-loadout-card h3 { margin: 0; font-size: 1rem; }
+.arsenal-loadout-card .arsenal-player-titan { align-self: start; }
+.arsenal-loadout-card .arsenal-assigned-cards {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(min(74px, 100%), 1fr));
+}
+.arsenal-loadout-card .arsenal-assigned-cards > figure {
+  width: auto; padding: 5px; border-radius: 6px; border: 1px solid var(--line);
+}
+.arsenal-loadout-card .arsenal-assigned-cards img { height: 5.8rem; }
+.arsenal-loadout-equipment h4 { margin: 0 0 .4rem; font-size: .86rem; }
+.arsenal-loadout-equipment h4 span { margin-left: .4rem; font-weight: 400; }
+.arsenal-loadout-footer {
+  display: flex; flex-wrap: wrap; gap: 8px; margin-top: auto;
+  padding-top: 10px; border-top: 1px solid var(--line);
+}
+.arsenal-loadouts .arsenal-export-button:not(:disabled) {
+  background: #28463d; color: #fff7e7; border-color: #28463d;
+}
+.arsenal-loadouts .arsenal-export-button:not(:disabled):hover { background: #365a50; }
 .arsenal-loadout-dialog {
   box-sizing: border-box;
   width: min(480px, calc(100% - 24px));

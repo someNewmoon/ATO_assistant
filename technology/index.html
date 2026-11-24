@@ -1091,7 +1091,7 @@ button.gear-group-name:hover {
 <link rel="stylesheet" href="../assets/theme.css?v=20261001">
 <link rel="stylesheet" href="editorial.css?v=20261001-cycle-menu">
 <link rel="stylesheet" href="tech-tree.css?v=20261002-content-paper">
-<link rel="stylesheet" href="arsenal.css?v=20261120-copy-limits">
+<link rel="stylesheet" href="arsenal.css?v=20261124-loadout-image">
 <link rel="stylesheet" href="arsenal-loadout.css?v=20261124-folio">
 <link rel="stylesheet" href="../hero/battle-roster.css">
 <link rel="stylesheet" href="../assets/card-art.css?v=20261017-corners1">
@@ -1172,6 +1172,7 @@ button.gear-group-name:hover {
   <script src="structure-tech-client.js?v=20261019-negotiation-rows2"></script>
 <script src="../hero/hero-catalog.js?v=20261117-battle-polish"></script>
 <script src="gear-inventory.js?v=20261120-copy-limits"></script>
+<script src="loadout-image.js?v=20261124"></script>
 <script>
 const TECH_DICTIONARY_URL = 'tech_card_dictionary.min.json';
 const fetch = window.ATO_CAMPAIGN_NOTES.createFetch(window.fetch.bind(window), {
@@ -2223,35 +2224,57 @@ function loadoutTitanLabel(titan) {
   return window.ATO_GEAR_INVENTORY.titanLabel(titan);
 }
 
-function arsenalLoadoutsHtml(disabled) {
+function arsenalLoadoutModels() {
   const inventory = window.ATO_GEAR_INVENTORY;
   const heroes = window.ATO_HERO_CATALOG;
   const titans = inventory.loadoutTitans(gearRecordState);
   const stock = inventory.normalize(gearRecordState.arsenal);
-  const cards = gearRecordHeroes.map(hero => {
+  return gearRecordHeroes.map(hero => {
     const kit = inventory.normalizeLoadout(gearRecordState.loadouts?.[hero.id]);
     const titanId = inventory.titanIdFor(gearRecordState, kit.titanId);
     const titan = inventory.loadoutTitan(titans.find(entry => String(entry.id) === titanId), kit.titanPanelId);
-    const gear = Object.entries(kit.gear).filter(([id]) => stock[id]?.quantity > 0).map(([id, quantity]) => {
-      const art = gearImageSrc(id);
-      return `<figure>${art ? `<img src="${esc(art)}" loading="lazy" alt="">` : ''}<figcaption>${esc(getGearName(id))} ×${quantity}</figcaption></figure>`;
-    }).join('');
-    const avatar = heroes.heroPortrait(hero);
-    const name = heroes.heroDisplayName(hero);
+    const gear = Object.entries(kit.gear).filter(([id]) => stock[id]?.quantity > 0).map(([id, quantity]) => ({
+      id, quantity, name: getGearName(id), art: gearImageSrc(id), part: gearPart(id).key,
+    }));
+    const groups = inventory.groupGear(gear, card => card.part);
+    const portrait = heroes.heroPortrait(hero);
     const titanArt = inventory.titanArtwork(titan);
-    const patterns = inventory.loadoutPatterns(titan, kit, gearRecordState.cycle).map(pattern => pattern.name);
     const titanLabel = titan ? loadoutTitanLabel(titan) : kit.titanId ? '原泰坦已不在列表' : '未选择泰坦';
+    return {
+      hero, name: heroes.heroDisplayName(hero), avatar: portrait ? '../hero/assets/' + portrait : '',
+      titan: titanArt ? { art: '../' + titanArt.path, name: titanLabel, label: titanArt.label } : null, titanLabel,
+      patterns: inventory.loadoutPatterns(titan, kit, gearRecordState.cycle).map(pattern => ({
+        name: pattern.name, art: '../' + pattern.art,
+      })),
+      gear: groups.flatMap(group => group.items.map(card => ({ ...card, category: group.label }))),
+      memories: heroes.mnemosCards(hero).map(card => card.zh + ' · ' + (card.fated ? '命业旧忆' : card.progress + '/' + card.limit)),
+    };
+  });
+}
+
+function arsenalLoadoutsHtml(kits, disabled) {
+  const cards = kits.map(kit => {
+    const { hero, name, avatar, titan, titanLabel, patterns, gear } = kit;
+    const equipment = gear.map(card => `<figure>${card.art ? `<button type="button" class="arsenal-kit-art" data-preview-gear="${esc(card.id)}" aria-label="${esc('放大' + card.name)}"><img src="${esc(card.art)}" loading="lazy" alt=""></button>` : ''}
+      <figcaption>${esc(card.name)} <b>×${card.quantity}</b></figcaption></figure>`).join('');
     return `<article class="arsenal-loadout-card">
-      <header class="arsenal-player-identity">${avatar ? `<img src="../hero/assets/${esc(avatar)}" alt="">` : ''}<div><h3>${esc(name)}</h3><small>${esc(titanLabel)}</small></div></header>
-      ${titanArt ? `<a class="arsenal-player-titan" href="../${esc(titanArt.path)}" target="_blank" rel="noopener"><img alt="${esc(titanArt.label)}" loading="lazy" src="../${esc(titanArt.path)}"></a>` : ''}
-      ${patterns.length ? `<div class="arsenal-item-meta">样式卡牌 · ${esc(patterns.join('、'))}</div>` : ''}
-      <div class="arsenal-assigned-cards">${gear || '未分配装备'}</div>
-      ${heroes.mnemosHtml(hero)}
-      <button type="button" class="tool-btn" data-edit-loadout="${esc(hero.id)}" aria-label="${esc(`编辑${name}的配装`)}" ${disabled ? 'disabled' : ''}>编辑配装</button>
+      <header class="arsenal-player-identity">${avatar ? `<img src="${esc(avatar)}" alt="">` : ''}<div><h3>${esc(name)}</h3><small>${esc(titanLabel)}</small></div></header>
+      ${titan ? `<a class="arsenal-player-titan" href="${esc(titan.art)}" target="_blank" rel="noopener"><img alt="${esc(titan.label)}" loading="lazy" src="${esc(titan.art)}"></a>` : ''}
+      ${patterns.length ? `<div class="arsenal-item-meta">样式卡牌 · ${esc(patterns.map(card => card.name).join('、'))}</div>` : ''}
+      <div class="arsenal-loadout-equipment"><h4>装备 <span>${gear.reduce((sum, card) => sum + card.quantity, 0)} 件</span></h4>
+        <div class="arsenal-assigned-cards">${equipment || '未分配装备'}</div></div>
+      ${window.ATO_HERO_CATALOG.mnemosHtml(hero)}
+      <footer class="arsenal-loadout-footer">
+        <button type="button" class="tool-btn" data-edit-loadout="${esc(hero.id)}" aria-label="${esc(`编辑${name}的配装`)}" ${disabled ? 'disabled' : ''}>编辑配装</button>
+        <button type="button" class="tool-btn arsenal-export-button" data-export-loadout="${esc(hero.id)}" aria-label="${esc(`导出${name}的配装图片`)}" ${disabled ? 'disabled' : ''}>导出图片</button>
+      </footer>
     </article>`;
   });
   return `<section class="arsenal-loadouts" aria-labelledby="arsenalLoadoutsTitle">
-    <h2 id="arsenalLoadoutsTitle">英雄配装</h2>
+    <header class="arsenal-loadout-heading"><h2 id="arsenalLoadoutsTitle">英雄配装</h2>
+      ${kits.length > 1 ? `<button type="button" class="tool-btn arsenal-export-button" data-export-all-loadouts ${disabled ? 'disabled' : ''}>导出全队图片</button>` : ''}
+    </header>
+    <p class="arsenal-export-status" role="status" data-loadout-export-status></p>
     ${cards.length ? `<div class="arsenal-loadout-grid">${cards.join('')}</div>` : '<p>请先到<a href="../hero/">英雄页</a>添加英雄，再回来配装。</p>'}
   </section>`;
 }
@@ -2651,7 +2674,8 @@ function renderArsenalPage() {
     </div>
   </div><div class="arsenal-meta"><span>制造自动入库。补录和制造共用实物上限。</span><span class="arsenal-summary">显示 ${visible.length}/${recorded.length} 种 · ${visibleQuantity} 件</span></div>`;
   html += gearMutationInFlight ? '<div class="arsenal-message" role="status">正在保存军械库...</div>' : arsenalMessageHtml();
-  if (gearRecordState) html += arsenalLoadoutsHtml(unavailable);
+  const loadouts = gearRecordState ? arsenalLoadoutModels() : [];
+  if (gearRecordState) html += arsenalLoadoutsHtml(loadouts, unavailable);
   if (gearRecordError) html += `<div class="gear-empty">军械库读取失败：${esc(gearRecordError)}。请点击刷新重试。</div>`;
   else if (!gearRecordState) html += '<div class="gear-empty">正在读取军械库...</div>';
   else if (!recorded.length) html += '<div class="gear-empty">军械库还没有装备。在“装备制造”中制造，或在上方补录已有装备。</div>';
@@ -2668,6 +2692,27 @@ function renderArsenalPage() {
   mainView.innerHTML = html + '</div>';
   mainView.querySelectorAll('[data-edit-loadout]').forEach(button => {
     button.addEventListener('click', () => editArsenalLoadout(button.dataset.editLoadout, catalog));
+  });
+  mainView.querySelectorAll('.arsenal-loadout-card [data-preview-gear]').forEach(button => {
+    const id = button.dataset.previewGear;
+    button.addEventListener('click', () => showGearImageModal(gearImageSrc(id), getGearName(id)));
+  });
+  mainView.querySelectorAll('[data-export-loadout], [data-export-all-loadouts]').forEach(button => {
+    button.addEventListener('click', async () => {
+      const kits = button.hasAttribute('data-export-all-loadouts') ? loadouts
+        : loadouts.filter(kit => kit.hero.id === button.dataset.exportLoadout);
+      const status = mainView.querySelector('[data-loadout-export-status]');
+      button.disabled = true;
+      status.textContent = '正在生成配装图片…';
+      try {
+        await window.ATO_LOADOUT_IMAGE.download(kits);
+        status.textContent = '已开始下载 PNG。';
+      } catch (error) {
+        status.textContent = error.message || '导出失败，请重试。';
+      } finally {
+        button.disabled = false;
+      }
+    });
   });
   mainView.querySelectorAll('[data-arsenal-filter]').forEach(input => input.addEventListener('change', () => {
     if (input.dataset.arsenalFilter === 'part') arsenalPartFilter = input.value;

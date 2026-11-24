@@ -592,8 +592,9 @@
         const current = signature ? { src: projection?.signature, label: '招牌技' } : projection?.ai;
         const targeting = step === 'target' || step === 'hope-target';
         const resolving = aiGuide.resolvesMovement(step);
-        guidance = '<div class="room-ai-guide"><strong>' + title + '</strong><p>' + detail + '</p>'
-          + ((targeting || resolving) && current?.src ? cardImage('/aibp/' + current.src, current.label || '当前 AI') : '');
+        guidance = '<div class="room-ai-guide">'
+          + ((targeting || resolving) && current?.src ? cardImage('/aibp/' + current.src, current.label || '当前 AI') : '')
+          + '<div class="room-ai-step"><strong>' + title + '</strong><p>' + detail + '</p>';
         if (targeting && host) guidance += renderAiTargetChoice(step);
         if (resolving && Number.isInteger(turn.aiTarget)) {
           guidance += '<p>本次目标：<b>' + escape(state.heroes[turn.aiTarget]?.name || '') + '</b></p>';
@@ -636,7 +637,7 @@
         }
         const hope = projection?.hopeEnds;
         if (step === 'other' && hope) guidance += '<p>希望终结生效，处理完其他行动后执行招牌技。</p>';
-        guidance += '</div>';
+        guidance += '</div></div>';
         if (host) {
           if (step === 'start' || step === 'draw') {
             if (projection?.aiPending) controls = guideAction('start', '确认已揭示');

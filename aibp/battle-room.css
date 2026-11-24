@@ -447,7 +447,10 @@ body.aibp-room-only > .app > main > :not(#battleRoom) { display: none !important
 .room-turn-boss-link { display: grid; place-items: center; color: #fff5e4; background: #263c36; text-decoration: none; }
 .room-turn-bar > :is(button, a) { flex: none; height: auto; min-height: 2.3rem; padding: .38rem .65rem; border-radius: .6rem; white-space: nowrap; }
 .room-turn-window { min-width: 0; border: 1px solid var(--room-border); border-radius: .7rem; color: #fff5e4; background: #263c36; box-shadow: 0 2px 10px #0005; }
-.room-turn-window[open] { max-height: min(75dvh, 32rem); overflow: auto; }
+.room-turn-window[open] {
+  max-height: calc(100dvh - max(.5rem, env(safe-area-inset-top)) - max(.5rem, env(safe-area-inset-bottom)));
+  overflow: auto;
+}
 .room-turn-window summary { padding: .5rem .68rem; cursor: pointer; font-weight: 700; }
 .room-turn-window [data-turn-body] { padding: 0 .65rem .6rem; font-size: .88rem; }
 .room-turn-window ul { display: grid; gap: .3rem; margin: 0; padding: 0; list-style: none; }
@@ -456,9 +459,17 @@ body.aibp-room-only > .app > main > :not(#battleRoom) { display: none !important
 .room-turn-window li span { flex: 1; }
 .room-turn-window li small { display: block; color: #e0d7bb; }
 .room-turn-window .roll-hero-avatar { width: 1.75rem; height: 1.75rem; }
-.room-turn-window button { white-space: nowrap; }
-.room-ai-guide { display: grid; gap: .35rem; padding-block: .45rem; }
-.room-ai-guide > strong { color: #ffe09d; }
+.room-turn-window button { white-space: normal; }
+.room-ai-guide { display: grid; align-items: start; gap: .6rem; padding-block: .35rem; }
+.room-ai-guide:has(> .battle-room-card-art) { grid-template-columns: clamp(3.75rem, 16vw, 6.5rem) minmax(0, 1fr); }
+.room-ai-step { display: grid; min-width: 0; justify-items: start; gap: .35rem; }
+.room-ai-step > strong { color: #ffe09d; }
+.room-ai-step > p { margin: 0; }
+@media (min-width: 700px) {
+  .room-turn-bar:has(.room-turn-window[open] .room-ai-guide > .battle-room-card-art) {
+    max-width: min(42rem, calc(100vw - 1rem));
+  }
+}
 .room-ai-move-actions { display: flex; flex-wrap: wrap; gap: .4rem; }
 .room-ai-collisions { border-inline-start: 3px solid #ff9b7b; padding: .35rem .5rem; background: #542e28; }
 .room-ai-collisions ul { margin-block: .25rem; }
@@ -467,8 +478,7 @@ body.aibp-room-only > .app > main > :not(#battleRoom) { display: none !important
 .room-ai-guide label { display: flex; flex-wrap: wrap; align-items: center; gap: .35rem; }
 .room-ai-guide :is(select, input) { background: #fff7e8; color: #342d24; }
 .room-ai-guide input { width: 4rem; }
-.room-ai-guide > .battle-room-card-art { max-width: 8rem; }
-.room-ai-guide > .battle-room-card-art img { max-height: 7rem; }
+.room-ai-guide > .battle-room-card-art img { max-height: none; }
 .room-turn-controls { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .4rem; }
 .room-turn-window:not([open]) [data-turn-status], .room-turn-window [data-turn-status]:empty { display: none; }
 .room-turn-window [data-turn-status] { display: block; color: #ffd1bd; padding: 0 .65rem .45rem; }

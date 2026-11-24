@@ -262,6 +262,41 @@ function combatPatch(room, { type, id, seat, key, delta }) {
     ...(hero && { hero }), ...(activity?.id === id && { activity }),
   } };
 }
+// Card operations change the public projection and at most one settled roll.
+function cardActionPatch(room, body, previousDeckRevision) {
+  let changes, roll;
+  if (body.type === 'ai-guide') {
+    changes = { turn: room.turn };
+  } else if (body.type === 'turn-finish') {
+    changes = { turn: room.turn, board: room.board };
+  } else if (['ai-request', 'ai-guide-discard', 'bp-request', 'bp-settle'].includes(body.type)) {
+    changes = { turn: room.turn, projection: room.projection,
+      deckRevision: room.battleDeck.revision, bpSeat: room.battleDeck.bpSeat ?? null };
+    if (body.type === 'bp-settle') {
+      changes.secondAbility = room.secondAbility;
+      if (room.squad) changes.damageBySeat = room.heroes.map((_, seat) => room.battleStats?.[seat]?.damage ?? 0);
+      roll = body.roll && room.rolls.find(entry => entry.id === body.roll);
+    }
+  } else return null;
+
+  const activity = room.activity?.[0];
+  return {
+    cards: true,
+    hostDeck: room.battleDeck?.revision !== previousDeckRevision ? room.battleDeck : null,
+    data: { roomPatch: {
+      baseRevision: room.revision - 1, revision: room.revision, room: changes,
+      ...(roll && { roll }), ...(activity?.id === body.id && { activity }),
+    } },
+  };
+}
+
+function patchForSocket(update, attachment) {
+  if (!update || !attachment?.patches || (update.cards && !attachment.cardPatches)) return null;
+  const { data, hostDeck } = update;
+  if (!hostDeck || attachment.role !== 'host') return data;
+  const roomPatch = data.roomPatch;
+  return { roomPatch: { ...roomPatch, room: { ...roomPatch.room, hostBattleDeck: hostDeck } } };
+}
 
 export class BattleRoom extends DurableObject {
   constructor(ctx, env) {
@@ -323,14 +358,16 @@ export class BattleRoom extends DurableObject {
   }
 
   publish(room, sender, patch) {
-    let compact;
+    let compact, hostCompact;
     for (const socket of this.ctx.getWebSockets()) {
       // The initiating socket receives its update in the acknowledgement.
       if (socket === sender) continue;
       try {
         const attachment = socket.deserializeAttachment();
-        socket.send(patch && attachment.patches
-          ? (compact ??= JSON.stringify(patch)) : JSON.stringify(this.view(room, attachment)));
+        const data = patchForSocket(patch, attachment);
+        if (!data) socket.send(JSON.stringify(this.view(room, attachment)));
+        else if (patch.hostDeck && attachment.role === 'host') socket.send(hostCompact ??= JSON.stringify(data));
+        else socket.send(compact ??= JSON.stringify(data));
       } catch { socket.close(1011, 'Reconnect'); }
     }
   }
@@ -409,7 +446,9 @@ export class BattleRoom extends DurableObject {
         const actor = this.actor(room, secretHash, projection);
         const [client, server] = Object.values(new WebSocketPair());
         this.ctx.acceptWebSocket(server);
-        server.serializeAttachment({ ...actor, secretHash, projection, patches: url.searchParams.get('patch') === '1' });
+        const patchVersion = url.searchParams.get('patch');
+        server.serializeAttachment({ ...actor, secretHash, projection,
+          patches: ['1', '2'].includes(patchVersion), cardPatches: patchVersion === '2' });
         server.send(JSON.stringify({ ...this.view(room, actor), socketActions: true, socketHeartbeat: true }));
         return new Response(null, { status: 101, webSocket: client, headers: { 'Sec-WebSocket-Protocol': protocol } });
       }
@@ -561,6 +600,7 @@ export class BattleRoom extends DurableObject {
     }
     if (room.closed) reject(room.squad ? '小队已解散。' : '本场战斗已结束。', 409);
     const previousProjection = room.projection;
+    const previousDeckRevision = room.battleDeck?.revision;
     this.apply(room, actor, body, savedTrauma);
     recordBattleActivity(room, actor, body, previousProjection);
     room.revision++;
@@ -572,9 +612,11 @@ export class BattleRoom extends DurableObject {
     previousPlayers.forEach((key, seat) => {
       if (key && key !== room.secrets.players[seat]) this.revokeSeat(seat);
     });
-    const patch = combatPatch(room, body);
+    const combat = combatPatch(room, body);
+    const patch = combat ? { data: combat } : cardActionPatch(room, body, previousDeckRevision);
     this.publish(room, sender, patch);
-    return patch && sender?.deserializeAttachment()?.patches ? { ok: true, ...patch } : this.view(room, actor);
+    const acknowledgement = patchForSocket(patch, sender?.deserializeAttachment());
+    return acknowledgement ? { ok: true, ...acknowledgement } : this.view(room, actor);
   }
 
   apply(room, actor, body, savedTrauma) {

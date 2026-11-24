@@ -311,6 +311,42 @@ test('导航揭示 AI 使用 Worker 当前牌堆，重试不会多抽牌', () =>
   assert.equal(r.battleDeck.operation, 'first');
 });
 
+test('卡牌增量按客户端版本发送，只有房主收到完整牌堆', () => {
+  const r = room();
+  r.revision = 0;
+  r.board = api.setupRoomBoard({ apostle: 'HEKATON', level: 1 }, 2);
+  r.turn = { phase: 'apostle', seat: null, finished: [] };
+  const card = index => ({ type: 'AI', level: 'I', index, _room: {
+    face: { src: 'ps/HEKATON/AI' + index + '.jpg', label: 'AI ' + index },
+  } });
+  const pile = { deck: [card(1), card(2)], discard: [], removed: [], supply: {} };
+  r.battleDeck = api.prepareRoomDeck({ apostle: 'HEKATON', AI: pile,
+    BP: { ...pile, deck: [] }, tokens: [], lastRevealed: {} }, 'HEKATON');
+  r.projection = api.roomDeckProjection(r.battleDeck, {});
+  function socket(role, version) {
+    const messages = [];
+    return { messages, deserializeAttachment: () => ({ role, patches: true, cardPatches: version === 2 }),
+      send: text => messages.push(JSON.parse(text)) };
+  }
+  const sender = socket('host', 2);
+  const viewer = socket('viewer', 2);
+  const legacy = socket('viewer', 1);
+  const next = Object.assign(Object.create(BattleRoom.prototype), {
+    save: () => {},
+    ctx: { getWebSockets: () => [sender, viewer, legacy], storage: { transactionSync: write => write() } },
+    sql: { exec: () => ({ toArray: () => [] }) },
+  });
+  const result = next.action(r, host, { type: 'ai-request', id: crypto.randomUUID() }, [], undefined, sender);
+  const patch = viewer.messages[0].roomPatch;
+  assert.equal(result.roomPatch.room.hostBattleDeck.revision, 2);
+  assert.equal(sender.messages.length, 0);
+  assert.equal(patch.room.projection.aiPending, true);
+  assert.equal(patch.room.hostBattleDeck, undefined);
+  assert.equal(patch.room.deckRevision, 2);
+  assert.equal(legacy.messages[0].room.revision, patch.revision);
+  assert.equal(legacy.messages[0].room.hostBattleDeck, undefined);
+});
+
 test('成员的投屏连接使用只读身份，并只投影共享剧情', () => {
   const r = room();
   r.secrets = { host: 'host', viewer: 'viewer', players: ['player'] };

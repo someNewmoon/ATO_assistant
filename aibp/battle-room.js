@@ -62,6 +62,19 @@
   let actionRetry;
   let actionRetryDelay = 1500;
   const actions = [];
+  const cardActionLabels = {
+    'ai-request': '揭示 AI', 'ai-guide': '确认骇物步骤', 'ai-guide-discard': '弃置 AI',
+    'bp-request': '揭示部位牌', 'bp-settle': '确认部位牌结果', 'turn-finish': '结束回合',
+  };
+  const timingKey = 'ato-battle-card-timings';
+  const actionTimings = new WeakMap();
+  let activeCardAction;
+  let timingHistory = [];
+  try {
+    const stored = JSON.parse(sessionStorage.getItem(timingKey));
+    if (Array.isArray(stored)) timingHistory = stored.slice(-60);
+  } catch { /* Diagnostics are optional. */ }
+  window.getAibpCardActionTimings = () => structuredClone(timingHistory);
   let connection = '正在连接';
   let message = '';
   const boardMount = root.querySelector('[data-room-board]');
@@ -95,9 +108,15 @@
   }
 
   function updateStatus() {
-    status.textContent = [state && connection, message].filter(Boolean).join(' · ');
-    if (toolsDialog.open) toolsStatus.textContent = message;
-    turnWindow.querySelector('[data-turn-status]').textContent = message;
+    const queued = actions.find(action => actionTimings.has(action));
+    const progress = activeCardAction ? '正在处理' + cardActionLabels[activeCardAction.type]
+      : queued ? '等待发送' + cardActionLabels[queued.type] : '';
+    const detail = activeCardAction ? progress : message || progress;
+    const next = [state && connection, detail].filter(Boolean).join(' · ');
+    if (status.textContent !== next) status.textContent = next;
+    if (toolsDialog.open && toolsStatus.textContent !== detail) toolsStatus.textContent = detail;
+    const turnStatus = turnWindow.querySelector('[data-turn-status]');
+    if (turnStatus.textContent !== detail) turnStatus.textContent = detail;
   }
 
   function say(text) {
@@ -182,6 +201,12 @@
       const { seat, fields } = patch.hero;
       room.heroes = state.heroes.map((hero, index) => index === seat ? { ...hero, ...fields } : hero);
     }
+    if (patch.roll) {
+      room.rolls = state.rolls.map(roll => roll.id === patch.roll.id ? patch.roll : roll);
+      if (state.squad?.lastBattleRoll?.id === patch.roll.id) {
+        room.squad = { ...state.squad, lastBattleRoll: patch.roll };
+      }
+    }
     if (patch.activity) room.activity = [patch.activity, ...(state.activity || [])].slice(0, 80);
     accept({ room, actor });
   }
@@ -212,7 +237,7 @@
   let disconnectSocket;
   function connect() {
     if (!credentials?.token || socket) return;
-    const url = new URL(id + '/socket?patch=1', base);
+    const url = new URL(id + '/socket?patch=2', base);
     if (memberProjection) url.searchParams.set('projection', '1');
     url.protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
     const current = new WebSocket(url, ['ato-battle-v1', credentials.token]);
@@ -1528,12 +1553,42 @@
   }
 
   function send(action) {
-    actions.push({ ...action, ...(state.squad && { battleNumber: state.squad.battleNumber }),
-      ...(action.type !== 'room-projection' && { expectedRound: state.round }) });
+    const queued = { ...action, ...(state.squad && { battleNumber: state.squad.battleNumber }),
+      ...(action.type !== 'room-projection' && { expectedRound: state.round }) };
+    actions.push(queued);
+    if (Object.hasOwn(cardActionLabels, action.type)) {
+      actionTimings.set(queued, {
+        queuedAt: performance.now(),
+        result: { at: new Date().toISOString(), operation: action.type, round: state.round, transports: [] },
+      });
+      updateStatus();
+    }
     void writeActions();
   }
 
-  async function submitAction(action) {
+  function noteTransport(timing, transport) {
+    if (!timing) return;
+    const now = performance.now();
+    timing.sentAt ??= now;
+    const transports = timing.result.transports;
+    if (transports.length < 12) transports.push(transport);
+  }
+
+  function saveActionTiming(timing, outcome, fields = {}) {
+    if (!timing) return;
+    const { result, queuedAt, sentAt } = timing;
+    if (!timingHistory.includes(result)) {
+      timingHistory.push(result);
+      if (timingHistory.length > 60) timingHistory.shift();
+    }
+    Object.assign(result, {
+      outcome, queueMs: Math.round((sentAt ?? performance.now()) - queuedAt),
+      totalMs: Math.round(performance.now() - queuedAt), ...fields,
+    });
+    try { sessionStorage.setItem(timingKey, JSON.stringify(timingHistory)); } catch { /* Optional. */ }
+  }
+
+  async function submitAction(action, timing) {
     if (socketActions && socket?.readyState === WebSocket.OPEN) {
       const current = socket;
       try {
@@ -1544,7 +1599,10 @@
             reject(new TypeError('战斗操作确认超时。'));
           }, 8000);
           socketAction = { id: action.id, socket: current, timer, resolve, reject };
-          try { current.send(JSON.stringify({ type: 'action', action })); }
+          try {
+            noteTransport(timing, 'websocket');
+            current.send(JSON.stringify({ type: 'action', action }));
+          }
           catch (error) {
             clearTimeout(timer);
             socketAction = null;
@@ -1557,6 +1615,7 @@
         // the same operation ID through HTTP lets the server deduplicate it.
       }
     }
+    noteTransport(timing, 'http');
     return request(id + '/action', action);
   }
 
@@ -1565,8 +1624,15 @@
     writing = true;
     while (actions.length && !failedAction) {
       const action = actions.shift();
+      const timing = actionTimings.get(action);
+      if (timing) {
+        activeCardAction = action;
+        updateStatus();
+      }
       try {
-        acceptUpdate(await submitAction(action));
+        const result = await submitAction(action, timing);
+        const confirmedAt = timing ? performance.now() : 0;
+        acceptUpdate(result);
         if (action.id === turnAiAction) {
           turnAiAction = null;
           renderTurn();
@@ -1577,7 +1643,17 @@
         }
         actionRetryDelay = 1500;
         say('');
+        if (timing) {
+          const revision = result.room?.revision ?? result.roomPatch?.revision;
+          saveActionTiming(timing, 'confirmed', {
+            status: null, reason: null, confirmMs: Math.round(confirmedAt - timing.sentAt),
+            uiMs: state.revision >= revision ? Math.round(performance.now() - confirmedAt) : null,
+          });
+        }
       } catch (error) {
+        saveActionTiming(timing, error instanceof RejectedAction ? 'rejected' : 'retry', {
+          status: error.status ?? null, reason: error instanceof RejectedAction ? error.message : 'transport',
+        });
         say(error.message);
         if (action.type === 'room-projection') {
           lastProjectionSent = '';
@@ -1602,6 +1678,10 @@
           actionRetryDelay = Math.min(actionRetryDelay * 2, 15000);
         }
       } finally {
+        if (timing) {
+          activeCardAction = null;
+          updateStatus();
+        }
         if (action.id === projectionAction) {
           projectionAction = null;
           if (lastProjectionSent) syncProjection();

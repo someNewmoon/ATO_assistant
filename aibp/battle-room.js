@@ -1107,6 +1107,7 @@
     const form = '<form data-roll data-dice-seat="' + seat + '" class="battle-room-dice"><div>' + fields + followup
       + '<button type="submit">投掷' + dice.modes[rollMode].name + '</button></div></form>';
     const modes = '<div class="room-dice-modes" role="group" aria-label="投掷用途">' + Object.entries(dice.modes)
+      .filter(([key]) => key !== 'armor')
       .map(([key, entry]) => '<button type="button" data-roll-mode="' + key + '" aria-pressed="' + (key === rollMode) + '">'
         + (key === 'dodge' ? '<img class="room-mode-icon" src="room-dice-art/dodge.webp" alt="">'
           : '<span class="room-mode-icon" aria-hidden="true"></span>') + entry.name + '</button>').join('')

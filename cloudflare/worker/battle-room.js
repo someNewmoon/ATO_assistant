@@ -74,10 +74,11 @@ export function squadHeroStats(campaign) {
   return Object.fromEntries(heroCatalog.activeHeroes(campaign).map(hero => [hero.id, hero.triskelion || {}]));
 }
 
-export function squadCampaignStock(campaign) {
-  const { record } = battleConfig.availability(campaign, techDictionary);
-  const { stock, gearNames } = createSquad(record, heroCatalog.activeHeroes(campaign),
-    'official', activeCycle(campaign), equipmentName);
+export function squadCampaignStock(campaign, profile = battleConfig.profileId(campaign)) {
+  const record = battleConfig.userState(campaign.sections.record, profile);
+  const cycle = campaign.sections.dashboard?.profiles?.[profile]?.activeCycleId || 'c1';
+  const { stock, gearNames } = createSquad(record, heroCatalog.activeHeroes(campaign, profile),
+    'official', cycle, equipmentName);
   return { stock, gearNames };
 }
 
@@ -526,17 +527,19 @@ export class BattleRoom extends DurableObject {
     let savedTrauma;
     if (actor.role === 'host' && room.owner && this.campaigns && !room.closed
         && body.type === 'squad-start' && room.squad?.phase === 'prep' && body.battleNumber === room.squad.battleNumber) {
-      const url = new URL('https://campaign.internal/trauma-config');
+      const url = new URL('https://campaign.internal/battle-setup');
       url.searchParams.set('profile', room.owner.profile);
       const result = await this.campaigns.getByName(room.owner.account).fetch(url);
-      if (!result.ok) reject('暂时无法读取存档的创伤牌库，请重试。', 503);
-      savedTrauma = await result.json();
+      if (!result.ok) reject('暂时无法同步存档的军械库和创伤牌库，请重试。', 503);
+      const { campaignStock, ...trauma } = await result.json();
+      savedTrauma = trauma;
       const { owner, revision } = room;
       room = this.load();
       if (room.owner?.account !== owner.account || room.owner?.profile !== owner.profile
           || room.revision !== revision) {
         reject('小队状态已更新，请确认备战后重试。', 409);
       }
+      syncCampaignStock(room, campaignStock);
     }
     const updatesDirectory = ['public-lobby', 'end', 'round', 'squad-phase', 'squad-start',
       'squad-host-seat', 'squad-remove-player', 'squad-disband'].includes(body.type);

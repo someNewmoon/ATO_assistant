@@ -236,6 +236,32 @@ test('读剧情保存配装，备战刷新库存时保存未被军械库改动�
   assert.equal(syncCampaignStock(r, { stock: { ...stock }, gearNames: {} }), false);
 });
 
+test('开战库存刷新清理小队旧草稿里的零库存分析模块，保留有效草稿和真实短缺', () => {
+  const r = room();
+  const kit = { player: '', titanId: 't', gear: {} };
+  const titans = [{ id: 't', count: 2, typeId: 'dreamwalker' }];
+  const fresh = { gearNames: { AJ0001: '测试装备' }, stock: {
+    arsenal: { AJ0001: { quantity: 1 } }, titans, loadouts: { h0: kit, h1: kit },
+  } };
+  r.squad = { phase: 'prep', battleNumber: 0, cycle: 'c1', gearNames: { AJ0217: '分析模块' },
+    campaignLoadouts: structuredClone(fresh.stock.loadouts), stock: { ...fresh.stock, loadouts: {
+      h0: { ...kit, gear: { AJ0217: 1, AJ0001: 1 } }, h1: kit,
+    } } };
+  const inconsistent = structuredClone(r);
+  const savedStock = structuredClone(fresh);
+  savedStock.stock.loadouts.h0 = { ...kit, gear: { AJ0217: 1 } };
+  savedStock.gearNames.AJ0217 = '分析模块';
+  assert.equal(syncCampaignStock(inconsistent, savedStock), true);
+  const start = { type: 'squad-start', battleNumber: 0, board: { apostle: 'HEKATON', level: 1 } };
+  assert.throws(() => applySquad(inconsistent, host, start, random), /分析模块.*库存 0 件.*英雄0 ×1/);
+
+  assert.equal(syncCampaignStock(r, fresh), true);
+  assert.equal(syncCampaignStock(r, fresh), false);
+  assert.deepEqual(r.squad.stock.loadouts.h0.gear, { AJ0001: 1 });
+  applySquad(r, host, start, random);
+  assert.equal(r.squad.phase, 'battle');
+});
+
 test('创伤样式覆盖旧配装，受击到凶险 1 时更新凶险并跳过抽取', () => {
   const r = room();
   const kit = { player: '', titanId: 't', gear: {}, traumaTrack: Array(9).fill('lethal') };

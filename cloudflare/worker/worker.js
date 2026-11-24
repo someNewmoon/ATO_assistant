@@ -160,11 +160,12 @@ export class CampaignAccount extends DurableObject {
     const id = request.headers.get('x-ato-account');
     const user = { id, username: id };
     try {
-      if (url.origin === 'https://campaign.internal' && url.pathname === '/trauma-config' && request.method === 'GET') {
+      if (url.origin === 'https://campaign.internal' && url.pathname === '/battle-setup' && request.method === 'GET') {
         const profile = url.searchParams.get('profile');
         const campaign = this.loadCampaign();
         const cycle = this.traumaCycle(campaign, profile);
-        return response({ cycle, configuration: normalizeTraumaConfig(savedTraumaConfig(campaign, profile, cycle), cycle) });
+        return response({ cycle, configuration: normalizeTraumaConfig(savedTraumaConfig(campaign, profile, cycle), cycle),
+          campaignStock: squadCampaignStock(campaign, profile) });
       }
       if (authActions.has(action)) return await this.authenticate(request, url, action, user);
       const token = tokenFrom(request);

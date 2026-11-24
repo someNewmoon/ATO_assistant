@@ -45,7 +45,15 @@ export function syncCampaignStock(room, fresh) {
     const draft = squad.stock.loadouts[id];
     if (!draft) continue;
     const unchanged = baseline && JSON.stringify(latest[id]) === JSON.stringify(baseline[id]);
-    if (unchanged || (!baseline && !Object.hasOwn(latest, id))) merged[id] = draft;
+    if (unchanged || (!baseline && !Object.hasOwn(latest, id))) {
+      // A draft may still reserve gear removed from the campaign arsenal.
+      const gear = Object.fromEntries(Object.entries(draft.gear || {}).flatMap(([gearId, count]) => {
+        const kept = fresh.stock.arsenal?.[gearId]?.quantity > 0
+          ? count : Math.min(count, latest[id]?.gear?.[gearId] || 0);
+        return kept ? [[gearId, kept]] : [];
+      }));
+      merged[id] = { ...draft, gear };
+    }
   }
   const names = { ...fresh.gearNames };
   for (const kit of Object.values(merged)) {
@@ -175,7 +183,12 @@ export function applySquad(room, actor, body, randomInt, savedTrauma) {
     const selected = room.heroes.map(hero => squad.stock.loadouts[hero.id]).filter(Boolean);
     for (const [id, name] of Object.entries(squad.gearNames)) {
       const count = selected.reduce((sum, kit) => sum + (kit.gear?.[id] || 0), 0);
-      if (count > (squad.stock.arsenal?.[id]?.quantity || 0)) fail('请调整库存不足的装备：' + name, 409);
+      const available = squad.stock.arsenal?.[id]?.quantity || 0;
+      if (count > available) {
+        const holders = room.heroes.filter(hero => squad.stock.loadouts[hero.id]?.gear?.[id])
+          .map(hero => hero.name + ' ×' + squad.stock.loadouts[hero.id].gear[id]);
+        fail('装备库存不足：' + name + '（已配 ' + count + ' 件，库存 ' + available + ' 件，持有者 ' + holders.join('、') + '）。请返回备战调整配装。', 409);
+      }
     }
     for (const titan of squad.stock.titans) {
       if (selected.filter(kit => kit.titanId === titan.id).length > titan.count) {

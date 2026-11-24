@@ -31,9 +31,43 @@ export function finishAiMovement(room) {
   if (room.board) delete room.board.apostleMovement;
 }
 
+function validAiTarget(room, target) {
+  return target === null || (Number.isInteger(target) && room.heroes[target] && room.heroes[target].condition !== 'dead');
+}
+
+function confirmInsertedSignature(room, action) {
+  const { turn } = room;
+  const { value, target, signatureId } = action;
+  if (turn?.phase !== 'titans') throw new ApiError(409, '请在泰坦回合结算临时招牌技。');
+  if (value === 'signature-begin' && !turn.aiSignatureId) {
+    if (!room.board || !room.projection?.signature) throw new ApiError(409, '本场招牌技尚未同步。');
+    finishAiMovement(room);
+    turn.aiSignatureId = action.id;
+    turn.aiGuide = 'signature-target';
+    delete turn.aiTarget;
+    return;
+  }
+  if (turn.aiSignatureId && signatureId === turn.aiSignatureId && value === turn.aiGuide) {
+    if (value === 'signature-target' && validAiTarget(room, target)) {
+      turn.aiTarget = target;
+      turn.aiGuide = 'signature-resolve';
+      return;
+    }
+    if (value === 'signature-resolve') {
+      finishAiMovement(room);
+      delete turn.aiGuide;
+      delete turn.aiTarget;
+      delete turn.aiSignatureId;
+      return;
+    }
+  }
+  throw new ApiError(409, '当前招牌技步骤已变化，请核对后继续。');
+}
+
 function confirmAiStep(room, actor, action) {
   const { turn } = room;
   if (actor.role !== 'host') throw new ApiError(403, '骇物行动由房主确认。');
+  if (action.value === 'signature-begin' || guide.isInsertedSignature(action.value)) return confirmInsertedSignature(room, action);
   if (turn?.phase !== 'apostle' || !guide.bosses.includes(room.board?.apostle)) {
     throw new ApiError(409, '当前骇物轮次无法使用逐步结算。');
   }
@@ -59,7 +93,7 @@ function confirmAiStep(room, actor, action) {
     return;
   }
   if (value === step && ['target', 'hope-target'].includes(step)
-      && (target === null || (Number.isInteger(target) && room.heroes[target] && room.heroes[target].condition !== 'dead'))) {
+      && validAiTarget(room, target)) {
     turn.aiTarget = target;
     turn.aiGuide = step === 'target' ? 'resolve' : 'hope-resolve';
     return;

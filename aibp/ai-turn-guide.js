@@ -10,11 +10,15 @@
     other: ['轮次结束前', '检查其他行动、额外指令技和轮次结束效果。'],
     'hope-target': ['希望终结 · 确定目标', '现在执行招牌技，按招牌技重新选择目标。'],
     'hope-resolve': ['希望终结 · 结算招牌技', '按招牌技结算移动、攻击、闪避和其他效果。'],
+    'signature-target': ['招牌技 · 确定目标', '按牌面选择目标。'],
+    'signature-resolve': ['招牌技 · 结算', '按牌面结算移动、闪避、攻击后果和其他效果。'],
     ready: ['可以进入泰坦轮次', '确认本轮剩余的结束效果已经处理。'],
   };
   const previousSteps = { move: 'resolve', evade: 'resolve', effects: 'resolve', after: 'resolve', discard: 'resolve', end: 'other' };
   const stepFor = step => previousSteps[step] || step;
-  const resolvesMovement = step => ['resolve', 'hope-resolve'].includes(stepFor(step));
+  const isInsertedSignature = step => step === 'signature-target' || step === 'signature-resolve';
+  const usesSignature = step => isInsertedSignature(step) || step === 'hope-target' || step === 'hope-resolve';
+  const resolvesMovement = step => ['resolve', 'hope-resolve', 'signature-resolve'].includes(stepFor(step));
 
   function apostleRoutes(room, reach, terrain, los) {
     const { board, heroes, turn, projection } = room;
@@ -54,12 +58,12 @@
 
   function routeStamp(room, route) {
     const step = stepFor(room.turn.aiGuide);
-    const card = step === 'hope-resolve' ? room.projection?.signature : room.projection?.ai?.src;
-    return JSON.stringify([room.board.layoutRevision, room.board.apostleMovement?.id, step, card,
+    const card = usesSignature(step) ? room.projection?.signature : room.projection?.ai?.src;
+    return JSON.stringify([room.board.layoutRevision, room.board.apostleMovement?.id, step, room.turn.aiSignatureId, card,
       room.turn.aiTarget, route.centers, route.facing, route.crossedSeats, route.endSeats, route.stopReason]);
   }
 
-  const api = { bosses, steps, stepFor, resolvesMovement, apostleRoutes, routeStamp };
+  const api = { bosses, steps, stepFor, isInsertedSignature, usesSignature, resolvesMovement, apostleRoutes, routeStamp };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.ATO_AI_TURN_GUIDE = api;
 })(globalThis);

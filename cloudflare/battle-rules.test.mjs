@@ -730,6 +730,42 @@ test('普通攻击及威力检查回合，额外攻击威力继承来源且不�
   assert.equal(r.turn.seat, null);
 });
 
+test('泰坦回合可插入招牌技并结算移动，保留现有行动席位和移动进度', () => {
+  const r = room();
+  r.board = api.setupRoomBoard({ apostle: 'HERMESIAN_PURSUER', level: 1 }, 2);
+  r.turn = { phase: 'titans', seat: 0, finished: [1] };
+  r.projection = { signature: 'ps/HERMESIAN_PURSUER/SIGNATURE.jpg', aiPending: false };
+  r.board.map.pieces.apostle = { column: 2.5, row: 2.5, facing: 0 };
+  r.board.map.pieces.titans = [{ column: 7, row: 4 }, { column: 4, row: 2 }];
+  const titanMoves = { 0: { id: 'active-titan' } };
+  r.board.titanMoves = titanMoves;
+  const act = (actor, value, fields = {}) => reducer.apply(r, actor,
+    { type: 'ai-guide', round: 1, phase: 'titans', value, ...fields });
+  const move = (fields) => reducer.apply(r, host, fields);
+  const originalTurn = structuredClone(r.turn);
+  assert.throws(() => act(player, 'signature-begin', { id: 'player-signature' }), /房主/);
+  act(host, 'signature-begin', { id: 'signature-a' });
+  assert.equal(r.turn.aiGuide, 'signature-target');
+  assert.throws(() => act(host, 'signature-begin', { id: 'duplicate' }), /已变化/);
+  assert.throws(() => act(host, 'signature-target', { signatureId: 'expired', target: 0 }), /已变化/);
+  act(host, 'signature-target', { signatureId: 'signature-a', target: 0 });
+  assert.equal(r.turn.seat, 0);
+  assert.deepEqual(r.turn.finished, [1]);
+  const route = guide.apostleRoutes(r, 1, terrain, los).find(path => path.id === 'horizontal-first');
+  move({ type: 'board-ai-route', id: 'signature-move', reach: 1, route: route.id, stamp: guide.routeStamp(r, route) });
+  assert.equal(r.turn.aiMovement.pending, true);
+  assert.throws(() => act(host, 'signature-resolve', { signatureId: 'signature-a' }), /先处理并确认/);
+  move({ type: 'board-ai-trample-confirm', move: 'signature-move' });
+  act(host, 'signature-resolve', { signatureId: 'signature-a' });
+  assert.deepEqual(r.turn, originalTurn);
+  assert.strictEqual(r.board.titanMoves, titanMoves);
+  assert.equal(r.board.lastApostleMove.id, 'signature-move');
+  act(host, 'signature-begin', { id: 'signature-b' });
+  act(host, 'signature-target', { signatureId: 'signature-b', target: null });
+  act(host, 'signature-resolve', { signatureId: 'signature-b' });
+  assert.deepEqual(r.turn, originalTurn);
+});
+
 test('骇物轮次的非主动移动可经过其他泰坦，单独记步且不认领回合', () => {
   const r = room();
   r.board = api.setupRoomBoard({ apostle: 'HEKATON', level: 1 }, 2);

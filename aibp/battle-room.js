@@ -467,7 +467,7 @@
       return;
     }
     const selection = button.dataset.aiTarget || '';
-    if (type === 'ai-guide' && ['target', 'hope-target'].includes(value) && !selection) {
+    if (type === 'ai-guide' && ['target', 'hope-target', 'signature-target'].includes(value) && !selection) {
       say('请选择本次目标，或选择按牌面处理。');
       return;
     }
@@ -506,6 +506,7 @@
     }
     send({ id: crypto.randomUUID(), type, round: state.round, phase: state.turn?.phase ?? null,
       ...(seat !== undefined && { seat: Number(seat) }), ...(value && { value }),
+      ...(type === 'ai-guide' && aiGuide.isInsertedSignature(value) && { signatureId: state.turn.aiSignatureId }),
       ...(selection && { target: selection === 'manual' ? null : Number(selection) }) });
   });
 
@@ -539,7 +540,8 @@
     const titans = turn?.phase === 'titans';
     const host = actor.role === 'host';
     const aiRound = (state.squad?.battleNumber || 0) + ':' + state.round;
-    const guideAvailable = turn?.phase === 'apostle' && aiGuide.bosses.includes(state.board?.apostle);
+    const signatureActive = titans && aiGuide.isInsertedSignature(turn.aiGuide);
+    const guideAvailable = signatureActive || (turn?.phase === 'apostle' && aiGuide.bosses.includes(state.board?.apostle));
     const step = guideAvailable && aiGuide.stepFor(turn.aiGuide);
     const shouldDrawAi = host && turn?.phase === 'apostle' && !state.projection?.aiPending
       && Boolean(window.drawAibpRoomCard || (guideAvailable && state.deckRevision));
@@ -551,7 +553,8 @@
     const label = !turn ? '等待房主设置轮次' : !titans ? '骇物轮次'
       : activeSeat !== null ? '泰坦轮次 · ' + state.heroes[activeSeat].name
         : everyoneFinished ? '泰坦轮次 · 全员已结束' : '泰坦轮次 · 等待认领';
-    const heading = '第 ' + state.round + ' 轮 · ' + label + (turn?.aiMovement?.pending ? ' · 待结算冲撞' : '');
+    const heading = '第 ' + state.round + ' 轮 · ' + label
+      + (signatureActive ? ' · 招牌技结算中' : '') + (turn?.aiMovement?.pending ? ' · 待结算冲撞' : '');
     if (turnHeading !== heading) {
       turnHeading = heading;
       turnWindow.querySelector('summary').textContent = heading;
@@ -574,7 +577,7 @@
       + (aiGuide.resolvesMovement(value) && turn.aiMovement?.pending ? ' disabled' : ''));
     let controls = '';
     let guidance = '';
-    const planKey = [state.squad?.battleNumber, state.round, step, turn?.aiTarget].join(':');
+    const planKey = [state.squad?.battleNumber, state.round, step, turn?.aiSignatureId, turn?.aiTarget].join(':');
     if (aiPlanKey !== planKey) {
       aiPlanKey = planKey;
       aiRange = 1;
@@ -587,9 +590,9 @@
       if (step) {
         const [title, detail] = aiGuide.steps[step];
         const projection = state.projection;
-        const signature = step.startsWith('hope-');
+        const signature = aiGuide.usesSignature(step);
         const current = signature ? { src: projection?.signature, label: '招牌技' } : projection?.ai;
-        const targeting = step === 'target' || step === 'hope-target';
+        const targeting = ['target', 'hope-target', 'signature-target'].includes(step);
         const resolving = aiGuide.resolvesMovement(step);
         guidance = '<div class="room-ai-guide">'
           + ((targeting || resolving) && current?.src ? cardImage('/aibp/' + current.src, current.label || '当前 AI') : '')
@@ -647,7 +650,7 @@
             if (projection?.aiPending && state.deckRevision && current?.src) {
               controls = action('ai-guide-discard', '结算完毕，弃置 AI', turn.aiMovement?.pending ? ' disabled' : '');
             } else if (!projection?.aiPending) controls = guideAction('resolve', '牌面已处理');
-          } else if (step === 'hope-resolve') controls = guideAction(step, '招牌技已结算');
+          } else if (step === 'hope-resolve' || step === 'signature-resolve') controls = guideAction(step, '招牌技已结算');
           else if (!targeting) {
             if (step === 'other') controls = guideAction('extra', '结算额外 AI');
             if (step === 'other' && hope) controls += guideAction('hope', '希望终结 · 执行招牌技');
@@ -661,13 +664,14 @@
       : !titans ? (shouldDrawAi ? drawAi() : '') + action('turn-phase', '结束骇物轮次', ' data-value="titans"')
         : action('round', '下一轮 · 骇物行动',
           ' title="开始下一轮，回正阿尔戈能力"' + (everyoneFinished ? '' : ' disabled'));
+      if (titans && state.board && state.projection?.signature) controls = guideAction('signature-begin', '结算招牌技') + controls;
     }
     const hint = !turn ? '' : !titans ? '<p>泰坦仍可结算闪避、击退和推斥。</p>'
       : everyoneFinished ? '<p>结算本轮结束效果后，由房主开启下一轮。</p>'
         : activeSeat === null ? '<p>首次主动移动或投掷攻击／威力骰会认领回合。</p>' : '';
     const actions = controls ? '<div class="room-turn-controls">' + controls + '</div>' : '';
     roomBoard?.setAiRoute(route);
-    const next = guidance + actions + (step ? '' : '<ul>' + roster + '</ul>') + hint;
+    const next = guidance + actions + (step && !signatureActive ? '' : '<ul>' + roster + '</ul>') + hint;
     if (turnMarkup !== next) {
       turnMarkup = next;
       turnWindow.querySelector('[data-turn-body]').innerHTML = next;
@@ -1187,7 +1191,7 @@
     }
     if (rollMode === 'power') return weaponPowerReference(seat);
     if (rollMode === 'dodge' || rollMode === 'defense') {
-      const trait = aiGuide.stepFor(state.turn?.aiGuide)?.startsWith('hope-');
+      const trait = aiGuide.usesSignature(aiGuide.stepFor(state.turn?.aiGuide));
       const projection = state.projection;
       const card = trait ? { src: projection?.signature, label: '当前招牌技' } : projection?.aiPending ? projection.ai : null;
       const defenseCards = hero.gear.map(item => {

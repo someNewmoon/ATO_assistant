@@ -176,7 +176,8 @@ function recordBattleActivity(room, actor, body, previousProjection) {
   let detail = '';
   const projection = room.projection;
   if (body.type === 'ai-guide') {
-    label = ({ begin: '开始逐步结算', extra: '结算额外指令技', hope: '希望终结 · 执行招牌技' })[body.value] || '完成骇物步骤';
+    label = ({ begin: '开始逐步结算', extra: '结算额外指令技', hope: '希望终结 · 执行招牌技',
+      'signature-begin': '开始结算招牌技', 'signature-resolve': '招牌技已结算' })[body.value] || '完成骇物步骤';
     detail = [aiGuide.steps[body.value]?.[0], Number.isInteger(body.target) ? room.heroes[body.target]?.name : '']
       .filter(Boolean).join(' · ');
   } else if (body.type === 'ai-guide-discard') {
@@ -273,7 +274,7 @@ function cardActionPatch(room, body, previousDeckRevision) {
   let changes, roll;
   if (body.type === 'ai-guide') {
     changes = { turn: room.turn };
-    if (aiGuide.resolvesMovement(body.value)) changes.board = room.board;
+    if (aiGuide.resolvesMovement(body.value) || body.value === 'signature-begin') changes.board = room.board;
   } else if (body.type === 'turn-finish') {
     changes = { turn: room.turn, board: room.board };
   } else if (['ai-request', 'ai-guide-discard', 'bp-request', 'bp-settle'].includes(body.type)) {
@@ -735,6 +736,7 @@ export class BattleRoom extends DurableObject {
     if (body.type === 'round' || body.type === 'end') {
       if (actor.role !== 'host') reject('只有房主可以执行此操作。', 403);
       if (body.type === 'round') {
+        if (aiGuide.isInsertedSignature(room.turn?.aiGuide)) reject('请先完成当前招牌技。', 409);
         if (body.phase !== undefined && (body.round !== room.round || room.turn?.phase !== 'titans')) {
           reject('轮次已更新，请重试。', 409);
         }

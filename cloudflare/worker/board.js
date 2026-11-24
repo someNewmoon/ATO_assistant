@@ -84,7 +84,9 @@ export function priorityTarget(room) {
 
 function applyAiMovement(room, body) {
   const { turn, board } = room;
-  if (turn?.phase !== 'apostle' || !guide.bosses.includes(board.apostle) || !guide.resolvesMovement(turn.aiGuide)) {
+  const guidedAi = turn?.phase === 'apostle' && guide.bosses.includes(board.apostle);
+  const signature = turn?.phase === 'titans' && turn.aiGuide === 'signature-resolve';
+  if ((!guidedAi && !signature) || !guide.resolvesMovement(turn.aiGuide)) {
     fail('当前步骤无法执行推荐移动。', 409);
   }
   if (body.type === 'board-ai-trample-confirm') {
@@ -197,7 +199,7 @@ export function applyRoomBoard(room, actor, body) {
       if (body.type === 'board-apostle-end') {
         delete board.apostleMovement;
         const turn = room.turn;
-        if (turn?.phase === 'apostle' && guide.resolvesMovement(turn.aiGuide) && !turn.aiMovement) {
+        if (guide.resolvesMovement(turn?.aiGuide) && !turn.aiMovement) {
           turn.aiManualMovementEnded = true;
         }
         return;

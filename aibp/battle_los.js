@@ -1003,6 +1003,7 @@
     let nextAxis = firstAxis;
     let steps = 0;
     let lastFacing = null;
+    let firstFacing = null;
     const maxSteps = limit === Infinity ? COLUMNS + ROWS + size : Math.max(0, Math.floor(Number(limit) || 0));
     const stopReach = Math.max(0, Math.floor(Number(reach) || 0));
     const done = () => {
@@ -1027,6 +1028,7 @@
         : { column: current.column, row: current.row + sign };
       centers.push({ column: current.column, row: current.row });
       lastFacing = facingFromStep(axis, sign);
+      firstFacing ??= lastFacing;
       steps += 1;
       if (hasH && hasV) nextAxis = axis === "h" ? "v" : "h";
     }
@@ -1051,6 +1053,7 @@
       finalCenter: current,
       finalFootprint: losSourceCells(current, size),
       facing: finalFacing,
+      firstFacing,
       stopReason,
     };
   }
@@ -1089,8 +1092,8 @@
     const shortest = Math.min(...paths.map(path => path.steps));
     return paths.filter(path => path.steps === shortest).map(path => {
       const crossed = new Set(path.footprints.slice(1).flatMap(cells => cells.map(({ c, r }) => cellKey(c, r))));
-      const collisions = titanCells.filter(({ column, row }) => crossed.has(cellKey(column, row))).length;
-      return { ...path, collisions };
+      const collisions = titanCells.filter(({ column, row }) => crossed.has(cellKey(column, row)));
+      return { ...path, collisions: collisions.length, crossedSeats: collisions.map(cell => cell.seat) };
     }).sort((a, b) => a.collisions - b.collisions);
   }
 

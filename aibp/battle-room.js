@@ -10,6 +10,7 @@
   const squadId = params.get('squad');
   const routeId = params.get('battle');
   let roomLanguage;
+  const hostPersonalView = params.get('personal') === '1';
   const invite = fragment.get('invite') || '';
   const quickJoin = params.get('quick') === '1';
   const viewKey = fragment.get('view') || '';
@@ -352,7 +353,7 @@
   traumaDialog.className = 'room-trauma-dialog';
   root.appendChild(traumaDialog);
 
-  const toolNames = { rolls: '战斗掷骰记录', apostle: '骇物面板', argo: '阿尔戈能力', trauma: '创伤牌库' };
+  const toolNames = { rolls: '战斗掷骰记录', argo: '阿尔戈能力' };
   const dock = document.createElement('div');
   dock.className = 'room-tool-dock';
   dock.hidden = true;
@@ -377,21 +378,31 @@
     button.setAttribute('aria-haspopup', 'dialog');
     button.addEventListener('click', () => {
       activeTool = key;
-      toolsDialog.querySelector('h3').innerHTML = (key === 'apostle' ? bossIdentityArt() : '') + escape(label);
+      toolsDialog.querySelector('h3').innerHTML = escape(label);
       toolsStatus.textContent = '';
       renderTools();
       toolsDialog.showModal();
-      if (key === 'apostle') void refreshRoomState();
     });
     toolLinks.append(button);
   }
-  const bossShortcut = toolLinks.querySelector('[data-tool="apostle"]');
+  const bossShortcut = document.createElement('a');
+  bossShortcut.className = 'room-turn-boss-link';
+  bossShortcut.href = '#room-apostle';
   bossShortcut.textContent = '骇物';
-  bossShortcut.title = '查看招牌技、属性和状态';
   const quick = document.createElement('nav');
   quick.className = 'room-primary-nav';
   quick.setAttribute('aria-label', '常用操作');
-  quick.innerHTML = '<a href="#room-movement">移动</a><a href="#room-dice">掷骰</a><a href="#room-status">状态</a><a href="#room-equipment">装备</a>';
+  quick.innerHTML = '<a href="#room-movement">移动</a><a href="#room-dice">掷骰</a><a href="#room-status">状态</a><a href="#room-equipment">装备</a>'
+    + '<a href="#room-apostle">骇物</a>';
+  toolLinks.insertAdjacentHTML('beforeend', '<a href="#room-trauma">创伤牌库</a>');
+  root.addEventListener('click', event => {
+    const link = event.target.closest('a[href="#room-apostle"], a[href="#room-trauma"]');
+    if (!link) return;
+    const panel = root.querySelector(link.hash);
+    if (!panel) return;
+    panel.open = true;
+    turnWindow.open = false;
+  });
   const movementShortcut = quick.querySelector('a[href="#room-movement"]');
   function forcedMovementSeat() {
     const seat = personalSeat();
@@ -442,10 +453,13 @@
     const button = event.target.closest('[data-turn-action]');
     if (!button || !state || state.closed) return;
     const { turnAction: type, seat, value } = button.dataset;
-    const selection = type === 'ai-guide' && ['target', 'hope-target'].includes(value)
-      ? turnWindow.querySelector('[data-ai-target]').value : '';
+    const selection = button.dataset.aiTarget || '';
     if (type === 'ai-guide' && ['target', 'hope-target'].includes(value) && !selection) {
       say('请选择本次目标，或选择按牌面处理。');
+      return;
+    }
+    if (type === 'ai-face') {
+      send({ id: crypto.randomUUID(), type: 'board-face', facing: Number(value) });
       return;
     }
     if (type === 'ai-guide-discard') {
@@ -490,14 +504,15 @@
       sourceAnchor: pieces.apostle, targetAnchor: target, size: profile.size, speed, reach: aiRange, facing: pieces.apostle.facing,
     });
     return window.BattleLOS.rankApostleRoutes(paths?.rules || [],
-      pieces.titans.filter((piece, seat) => piece && state.heroes[seat]?.condition !== 'dead'));
+      pieces.titans.flatMap((piece, seat) => piece && state.heroes[seat]?.condition !== 'dead' ? [{ ...piece, seat }] : []));
   }
 
-  function renderAiTargetChoice() {
-    return '<label>本次目标 <select data-ai-target><option value="">请选择</option>'
-      + state.heroes.map((hero, seat) => hero.condition === 'dead' ? ''
-        : '<option value="' + seat + '">' + escape(hero.name) + '</option>').join('')
-      + '<option value="manual">无单一目标，按牌面处理</option></select></label>';
+  function renderAiTargetChoice(step) {
+    const button = (target, label, portrait = '') => '<button type="button" data-turn-action="ai-guide" data-value="' + step
+      + '" data-ai-target="' + target + '">' + portrait + escape(label) + '</button>';
+    return '<div class="room-ai-targets" role="group" aria-label="选择本次目标">'
+      + state.heroes.map((hero, seat) => hero.condition === 'dead' ? '' : button(String(seat), hero.name, rollAvatar(seat))).join('')
+      + button('manual', '无单一目标／按牌面') + '</div>';
   }
 
   function renderTurn() {
@@ -560,7 +575,7 @@
         const resolving = step === 'resolve' || step === 'hope-resolve';
         guidance = '<div class="room-ai-guide"><strong>' + title + '</strong><p>' + detail + '</p>'
           + ((targeting || resolving) && current?.src ? cardImage('/aibp/' + current.src, current.label || '当前 AI') : '');
-        if (targeting && host) guidance += renderAiTargetChoice();
+        if (targeting && host) guidance += renderAiTargetChoice(step);
         if (resolving && Number.isInteger(turn.aiTarget)) {
           guidance += '<p>本次目标：<b>' + escape(state.heroes[turn.aiTarget]?.name || '') + '</b></p>';
           const routes = aiRouteOptions();
@@ -570,7 +585,17 @@
               + '<label>路线 <select data-ai-route>' + routes.map((path, i) => '<option value="' + path.id + '"'
                 + (route === path ? ' selected' : '') + '>' + (i ? '' : '推荐 · ') + path.label + ' · ' + path.steps
                 + ' 步 · ' + (path.collisions ? '可能冲撞 ' + path.collisions + ' 位泰坦' : '避开泰坦') + '</option>').join('')
-              + '</select></label><small>版图虚线是建议路线。请按牌面核对移动限制和视线。</small>';
+              + '</select></label><small>版图虚线与半透明模型标出建议落点。按牌面核对移动、视线和转向例外。</small>';
+            const headings = { 0: '上', 90: '右', 180: '下', 270: '左' };
+            if (Object.hasOwn(headings, route.facing)) {
+              const begin = route.firstFacing;
+              const currentFacing = route.steps ? begin : route.facing;
+              guidance += '<p>' + (route.steps && begin != null ? '移动前朝' + headings[begin] + ' · ' : '')
+                + '落点／攻击前朝' + headings[route.facing] + '</p>'
+                + (Number.isInteger(currentFacing)
+                  ? action('ai-face', route.steps ? '转到起步朝向' : '转向目标', ' data-value="' + currentFacing + '"')
+                  : '');
+            }
           }
         }
         const hope = projection?.hopeEnds;
@@ -582,13 +607,12 @@
             else controls = action('draw-ai', step === 'start' ? '开始效果已处理，抽取 AI' : '抽取 AI',
               turnAiAction || !shouldDrawAi ? ' disabled' : '');
             if (!shouldDrawAi && !projection?.aiPending) guidance += '<p>请先由房主在 AIBP 同步牌堆。</p>';
-          } else if (targeting) controls = guideAction(step, '确认目标');
-          else if (step === 'resolve') {
+          } else if (step === 'resolve') {
             if (projection?.aiPending && state.deckRevision && current?.src) {
               controls = action('ai-guide-discard', '结算完毕，弃置 AI');
             } else if (!projection?.aiPending) controls = guideAction('resolve', '牌面已处理');
           } else if (step === 'hope-resolve') controls = guideAction(step, '招牌技已结算');
-          else {
+          else if (!targeting) {
             if (step === 'other') controls = guideAction('extra', '结算额外 AI');
             if (step === 'other' && hope) controls += guideAction('hope', '希望终结 · 执行招牌技');
             else controls += action('turn-phase', '结束骇物轮次', ' data-value="titans"');
@@ -606,14 +630,11 @@
       : everyoneFinished ? '<p>结算本轮结束效果后，由房主开启下一轮。</p>'
         : activeSeat === null ? '<p>首次主动移动或投掷攻击／威力骰会认领回合。</p>' : '';
     const actions = controls ? '<div class="room-turn-controls">' + controls + '</div>' : '';
-    roomBoard?.setAiRoute(route?.centers);
+    roomBoard?.setAiRoute(route);
     const next = guidance + actions + (step ? '' : '<ul>' + roster + '</ul>') + hint;
     if (turnMarkup !== next) {
-      const picked = turnWindow.querySelector('[data-ai-target]')?.value;
       turnMarkup = next;
       turnWindow.querySelector('[data-turn-body]').innerHTML = next;
-      const selection = turnWindow.querySelector('[data-ai-target]');
-      if (picked && selection && [...selection.options].some(option => option.value === picked)) selection.value = picked;
     }
   }
 
@@ -625,6 +646,7 @@
     if (!personal && toolsDialog.open) toolsDialog.close();
     movementShortcut.hidden = !state.board;
     bossShortcut.hidden = !state.board;
+    quick.querySelector('a[href="#room-apostle"]').hidden = !state.board;
     const forced = forcedMovementSeat() !== null;
     if (forced !== (movementShortcut.dataset.forced === 'true')) {
       movementShortcut.dataset.forced = String(forced);
@@ -636,21 +658,12 @@
     if (!personal || !activeTool) return;
     const markup = {
       rolls: latestHeroRolls,
-      apostle: () => roomProjection(true) || '<p>骇物面板尚未准备。</p>',
       argo: () => argoAbilities() || '<p>本场尚未准备阿尔戈能力。</p>',
-      trauma: () => {
-        const traumaSeat = seat ?? (actor.role === 'host' ? equipmentSeat : null);
-        return roomTrauma() + (state.heroes[traumaSeat] ? traumaControls(state.heroes[traumaSeat], traumaSeat, true) : '')
-          || '<p>创伤牌库尚未准备。</p>';
-      },
     }[activeTool]();
     if (markup !== toolsMarkup) {
       const focused = toolsBody.contains(document.activeElement) ? document.activeElement : null;
       const focusKey = focused?.dataset.action || focused?.dataset.traumaDialog;
-      const comparisonWasOpen = toolsBody.querySelector('.room-boss-levels')?.open;
       toolsBody.innerHTML = markup;
-      const comparison = toolsBody.querySelector('.room-boss-levels');
-      if (comparison) comparison.open = Boolean(comparisonWasOpen);
       toolsMarkup = markup;
       if (focusKey) [...toolsBody.querySelectorAll('button:not(:disabled)')].find(button =>
         (button.dataset.action || button.dataset.traumaDialog) === focusKey
@@ -1046,6 +1059,34 @@
     }
   }
 
+  function rollReference(seat) {
+    const hero = state.heroes[seat];
+    if (!hero) return '';
+    if (rollMode === 'attack') {
+      const weapons = hero.gear.filter(item => item.category?.split('_')[0] === 'arm');
+      const art = window.ATO_BATTLE_ASSETS;
+      const cards = weapons.map(item => {
+        const source = art?.gearSrc(item.id, roomLanguage);
+        return '<li>' + (source ? cardImage(source, item.name, '', art.gearThumbSrc(item.id, roomLanguage)) : escape(item.name)) + '</li>';
+      }).join('');
+      const rage = hero.stats.rage;
+      return '<section class="room-roll-reference"><h4>宣告武器</h4><div>'
+        + '<button type="button" data-action="stat" data-key="rage" data-delta="1" data-seat="' + seat
+        + '"' + (rage >= 30 || hero.condition === 'dead' ? ' disabled' : '') + '>怒气 +1</button>'
+        + '<span>当前怒气 ' + rage + '</span></div>'
+        + (cards ? '<ul>' + cards + '</ul>' : '<p>该英雄未装备武器。</p>') + '</section>';
+    }
+    if (rollMode === 'dodge') {
+      const trait = aiGuide.stepFor(state.turn?.aiGuide)?.startsWith('hope-');
+      const projection = state.projection;
+      const card = trait ? { src: projection?.signature, label: '当前招牌技' } : projection?.aiPending ? projection.ai : null;
+      return '<section class="room-roll-reference"><h4>本次闪避参考</h4>'
+        + (card?.src ? cardImage('/aibp/' + card.src, card.label || '当前指令技') : '<p>目前没有待结算的指令技。</p>')
+        + '</section>';
+    }
+    return '';
+  }
+
   function renderDicePanel(panel, powerPool) {
     const seat = actor.role === 'host' ? rollSeat : actor.seat;
     const previousForm = panel.querySelector('form[data-roll]');
@@ -1059,7 +1100,7 @@
     const latestResult = '<section class="room-personal-result"><h4>最新投掷</h4>'
       + (last ? '<ol class="room-last-rolls">' + rollCard(last, true) + '</ol>' : '<p>该英雄本场尚未掷骰。</p>') + '</section>';
     const notes = {
-      attack: '宣告武器，增加 2 怒气并检查首要目标，再投攻击骰。命中后先结算第一能力时段，再揭示部位卡牌。',
+      attack: '宣告武器，增加 1 怒气并检查首要目标，再按武器牌投攻击骰。命中后先结算第一能力时段，再揭示部位卡牌。',
       dodge: '先结算闪避，根据结果决定是否投掷防御红骰。',
       power: '先揭示部位卡牌。重掷和转换潜力后，对照永世力场选结果，再按牌面结算骇物响应、伤口和激化。结算后清空克拉托斯池，再进入第二能力时段。',
     };
@@ -1068,12 +1109,15 @@
     const modes = '<div class="room-dice-modes" role="group" aria-label="投掷用途">' + Object.entries(dice.modes)
       .map(([key, entry]) => '<button type="button" data-roll-mode="' + key + '" aria-pressed="' + (key === rollMode) + '">'
         + (key === 'dodge' ? '<img class="room-mode-icon" src="room-dice-art/dodge.webp" alt="">'
-          : '<span class="room-mode-icon" aria-hidden="true"></span>') + entry.name + '</button>').join('') + '</div>';
+          : '<span class="room-mode-icon" aria-hidden="true"></span>') + entry.name + '</button>').join('')
+      + (state.turn?.phase === 'titans' && state.turn.seat === seat
+        ? '<button class="room-dice-end-turn" type="button" data-action="turn-finish" data-seat="' + seat + '">结束回合</button>' : '')
+      + '</div>';
     const power = rollMode === 'power';
     const pendingPower = dice.pendingPowerRoll(state, seat);
     const showSeparateBp = !power && pendingPower && pendingPower.id !== last?.id;
     renderSections(panel, [
-      '<h3>掷骰</h3>', actor.role === 'host' && heroSeatButtons(seat, 'roll'), modes,
+      '<h3>掷骰</h3>', actor.role === 'host' && !hostPersonalView && heroSeatButtons(seat, 'roll'), modes, rollReference(seat),
       power ? '<div class="room-power-workspace"></div>' : form, latestResult,
       showSeparateBp && powerPartCard(seat, last),
       notes[rollMode] && '<p class="room-dice-help">' + notes[rollMode] + '</p>',
@@ -1543,7 +1587,11 @@
     const seat = personalSeat();
     const host = role === 'host';
     const edit = role !== 'viewer' && !state.closed;
-    const links = host && credentials.keys ? '<div class="battle-room-links">'
+    const personalLink = host && Number.isInteger(seat)
+      ? '<a href="' + escape(hostPersonalView
+        ? '/aibp/?battle=' + id + (state.board?.apostle ? '&apostle=' + state.board.apostle : '')
+        : '/aibp/room?battle=' + id + '&personal=1') + '">' + (hostPersonalView ? '返回房主战斗台' : '个人战斗面板') + '</a>' : '';
+    const links = host && credentials.keys ? '<div class="battle-room-links">' + personalLink
       + (!state.closed && !state.squad ? '<button type="button" data-room-copy="invite">复制玩家邀请</button>' : '')
       + '<a href="' + escape(roomLink('view', credentials.keys.viewer)) + '" target="_blank" rel="noopener">打开只读投屏</a>'
       + (state.closed ? '<a href="./">返回 AIBP 开新战斗</a>' : '') + '</div>' : '';
@@ -1555,11 +1603,11 @@
       + (Object.values(state.pool).every(value => value === 0) ? ' disabled' : '') + '>一键清空</button>' : '';
     const heroes = state.heroes.map(heroCard);
     const shownSeat = host ? equipmentSeat : seat;
-    const heroTabs = host ? heroSeatButtons(shownSeat, 'equipment') : '';
+    const heroTabs = host && !hostPersonalView ? heroSeatButtons(shownSeat, 'equipment') : '';
     const own = heroes[shownSeat];
-    const ownHeading = own && '<h3 class="battle-room-heading">' + (host ? '泰坦与装备' : '我的英雄') + '</h3>';
+    const ownHeading = own && '<h3 class="battle-room-heading">' + (host && !hostPersonalView ? '泰坦与装备' : '我的英雄') + '</h3>';
     const teammates = heroes.filter((_, index) => index !== shownSeat);
-    const overview = role === 'player'
+    const overview = role === 'player' || hostPersonalView
       ? '<details class="battle-room-team"' + (content.querySelector('.battle-room-team')?.open ? ' open' : '')
         + '><summary>队伍状态</summary><div class="battle-room-grid">' + teammates.join('') + '</div></details>'
       : '<div class="battle-room-grid">' + teammates.join('') + '</div>';
@@ -1568,7 +1616,7 @@
       for (const dieId of choices) if (!roll?.dice.some(die => die.id === dieId && dice.canReroll(die))) choices.delete(dieId);
       if (!choices.size) selectedDice.delete(id);
     }
-    const personal = role === 'player' && edit;
+    const personal = (role === 'player' || (host && hostPersonalView)) && edit;
     const latestRoll = personal ? null : state.rolls.find(roll => roll.id === state.lastBattleRollId) || state.rolls[0];
     const rolls = latestRoll ? rollCard(latestRoll, true)
       + state.rolls.filter(roll => roll !== latestRoll).map(roll => rollCard(roll, false)).join('') : '';
@@ -1595,12 +1643,19 @@
     renderSections(content, [
       goal, !personal && !poolByDice && poolSection,
       edit && '<section class="room-dice-panel" id="room-dice"></section>',
-      ownHeading, own && heroTabs, own, !personal && argoAbilities(), !personal && roomTrauma(),
+      ownHeading, own && heroTabs, own, !personal && argoAbilities(),
+      state.board && '<details class="room-jump-panel" id="room-apostle"><summary>骇物面板</summary><div data-jump-apostle></div></details>',
+      '<details class="room-jump-panel" id="room-trauma"><summary>创伤牌库</summary><div data-jump-trauma></div></details>',
       !personal && edit && rollLog, edit && teamActivity(),
-      role !== 'player' && '<h3 class="battle-room-heading">状态总览</h3>', overview, !edit && rollLog,
+      role !== 'player' && !hostPersonalView && '<h3 class="battle-room-heading">状态总览</h3>', overview, !edit && rollLog,
       state.squad && '<p><a href="' + escape(squadLink.link('/aibp/squad', id)) + '">返回联机小队</a></p>',
     ]);
     if (edit) renderDicePanel(content.querySelector('#room-dice'), poolByDice ? poolSection : '');
+    const bossPanel = content.querySelector('[data-jump-apostle]');
+    if (bossPanel) renderMarkup(bossPanel, roomProjection(true));
+    const traumaSeat = seat ?? (host ? equipmentSeat : null);
+    renderMarkup(content.querySelector('[data-jump-trauma]'), roomTrauma()
+      + (state.heroes[traumaSeat] ? traumaControls(state.heroes[traumaSeat], traumaSeat, edit) : ''));
     renderTools();
     renderTurn();
     if (focus >= 0 && active !== document.activeElement) {

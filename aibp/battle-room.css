@@ -349,7 +349,7 @@ body.aibp-room-only > .app > main > :not(#battleRoom) { display: none !important
   box-sizing: border-box; text-decoration: none; display: grid; place-items: center;
   background: #344f46; color: var(--room-nav-text);
 }
-.battle-room .room-tool-dock .room-secondary-nav button { background: var(--room-nav-surface); font-size: .78rem; }
+.battle-room .room-tool-dock .room-secondary-nav :is(button, a) { background: var(--room-nav-surface); font-size: .78rem; }
 .battle-room .room-tool-dock :is(a, button):hover { background: #405e54; }
 .room-tool-dock[hidden], .battle-room .room-tool-dock [hidden], .room-tool-sheet:not([open]) { display: none; }
 .room-tool-sheet {
@@ -437,7 +437,8 @@ body.aibp-room-only > .app > main > :not(#battleRoom) { display: none !important
 
 .room-turn-bar { position: fixed; z-index: 991; top: max(.5rem, env(safe-area-inset-top)); right: max(.5rem, env(safe-area-inset-right)); max-width: min(29rem, calc(100vw - 1rem)); display: flex; align-items: start; gap: .3rem; }
 .room-turn-bar[hidden] { display: none; }
-.room-turn-bar > button { flex: none; height: auto; min-height: 2.3rem; padding: .38rem .65rem; border-radius: .6rem; white-space: nowrap; }
+.room-turn-boss-link { display: grid; place-items: center; color: #fff5e4; background: #263c36; text-decoration: none; }
+.room-turn-bar > :is(button, a) { flex: none; height: auto; min-height: 2.3rem; padding: .38rem .65rem; border-radius: .6rem; white-space: nowrap; }
 .room-turn-window { min-width: 0; border: 1px solid var(--room-border); border-radius: .7rem; color: #fff5e4; background: #263c36; box-shadow: 0 2px 10px #0005; }
 .room-turn-window[open] { max-height: min(70dvh, 24rem); overflow: auto; }
 .room-turn-window summary { padding: .5rem .68rem; cursor: pointer; font-weight: 700; }
@@ -597,3 +598,14 @@ body.room-viewer > .app > main { padding: 8px; }
 .room-equipment-head, .room-reroll-controls, .room-reroll-fate { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .room-equipment-head { justify-content: space-between; }
 .room-reroll-fate .battle-room-marker img { width: 1.25rem; height: 1.25rem; }
+
+.room-ai-targets { display: flex; flex-wrap: wrap; gap: .35rem; }
+.room-ai-targets button { display: inline-flex; align-items: center; gap: .35rem; }
+.room-roll-reference { display: grid; gap: .45rem; }
+.room-roll-reference > div { display: flex; flex-wrap: wrap; gap: .6rem; align-items: center; }
+.room-roll-reference ul { display: flex; flex-wrap: wrap; gap: .5rem; list-style: none; padding: 0; margin: 0; }
+.room-roll-reference .battle-room-card-art { max-width: 8rem; }
+.room-roll-reference .battle-room-card-art img { max-height: 8rem; }
+.room-jump-panel { scroll-margin-top: 4rem; border: 1px solid var(--room-border); border-radius: 8px; padding: .55rem; }
+.room-jump-panel summary { cursor: pointer; font-weight: 700; }
+.room-dice-modes .room-dice-end-turn { margin-inline-start: .6rem; border-color: #987746; }

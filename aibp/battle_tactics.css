@@ -200,3 +200,6 @@ button.battle-piece { pointer-events: auto; cursor: pointer; min-height: 0; }
 
 .battle-piece.battle-piece-titan.is-ai-target { outline: 3px solid #ffd56e; outline-offset: 2px; }
 .battle-piece-suggested-route polyline { stroke-dasharray: 6 4; }
+
+.battle-piece.battle-piece-route-ghost { opacity: .55; border: 2px dashed #ffd56e; background: #96632855; box-shadow: none; }
+.battle-piece.battle-piece-titan.is-ai-route-crossed:not(.is-ai-target) { outline: 2px dashed #f98977; }

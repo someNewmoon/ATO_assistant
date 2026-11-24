@@ -97,6 +97,26 @@
     layer.appendChild(svg);
   }
 
+  function drawRouteGhost(layer, route, sprite, size) {
+    if (!route?.finalCenter) return;
+    const { column, row } = route.finalCenter;
+    const document = layer.ownerDocument;
+    const ghost = document.createElement("span");
+    ghost.className = "battle-piece battle-piece-route-ghost";
+    ghost.style.left = (column - 0.5) * 5 + "%";
+    ghost.style.top = (14.5 - row) / 14 * 100 + "%";
+    ghost.style.width = size * 5 + "%";
+    ghost.style.height = size / 14 * 100 + "%";
+    ghost.setAttribute("aria-hidden", "true");
+    if (sprite) ghost.appendChild(spriteNode(document, sprite, route.facing));
+    const arrow = document.createElement("span");
+    arrow.className = "battle-piece-facing";
+    arrow.style.transform = "translate(-50%, -50%) rotate(" + route.facing + "deg)";
+    arrow.textContent = "▲";
+    ghost.appendChild(arrow);
+    layer.appendChild(ghost);
+  }
+
   function render(layer, pieces, {
     apostle, size = 1, selected = 0, mode, names = [], roster, portraits = [], deadSeats = [], priorityTarget, priorityVisible, aiTarget, aiRoute, trail, bossTrail, onSelect, onSelectBoss,
   } = {}) {
@@ -104,10 +124,11 @@
     layer.hidden = false;
     if (!deadSeats.includes(trail?.seat)) drawTrail(layer, trail);
     drawTrail(layer, bossTrail, true);
-    if (aiRoute) drawTrail(layer, { route: aiRoute }, true, true);
+    if (aiRoute) drawTrail(layer, { route: aiRoute.centers }, true, true);
     if (priorityVisible) drawPriorityLink(layer, pieces.apostle, pieces.titans[priorityTarget]);
     const document = layer.ownerDocument;
     const sprites = window.BattleBoardSprites || {};
+    drawRouteGhost(layer, aiRoute, sprites.forApostle?.(apostle), size);
     function token(piece, span, name, index, sprite, fallback) {
       const boss = index === null;
       const select = boss ? onSelectBoss : onSelect && (() => onSelect(index));
@@ -123,6 +144,7 @@
       marker.className = "battle-piece " + (boss ? "battle-piece-apostle" : "battle-piece-titan");
       marker.classList.toggle("is-selected", boss ? mode?.startsWith("apostle-") : selected === index && mode?.startsWith("titan-"));
       marker.classList.toggle("is-ai-target", !boss && index === aiTarget);
+      marker.classList.toggle("is-ai-route-crossed", !boss && aiRoute?.crossedSeats?.includes(index));
       if (!boss) marker.style.setProperty("--piece-accent", accents[index]);
       marker.style.left = (piece.column - 0.5) * 5 + "%";
       marker.style.top = (14 - piece.row + 0.5) / 14 * 100 + "%";

@@ -360,12 +360,10 @@
   const dock = document.createElement('div');
   dock.className = 'room-tool-dock';
   dock.hidden = true;
-  const toolGroup = document.createElement('details');
-  toolGroup.className = 'room-tools-group';
-  toolGroup.open = true;
-  toolGroup.innerHTML = '<summary>战斗工具</summary>';
   const toolLinks = document.createElement('div');
-  toolLinks.className = 'room-secondary-nav';
+  toolLinks.className = 'room-tool-actions';
+  toolLinks.setAttribute('role', 'group');
+  toolLinks.setAttribute('aria-label', '战斗功能');
   const toolsDialog = document.createElement('dialog');
   toolsDialog.className = 'room-tool-sheet';
   toolsDialog.id = 'room-tool-sheet';
@@ -400,13 +398,13 @@
   bossJump.href = '#viewer';
   bossJump.textContent = toolNames.apostle;
   bossJump.addEventListener('click', () => { turnWindow.open = false; });
-  toolLinks.append(toolButton('rolls'), toolButton('argo'), bossTool, bossJump, toolButton('trauma'));
-  toolGroup.append(toolLinks);
+  toolLinks.append(toolButton('rolls'), toolButton('argo'), bossTool, toolButton('trauma'));
 
   const quick = document.createElement('nav');
   quick.className = 'room-primary-nav';
-  quick.setAttribute('aria-label', '常用操作');
+  quick.setAttribute('aria-label', '战斗导航');
   quick.innerHTML = '<a href="#room-movement">移动</a><a href="#room-dice">掷骰</a><a href="#room-status">状态</a><a href="#room-equipment">装备</a>';
+  quick.append(bossJump);
   const movementShortcut = quick.querySelector('a[href="#room-movement"]');
   function forcedMovementSeat() {
     const seat = personalSeat();
@@ -417,7 +415,7 @@
     const seat = forcedMovementSeat();
     if (seat !== null && roomBoard?.openForcedMovement(seat)) event.preventDefault();
   });
-  dock.append(quick, toolGroup);
+  dock.append(quick, toolLinks);
   toolsDialog.querySelector('[data-close-tools]').addEventListener('click', () => toolsDialog.close());
   toolsDialog.addEventListener('close', () => {
     activeTool = null;

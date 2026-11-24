@@ -1,16 +1,9 @@
 .arsenal-loadout-dialog.loadout-folio {
-  --folio-ink: #38291f;
-  --folio-muted: #675341;
-  --folio-line: #cbbb9d;
-  --folio-copper: #a67d4e;
-  --folio-sheet: #f7efe1;
-  --folio-paper: #fbf7ee;
-  --folio-dark: #29251e;
   width: min(1380px, calc(100% - 42px));
   max-width: none;
   max-height: calc(100dvh - 36px);
   padding: 0;
-  border: 3px double var(--folio-copper);
+  border: 3px double var(--folio-rule);
   border-radius: 3px;
   background: var(--folio-sheet);
   color: var(--folio-ink);
@@ -27,7 +20,7 @@
   padding: 16px 23px;
   background:
     linear-gradient(110deg, #34291f, #28241d 80%),
-    var(--folio-dark);
+    var(--folio-nav);
   color: #f5e7cb;
   border-bottom: 4px double #c29b68;
 }
@@ -62,7 +55,7 @@
   display: grid;
   grid-template-columns: minmax(210px, 1fr) minmax(220px, 1fr) minmax(340px, 1.7fr);
   gap: 1px;
-  background: var(--folio-line);
+  background: var(--folio-edge);
 }
 .loadout-folio .folio-panel {
   min-width: 0;
@@ -77,20 +70,20 @@
 .loadout-folio .folio-title {
   margin: 0;
   padding-bottom: 8px;
-  border-bottom: 3px double var(--folio-line);
+  border-bottom: 3px double var(--folio-edge);
   font: 700 22px/1.2 "Songti SC", "Noto Serif CJK SC", SimSun, Georgia, serif;
   color: #68482c;
 }
 .loadout-folio label { color: var(--folio-muted); font-size: 12px; font-weight: 700; }
 .loadout-folio :is(input[type="search"], select) {
   min-height: 36px;
-  border: 1px solid var(--folio-line);
+  border: 1px solid var(--folio-edge);
   background: var(--folio-paper);
   color: var(--folio-ink);
 }
 .loadout-folio [data-loadout-titan-art] {
   padding: 10px;
-  border: 1px solid var(--folio-copper);
+  border: 1px solid var(--folio-rule);
   background: radial-gradient(ellipse at 50% 35%, #56503c, #241e18 75%);
   display: grid;
   place-items: center;
@@ -103,7 +96,7 @@
   filter: drop-shadow(0 5px 6px #0008);
 }
 .loadout-folio :is(.folio-titan details, .folio-titan > small) {
-  border-bottom: 1px solid var(--folio-line);
+  border-bottom: 1px solid var(--folio-edge);
   padding-bottom: 9px;
 }
 .loadout-folio .folio-titan summary { cursor: pointer; font-weight: 700; color: #68482c; }
@@ -115,7 +108,7 @@
   align-items: baseline;
   margin: 0 0 5px;
   padding: 4px 7px;
-  border-bottom: 1px solid var(--folio-copper);
+  border-bottom: 1px solid var(--folio-rule);
   background: #704a2820;
   color: #68482c;
   font-size: 13px;
@@ -132,7 +125,7 @@
   min-height: 58px;
   align-content: center;
   padding: 5px 7px;
-  border: 1px solid var(--folio-line);
+  border: 1px solid var(--folio-edge);
   background: var(--folio-paper);
 }
 .loadout-folio .folio-gear-rows > li > strong { grid-column: 2; }
@@ -165,7 +158,7 @@
 .loadout-folio .folio-categories { display: flex; flex-wrap: wrap; gap: 4px; }
 .loadout-folio .folio-category {
   padding: 4px 9px;
-  border: 1px solid var(--folio-line);
+  border: 1px solid var(--folio-edge);
   border-radius: 2px;
   background: var(--folio-paper);
   color: var(--folio-ink);
@@ -191,7 +184,7 @@
   display: flex;
   flex-direction: column;
   gap: 5px;
-  border: 1px solid var(--folio-line);
+  border: 1px solid var(--folio-edge);
   border-radius: 2px;
   background: #f3e9d9;
   line-height: 1.4;
@@ -225,7 +218,7 @@
   gap: 7px;
   padding: 10px 18px;
   background: var(--folio-sheet);
-  border-top: 3px double var(--folio-line);
+  border-top: 3px double var(--folio-edge);
 }
 .loadout-folio fieldset { gap: 0; }
 .loadout-folio .arsenal-loadout-actions button[type="submit"] { background: #503a2b; color: #fff1d7; border-color: #503a2b; }
@@ -237,7 +230,7 @@
 @media (max-width: 490px) {
   .arsenal-loadout-dialog.loadout-folio { width: calc(100% - 14px); }
   .loadout-folio .folio-columns { display: block; }
-  .loadout-folio .folio-panel + .folio-panel { border-top: 1px solid var(--folio-line); }
+  .loadout-folio .folio-panel + .folio-panel { border-top: 1px solid var(--folio-edge); }
   .loadout-folio > .arsenal-player-identity { padding: 12px; gap: 10px; }
   .loadout-folio .folio-counter { padding: 3px 5px; gap: 3px; }
 }

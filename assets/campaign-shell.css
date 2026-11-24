@@ -1,5 +1,5 @@
 /* A Cycle I skin over the existing application. Control behavior is owned by the app. */
-body:is([data-cycle="c1"], :not([data-cycle])):not([data-theme-dark]) {
+body:is([data-cycle="c1"], :not([data-cycle])):not([data-theme-dark], [data-campaign-folio]) {
   --bg: #eee6d7;
   --paper: #f8f2e7;
   --panel: #f9f4e9;
@@ -627,12 +627,12 @@ body.art-module-shell .campaign-toolbox { inset-inline-start: var(--art-module-i
 }
 
 /* The module headers and frames share the battle-room material and hierarchy. */
-body:is(.art-module-shell, [data-theme-module="second-screen"]) {
+body:is(.art-module-shell, [data-theme-module="second-screen"]):not([data-campaign-folio]) {
   --folio-serif: "Songti SC", "Noto Serif CJK SC", SimSun, Georgia, serif;
   --folio-rule: color-mix(in srgb, var(--gold) 48%, var(--line));
   --folio-sheet: color-mix(in srgb, var(--accent-soft) 63%, var(--panel));
 }
-body.art-module-shell:not([data-theme-dark]):is([data-theme-cycle="c1"], :not([data-theme-cycle]):is([data-cycle="c1"], :not([data-cycle]))),
+body.art-module-shell:not([data-theme-dark], [data-campaign-folio]):is([data-theme-cycle="c1"], :not([data-theme-cycle]):is([data-cycle="c1"], :not([data-cycle]))),
 body[data-theme-module="second-screen"]:not([data-theme-dark])[data-theme-cycle="c1"] {
   --folio-rule: #b99769;
   --folio-sheet: #f7efe1;
@@ -653,14 +653,14 @@ body.art-module-shell:not([data-theme-dark], .second-screen-map) :is(
   padding: clamp(.7rem, 2vw, 1.25rem);
   background: linear-gradient(105deg, var(--folio-sheet), var(--panel));
 }
-body.art-module-shell:not([data-theme-dark], .second-screen-map) :is(
-  .control-panel, .token-panel, .tree-wrap, .briefing-body .pane, .sheet
+body.art-module-shell:not([data-theme-dark], .second-screen-map) :is(.tree-wrap, .briefing-body .pane, .sheet),
+body.art-module-shell:not([data-theme-dark], .second-screen-map, [data-campaign-folio]) :is(.control-panel, .token-panel
 ) {
   border-color: var(--line);
   border-radius: 2px;
 }
-body.art-module-shell:not([data-theme-dark]) :is(
-  .hero-column .panel-heading, .panel-heading.module-head, .briefing-body .pane-head, .tree-tools
+body.art-module-shell:not([data-theme-dark]) :is(.panel-heading.module-head, .briefing-body .pane-head),
+body.art-module-shell:not([data-theme-dark], [data-campaign-folio]) :is(.hero-column .panel-heading, .tree-tools
 ) {
   border-bottom: 1px solid var(--folio-rule);
   background: var(--folio-sheet);
@@ -695,4 +695,23 @@ body[data-theme-module="second-screen"]:not([data-theme-dark]) .squad-projection
   border-radius: 2px;
   background: var(--folio-sheet);
   color: var(--ink);
+}
+
+/* Use the new palette on the record, hero, technology and map pages. */
+body[data-campaign-folio] .art-sidebar {
+  background: var(--folio-nav);
+  color: var(--folio-on-dark);
+  border-color: var(--folio-rule);
+}
+body[data-campaign-folio] .art-sidebar .art-sidebar-brand { border-bottom-color: var(--folio-rule); }
+body[data-campaign-folio] .art-sidebar :is(.art-sidebar-tab, .record-card-link) { color: var(--folio-on-dark); }
+body[data-campaign-folio] .art-sidebar :is(a:hover, a:focus-visible, a[aria-current="page"]) {
+  color: var(--folio-on-dark);
+  border-color: var(--folio-rule);
+  background: var(--folio-nav-hover);
+}
+body[data-campaign-folio].art-module-shell:not([data-theme-dark], .second-screen-map) :is(
+  .app > header.topbar, .page-heading, .briefing-head, .masthead
+) {
+  background: linear-gradient(105deg, var(--folio-sheet), var(--folio-paper));
 }

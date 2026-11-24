@@ -10,7 +10,7 @@ body { background: var(--bg); line-height: 1.6; }
 .app { padding: 40px clamp(20px, 4vw, 56px) 32px; }
 .topbar { padding-bottom: 24px; border-bottom: 1px solid var(--line); margin-bottom: 24px; gap: 24px; }
 h1, .panel-heading h2, .matrix-head h2 {
-  font-family: "Songti SC", "Noto Serif CJK SC", SimSun, Georgia, serif;
+  font-family: var(--folio-serif);
   font-weight: 600;
   color: var(--accent-strong);
   letter-spacing: .05em;
@@ -32,8 +32,8 @@ input, select, textarea, .header-fields input, .header-fields select { backgroun
 textarea { background: var(--bg); }
 :is(button, a, input, select, textarea, summary):focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 
-.panel { border-radius: 0; box-shadow: none; background: var(--panel); }
-.panel-heading { background: transparent; padding: 14px 16px; }
+.panel { border-color: var(--folio-edge); border-radius: 2px; box-shadow: none; background: var(--folio-paper); }
+.panel-heading { background: var(--folio-sheet); border-bottom: 1px solid var(--folio-rule); padding: 14px 16px; }
 .panel-heading h2, .matrix-head h2 { font-size: 22px; }
 .panel-heading h2 { flex-shrink: 0; white-space: nowrap; }
 .panel-heading .status-line { text-align: right; }
@@ -57,7 +57,7 @@ textarea { background: var(--bg); }
   padding-block: 0;
 }
 .identity-grid .oxygen-value-pair input { font-size: 13px; }
-.titan-list-panel { background: var(--panel); padding: 14px 16px; }
+.titan-list-panel { background: var(--folio-paper); padding: 14px 16px; }
 .titan-list-head { color: var(--accent-strong); font-size: 14px; }
 .titan-list-head strong, .summon-group-head strong { font-weight: 600; }
 .titan-row { border: 0; border-radius: 0; padding: 10px 0; background: transparent; }
@@ -121,9 +121,8 @@ textarea { background: var(--bg); }
   gap: 4px;
 }
 .resource-card .number-field input { width: 100%; }
-.summon-group { padding-top: 12px; border-top: 1px solid var(--line); }
+.summon-group { padding-top: 12px; border-top: 1px solid var(--folio-edge); }
 .summon-group-head { color: var(--accent-strong); }
-.matrix-head { background: var(--accent-soft); color: var(--accent-strong); }
 .matrix-wrap { border-radius: 0; background: var(--panel); }
 .matrix {
   width: 100%;
@@ -243,8 +242,8 @@ textarea { background: var(--bg); }
    底色去掉后露出面板本身的颜色，并补上其余标题都有的下边框；内边距也用
    .panel-heading.compact 那一套，否则它比其余标题栏高出 8px 多。 */
 .matrix-head {
-  background: transparent;
-  border-bottom: 1px solid var(--line);
+  background: var(--folio-sheet);
+  border-bottom: 1px solid var(--folio-rule);
   padding: 9px 16px 8px;
 }
 

@@ -72,7 +72,7 @@ body { background: var(--bg); line-height: 1.6; }
 .app { padding: 40px clamp(20px, 4vw, 56px) 32px; }
 .topbar { padding-bottom: 24px; border-bottom: 1px solid var(--line); margin-bottom: 24px; gap: 24px; }
 h1, .hero-column .panel-heading h2, .picker-head h2 {
-  font-family: "Songti SC", "Noto Serif CJK SC", SimSun, Georgia, serif;
+  font-family: var(--folio-serif);
   color: var(--accent-strong);
   font-weight: 600;
   letter-spacing: .05em;
@@ -92,8 +92,8 @@ h1 { font-size: clamp(28px, 3.5vw, 42px); line-height: 1.3; }
 .hero-skill-heading .skill-expand-toggle { grid-column: 2; grid-row: 1; }
 .hero-skill-heading .skill-preview { grid-column: 1 / -1; grid-row: 2; justify-content: flex-start; margin-left: 0; }
 .hero-column { container-type: inline-size; container-name: hero-card; }
-.hero-column { gap: 0; border-block: 1px solid var(--line); background: var(--panel); }
-.hero-column > .panel { border: 0; border-bottom: 1px solid var(--line); }
+.hero-column { gap: 0; border: 1px solid var(--folio-edge); border-radius: 2px; background: var(--folio-paper); }
+.hero-column > .panel { border: 0; border-bottom: 1px solid var(--folio-edge); }
 .hero-column > .panel:not(:has(> .panel-body)) > .hero-skill-heading { border-bottom: 0; }
 .hero-column > .hero-remove-wrap { padding: 12px; }
 .hero-column .identity-grid {
@@ -122,8 +122,13 @@ button.secondary:hover, .toolbar a:hover { background: var(--accent-soft); borde
 input, select, textarea { background: var(--panel); }
 textarea { background: var(--bg); }
 :is(button, a, input, select, textarea, summary):focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
-.panel { border-radius: 0; background: var(--panel); box-shadow: none; }
-.panel-heading { background: transparent; border-color: var(--line); }
+.panel { border-radius: 2px; background: var(--folio-paper); box-shadow: none; }
+.panel-heading { background: var(--folio-sheet); border-color: var(--folio-rule); }
+.hero-column .panel-heading.hero-title-drag {
+  background: var(--folio-nav);
+  border-bottom: 3px double var(--folio-rule);
+}
+.hero-column .hero-title-drag h2 { color: var(--folio-on-dark); }
 .hero-column .panel-heading h2 { font-size: 18px; }
 .hero-column .panel:first-child .panel-heading h2 {
   min-width: 0;
@@ -132,7 +137,7 @@ textarea { background: var(--bg); }
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.hero-column .portrait-box { border-radius: 0; box-shadow: none; background: var(--accent-soft); }
+.hero-column .portrait-box { border: 1px solid var(--folio-edge); border-radius: 2px; box-shadow: none; background: var(--folio-inset); }
 .hero-drag-handle { border-radius: 0; background: var(--bg); color: var(--accent-strong); }
 .hero-column.is-dragging { border-radius: 0; }
 .skill-card { border: 0; border-bottom: 1px solid var(--line); border-radius: 0; background: transparent; }
@@ -160,7 +165,8 @@ textarea { background: var(--bg); }
 .track-num, .track-cell.milestone .track-num { font-weight: 600; line-height: 1.4; }
 .hero-empty-slot, .empty-state { border-radius: 0; box-shadow: none; background: var(--panel); border-color: var(--line); }
 .picker-dialog, .argonaut-picker-card, .argonaut-picker-card img, .picker-note, .graveyard-card, .graveyard-entry { border-radius: 0; }
-.picker-head { background: var(--accent-soft); }
+.picker-head { background: var(--folio-sheet); border-bottom-color: var(--folio-rule); }
+.picker-dialog { background: var(--folio-paper); border: 3px double var(--folio-rule); }
 .argonaut-picker-card, .graveyard-card, .graveyard-entry { background: var(--panel); }
 .argonaut-picker-card:hover { box-shadow: none; }
 .picker-note { background: var(--bg); border-color: var(--accent); }

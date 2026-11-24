@@ -67,4 +67,38 @@ body[data-cycle="c5"] {
   --gold: #95702b;
 }
 
-
+/* Shared surfaces for the main campaign modules. */
+body[data-campaign-folio] {
+  --folio-serif: "Songti SC", "Noto Serif CJK SC", SimSun, Georgia, serif;
+  --folio-paper: var(--panel);
+  --folio-sheet: color-mix(in srgb, var(--accent-soft) 55%, var(--panel));
+  --folio-inset: color-mix(in srgb, var(--accent-soft) 80%, var(--panel));
+  --folio-edge: var(--line);
+  --folio-rule: color-mix(in srgb, var(--accent-strong) 48%, var(--line));
+  --folio-ink: var(--ink);
+  --folio-muted: var(--muted);
+  --folio-label: var(--accent-strong);
+  --folio-action: var(--accent-strong);
+  --folio-nav: color-mix(in srgb, var(--accent-strong) 60%, #24211d);
+  --folio-nav-hover: color-mix(in srgb, var(--accent-strong) 60%, #4b463e);
+  --folio-on-dark: #fff5e4;
+}
+body[data-campaign-folio]:is([data-theme-cycle="c1"], :not([data-theme-cycle]):is([data-cycle="c1"], :not([data-cycle]))):not([data-theme-dark]) {
+  --folio-paper: #fbf7ee;
+  --folio-sheet: #f7efe1;
+  --folio-inset: #efe4d2;
+  --folio-edge: #cbbb9d;
+  --folio-rule: #a9855a;
+  --folio-ink: #38291f;
+  --folio-muted: #675341;
+  --folio-label: #68482c;
+  --folio-action: #503a2b;
+  --folio-nav: #302b24;
+  --folio-nav-hover: #554331;
+}
+body[data-campaign-folio][data-theme-dark] {
+  --folio-sheet: color-mix(in srgb, var(--ink) 5%, var(--panel));
+  --folio-inset: color-mix(in srgb, var(--ink) 10%, var(--panel));
+  --folio-rule: var(--line);
+  --folio-label: var(--ink);
+}

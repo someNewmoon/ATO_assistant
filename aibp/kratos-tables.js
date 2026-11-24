@@ -145,6 +145,13 @@
     black: 'kratos-abilities/black.png', retainAny: 'kratos-abilities/retainAny.png',
     reposition: 'kratos-abilities/reposition.png', burden: 'kratos-abilities/burden.png',
     diversion: 'battle-markers/diversion.webp', motivate: 'kratos-abilities/motivate.png',
+    vault: 'kratos-abilities/vault.png',
+  };
+
+  // Use unnumbered UI symbols where a matching card glyph is unavailable.
+  const glyphs = {
+    reroll2: '↻', retain2: '↶', overbreak: '⇊', despairElation: '↑',
+    ambrosiaElation: '↑', ignoreCumbersome: '⊘', replaceBp: '⇄', provoke: '◎',
   };
 
   function forTitan(titan) {
@@ -155,5 +162,5 @@
     return rows && { rows, name: pattern?.name || inventory.titanLabel(titan) };
   }
 
-  window.ATO_KRATOS_TABLES = { forTitan, labels, icons };
+  window.ATO_KRATOS_TABLES = { forTitan, labels, icons, glyphs };
 })();

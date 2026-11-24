@@ -353,10 +353,15 @@
   traumaDialog.className = 'room-trauma-dialog';
   root.appendChild(traumaDialog);
 
-  const toolNames = { rolls: '战斗掷骰记录', argo: '阿尔戈能力' };
+  const toolNames = { rolls: '战斗掷骰记录', argo: '阿尔戈能力', apostle: '骇物面板', trauma: '创伤牌库' };
+  const fullBossPanel = document.getElementById('viewer');
   const dock = document.createElement('div');
   dock.className = 'room-tool-dock';
   dock.hidden = true;
+  const toolGroup = document.createElement('details');
+  toolGroup.className = 'room-tools-group';
+  toolGroup.open = true;
+  toolGroup.innerHTML = '<summary>战斗工具</summary>';
   const toolLinks = document.createElement('div');
   toolLinks.className = 'room-secondary-nav';
   const toolsDialog = document.createElement('dialog');
@@ -369,7 +374,7 @@
   const toolsStatus = toolsDialog.querySelector('[data-tools-status]');
   let activeTool;
   let toolsMarkup;
-  for (const [key, label] of Object.entries(toolNames)) {
+  function toolButton(key, label = toolNames[key]) {
     const button = document.createElement('button');
     button.type = 'button';
     button.textContent = label;
@@ -378,31 +383,28 @@
     button.setAttribute('aria-haspopup', 'dialog');
     button.addEventListener('click', () => {
       activeTool = key;
-      toolsDialog.querySelector('h3').innerHTML = escape(label);
+      toolsDialog.querySelector('h3').textContent = toolNames[key];
       toolsStatus.textContent = '';
       renderTools();
       toolsDialog.showModal();
     });
-    toolLinks.append(button);
+    return button;
   }
-  const bossShortcut = document.createElement('a');
+
+  const bossShortcut = toolButton('apostle', '骇物');
   bossShortcut.className = 'room-turn-boss-link';
-  bossShortcut.href = '#room-apostle';
-  bossShortcut.textContent = '骇物';
+  const bossTool = toolButton('apostle');
+  const bossJump = document.createElement('a');
+  bossJump.href = '#viewer';
+  bossJump.textContent = toolNames.apostle;
+  bossJump.addEventListener('click', () => { turnWindow.open = false; });
+  toolLinks.append(toolButton('rolls'), toolButton('argo'), bossTool, bossJump, toolButton('trauma'));
+  toolGroup.append(toolLinks);
+
   const quick = document.createElement('nav');
   quick.className = 'room-primary-nav';
   quick.setAttribute('aria-label', '常用操作');
-  quick.innerHTML = '<a href="#room-movement">移动</a><a href="#room-dice">掷骰</a><a href="#room-status">状态</a><a href="#room-equipment">装备</a>'
-    + '<a href="#room-apostle">骇物</a>';
-  toolLinks.insertAdjacentHTML('beforeend', '<a href="#room-trauma">创伤牌库</a>');
-  root.addEventListener('click', event => {
-    const link = event.target.closest('a[href="#room-apostle"], a[href="#room-trauma"]');
-    if (!link) return;
-    const panel = root.querySelector(link.hash);
-    if (!panel) return;
-    panel.open = true;
-    turnWindow.open = false;
-  });
+  quick.innerHTML = '<a href="#room-movement">移动</a><a href="#room-dice">掷骰</a><a href="#room-status">状态</a><a href="#room-equipment">装备</a>';
   const movementShortcut = quick.querySelector('a[href="#room-movement"]');
   function forcedMovementSeat() {
     const seat = personalSeat();
@@ -413,7 +415,7 @@
     const seat = forcedMovementSeat();
     if (seat !== null && roomBoard?.openForcedMovement(seat)) event.preventDefault();
   });
-  dock.append(quick, toolLinks);
+  dock.append(quick, toolGroup);
   toolsDialog.querySelector('[data-close-tools]').addEventListener('click', () => toolsDialog.close());
   toolsDialog.addEventListener('close', () => {
     activeTool = null;
@@ -646,7 +648,9 @@
     if (!personal && toolsDialog.open) toolsDialog.close();
     movementShortcut.hidden = !state.board;
     bossShortcut.hidden = !state.board;
-    quick.querySelector('a[href="#room-apostle"]').hidden = !state.board;
+    const canJumpToBoss = actor.role === 'host' && !hostPersonalView && fullBossPanel;
+    bossJump.hidden = !state.board || !canJumpToBoss;
+    bossTool.hidden = !state.board || Boolean(canJumpToBoss);
     const forced = forcedMovementSeat() !== null;
     if (forced !== (movementShortcut.dataset.forced === 'true')) {
       movementShortcut.dataset.forced = String(forced);
@@ -659,6 +663,8 @@
     const markup = {
       rolls: latestHeroRolls,
       argo: () => argoAbilities() || '<p>本场尚未准备阿尔戈能力。</p>',
+      apostle: () => roomProjection(true),
+      trauma: traumaToolMarkup,
     }[activeTool]();
     if (markup !== toolsMarkup) {
       const focused = toolsBody.contains(document.activeElement) ? document.activeElement : null;
@@ -720,6 +726,12 @@
     return '<section class="room-trauma-summary"><h3>创伤牌库</h3><small>故事集 ' + escape(cycle.slice(1)) + (tutorial ? ' · 教程' : '')
       + ' · ' + Object.entries(counts).map(([deck, count]) => traumaDecks[deck] + ' ' + count).join(' · ') + '</small>'
       + (actor.role === 'host' && !state.closed ? '<button type="button" data-trauma-dialog="manage">调整本场牌库</button> <a href="/aibp/trauma" target="_blank" rel="noopener">存档牌库</a>' : '') + latest + '</section>';
+  }
+
+  function traumaToolMarkup() {
+    const seat = personalSeat() ?? (actor.role === 'host' ? equipmentSeat : null);
+    const hero = state.heroes[seat];
+    return roomTrauma() + (hero ? traumaControls(hero, seat, !state.closed) : '');
   }
 
   function openTraumaDialog(mode, seat) {
@@ -1030,7 +1042,9 @@
         '<span>' + effects.map(effect => {
           const icon = kratos.icons[effect];
           const label = escape(kratos.labels[effect]);
-          return icon ? marker('images/' + icon, label) : label;
+          const visual = icon ? '<img alt="" src="images/' + icon + '">'
+            : '<span class="room-kratos-glyph" aria-hidden="true">' + escape(kratos.glyphs[effect]) + '</span>';
+          return '<span class="room-kratos-effect">' + visual + '<span>' + label + '</span></span>';
         }).join(' + ') + '</span>').join('<small>或</small>') + '</div></li>';
     }
     return '<section class="room-kratos-reminder" aria-label="克拉托斯表能力">'
@@ -1646,19 +1660,19 @@
     renderSections(content, [
       goal, !personal && !poolByDice && poolSection,
       edit && '<section class="room-dice-panel" id="room-dice"></section>',
-      ownHeading, own && heroTabs, own, !personal && argoAbilities(),
-      state.board && '<details class="room-jump-panel" id="room-apostle"><summary>骇物面板</summary><div data-jump-apostle></div></details>',
-      '<details class="room-jump-panel" id="room-trauma"><summary>创伤牌库</summary><div data-jump-trauma></div></details>',
+      ownHeading, own && heroTabs, own, !edit && argoAbilities(),
+      !edit && state.board && '<details class="room-jump-panel"><summary>骇物面板</summary><div data-closed-apostle></div></details>',
+      !edit && '<details class="room-jump-panel"><summary>创伤牌库</summary><div data-closed-trauma></div></details>',
       !personal && edit && rollLog, edit && teamActivity(),
       role !== 'player' && !hostPersonalView && '<h3 class="battle-room-heading">状态总览</h3>', overview, !edit && rollLog,
       state.squad && '<p><a href="' + escape(squadLink.link('/aibp/squad', id)) + '">返回联机小队</a></p>',
     ]);
     if (edit) renderDicePanel(content.querySelector('#room-dice'), poolByDice ? poolSection : '');
-    const bossPanel = content.querySelector('[data-jump-apostle]');
-    if (bossPanel) renderMarkup(bossPanel, roomProjection(true));
-    const traumaSeat = seat ?? (host ? equipmentSeat : null);
-    renderMarkup(content.querySelector('[data-jump-trauma]'), roomTrauma()
-      + (state.heroes[traumaSeat] ? traumaControls(state.heroes[traumaSeat], traumaSeat, edit) : ''));
+    if (!edit) {
+      const bossPanel = content.querySelector('[data-closed-apostle]');
+      if (bossPanel) renderMarkup(bossPanel, roomProjection(true));
+      renderMarkup(content.querySelector('[data-closed-trauma]'), traumaToolMarkup());
+    }
     renderTools();
     renderTurn();
     if (focus >= 0 && active !== document.activeElement) {

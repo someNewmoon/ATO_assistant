@@ -752,7 +752,7 @@ body.aibp-active-online-battle #heroBattleRoster { display: none; }
 .room-weapon-options [data-attack-weapon][aria-pressed="true"] {
   background: var(--accent-soft, #ede0ca); border-color: #99663f; box-shadow: inset 0 0 0 1px #99663f;
 }
-.room-roll-reference [data-weapon-hits] { max-width: 4.5rem; }
+.room-roll-reference [name="weaponHits"] { max-width: 4.5rem; }
 .room-roll-reference > .room-defense-cards { display: grid; justify-items: start; }
 .room-roll-reference > [data-roll-mode="defense"] { justify-self: start; }
 

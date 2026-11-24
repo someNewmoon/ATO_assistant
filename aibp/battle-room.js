@@ -849,7 +849,7 @@
     } else if (mode === 'hit') {
       fields = '<div class="room-trauma-amount"><label for="room-trauma-amount">护甲减免后的净凶险</label>'
         + '<div class="room-dice-stepper"><button type="button" data-trauma-step="-1" aria-label="减少净凶险">−</button>'
-        + '<input id="room-trauma-amount" aria-describedby="room-hit-trauma-preview" name="amount" type="number" min="0" max="99" required autofocus>'
+        + '<input id="room-trauma-amount" aria-describedby="room-hit-trauma-preview" name="amount" type="number" min="0" max="99" value="0" required autofocus>'
         + '<button type="button" data-trauma-step="1" aria-label="增加净凶险">＋</button></div></div>'
         + '<label>牌库 <select name="deck">' + traumaOptions(true) + '</select></label>'
         + '<p id="room-hit-trauma-preview" class="room-hit-trauma-preview" data-hit-trauma-preview role="status"></p>';
@@ -1132,11 +1132,11 @@
         + rollAvatar(seat) + escape(hero.name) + '</h4><small>本场尚未掷骰</small></li>').join('') + '</ol>';
   }
 
-  function diceCountField(kind, label, min, max, value) {
+  function diceCountField(kind, label, min, max, value, unit = '枚') {
     const button = (delta, text) => '<button type="button" data-dice-step="' + kind + '" data-delta="' + delta
       + '" aria-label="' + (delta < 0 ? '减少' : '增加') + escape(label) + '"'
       + ((delta < 0 ? Number(value) <= min : Number(value) >= max) ? ' disabled' : '') + '>' + text + '</button>';
-    return '<label>' + escape(label) + '<small>上限 ' + max + ' 枚</small><span class="room-dice-stepper">' + button(-1, '−')
+    return '<label>' + escape(label) + '<small>上限 ' + max + ' ' + unit + '</small><span class="room-dice-stepper">' + button(-1, '−')
       + '<input type="number" min="' + min + '" max="' + max + '" name="' + kind + '" value="' + escape(value)
       + '" required aria-label="' + escape(label) + '">' + button(1, '+') + '</span></label>';
   }
@@ -1279,8 +1279,8 @@
       : '<p>威力请按牌面填写。</p>';
     return '<section class="room-roll-reference"><h4>激活武器 · ' + escape(item.name) + '</h4><div>'
       + gearCardReference(item) + '<div>' + summary
-      + (profile?.[1] ? '<label>命中数 <input type="number" data-weapon-hits min="1" max="'
-        + (attack?.dice.length ?? dice.limits.d10) + '" value="1"></label> <button type="button" data-fill-weapon-power>带入武器威力骰</button>'
+      + (profile?.[1] ? diceCountField('weaponHits', '命中数', 0, attack?.dice.length ?? dice.limits.d10, 0, '次')
+        + ' <button type="button" data-fill-weapon-power>带入武器威力骰</button>'
         + '<small>再按泰坦、能力和牌面条件补入其他骰子。原始威力单独计入。</small><p data-weapon-power-status role="status"></p>' : '')
       + '</div></div></section>';
   }
@@ -1329,10 +1329,15 @@
     const item = attack ? state.heroes[seat].gear.find(gear => gear.id === attack.weapon) : selectedWeapon(seat);
     const profile = gearProfile(item);
     const reference = button.closest('.room-roll-reference');
-    const hitInput = reference.querySelector('[data-weapon-hits]');
-    if (!profile?.[1] || !hitInput.reportValidity() || !hitInput.value) return;
-    const total = gearRolls.power(profile[1], profile[2] || '', Number(hitInput.value));
+    const hitInput = reference.querySelector('[name="weaponHits"]');
+    if (!profile?.[1] || !hitInput.reportValidity()) return;
     const status = reference.querySelector('[data-weapon-power-status]');
+    const hits = Number(hitInput.value);
+    if (hits === 0) {
+      status.textContent = '命中数为 0，本次无需带入武器威力骰。';
+      return;
+    }
+    const total = gearRolls.power(profile[1], profile[2] || '', hits);
     for (const [lower, higher] of [['red', 'black'], ['black', 'white']]) {
       const excess = Math.max(0, total[lower] - dice.limits[lower]);
       total[lower] -= Math.ceil(excess / 2) * 2;
@@ -2157,8 +2162,9 @@
   });
 
   content.addEventListener('input', event => {
-    if (event.target.form?.matches('[data-roll]')) {
-      const input = event.target;
+    const input = event.target;
+    if (input.matches('input[name="weaponHits"]')) updateDiceSteps(input);
+    if (input.form?.matches('[data-roll]')) {
       updateDiceSteps(input);
       const seat = actor.role === 'host' ? rollSeat : actor.seat;
       saveDiceDraft(seat, rollMode, Object.fromEntries(new FormData(event.target.form)));
@@ -2256,7 +2262,7 @@
       return;
     }
     if (button.dataset.diceStep) {
-      const input = button.form.elements.namedItem(button.dataset.diceStep);
+      const input = button.parentElement.querySelector('input[type="number"]');
       input.value = Math.max(Number(input.min), Math.min(Number(input.max), (Number(input.value) || 0) + Number(delta)));
       input.dispatchEvent(new Event('input', { bubbles: true }));
       return;

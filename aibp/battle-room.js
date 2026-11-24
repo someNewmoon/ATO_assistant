@@ -443,6 +443,7 @@
   let promptedAiRound = '';
   let aiRange = 1;
   let aiRouteId = '';
+  let aiManualMovement = false;
   let aiPlanKey = '';
   turnWindow.addEventListener('change', event => {
     if (!event.target.matches('[data-ai-range]')) return;
@@ -460,6 +461,12 @@
       return;
     }
     const { turnAction: type, seat, value } = button.dataset;
+    if (type === 'ai-manual-movement') {
+      aiManualMovement = !aiManualMovement;
+      renderTurn();
+      turnWindow.querySelector('[data-turn-action="ai-manual-movement"]')?.focus({ preventScroll: true });
+      return;
+    }
     const selection = button.dataset.aiTarget || '';
     if (type === 'ai-guide' && ['target', 'hope-target'].includes(value) && !selection) {
       say('请选择本次目标，或选择按牌面处理。');
@@ -573,6 +580,7 @@
       aiPlanKey = planKey;
       aiRange = 1;
       aiRouteId = '';
+      aiManualMovement = false;
     }
     let route;
     if (guideAvailable) {
@@ -595,16 +603,19 @@
             guidance += '<p>已结束本次手动移动。</p>';
           } else if (!host) {
             guidance += '<p>房主执行移动后，版图会同步路线和冲撞标记。</p>';
+          } else if (aiManualMovement) {
+            guidance += '<p>用版图上的「移动骇物」按牌面结算。</p>'
+              + action('ai-manual-movement', '返回常规路线');
           } else {
             const routes = aiGuide.apostleRoutes(state, aiRange, window.BattleTerrain, window.BattleLOS);
             route = routes.find(path => path.id === aiRouteId) || routes[0];
             guidance += '<label>有效射程（近战 1 格） <input data-ai-range type="number" min="1" max="20" value="' + aiRange + '"></label>';
             if (route) {
-              guidance += '<div class="room-ai-route-options" role="group" aria-label="移动路线">' + routes.map((path, i) =>
+              guidance += '<div class="room-ai-route-options" role="group" aria-label="常规移动路线">' + routes.map((path, i) =>
                   '<button type="button" data-ai-route="' + path.id + '" aria-pressed="' + (route === path) + '">'
                   + '<strong>' + (path.steps ? path.label : '原地就位') + (i === 0 ? ' · 推荐' : '') + '</strong><small>'
                   + path.steps + ' 格 · ' + (path.collisions ? '冲撞 ' + path.collisions + ' 位泰坦' : '避开泰坦') + '</small></button>').join('')
-                + '</div><small>最短正交路线，未对齐时逐格换轴。卡牌有专门指示时，用版图的「移动骇物」按牌面处理。</small>';
+                + '</div><small>最短正交路线，未对齐时逐格换轴。地形不影响路线。</small>';
               if (Object.hasOwn(aiHeadings, route.facing)) {
                 const begin = route.firstFacing;
                 guidance += '<p>' + (route.steps ? '起步朝' + aiHeadings[begin] + ' · ' : '')
@@ -620,6 +631,7 @@
             } else if (state.board?.apostleMovement) {
               guidance += '<p>已走路线无法按当前目标和射程继续推荐。请撤回不符的步数，或按牌面手动处理。</p>';
             }
+            guidance += action('ai-manual-movement', '按牌面手动移动');
           }
         }
         const hope = projection?.hopeEnds;

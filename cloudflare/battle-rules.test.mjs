@@ -764,6 +764,24 @@ test('推荐移动执行所选逐格路线，冲撞待确认时保留标记并�
   assert.deepEqual(r.board.lastApostleMove.route, collision.centers);
 });
 
+test('截图版图的常规路线只有横向和纵向起步，地形不改变最短路线', () => {
+  const r = room();
+  r.board = api.setupRoomBoard({ apostle: 'HERMESIAN_PURSUER', level: 1 }, 2);
+  r.turn = { phase: 'apostle', aiGuide: 'resolve', aiTarget: 1 };
+  r.board.map.pieces.apostle = { column: 8.5, row: 6.5, facing: 180 };
+  r.board.map.pieces.titans = [{ column: 8, row: 5 }, { column: 13, row: 5 }];
+  const withTerrain = guide.apostleRoutes(r, 1, terrain, los);
+  assert.deepEqual(withTerrain.map(path => [path.id, path.steps, path.crossedSeats]), [
+    ['horizontal-first', 4, []], ['vertical-first', 4, [0]],
+  ]);
+  const coords = centers => centers.map(({ column, row }) => [column, row]);
+  assert.deepEqual(coords(withTerrain[0].centers), [[8.5, 6.5], [9.5, 6.5], [9.5, 5.5], [10.5, 5.5], [11.5, 5.5]]);
+  assert.deepEqual(coords(withTerrain[1].centers), [[8.5, 6.5], [8.5, 5.5], [9.5, 5.5], [10.5, 5.5], [11.5, 5.5]]);
+  assert(r.board.map.terrain.length > 0);
+  r.board.map.terrain = [];
+  assert.deepEqual(guide.apostleRoutes(r, 1, terrain, los), withTerrain);
+});
+
 test('推荐移动从已走路线接续换轴，拒绝未对齐时连续同轴的前缀', () => {
   const r = room();
   r.board = api.setupRoomBoard({ apostle: 'HERMESIAN_PURSUER', level: 1 }, 2);

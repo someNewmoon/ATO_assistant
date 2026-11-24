@@ -181,7 +181,15 @@ button.battle-piece { pointer-events: auto; cursor: pointer; min-height: 0; }
 .room-tactical-board .battle-map-board-image { opacity: .53; filter: saturate(.54); }
 .room-tactical-board .battle-map-grid { opacity: .9; }
 .room-board-turn-tools, .room-board-turn-tools > div { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
-.room-board-turn-tools[hidden], .room-board-turn-tools label[hidden] { display: none; }
+.room-board-turn-tools[hidden], .room-board-settings[hidden] { display: none; }
+.room-board-turn-tools .room-seat-tabs { margin: 0; }
+.room-board-turn-tools [data-priority-lock][aria-pressed="true"] {
+  background: #65452c; border-color: #e5ad67; color: #fff3df;
+}
+.room-board-settings { margin-top: .5rem; border-top: 1px solid var(--line); padding-top: .45rem; }
+.room-board-settings > summary { cursor: pointer; font-weight: 700; }
+.room-board-settings > :not(summary) { margin-top: .45rem; }
+.room-board-settings .battle-map-head-actions { justify-content: flex-start; }
 .battle-piece-priority {
   position: absolute; top: 39%; left: 38%; z-index: 2;
   display: grid; place-items: center; width: 1.25em; height: 1.25em;

@@ -187,7 +187,8 @@
         priority.title = "首要目标";
         priority.setAttribute("aria-hidden", "true");
         marker.appendChild(priority);
-        marker.setAttribute("aria-label", name + " " + square + " · 首要目标");
+        marker.title += " · 首要目标";
+        marker.setAttribute("aria-label", marker.title);
       }
       if (boss) {
         const facing = document.createElement("span");

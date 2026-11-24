@@ -61,7 +61,9 @@
 .battle-room :is(.battle-room-stats, .battle-room-pool > div, .battle-room-dice > div) { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; }
 .battle-room-pool header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
 .battle-room-rolls ol { max-height: 12rem; overflow-y: auto; margin: 7px 0 0; padding-inline-start: 1.6em; }
-.battle-room-team > summary { cursor: pointer; margin-bottom: 8px; }
+.room-battle-history, .battle-room-team { margin-top: .65rem; }
+:is(.battle-room-team, .room-battle-history) > summary { cursor: pointer; font-weight: 700; }
+.battle-room-team[open] > summary { margin-bottom: 8px; }
 .battle-room-result { font-size: .92em; }
 .battle-room [data-room-retry] { margin-top: 10px; }
 

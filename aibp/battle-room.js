@@ -1636,10 +1636,9 @@
     const own = heroes[shownSeat];
     const ownHeading = own && '<h3 class="battle-room-heading">' + (host && !hostPersonalView ? '泰坦与装备' : '我的英雄') + '</h3>';
     const teammates = heroes.filter((_, index) => index !== shownSeat);
-    const overview = role === 'player' || hostPersonalView
-      ? '<details class="battle-room-team"' + (content.querySelector('.battle-room-team')?.open ? ' open' : '')
-        + '><summary>队伍状态</summary><div class="battle-room-grid">' + teammates.join('') + '</div></details>'
-      : '<div class="battle-room-grid">' + teammates.join('') + '</div>';
+    const overview = teammates.length && '<details class="battle-room-team"'
+      + (content.querySelector('.battle-room-team')?.open ? ' open' : '')
+      + '><summary>队伍状态 · ' + teammates.length + ' 位队友</summary><div class="battle-room-grid">' + teammates.join('') + '</div></details>';
     for (const [id, choices] of selectedDice) {
       const roll = state.rolls.find(entry => entry.id === id);
       for (const dieId of choices) if (!roll?.dice.some(die => die.id === dieId && dice.canReroll(die))) choices.delete(dieId);
@@ -1671,17 +1670,20 @@
         + (canFinishTurn ? '<button type="button" data-action="turn-finish" data-seat="' + second.seat + '">结束回合</button>' : '') : '')
       + '<div>' + pool + '</div></section>';
     const poolByDice = edit && (personal || !!own || showFirstAbility);
+    const activity = edit && teamActivity();
+    const showHistory = edit && (!personal || activity);
     renderSections(content, [
       goal, !personal && !poolByDice && poolSection,
       edit && '<section class="room-dice-panel" id="room-dice"></section>',
       ownHeading, own && heroTabs, own, !edit && argoAbilities(),
       !edit && state.board && '<details class="room-jump-panel"><summary>骇物面板</summary><div data-closed-apostle></div></details>',
       !edit && '<details class="room-jump-panel"><summary>创伤牌库</summary><div data-closed-trauma></div></details>',
-      !personal && edit && rollLog, edit && teamActivity(),
-      role !== 'player' && !hostPersonalView && '<h3 class="battle-room-heading">状态总览</h3>', overview, !edit && rollLog,
+      showHistory && '<details class="room-battle-history"><summary>战斗记录</summary><div data-room-history></div></details>',
+      overview, !edit && rollLog,
       state.squad && '<p><a href="' + escape(squadLink.link('/aibp/squad', id)) + '">返回联机小队</a></p>',
     ]);
     if (edit) renderDicePanel(content.querySelector('#room-dice'), poolByDice ? poolSection : '');
+    if (showHistory) renderSections(content.querySelector('[data-room-history]'), [!personal && rollLog, activity]);
     if (!edit) {
       const bossPanel = content.querySelector('[data-closed-apostle]');
       if (bossPanel) renderMarkup(bossPanel, roomProjection(true));

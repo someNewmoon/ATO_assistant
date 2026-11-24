@@ -1301,6 +1301,7 @@ Add these script tags after the main viewer script:
         </div>
 
         <div class="loot-dialog-body">
+          <div data-loot-recap></div>
           <div class="loot-toolbar">
             <label class="loot-multiplier-label">战斗场景 <select class="loot-scene-input"></select></label>
             <label class="loot-multiplier-label">战斗结果 <select class="loot-outcome-input"></select></label>
@@ -1327,7 +1328,6 @@ Add these script tags after the main viewer script:
             <button type="button" class="loot-recalc-button">重新随机计算</button>
           </div>
 
-          <div data-loot-recap></div>
           <div class="loot-summary"></div>
           <div class="loot-warning"></div>
           <div class="loot-details"></div>

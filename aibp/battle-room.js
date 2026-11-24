@@ -180,6 +180,9 @@
     render();
     if (!first && prior && actor.role !== 'viewer') animateLatestRoll(prior);
     const second = state.secondAbility;
+    if (!first && second?.criticalWounds > 0 && prior?.secondAbility?.id !== second.id) {
+      squadLink?.celebrateCritical(state.heroes[second.seat]?.name, second.criticalWounds);
+    }
     const mySecond = second && second.id !== lastSecondAbility
       && (actor.role === 'player' ? actor.seat === second.seat : actor.role === 'host' && rollSeat === second.seat);
     if (mySecond && !first) {
@@ -1571,7 +1574,7 @@
   function finishSquadBattle() {
     const dialog = document.createElement('dialog');
     dialog.className = 'room-trauma-dialog room-battle-finish';
-    dialog.innerHTML = '<form><h3>结束战斗</h3><p>已按每次威力投掷的击破结果累计损伤。</p><ul>'
+    dialog.innerHTML = '<form><h3>结束战斗</h3><p>已按部位牌结算累计损伤。</p><ul>'
       + state.heroes.map((hero, seat) => '<li>' + escape(hero.name) + ' · ' + (state.damageBySeat?.[seat] ?? 0) + '</li>').join('')
       + '</ul><details><summary>调整其他来源造成的损伤</summary>'
       + state.heroes.map((hero, seat) => '<label>' + escape(hero.name)

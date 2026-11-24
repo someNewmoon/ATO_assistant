@@ -714,6 +714,11 @@ export class BattleRoom extends DurableObject {
           stats.damage = (stats.damage ?? 0) + wounds;
         }
         room.secondAbility = { id: body.id, roll: roll?.id ?? null, seat, round: room.round };
+        if (body.value === 2 && wounds > 0) {
+          const stats = battleStats(room)[seat];
+          stats.criticals = (stats.criticals ?? 0) + 1;
+          room.secondAbility.criticalWounds = wounds;
+        }
       }
       deck.revision++;
       deck.operation = body.id;

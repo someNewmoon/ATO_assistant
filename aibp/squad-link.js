@@ -155,17 +155,38 @@
     if (window.ATO_LANGUAGE) apply();
     else document.addEventListener('DOMContentLoaded', apply, { once: true });
   }
+  function celebrateCritical(name, damage) {
+    let notice = document.querySelector('.battle-critical-notice');
+    if (!notice) {
+      notice = document.createElement('div');
+      notice.className = 'battle-critical-notice';
+      notice.setAttribute('role', 'status');
+      document.body.append(notice);
+    }
+    const result = document.createElement('div');
+    result.className = 'battle-critical-result';
+    const title = document.createElement('strong');
+    title.textContent = '暴击';
+    const detail = document.createElement('span');
+    detail.textContent = [name, '+' + damage + ' 损伤'].filter(Boolean).join(' · ');
+    result.append(title, detail);
+    notice.replaceChildren(result);
+    window.setTimeout(() => result.remove(), 2000);
+  }
+
   function recapMarkup(recap) {
     if (!recap) return '';
     const { escape, heroPortrait } = window.ATO_HERO_CATALOG;
     const spotlight = recap.heroes.find(hero => hero.id === recap.mvp);
+    const total = recap.heroes.reduce((sum, hero) => sum + (hero.damage ?? 0), 0);
     return '<section class="room-battle-recap"><h3>第 ' + recap.battleNumber + ' 场 · 战斗称号</h3>'
       + '<p>' + escape(recap.apostle) + ' · 第 ' + recap.round + ' 轮结束'
       + (spotlight ? ' · ' + (recap.spotlights ? '全场最佳 ' : '本场特别提名 ') + escape(spotlight.name) : '') + '</p>'
+      + '<p class="room-damage-recap"><strong>小队造成 ' + total + ' 损伤</strong></p>'
       + '<ul>' + recap.heroes.map(hero => {
         const portrait = heroPortrait(hero);
         const metrics = [hero.damage == null ? '' : '损伤 ' + hero.damage,
-          '投掷 ' + hero.rolls, '赞同 ' + hero.likes, '表态 ' + hero.feedback].filter(Boolean);
+          hero.criticals ? '暴击 ' + hero.criticals + ' 次' : '', '投掷 ' + hero.rolls, '赞同 ' + hero.likes, '表态 ' + hero.feedback].filter(Boolean);
         return '<li>' + (portrait ? '<img alt="" src="../hero/assets/' + escape(portrait) + '">' : '')
           + '<div><strong>' + escape(hero.name) + ' · ' + escape(hero.title) + '</strong>'
           + (hero.reason ? '<div>' + escape(hero.reason) + '</div>' : '')
@@ -173,5 +194,5 @@
       }).join('') + '</ul></section>';
   }
 
-  window.ATO_SQUAD_LINK = { read, save, forget, recentHost, listedHost, home, link, request, connect, watchSocket, language, validId, validKey, sharedOrigin, recapMarkup };
+  window.ATO_SQUAD_LINK = { read, save, forget, recentHost, listedHost, home, link, request, connect, watchSocket, language, validId, validKey, sharedOrigin, recapMarkup, celebrateCritical };
 })();

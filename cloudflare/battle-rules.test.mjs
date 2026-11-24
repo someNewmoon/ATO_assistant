@@ -461,6 +461,8 @@ test('Worker 独立揭示、结算部位牌并激化，完整牌堆只对房主�
     assert.equal(r.battleStats[0].damage, damage);
     assert.equal(r.turn.seat, priorSeat);
     assert.equal(r.secondAbility.id, 'settled');
+    assert.equal(r.secondAbility.criticalWounds, outcome === 2 ? damage : undefined);
+    assert.equal(r.battleStats[0].criticals, outcome === 2 ? 1 : undefined);
     assert.equal(r.pool.opening, 3);
     assert.equal(r.battleDeck.revision, outcome === 1 ? 3 : 4);
     if (!outcome) assert.deepEqual(r.battleDeck.data.BP.discard, [current]);

@@ -1,3 +1,72 @@
 .room-battle-recap ul { list-style: none; padding: 0; display: grid; gap: .45rem; grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 1fr)); }
 .room-battle-recap li { display: flex; align-items: center; gap: .55rem; border: 1px solid #aa9265; padding: .5rem; border-radius: .6rem; }
 .room-battle-recap img { width: 2.2rem; height: 2.2rem; object-fit: cover; object-position: top; border-radius: 50%; }
+
+
+.room-damage-recap {
+  margin-block: .5rem .85rem;
+  padding: .5rem .7rem;
+  border-inline-start: 3px solid #ad7140;
+  background: #f7e8cf;
+  color: #513a27;
+}
+
+.battle-critical-notice {
+  position: fixed;
+  z-index: 9999;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+}
+
+.battle-critical-result {
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  gap: .2rem;
+  padding: .7rem 2.4rem 1rem;
+  text-align: center;
+  background: radial-gradient(ellipse at top, #893721, #291411 83%);
+  border-block: 2px solid #e4b66b;
+  color: #fff0cf;
+  box-shadow: 0 0 2rem #dd66276b, 0 .4rem 1.5rem #1c0d0bc9;
+  animation: battle-critical-impact 1.95s both;
+}
+
+.battle-critical-result strong {
+  font-family: "Songti SC", "Noto Serif CJK SC", SimSun, Georgia, serif;
+  font-size: clamp(2rem, 6vw, 3.5rem);
+  line-height: 1.1;
+  letter-spacing: .12em;
+  text-shadow: 0 0 .65rem #f49b39;
+}
+
+.battle-critical-result::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: 44% -3rem auto;
+  height: 4px;
+  background: linear-gradient(90deg, transparent, #ffe0a2, transparent);
+  transform: rotate(-10deg);
+  animation: battle-critical-slash .45s ease-out both;
+}
+
+@keyframes battle-critical-impact {
+  0% { transform: scale(.78) rotate(-3deg); opacity: 0; }
+  14% { transform: scale(1.08); opacity: 1; }
+  26%, 80% { transform: scale(1); opacity: 1; }
+  100% { transform: translateY(-10px); opacity: 0; }
+}
+
+@keyframes battle-critical-slash {
+  0% { clip-path: inset(0 100% 0 0); }
+  42% { clip-path: inset(0); opacity: 1; }
+  100% { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .battle-critical-result { animation: none; }
+  .battle-critical-result::before { display: none; }
+}

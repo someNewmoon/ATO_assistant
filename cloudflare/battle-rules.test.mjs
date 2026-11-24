@@ -18,6 +18,7 @@ const bundled = await build({
     export { createTrauma, applyTrauma, traumaView } from './worker/room-trauma.js';
     export { applySquad, syncCampaignStock } from './worker/room-squad.js';
     export { setupRoomBoard } from './worker/board.js';
+    export { captureTurnUndo, canUndoTurn, undoTurn } from './worker/room-turn.js';
     export { prepareRoomDeck, roomDeckProjection } from './worker/room-deck.js';`, resolveDir: import.meta.dirname },
   bundle: true, write: false, platform: 'node', format: 'esm',
   plugins: [{ name: 'cloudflare-test-base', setup(builder) {
@@ -1079,4 +1080,35 @@ test('循环一逐步结算由房主确认，核对牌面并洗回空的指令�
     assert.equal(r.turn.phase, 'titans');
     assert.equal(r.turn.aiGuide, undefined);
   }
+});
+
+
+test('轮次上一步恢复目标、位置和牌堆，其他行动或旧版本提交不能回滚', () => {
+  const { captureTurnUndo, canUndoTurn, undoTurn } = api;
+  const host = { role: 'host' };
+  const room = { revision: 7, turn: { phase: 'apostle', aiGuide: 'target' },
+    board: { layoutRevision: 2, map: { column: 4 } },
+    battleDeck: { revision: 3, operation: 'draw', data: ['A', 'B'] },
+    projection: { aiPending: true } };
+  const saved = captureTurnUndo(room, host, { type: 'ai-guide-discard' });
+  assert.equal(captureTurnUndo(room, host, { type: 'roll' }), null);
+  assert.equal(captureTurnUndo(room, { role: 'player' }, { type: 'turn-finish' }), null);
+  room.turnUndo = saved;
+  room.revision = 8;
+  room.turn.aiGuide = 'other';
+  room.board.layoutRevision = 3;
+  room.board.map.column = 8;
+  room.battleDeck.revision = 4;
+  room.battleDeck.data.shift();
+  room.projection.aiPending = false;
+  assert.equal(canUndoTurn(room), true);
+  assert.throws(() => undoTurn(room, { role: 'player' }, { revision: 8 }), { status: 403 });
+  assert.throws(() => undoTurn(room, host, { revision: 7 }), { status: 409 });
+  undoTurn(room, host, { id: 'undo', revision: 8 });
+  assert.equal(room.turn.aiGuide, 'target');
+  assert.deepEqual(room.board, { layoutRevision: 4, map: { column: 4 } });
+  assert.deepEqual(room.battleDeck, { revision: 5, operation: 'undo', data: ['A', 'B'] });
+  assert.equal(room.projection.aiPending, true);
+  room.revision++;
+  assert.equal(canUndoTurn(room), false);
 });

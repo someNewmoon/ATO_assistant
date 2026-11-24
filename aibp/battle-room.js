@@ -66,7 +66,7 @@
   let actionRetryDelay = 1500;
   const actions = [];
   const cardActionLabels = {
-    'ai-request': '揭示 AI', 'ai-guide': '确认骇物步骤', 'ai-guide-discard': '弃置 AI',
+    'turn-undo': '撤回轮次行动', 'ai-request': '揭示 AI', 'ai-guide': '确认骇物步骤', 'ai-guide-discard': '弃置 AI',
     'bp-request': '揭示部位牌', 'bp-settle': '确认部位牌结果', 'turn-finish': '结束回合',
   };
   const timingKey = 'ato-battle-card-timings';
@@ -460,6 +460,11 @@
       return;
     }
     const { turnAction: type, seat, value } = button.dataset;
+    if (type === 'turn-undo') {
+      if (!state.canUndoTurn || actions.some(entry => entry.type === type)) return;
+      send({ id: crypto.randomUUID(), type, revision: state.revision });
+      return;
+    }
     if (type === 'guide-defense') {
       if (actor.role !== 'host' || !canOpenGuidedDefense(state.turn)) return;
       const target = state.turn.aiTarget;
@@ -694,7 +699,9 @@
     const hint = !turn ? '' : !titans ? '<p>泰坦仍可结算闪避、击退和推斥。</p>'
       : everyoneFinished ? '<p>结算本轮结束效果后，由房主开启下一轮。</p>'
         : activeSeat === null ? '<p>首次主动移动或投掷攻击／威力骰会认领回合。</p>' : '';
-    const actions = controls ? '<div class="room-turn-controls">' + controls + '</div>' : '';
+    const back = host && turn ? action('turn-undo', '上一步', state.canUndoTurn ? ''
+      : ' disabled title="仅可撤回刚才的轮次操作；其他战斗操作已发生时无法撤回。"') : '';
+    const actions = controls || back ? '<div class="room-turn-controls">' + back + controls + '</div>' : '';
     roomBoard?.setAiRoute(route);
     const next = guidance + actions + (step && !signatureActive ? '' : '<ul>' + roster + '</ul>') + hint;
     if (turnMarkup !== next) {
@@ -2090,7 +2097,7 @@
           }
         } else if (error instanceof RejectedAction) {
           if (action.id === turnAiAction) turnAiAction = null;
-          if (error.status === 409 && ['ai-request', 'ai-guide', 'ai-guide-discard', 'bp-request', 'bp-settle'].includes(action.type)) await refreshRoomState();
+          if (error.status === 409 && ['ai-request', 'ai-guide', 'ai-guide-discard', 'turn-undo', 'bp-request', 'bp-settle'].includes(action.type)) await refreshRoomState();
           if (error.status === 401 && lostSeat()) break;
           if (!state.squad || state.squad.phase === 'battle') render();
         } else {

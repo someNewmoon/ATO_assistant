@@ -7,7 +7,7 @@ import aiGuide from '../../aibp/ai-turn-guide.js';
 import roomDice from '../../aibp/room-dice.js';
 import { roomProjection } from './room-projection.js';
 import { discardRoomAi, prepareRoomDeck, revealRoomAi, revealRoomBp, roomDeckProjection, settleRoomBp } from './room-deck.js';
-import { applyTurn, claimTurn, finishAiMovement, setTurnPhase } from './room-turn.js';
+import { applyTurn, claimTurn, finishAiMovement, setTurnPhase, captureTurnUndo, canUndoTurn, undoTurn } from './room-turn.js';
 import { battleRecap, battleStats, countReaction, setRollWounds } from './room-recap.js';
 import battleConfig from '../../technology/battle-config.js';
 import techDictionary from '../../technology/tech_card_dictionary.min.json';
@@ -160,7 +160,7 @@ function publicSquadLoadouts(room) {
 }
 
 const activityLabels = {
-  'turn-phase': '切换轮次', 'turn-take': '开始英雄回合', 'turn-finish': '结束英雄回合',
+  'turn-undo': '撤回上一步轮次行动', 'turn-phase': '切换轮次', 'turn-take': '开始英雄回合', 'turn-finish': '结束英雄回合',
   'board-move': '移动泰坦', 'board-undo-move': '撤回上一步', 'board-apostle-move': '移动骇物',
   'board-ai-route': '执行推荐移动', 'board-ai-trample-confirm': '确认冲撞',
   'board-apostle-undo': '撤回骇物移动', 'board-face': '调整骇物朝向', 'priority-target': '调整首要目标', round: '开启新一轮',
@@ -342,8 +342,8 @@ export class BattleRoom extends DurableObject {
   }
 
   view(room, actor) {
-    const { secrets, trauma, squad, owner, battleStats, battleDeck, bpRequest, ...state } = room;
-    return { ok: true, room: { ...state, heroes: room.heroes.map(hero => ({ ...hero, gear: hero.gear.map(item => ({
+    const { secrets, trauma, squad, owner, battleStats, battleDeck, bpRequest, turnUndo, ...state } = room;
+    return { ok: true, room: { ...state, canUndoTurn: actor.role === 'host' && canUndoTurn(room), heroes: room.heroes.map(hero => ({ ...hero, gear: hero.gear.map(item => ({
       ...item, category: roomGearCategory(item.id),
     })) })), priorityTarget: priorityTarget(room), trauma: traumaView(room, actor),
       ...(battleDeck && { deckRevision: battleDeck.revision, bpSeat: battleDeck.bpSeat ?? null }),
@@ -613,7 +613,11 @@ export class BattleRoom extends DurableObject {
     if (room.closed) reject(room.squad ? '小队已解散。' : '本场战斗已结束。', 409);
     const previousProjection = room.projection;
     const previousDeckRevision = room.battleDeck?.revision;
+    const undoWasAvailable = canUndoTurn(room);
+    const turnUndo = captureTurnUndo(room, actor, body);
     this.apply(room, actor, body, savedTrauma);
+    if (turnUndo) room.turnUndo = turnUndo;
+    else delete room.turnUndo;
     recordBattleActivity(room, actor, body, previousProjection);
     room.revision++;
     this.ctx.storage.transactionSync(() => {
@@ -626,6 +630,7 @@ export class BattleRoom extends DurableObject {
     });
     const combat = combatPatch(room, body);
     const patch = combat ? { data: combat } : cardActionPatch(room, body, previousDeckRevision);
+    if (patch && (undoWasAvailable || turnUndo)) patch.data.roomPatch.room.canUndoTurn = Boolean(turnUndo);
     this.publish(room, sender, patch);
     const acknowledgement = patchForSocket(patch, sender?.deserializeAttachment());
     return acknowledgement ? { ok: true, ...acknowledgement } : this.view(room, actor);
@@ -642,6 +647,7 @@ export class BattleRoom extends DurableObject {
     if (room.squad && body.type !== 'public-lobby'
       && (room.squad.phase !== 'battle' || body.battleNumber !== room.squad.battleNumber)) reject('当前战斗已结束或已经切换。', 409);
     if (body.expectedRound !== undefined && body.expectedRound !== room.round) reject('轮次已更新，请重新操作。', 409);
+    if (body.type === 'turn-undo') return undoTurn(room, actor, body);
     if (['turn-phase', 'turn-take', 'turn-finish', 'ai-guide'].includes(body.type)) return applyTurn(room, actor, body);
     if (typeof body.type === 'string' && body.type.startsWith('trauma-')) return applyTrauma(room, actor, body, randomInt);
     if (typeof body.type === "string" && body.type.startsWith("board-")) return applyRoomBoard(room, actor, body);

@@ -147,3 +147,36 @@ export function applyTurn(room, actor, action) {
   }
   throw new ApiError(409, '该回合已被认领、已经结束，或当前是骇物轮次。');
 }
+
+const undoableTurnActions = new Set([
+  'turn-phase', 'turn-take', 'turn-finish', 'ai-guide', 'ai-request', 'ai-guide-discard',
+  'board-ai-route', 'board-ai-trample-confirm', 'board-apostle-move', 'board-apostle-end',
+]);
+
+export function captureTurnUndo(room, actor, action) {
+  if (actor.role !== 'host' || !undoableTurnActions.has(action.type)) return null;
+  if (action.type === 'ai-request' && !room.turn?.aiGuide) return null;
+  const fields = ['turn', 'board'];
+  if (action.type === 'ai-request' || action.type === 'ai-guide-discard') fields.push('battleDeck', 'projection');
+  return { revision: room.revision + 1, fields: structuredClone(Object.fromEntries(fields.map(key => [key, room[key]]))) };
+}
+
+export function canUndoTurn(room) {
+  return Boolean(room.turnUndo && room.turnUndo.revision === room.revision);
+}
+
+export function undoTurn(room, actor, action) {
+  if (actor.role !== 'host') throw new ApiError(403, '轮次操作由房主撤回。');
+  if (!canUndoTurn(room) || action.revision !== room.revision) {
+    throw new ApiError(409, '战斗状态已更新，无法安全撤回上一步。');
+  }
+  const { fields } = room.turnUndo;
+  if (fields.battleDeck) {
+    fields.battleDeck.revision = room.battleDeck.revision + 1;
+    fields.battleDeck.operation = action.id;
+  }
+  if (fields.board && fields.board.layoutRevision !== room.board?.layoutRevision) {
+    fields.board.layoutRevision = (room.board?.layoutRevision ?? -1) + 1;
+  }
+  Object.assign(room, fields);
+}

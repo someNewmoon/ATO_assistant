@@ -26,6 +26,7 @@ Add these script tags after the main viewer script:
   const RECORD_SYNC_CHANNEL = typeof BroadcastChannel === "function" ? new BroadcastChannel("ato-record-sync-v1") : null;
   const CHIMERA_APOSTLE = "CHIMERA_METASTASIOS";
   const BURDEN_APOSTLE = "THE_BURDEN";
+  const PURSUER_APOSTLE = "HERMESIAN_PURSUER";
   const NIETZSCHE_APOSTLE = "THE_NIETZSCJEAN";
   const CORE_RESOURCE = "core";
   const RESOURCE_ZH_NAME = {
@@ -857,7 +858,7 @@ Add these script tags after the main viewer script:
   }
 
   function recordEnemyLevel(record, apostle, activeCycle = "") {
-    if (!isPlainObject(record?.enemies)) return 0;
+    if (apostle === PURSUER_APOSTLE || !isPlainObject(record?.enemies)) return 0;
     const config = APOSTLE_RECORD_ENEMY[apostle];
     if (!config) return 0;
 
@@ -894,7 +895,13 @@ Add these script tags after the main viewer script:
     return Math.max(0, ...levels.filter((level) => Number.isFinite(level)));
   }
 
+  function pursuerBattleLevel() {
+    const level = typeof currentApostleLevel === "function" ? currentApostleLevel() : 1;
+    return Number.isInteger(level) && level >= 1 && level <= 10 ? level : 1;
+  }
+
   async function recordMultiplierForApostle(apostle) {
+    if (apostle === PURSUER_APOSTLE) return 0;
     try {
       const server = await readServerRecordState();
       if (server.available) return recordEnemyLevel(server.state || {}, apostle, server.activeCycle);
@@ -1084,16 +1091,16 @@ Add these script tags after the main viewer script:
     const damageCards = isChimera ? getRegularDamageCards(apostle, bp) : getAllDamageCards(bp);
     const secondaryDamageCards = getSecondaryDamageCards(apostle, bp);
     const resourceKeys = collectResourceKeys(apostle, map);
-    const recordMultiplier = options.recordMultiplier === undefined
+    const battleLevel = apostle === PURSUER_APOSTLE ? pursuerBattleLevel() : 0;
+    const configuredRecordLevel = options.recordMultiplier === undefined
       ? cachedRecordApostleLevel(apostle) : Number(options.recordMultiplier || 0);
+    const recordMultiplier = battleLevel ? 0 : configuredRecordLevel;
     const manualMultiplier = Number(options.multiplier || 0);
-    const multiplier = Math.max(1, Math.floor(manualMultiplier || recordMultiplier || 1));
+    const multiplier = Math.max(1, Math.floor(manualMultiplier || battleLevel || recordMultiplier || 1));
     const resourceMultiplier = battle.ending ? multiplier : resourceMultiplierForApostle(apostle, multiplier);
     const multiplierSource = manualMultiplier > 0
       ? "manual"
-      : recordMultiplier > 0
-        ? "record"
-        : "default";
+      : battleLevel ? "battle" : recordMultiplier > 0 ? "record" : "default";
     const regularDamageCount = damageStackCount(damageCards);
     const secondaryDamageCount = damageStackCount(secondaryDamageCards);
 
@@ -1660,8 +1667,10 @@ Add these script tags after the main viewer script:
   function readLootDialogOptions(dialog, resetScene = false) {
     const readChoices = (attribute) => Object.fromEntries([...dialog.querySelectorAll(`[${attribute}]`)]
       .map((input) => [input.getAttribute(attribute), Number(input.value)]));
+    const inputLevel = Number(dialog.querySelector(".loot-multiplier-input").value || 1);
     return {
-      multiplier: Number(dialog.querySelector(".loot-multiplier-input").value || 1),
+      multiplier: lastLootResult?.multiplierSource === "battle" && inputLevel === lastLootResult.multiplier
+        ? undefined : inputLevel,
       sceneId: dialog.querySelector(".loot-scene-input").value,
       outcome: resetScene ? "victory" : dialog.querySelector(".loot-outcome-input").value,
       firstVictory: !resetScene && dialog.querySelector(".loot-first-victory-input").checked,
@@ -1728,7 +1737,7 @@ Add these script tags after the main viewer script:
         <div>暴击 BP III：${result.woundedBpIIICount}（核心 +${result.details.coreBonus.reduce((sum, item) => sum + Number(item.resource.core || 0), 0)}）</div>
         <div>倍率：×${result.multiplier}</div>
         ${result.ignoresLevelResourceMultiplier ? `<div>资源倍率：×${result.resourceMultiplier}（该始徒不按等级乘资源）</div>` : ""}
-        <div>倍率来源：${result.multiplierSource === "record" ? "记录表" : result.multiplierSource === "manual" ? "手动输入" : "默认等级 1"}</div>
+        <div>倍率来源：${({ record: "记录表", battle: "本场骇物等级", manual: "手动输入" })[result.multiplierSource] || "默认等级 1"}</div>
         ${result.chimeraBonus ? `<div>奇美拉常规损伤：${escapeHtml(String(result.regularDamageCount))}</div>` : ""}
         ${result.chimeraBonus ? `<div>奇美拉第二损伤堆：${escapeHtml(String(result.secondaryDamageCount))}</div>` : ""}
         ${result.chimeraBonus ? `<div>奇美拉奖励条件：${escapeHtml(result.chimeraBonus.rowLabel || "无")}</div>` : ""}

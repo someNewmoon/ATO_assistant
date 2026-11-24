@@ -25,6 +25,7 @@ function harness(apostle = 'HEKATON') {
   };
   const ctx = vm.createContext({
     console, currentApostle: apostle, apostleLevelOverrides: {}, recordApostleLevels: {},
+    roomBattleLevel: null, theatreBattle: null,
     fixedLevelOneApostles: new Set(), maxApostleLevel: 9,
     piles: { [apostle]: { BP: {
       deck: [{ type: 'BP', level: 'III', index: 1 }], discard: [],
@@ -192,4 +193,32 @@ test('changing Boss while its record is loading does not open loot with the prev
   await opening;
   assert.deepEqual(ctx.alerts, []);
   assert.notEqual(lootDialog(ctx)?.open, true);
+});
+
+test('Pursuer loot uses the battle panel rather than checked encounter boxes', async () => {
+  const ctx = harness('HERMESIAN_PURSUER');
+  ctx.fixedLevelOneApostles.add('HERMESIAN_PURSUER');
+  ctx.recordApostleLevels.HERMESIAN_PURSUER = 4;
+  let recordReads = 0;
+  ctx.fetch = async () => {
+    recordReads++;
+    return recordResponse({ cycle: 'c1', enemies: { 'nemesis:pursuer:4-3': true } });
+  };
+  assert.equal(ctx.AIBP_calculateBpLoot({ recordMultiplier: 4 }).multiplier, 1);
+
+  await ctx.AIBP_showBpLootDialog();
+  const dialog = lootDialog(ctx), input = dialog.querySelector('.loot-multiplier-input');
+  assert.deepEqual(ctx.alerts, []);
+  assert.equal(recordReads, 0);
+  assert.equal(input.value, '1');
+  assert.match(dialog.querySelector('.loot-summary').innerHTML, /本场骇物等级/);
+
+  ctx.roomBattleLevel = { apostle: 'HERMESIAN_PURSUER', level: 2 };
+  await ctx.AIBP_showBpLootDialog();
+  assert.equal(input.value, '2');
+  assert.equal(ctx.AIBP_calculateBpLoot().resourceMultiplier, 1);
+  input.value = '3';
+  dialog.querySelector('.loot-toolbar').listeners.change({ target: input });
+  assert.equal(input.value, '3');
+  assert.match(dialog.querySelector('.loot-summary').innerHTML, /手动输入/);
 });

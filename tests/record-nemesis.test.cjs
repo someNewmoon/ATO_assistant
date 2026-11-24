@@ -219,7 +219,7 @@ function aibpContext() {
   const ctx = vm.createContext({});
   vm.runInContext([
     lootSource.slice(lootSource.indexOf('  const APOSTLE_RECORD_CORE_KEY = '), lootSource.indexOf('  const LEVEL_ORDER = ')),
-    'const BURDEN_APOSTLE = "THE_BURDEN"; const RECORD_DEFAULT_CYCLE = "c2";',
+    'const PURSUER_APOSTLE = "HERMESIAN_PURSUER"; const BURDEN_APOSTLE = "THE_BURDEN"; const RECORD_DEFAULT_CYCLE = "c2";',
     fn(lootSource, 'isPlainObject'), fn(lootSource, 'recordStageLevel'), fn(lootSource, 'recordEnemyLevel'),
     fn(lootSource, 'recordCycleForLoot'),
   ].join('\n'), ctx);
@@ -228,7 +228,7 @@ function aibpContext() {
   return ctx;
 }
 
-test('both AIBP level readers use shared nemesis progress and respect explicit clears over old marks', () => {
+test('nemesis progress and loot respect explicit clears, and Pursuer loot ignores the progress track', () => {
   const ctx = aibpContext();
   const tracks = [
     ['HERMESIAN_PURSUER', 'pursuer', 'c1', '5-4', 5], ['THE_BURDEN', 'adversary', 'c2', '4-3', 4],
@@ -237,7 +237,7 @@ test('both AIBP level readers use shared nemesis progress and respect explicit c
   for (const [apostle, key, cycle, stage, expected] of tracks) {
     const record = { cycle: 'c2', enemies: { [`nemesis:${key}:${stage}`]: true, [`nemesis:${key}:triangle`]: true } };
     assert.equal(ctx.recordLevelForTrack(record, { cycle, key }), expected);
-    assert.equal(ctx.recordEnemyLevel(record, apostle), expected);
+    assert.equal(ctx.recordEnemyLevel(record, apostle), apostle === 'HERMESIAN_PURSUER' ? 0 : expected);
     record.enemies[`nemesis:${key}:${stage}`] = false;
     record.enemies[`${cycle}:${key}:${stage}`] = true;
     record.enemies[key] = expected;

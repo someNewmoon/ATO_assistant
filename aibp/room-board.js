@@ -114,6 +114,7 @@
       panel.querySelector("[data-battle-map-los-control]").hidden = true;
       settings = document.createElement("details");
       settings.className = "room-board-settings";
+      settings.id = "roomBoardTerrainSettings";
       settings.hidden = !canEdit();
       const settingsSummary = document.createElement("summary");
       settingsSummary.textContent = "版图与地形设置";
@@ -123,7 +124,19 @@
       panel.querySelector(".battle-map-side").append(settings);
       const terrainMode = panel.querySelector('[data-board-mode=""]');
       terrainMode.hidden = !canEdit();
-      terrainMode.addEventListener("click", () => { settings.open = true; });
+      terrainMode.setAttribute("aria-controls", settings.id);
+      const syncTerrainDisclosure = () => terrainMode.setAttribute("aria-expanded", String(settings.open));
+      syncTerrainDisclosure();
+      settings.addEventListener("toggle", syncTerrainDisclosure);
+      terrainMode.addEventListener("click", () => {
+        settings.open = !settings.open;
+        syncTerrainDisclosure();
+      });
+      panel.querySelector("[data-board-tactics]").addEventListener("click", event => {
+        if (event.target.closest('[data-board-mode]:not([data-board-mode=""]), [data-board-place-boss]')) {
+          settings.open = false;
+        }
+      });
       panel.querySelector(".battle-movement-actions").append(finishTurn);
       grid = panel.querySelector("[data-battle-map-board]");
       panel.querySelector(".battle-map-head").append(pingBar);

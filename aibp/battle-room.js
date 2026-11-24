@@ -1290,6 +1290,8 @@
     ]);
     const incoming = (rollMode === 'dodge' || rollMode === 'defense')
       && last?.round === state.round && (last.mode === 'dodge' || last.mode === 'defense');
+    const canResolveTrauma = !state.closed && (actor.role === 'host' || (actor.role === 'player' && actor.seat === seat));
+    const traumaCards = incoming ? traumaCardList(seat, canResolveTrauma) : '';
     const outgoing = rollMode === 'power' && last?.mode === 'power' && last.bpOutcome !== undefined
       && state.secondAbility?.seat === seat && state.secondAbility.round === state.round;
     const results = panel.querySelector('.room-personal-result');
@@ -1297,9 +1299,11 @@
       '<h4>' + (dodge === last && dodge ? '本次闪避结果' : dodge ? '闪避与护甲' : '最新投掷') + '</h4>',
       latestResult,
       (rollMode === 'power' || pendingPower) && powerPartCard(seat, pendingPower),
-      incoming && state.trauma && state.heroes[seat].condition !== 'dead'
+      incoming && canResolveTrauma && state.trauma && state.heroes[seat].condition !== 'dead'
         && '<div class="room-roll-next"><button type="button" data-trauma-dialog="hit" data-seat="' + seat
         + '">录入净凶险并结算创伤</button><small>按剩余命中、护甲减免和牌面效果填写。</small></div>',
+      traumaCards && '<section class="room-trauma-result"><h5>当前创伤</h5><ul class="room-trauma-cards">'
+        + traumaCards + '</ul></section>',
       outgoing && '<div class="room-roll-next"><a href="#room-kratos-pool">结算响应后前往清池与第二能力时段</a></div>',
     ]);
     const currentForm = panel.querySelector('form[data-roll]');

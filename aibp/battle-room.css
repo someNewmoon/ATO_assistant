@@ -791,3 +791,15 @@ body.aibp-active-online-battle #heroBattleRoster { display: none; }
   font-weight: 650;
 }
 #room-dice { scroll-margin-top: 18px; }
+
+.room-trauma-amount { display: flex; align-items: center; flex-wrap: wrap; gap: .45rem .7rem; }
+.room-trauma-amount input[type="number"] { width: 4rem; appearance: textfield; }
+.room-hit-trauma-preview {
+  min-height: 2.3rem;
+  padding: .45rem .65rem;
+  border: 1px solid var(--room-border);
+  border-inline-start: 3px solid #a67d4e;
+  background: #efe4d2;
+  color: #513a2b;
+  font-size: .9rem;
+}

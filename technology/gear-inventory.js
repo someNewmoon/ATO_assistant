@@ -133,6 +133,11 @@
     };
   }
 
+  function traumaDrawTarget(danger, track, selected, mode) {
+    const overflow = danger > 9 && (selected === 'auto' || mode === 'hit');
+    return { overflow, deck: overflow ? 'obol' : selected !== 'auto' ? selected : track?.[danger - 1] };
+  }
+
   function traumaDeckLabel(deck) {
     return deck === 'none' ? '不抽取' : TRAUMA_DECKS[deck] || '';
   }
@@ -464,7 +469,7 @@
   return {
     gearGroups, groupGear, gearCopyLimits, copyLimit, stockTotals, checkStockGrowth, ascensionEnabled, baseGearId, ascendedCycle, nextCycle, ascend, loadoutTemplates,
     TITAN_NAMES_ZH, TITAN_TYPES, DREAMWALKER_PANELS, TRAUMA_DECKS, traumaTrack, defaultTraumaTrack, loadoutTraumaTrack,
-    TITAN_PATTERNS, PATTERN_FIELDS, loadoutPatterns, titanPatternFields, traumaDeckLabel,
+    TITAN_PATTERNS, PATTERN_FIELDS, loadoutPatterns, titanPatternFields, traumaDeckLabel, traumaDrawTarget,
     dreamwalkerPanel, loadoutTitan, titanType, titanTypeFields, titanLabel, titanArtwork,
     gearKey, normalize, adjust, normalizeLoadout, loadoutTitans, titanIdFor, assignedLoadouts, gearReservations, saveLoadout,
   };

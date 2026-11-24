@@ -797,6 +797,30 @@
     return roomTrauma() + (hero ? traumaControls(hero, seat, !state.closed) : '');
   }
 
+  function updateHitTraumaPreview() {
+    const form = traumaDialog.querySelector('form[data-hit-trauma-seat]');
+    if (!form) return;
+    const seat = Number(form.dataset.hitTraumaSeat);
+    const input = form.elements.namedItem('amount');
+    const amount = input.valueAsNumber;
+    const current = state.heroes[seat]?.stats.danger;
+    form.querySelector('[data-trauma-step="-1"]').disabled = !Number.isFinite(amount) || amount <= Number(input.min);
+    form.querySelector('[data-trauma-step="1"]').disabled = amount >= Number(input.max);
+    let text = '输入净凶险以预览创伤牌库。';
+    if (input.validity.valid && Number.isInteger(current)) {
+      const danger = current + amount;
+      const selected = form.elements.namedItem('deck').value;
+      const inventory = window.ATO_GEAR_INVENTORY;
+      const { deck } = inventory.traumaDrawTarget(danger, state.trauma?.tracks?.[seat], selected, 'hit');
+      const label = inventory.traumaDeckLabel(deck);
+      const preview = amount === 0 || deck === 'none' ? '不抽取创伤牌'
+        : label ? '预计抽取：' + label : '缺少创伤表，请按牌面选牌库';
+      text = '当前凶险 ' + current + ' → 结算凶险 ' + danger + ' · ' + preview;
+    }
+    const output = form.querySelector('[data-hit-trauma-preview]');
+    if (output.textContent !== text) output.textContent = text;
+  }
+
   function openTraumaDialog(mode, seat) {
     const title = { setup: '准备创伤牌库', manage: '调整本场创伤牌库', hit: '结算受击', draw: '抽创伤', gain: '获得凶险' }[mode];
     const name = state.heroes[seat]?.name;
@@ -815,15 +839,35 @@
         + '<label>操作 <select name="operation"><option value="add">加入或替换</option><option value="remove">移出牌库</option></select></label>';
     } else if (mode === 'draw') {
       fields = '<label>牌库 <select name="deck">' + traumaOptions(true) + '</select></label><small>当前凶险 ' + state.heroes[seat].stats.danger + '</small>';
+    } else if (mode === 'hit') {
+      fields = '<div class="room-trauma-amount"><label for="room-trauma-amount">护甲减免后的净凶险</label>'
+        + '<div class="room-dice-stepper"><button type="button" data-trauma-step="-1" aria-label="减少净凶险">−</button>'
+        + '<input id="room-trauma-amount" aria-describedby="room-hit-trauma-preview" name="amount" type="number" min="0" max="99" required autofocus>'
+        + '<button type="button" data-trauma-step="1" aria-label="增加净凶险">＋</button></div></div>'
+        + '<label>牌库 <select name="deck">' + traumaOptions(true) + '</select></label>'
+        + '<p id="room-hit-trauma-preview" class="room-hit-trauma-preview" data-hit-trauma-preview role="status"></p>';
     } else {
-      fields = '<label>' + (mode === 'hit' ? '护甲减免后的净凶险' : '增加的凶险') + ' <input name="amount" type="number" min="0" max="99" required></label>'
-        + (mode === 'gain' ? '<small>非攻击来源，只有超过 9 才触发抽取。</small>'
-          : '<label>牌库 <select name="deck">' + traumaOptions(true) + '</select></label><small>超过 9 时按生死关头结算。</small>');
+      fields = '<label>增加的凶险 <input name="amount" type="number" min="0" max="99" required></label>'
+        + '<small>非攻击来源，只有超过 9 才触发抽取。</small>';
     }
-    traumaDialog.innerHTML = '<form><h3>' + title + (name ? ' · ' + escape(name) : '') + '</h3>' + fields
+    traumaDialog.innerHTML = '<form' + (mode === 'hit' ? ' data-hit-trauma-seat="' + seat + '"' : '')
+      + '><h3>' + title + (name ? ' · ' + escape(name) : '') + '</h3>' + fields
       + '<div class="room-trauma-actions"><button type="button" data-trauma-cancel>取消</button><button type="submit">确认</button></div></form>';
     traumaDialog.querySelector('[data-trauma-cancel]').onclick = () => traumaDialog.close();
-    traumaDialog.querySelector('form').onsubmit = event => {
+    const form = traumaDialog.querySelector('form');
+    if (mode === 'hit') {
+      const input = form.elements.namedItem('amount');
+      form.oninput = updateHitTraumaPreview;
+      form.onclick = event => {
+        const button = event.target.closest('[data-trauma-step]');
+        if (!button) return;
+        const value = Number.isFinite(input.valueAsNumber) ? input.valueAsNumber : 0;
+        input.value = Math.max(Number(input.min), Math.min(Number(input.max), Math.round(value) + Number(button.dataset.traumaStep)));
+        updateHitTraumaPreview();
+      };
+      updateHitTraumaPreview();
+    }
+    form.onsubmit = event => {
       event.preventDefault();
       const fields = new FormData(event.currentTarget);
       const action = { id: crypto.randomUUID(), seat };
@@ -1825,6 +1869,7 @@
   }
 
   function render() {
+    if (traumaDialog.open) updateHitTraumaPreview();
     const { role } = actor;
     if (role === 'viewer') return renderViewer();
     const seat = personalSeat();

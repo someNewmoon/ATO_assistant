@@ -920,7 +920,7 @@ export class BattleRoom extends DurableObject {
   }
 
   roll(room, hero, seat, body, actor) {
-    const { counts, mode, parentRoll, weapon, defenseCount = 0 } = body;
+    const { counts, mode, parentRoll, weapon, extraAttack, defenseCount = 0 } = body;
     const { limits, modes } = roomDice;
     const modeRule = Object.hasOwn(modes, mode) && modes[mode];
     if (mode !== undefined && !modeRule) reject('投掷用途无效。');
@@ -930,6 +930,17 @@ export class BattleRoom extends DurableObject {
         || roomGearCategory(weapon)?.split('_')[0] !== 'arm')) reject('请选择该英雄装备的武器。');
     if (!Number.isInteger(defenseCount) || defenseCount < 0 || defenseCount > limits.red
         || (defenseCount && mode !== 'dodge')) reject('防御红骰数量无效。');
+    if (extraAttack !== undefined && (extraAttack !== true || mode !== 'attack')) reject('请先声明并投掷额外攻击。');
+    const parent = parentRoll && room.rolls.find(roll => roll.id === parentRoll && roll.seat === seat);
+    if (parentRoll && (!parent || !modeRule?.parentMode || parent.mode !== modeRule.parentMode
+        || (mode === 'power' && parent.round !== room.round) || (mode === 'defense' && parent.defenseRoll))) {
+      reject('关联投掷已结算或不存在。', 409);
+    }
+    const extra = extraAttack === true || (mode === 'power' && parent?.extraAttack === true);
+    const activeAttack = mode === 'attack' || mode === 'power';
+    if (activeAttack && (hero.condition === 'dead' || (!extra && !roomDice.canAttackNormally(room.turn, seat)))) {
+      reject('普通攻击和威力须在该泰坦可行动的回合结算。', 409);
+    }
     const dice = [];
     for (const [kind, count] of Object.entries(counts)) {
       if (!Number.isInteger(count) || count < 0 || count > limits[kind]) reject('骰子数量无效。');
@@ -940,20 +951,16 @@ export class BattleRoom extends DurableObject {
       }
     }
     if (!dice.length) reject('请选择至少一枚骰子。');
-    const parent = parentRoll && room.rolls.find(roll => roll.id === parentRoll && roll.seat === seat);
-    if (parentRoll && (!parent || !modeRule?.parentMode || parent.mode !== modeRule.parentMode
-        || (mode === 'defense' && parent.defenseRoll))) {
-      reject('关联投掷已结算或不存在。', 409);
-    }
     const roll = { id: body.id, seat, hero: hero.name, round: room.round, mode, dice,
       by: actor.role === 'host' ? 'host' : 'seat:' + seat };
     if (weapon) roll.weapon = weapon;
+    if (extra) roll.extraAttack = true;
     if (parent) {
       roll.parentRoll = parent.id;
       if (mode === 'defense') parent.defenseRoll = roll.id;
     }
     if (defenseCount) roll.defenseCount = defenseCount;
-    if (mode === 'attack' || mode === 'power') claimTurn(room, seat);
+    if (activeAttack && !extra) claimTurn(room, seat);
     battleStats(room)[seat].rolls++;
     room.lastBattleRollId = roll.id;
     room.rolls.unshift(roll);
@@ -976,6 +983,7 @@ export class BattleRoom extends DurableObject {
   changeRoll(room, seat, body) {
     const roll = room.rolls.find(entry => entry.id && entry.id === body.roll && entry.seat === seat);
     if (!roll) reject('找不到该英雄的这次投掷。', 409);
+    if (!roomDice.canAdjustRoll(roll, room.turn, room.round)) reject('当前无法调整这次攻击或威力投掷。', 409);
     if (body.type === 'reroll') {
       if (roll.mode === 'defense') reject('护甲投掷不能重掷。');
       if (!Array.isArray(body.ids) || !body.ids.length || body.ids.length > roll.dice.length) reject('请先选齐要重掷的骰子。');
@@ -988,7 +996,7 @@ export class BattleRoom extends DurableObject {
     const die = roll.dice.find(entry => entry.id === body.die);
     const result = die && roomDice.remainingFace(die);
     if (!result) reject('只能转换威力骰。');
-    if (roll.mode === 'defense') reject('护甲投掷只计威力。');
+    if (roll.mode === 'defense') reject('护甲投掷只计潜力。');
     const conversions = { potential: ['converted', 1], dot: ['dotConverted', 2] };
     if (!Object.hasOwn(conversions, body.symbol)) reject('未知骰面符号。');
     const [field, index] = conversions[body.symbol];

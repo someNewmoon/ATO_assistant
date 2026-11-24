@@ -699,6 +699,37 @@ test('回合由首个主动行动认领，其他队员的操作不会抢走回�
   assert.deepEqual(r.turn, { phase: 'apostle', seat: null, finished: [] });
 });
 
+test('普通攻击及威力检查回合，额外攻击威力继承来源且不会认领回合', () => {
+  const r = room();
+  r.turn = { phase: 'titans', seat: 0, finished: [] };
+  const teammate = { role: 'player', seat: 1 };
+  const roll = (seat, id, mode, counts, extra = {}) => reducer.apply(r, seat ? teammate : player,
+    { type: 'roll', id, mode, seat, counts, ...extra });
+  assert.throws(() => roll(1, 'blocked', 'attack', { d10: 1 }), /该泰坦可行动/);
+  assert.throws(() => roll(1, 'blocked-power', 'power', { red: 1 }), /该泰坦可行动/);
+  assert.throws(() => roll(1, 'fake-power', 'power', { red: 1 }, { extraAttack: true }), /请先声明/);
+  assert.equal(r.rolls.length, 0);
+  roll(0, 'ordinary', 'attack', { d10: 1 });
+  roll(0, 'ordinary-power', 'power', { red: 1 }, { parentRoll: 'ordinary' });
+  roll(1, 'dodge', 'dodge', { d10: 1 });
+  roll(1, 'armor', 'defense', { red: 1 }, { parentRoll: 'dodge' });
+  assert.equal(r.turn.seat, 0);
+  roll(1, 'extra', 'attack', { d10: 1 }, { extraAttack: true });
+  roll(1, 'extra-power', 'power', { red: 1 }, { parentRoll: 'extra' });
+  assert.equal(r.rolls[0].extraAttack, true);
+  assert.equal(r.turn.seat, 0);
+  r.turn.finished.push(0);
+  r.turn.seat = null;
+  assert.throws(() => roll(0, 'finished-power', 'power', { red: 1 }, { parentRoll: 'ordinary' }), /该泰坦可行动/);
+  const ordinary = r.rolls.find(entry => entry.id === 'ordinary');
+  assert.throws(() => reducer.apply(r, player, { type: 'reroll', seat: 0, roll: ordinary.id,
+    ids: [ordinary.dice[0].id] }), /无法调整/);
+  r.turn.phase = 'apostle';
+  assert.throws(() => roll(1, 'boss-turn', 'attack', { d10: 1 }), /该泰坦可行动/);
+  roll(1, 'boss-turn-extra', 'attack', { d10: 1 }, { extraAttack: true });
+  assert.equal(r.turn.seat, null);
+});
+
 test('骇物轮次的非主动移动可经过其他泰坦，单独记步且不认领回合', () => {
   const r = room();
   r.board = api.setupRoomBoard({ apostle: 'HEKATON', level: 1 }, 2);
@@ -899,13 +930,15 @@ test('攻击保存当前英雄的武器，护甲可接在无预填防御骰的�
   roll('evade', 'dodge', { d10: 2 });
   roll('armor', 'defense', { red: 1, black: 1, white: 1 }, { parentRoll: 'evade' });
   assert.deepEqual(r.rolls[0].dice.map(die => die.kind), ['red', 'black', 'white']);
-  const total = r.rolls[0].dice.reduce((sum, die) => sum + dice.remainingFace(die)[0], 0);
-  assert.equal(dice.rollSummary(r.rolls[0]), total + ' 威力 · 减免 ' + total + ' 凶险');
+  const total = r.rolls[0].dice.reduce((sum, die) => sum + dice.naturalFace(die)[1], 0);
+  assert.equal(dice.rollSummary(r.rolls[0]), total + ' 潜力 · 减免 ' + total + ' 凶险');
+  assert.equal(dice.rollSummary({ mode: 'defense', dice: [{ kind: 'red', face: 3 }] }), '0 潜力 · 减免 0 凶险');
+  assert.equal(dice.rollSummary({ mode: 'defense', dice: [{ kind: 'red', face: 2 }] }), '1 潜力 · 减免 1 凶险');
   assert.throws(() => roll('duplicate', 'defense', { red: 1 }, { parentRoll: 'evade' }), /已结算/);
   assert.throws(() => reducer.apply(r, player, { type: 'reroll', seat: 0, roll: 'armor',
     ids: [r.rolls[0].dice[0].id] }), /护甲投掷不能重掷/);
   assert.throws(() => reducer.apply(r, player, { type: 'convert', seat: 0, roll: 'armor',
-    die: r.rolls[0].dice[0].id, symbol: 'potential' }), /只计威力/);
+    die: r.rolls[0].dice[0].id, symbol: 'potential' }), /只计潜力/);
   for (let i = 0; i < 31; i++) {
     reducer.apply(r, { role: 'player', seat: 1 }, { type: 'roll', id: 'teammate-' + i, seat: 1, mode: 'check', counts: { d10: 1 } });
   }

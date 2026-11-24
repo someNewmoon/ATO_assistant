@@ -57,6 +57,7 @@
   let lastSecondAbility;
 
   let parentRoll = '';
+  let extraAttack = false;
   let armedCard = '';
   let pending = false;
   let writing = false;
@@ -949,7 +950,8 @@
     const selection = selectedDice.get(roll.id);
     const attrs = ' data-roll-id="' + escape(roll.id) + '" data-seat="' + roll.seat + '"';
     const mode = dice.modes[roll.mode]?.name;
-    const rerollable = editable && roll.mode !== 'defense';
+    const canAdjust = editable && dice.canAdjustRoll(roll, state.turn, state.round);
+    const rerollable = canAdjust && roll.mode !== 'defense';
     const faces = roll.dice.map(die => {
       const result = dice.remainingFace(die);
       const canSelect = rerollable && dice.canReroll(die);
@@ -964,7 +966,7 @@
         + '<span data-dice-reveal>' + (result ? result.map((n, i) => n + ['ϟ', '△', '●'][i]).join(' ') : die.value) + '</span>'
         + (critical ? '<strong class="room-critical-result" data-dice-reveal>' + critical + '</strong>' : '')
         + (die.rerolled ? '<small data-dice-reveal>已重掷 · 原掷 ' + escape(originalLabel) + '</small>' : '')
-        + (editable && result && roll.mode !== 'defense' ? '<div class="room-die-conversions" data-dice-reveal>'
+        + (canAdjust && result && roll.mode !== 'defense' ? '<div class="room-die-conversions" data-dice-reveal>'
           + (result[1] ? '<button type="button" data-action="convert" data-symbol="potential"' + dieAttrs + ' title="将一枚潜力转为威力">△ → ϟ</button>' : '')
           + (result[2] ? '<button type="button" data-action="convert" data-symbol="dot"' + dieAttrs + ' title="将一枚●转为威力">● → ϟ</button>' : '') + '</div>' : '')
         + '</div>';
@@ -986,11 +988,14 @@
           + ' aria-pressed="' + (roll.wounds === value) + '">' + label + '</button>').join('') + '</div>' : '')
       + '</div>' : '';
     const feedback = readOnly ? '' : reactions(roll, latest);
-    const heading = '<h4>' + rollAvatar(roll.seat) + escape(roll.hero) + (mode ? ' · ' + mode : '')
+    const attackFollowup = roll.mode === 'attack' && roll.round === state.round
+      && (roll.extraAttack || dice.canAttackNormally(state.turn, roll.seat));
+    const rollLabel = roll.extraAttack ? (roll.mode === 'attack' ? '额外攻击' : '额外攻击威力') : mode;
+    const heading = '<h4>' + rollAvatar(roll.seat) + escape(roll.hero) + (rollLabel ? ' · ' + rollLabel : '')
       + ' <small>第 ' + roll.round + ' 轮</small></h4>';
     return '<li class="room-roll" data-motion-roll="' + escape(roll.id) + '">' + (quickFeedback ? '<div class="room-roll-head">' + heading + feedback + '</div>' : heading)
       + '<div class="room-dice-results">' + faces + '</div><p data-dice-reveal>' + rollSummary(roll) + '</p>'
-      + (editable && (roll.mode === 'attack' || followup) ? '<button type="button" data-dice-reveal data-roll-followup="'
+      + (editable && (attackFollowup || followup) ? '<button type="button" data-dice-reveal data-roll-followup="'
         + (followup ? 'defense' : 'power') + '"' + attrs + '>' + (followup ? '仍受命中时结算护甲' : '命中后准备投掷威力骰') + '</button>' : '')
       + (rerollable && roll.dice.some(dice.canReroll) ? '<div class="room-reroll-controls" data-dice-reveal><button type="button" data-action="reroll"' + attrs
         + (selection?.size ? '' : ' disabled') + '>重掷所选骰子' + (selection?.size ? '（' + selection.size + '）' : '') + '</button>'
@@ -1128,6 +1133,19 @@
     return relevant || null;
   }
 
+  function powerRollParent(seat) {
+    const prior = attackForPower(seat);
+    return prior?.round === state.round
+      && (parentRoll === prior.id || state.rolls.find(roll => roll.seat === seat)?.id === prior.id) ? prior : null;
+  }
+
+  function canSubmitAttack(seat) {
+    if (rollMode !== 'attack' && rollMode !== 'power') return true;
+    if (state.heroes[seat]?.condition === 'dead') return false;
+    const extra = rollMode === 'attack' ? extraAttack : powerRollParent(seat)?.extraAttack;
+    return Boolean(extra) || dice.canAttackNormally(state.turn, seat);
+  }
+
   function weaponPowerReference(seat) {
     const attack = attackForPower(seat);
     const item = attack ? state.heroes[seat].gear.find(gear => gear.id === attack.weapon) : selectedWeapon(seat);
@@ -1235,13 +1253,20 @@
     const notes = {
       attack: '宣告武器，增加 1 怒气并检查首要目标，再按武器牌投攻击骰。命中后先结算第一能力时段，再揭示部位卡牌。',
       dodge: '先投闪避并按牌面结算格挡。仍受命中且会获得凶险时，再投护甲。',
-      defense: '按有效装备和加固效果填写护甲骰。护甲每点威力减免 1 凶险。同一次攻击只激活一件防御武器。',
+      defense: '按有效装备和加固效果填写护甲骰。护甲每点潜力（△）减免 1 凶险。同一次攻击只激活一件防御武器。',
       power: '先揭示部位卡牌。重掷和转换潜力后，对照永世力场选结果，再按牌面结算骇物响应、伤口和激化。结算后清空克拉托斯池，再进入第二能力时段。',
     };
     const weapon = rollMode === 'attack' && selectedWeapon(seat);
+    const canSubmit = canSubmitAttack(seat);
+    const extraToggle = rollMode === 'attack' && '<button type="button" data-extra-attack aria-pressed="' + extraAttack
+      + '">按牌面声明额外攻击</button>';
     const form = '<form data-roll data-dice-seat="' + seat + '" class="battle-room-dice">'
       + (weapon ? '<input type="hidden" name="weapon" value="' + escape(weapon.id) + '">' : '')
-      + '<div>' + fields + '<button type="submit">投掷' + (rollMode === 'defense' ? '护甲' : dice.modes[rollMode].name) + '</button></div></form>';
+      + '<div>' + fields + (extraToggle || '') + '<button type="submit"' + (canSubmit ? '' : ' disabled') + '>投掷'
+      + (rollMode === 'attack' && extraAttack ? '额外攻击' : dice.modes[rollMode].name) + '</button></div>'
+      + (!canSubmit ? '<p class="room-dice-help">'
+        + (state.heroes[seat]?.condition === 'dead' ? '该泰坦已死亡。' : rollMode === 'attack'
+          ? '普通攻击须等该泰坦的回合。' : '威力须在该泰坦回合结算，或从本轮的额外攻击结果进入。') + '</p>' : '') + '</form>';
     const modes = '<div class="room-dice-modes" role="group" aria-label="投掷用途">' + Object.entries(dice.modes)
       .filter(([key]) => key !== 'armor' && key !== 'defense')
       .map(([key, entry]) => '<button type="button" data-roll-mode="' + key + '" aria-pressed="'
@@ -1259,11 +1284,19 @@
       notes[rollMode] && '<p class="room-dice-help">' + notes[rollMode] + '</p>',
       showFirstAbility && kratosReminder(state.heroes[seat]), !showFirstAbility && powerPool,
     ]);
+    const incoming = (rollMode === 'dodge' || rollMode === 'defense')
+      && last?.round === state.round && (last.mode === 'dodge' || last.mode === 'defense');
+    const outgoing = rollMode === 'power' && last?.mode === 'power' && last.bpOutcome !== undefined
+      && state.secondAbility?.seat === seat && state.secondAbility.round === state.round;
     const results = panel.querySelector('.room-personal-result');
     renderSections(results, [
       '<h4>' + (dodge === last && dodge ? '本次闪避结果' : dodge ? '闪避与护甲' : '最新投掷') + '</h4>',
       latestResult,
       (rollMode === 'power' || pendingPower) && powerPartCard(seat, pendingPower),
+      incoming && state.trauma && state.heroes[seat].condition !== 'dead'
+        && '<div class="room-roll-next"><button type="button" data-trauma-dialog="hit" data-seat="' + seat
+        + '">录入净凶险并结算创伤</button><small>按剩余命中、护甲减免和牌面效果填写。</small></div>',
+      outgoing && '<div class="room-roll-next"><a href="#room-kratos-pool">结算响应后前往清池与第二能力时段</a></div>',
     ]);
     const currentForm = panel.querySelector('form[data-roll]');
     if (currentForm !== previousForm) restoreDiceDraft(currentForm, seat);
@@ -1768,7 +1801,8 @@
     const focus = active && focusRoot.contains(active) ? [...focusRoot.querySelectorAll('button,select,input')].indexOf(active) : -1;
     const selection = focus >= 0 && active.name;
     renderMarkup(summary, '<div class="battle-room-head"><div><h2>' + escape(state.title) + '</h2><p>第 ' + state.round
-      + ' 轮' + (state.closed ? ' · 已结束' : '') + '</p></div><div>' + controls + '</div></div>' + links);
+      + ' 轮' + (state.closed ? ' · 已结束' : '') + '</p></div></div>' + links
+      + (controls ? '<div class="battle-room-links">' + controls + '</div>' : ''));
     const goal = state.battleGoal ? '<section class="room-battle-goal"><h3>战斗目标</h3><p>'
       + escape(state.battleGoal) + '</p></section>' : '';
     const second = state.secondAbility;
@@ -2052,8 +2086,14 @@
       if (state.heroes[selected] && selected !== rollSeat) {
         rollSeat = selected;
         parentRoll = '';
+        extraAttack = false;
         render();
       }
+      return;
+    }
+    if (button.hasAttribute('data-extra-attack')) {
+      extraAttack = !extraAttack;
+      render();
       return;
     }
     if (button.dataset.attackWeapon !== undefined) {
@@ -2103,6 +2143,7 @@
       return;
     }
     if (mode || rollFollowup) {
+      extraAttack = false;
       rollMode = mode || rollFollowup;
       parentRoll = rollFollowup ? rollId : '';
       const source = rollFollowup && state.rolls.find(roll => roll.id === rollId);
@@ -2187,15 +2228,16 @@
     const fields = new FormData(form);
     if (form.matches('[data-roll]')) {
       const seat = actor.role === 'host' ? rollSeat : actor.seat;
+      if (!canSubmitAttack(seat)) return;
       saveDiceDraft(seat, rollMode, Object.fromEntries(fields));
       const counts = Object.fromEntries(dice.modes[rollMode].kinds.map(kind => [kind, Number(fields.get(kind))]));
       const weapon = rollMode === 'attack' && fields.get('weapon');
-      const powerParent = rollMode === 'power' && state.rolls.find(roll => roll.seat === seat)?.mode === 'attack'
-        ? attackForPower(seat)?.id : '';
-      const linked = parentRoll || powerParent;
+      const linked = rollMode === 'power' ? powerRollParent(seat)?.id : parentRoll;
       send({ id: crypto.randomUUID(), type: 'roll', mode: rollMode, seat, counts,
-        ...(weapon && { weapon }), ...(linked && { parentRoll: linked }) });
+        ...(weapon && { weapon }), ...(linked && { parentRoll: linked }),
+        ...(rollMode === 'attack' && extraAttack && { extraAttack: true }) });
       parentRoll = '';
+      extraAttack = false;
 
       return;
     }

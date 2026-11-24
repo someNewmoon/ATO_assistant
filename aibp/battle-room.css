@@ -459,6 +459,22 @@ body.aibp-room-only > .app > main > :not(#battleRoom) { display: none !important
 .room-turn-window li small { display: block; color: #e0d7bb; }
 .room-turn-window .roll-hero-avatar { width: 1.75rem; height: 1.75rem; }
 .room-turn-window button { white-space: normal; }
+.room-turn-window button:not(.battle-room-card-art) {
+  background: #fff7e8;
+  color: #342d24;
+  border-color: #c8ad87;
+}
+.room-turn-window button:not(.battle-room-card-art, :disabled):hover { background: #f3e2c4; }
+.room-turn-window button:not(.battle-room-card-art):focus-visible {
+  outline: 2px solid #f0c885;
+  outline-offset: 2px;
+}
+.room-turn-window button:not(.battle-room-card-art):disabled {
+  background: #dddbce;
+  color: #5a574b;
+  border-color: #a9a492;
+  opacity: 1;
+}
 .room-ai-guide { display: grid; align-items: start; gap: .6rem; padding-block: .35rem; }
 .room-ai-guide:has(> .battle-room-card-art) { grid-template-columns: clamp(3.75rem, 16vw, 6.5rem) minmax(0, 1fr); }
 .room-ai-step { display: grid; min-width: 0; justify-items: start; gap: .35rem; }
@@ -725,7 +741,11 @@ body.aibp-active-online-battle .battle-map-layout > #battleMapControl,
 body.aibp-active-online-battle #heroBattleRoster { display: none; }
 .room-ai-route-options { display: flex; flex-wrap: wrap; gap: .35rem; }
 .room-ai-route-options button { display: grid; gap: .15rem; text-align: start; }
-.room-ai-route-options button[aria-pressed="true"] { border-color: #dfb36a; box-shadow: inset 0 0 0 1px #dfb36a; }
+.room-turn-window .room-ai-route-options button[aria-pressed="true"]:not(:disabled) {
+  background: #f6dfb3;
+  border-color: #b07f37;
+  box-shadow: inset 0 0 0 1px #b07f37;
+}
 .room-weapon-options li, .room-defense-cards li { display: grid; align-content: start; gap: .25rem; max-width: 11rem; }
 .room-weapon-options li > [data-attack-weapon] { width: 100%; text-align: start; }
 .room-weapon-options [data-attack-weapon] small, .room-defense-cards li small { display: block; }

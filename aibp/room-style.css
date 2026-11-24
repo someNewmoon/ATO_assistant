@@ -45,7 +45,6 @@
   pointer-events: auto;
 }
 .room-tool-dock.room-style-dock[hidden] { display: none; }
-body.aibp-room-only > .app > main > .room-style-dock:not([hidden]) { display: flex !important; }
 main:has(> .room-style-preview .is-picking-point) > .room-style-dock { visibility: hidden; }
 main:has(> .room-style-dock:not([hidden])) > #viewer { scroll-margin-top: 4.5rem; }
 

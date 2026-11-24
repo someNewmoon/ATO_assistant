@@ -1,4 +1,4 @@
-// Only the boss panel, revealed cards and public deck counts cross into the room.
+// Only public boss information, revealed cards and public deck counts cross into the room.
 function text(value, max) {
   return typeof value === 'string' ? value.trim().slice(0, max) : '';
 }
@@ -24,6 +24,23 @@ function deck(value) {
   return { count: count(value?.count), discard: count(value?.discard), backs: text(value?.backs, 240), back: card(value?.back) };
 }
 
+function publicTokens(tokens) {
+  return tokens.slice(0, 128).flatMap(token => {
+    const file = /^(?:(?:AT|DA|ED|HT|SP|ps)[+-]\.png|py\+\.png|(?:CA|CM)\.jpg)$/.test(token?.file)
+      ? token.file : '';
+    const custom = text(token?.text, 40);
+    const quantity = count(token?.count);
+    if ((!file && !custom) || !quantity) return [];
+    const label = text(token.label, 40);
+    const counter = text(token.c45PanelCounter, 32);
+    return [{ file, count: quantity, ...(custom && { text: custom }), ...(label && { label }),
+      ...((token.perHit === true || token.autoLevelBonus === 'danger') && { perHit: true }),
+      ...(token.demidjinnWishArmor === true && { demidjinnWishArmor: true }),
+      ...(token.midascorePain === true && { midascorePain: true }),
+      ...(counter && { c45PanelCounter: counter }) }];
+  });
+}
+
 export function roomProjection(value, apostle) {
   if (!apostle || value?.apostle !== apostle) return null;
   const damage = value.damage;
@@ -33,6 +50,7 @@ export function roomProjection(value, apostle) {
     level: text(value.level, 12),
     panel: image(value.panel),
     signature: image(value.signature),
+    ...(Array.isArray(value.tokens) && { tokens: publicTokens(value.tokens) }),
     ai: card(value.ai),
     ...(value.sharedDeck === true && { sharedDeck: true }),
     bp: card(value.bp),

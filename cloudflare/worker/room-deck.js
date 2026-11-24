@@ -62,10 +62,14 @@ function removeLowest(pile, from, levelOf, randomInt, omitSpecial = false, reshu
 }
 
 function addToken(data, file, amount, flag, position = {}) {
-  const token = data.tokens.find(entry => flag ? entry[flag] === true || (flag === 'criticalMass' && entry.chimeraCriticalMass) : entry.file === file);
+  const perHit = file === 'DA+.png';
+  const token = data.tokens.find(entry => flag
+    ? entry[flag] === true || (flag === 'criticalMass' && entry.chimeraCriticalMass)
+    : entry.file === file && !entry.demidjinnWishArmor
+      && (entry.perHit === true || entry.autoLevelBonus === 'danger') === perHit);
   if (token) token.count = Math.min(99, (token.count || 0) + amount);
   else data.tokens.push({ id: crypto.randomUUID(), file, count: amount, x: position.x ?? 8, y: position.y ?? 8,
-    ...(flag && { [flag]: true }), ...(file === 'DA+.png' && { perHit: true }) });
+    ...(flag && { [flag]: true }), ...(perHit && { perHit: true }) });
 }
 
 function exhaustedAi(data, amount) {
@@ -261,7 +265,16 @@ export function roomDeckProjection(deck, previous) {
   const split = data.apostle === 'CHIMERA_METASTASIOS';
   const damage1 = split ? total('damage1') : undefined;
   const damage2 = split ? total('damage2') : undefined;
-  return roomProjection({ ...previous, apostle: data.apostle,
+  let tokens = data.tokens;
+  // These counters can change in the Worker while the host's AIBP is offline.
+  if (data.apostle === 'MIDASCORE' && data.special?.midascore) {
+    tokens = tokens.filter(token => !token.midascorePain);
+    tokens.push({ file: 'CM.jpg', count: data.special.midascore.pain, midascorePain: true });
+  } else if (data.apostle === 'DEMIDJINN' && data.special?.demidjinn) {
+    tokens = tokens.filter(token => token.c45PanelCounter !== 'demidjinn');
+    tokens.push({ file: 'CM.jpg', count: data.special.demidjinn.wishForWish, c45PanelCounter: 'demidjinn' });
+  }
+  return roomProjection({ ...previous, apostle: data.apostle, tokens,
     ai: (pending(data, 'AI') || data.lastRevealed.AI)?._room?.face,
     bp: (pending(data, 'BP') || data.lastRevealed.BP)?._room?.face,
     aiPending: Boolean(pending(data, 'AI')), bpPending: Boolean(pending(data, 'BP')), sharedDeck: Boolean(data.shared),

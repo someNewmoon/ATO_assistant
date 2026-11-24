@@ -340,7 +340,10 @@ test('Worker 独立揭示、结算部位牌并激化，完整牌堆只对房主�
     r.rolls = [{ id: 'power', mode: 'power', seat: 0, round: 1 }];
     const hidden = face('BP', 'I', 2);
     const current = face('BP', level, 1);
-    const data = { apostle: 'HEKATON', lastRevealed: {}, tokens: [],
+    const data = { apostle: 'HEKATON', lastRevealed: {}, tokens: [
+      { file: 'DA+.png', count: 2, id: 'private-id', x: 8 },
+      { file: 'SP-.png', count: 1 }, { file: '../BP.png', count: 1 },
+    ],
       AI: { deck: [face('AI', 'I', 1)], discard: [], removed: [], supply: { II: [face('AI', 'II', 1)], III: [] } },
       BP: { deck: [current, hidden], discard: [], removed: [], damage: [],
         supply: { II: [face('BP', 'II', 1)], III: [face('BP', 'III', 2), face('BP', 'III', 3)] } } };
@@ -360,6 +363,7 @@ test('Worker 独立揭示、结算部位牌并激化，完整牌堆只对房主�
     assert.equal(r.projection.bpDeck.back.src, hidden._room.back.src);
     const viewer = reducer.view(r, { role: 'viewer' }).room;
     assert.equal(viewer.hostBattleDeck, undefined);
+    assert.deepEqual(viewer.projection.tokens, [{ file: 'DA+.png', count: 2 }, { file: 'SP-.png', count: 1 }]);
     assert.ok(!JSON.stringify(viewer).includes('HEKATON_BP_I_002.jpg'));
     assert.throws(() => reducer.apply(r, host, { type: 'room-projection', deckRevision: 1, deck: data, projection: r.projection }), /牌堆已更新/);
     const manual = level === 'III' && outcome === 1;
@@ -396,6 +400,12 @@ test('Worker 独立揭示、结算部位牌并激化，完整牌堆只对房主�
     if (level === 'I' && outcome) assert.equal(r.battleDeck.data.AI.deck[0].level, 'II');
     if (level === 'III' && outcome === 1) assert.equal(r.battleDeck.data.BP.deck.at(-1), current);
     if (level === 'III' && outcome === 2) assert.equal(r.battleDeck.data.BP.damage[0], current);
+    if (level === 'III') {
+      assert.deepEqual(reducer.view(r, player).room.projection.tokens, [
+        { file: 'DA+.png', count: 2 }, { file: 'SP-.png', count: 1 },
+        { file: 'DA+.png', count: 1, perHit: true }, { file: 'HT+.png', count: 1 },
+      ]);
+    }
   }
 });
 

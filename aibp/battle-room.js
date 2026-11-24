@@ -361,11 +361,11 @@
   }
   const bossShortcut = toolLinks.querySelector('[data-tool="apostle"]');
   bossShortcut.textContent = '骇物';
+  bossShortcut.title = '查看招牌技、属性和状态';
   const quick = document.createElement('nav');
   quick.className = 'room-primary-nav';
   quick.setAttribute('aria-label', '常用操作');
   quick.innerHTML = '<a href="#room-movement">移动</a><a href="#room-dice">掷骰</a><a href="#room-status">状态</a><a href="#room-equipment">装备</a>';
-  quick.append(bossShortcut);
   const movementShortcut = quick.querySelector('a[href="#room-movement"]');
   function forcedMovementSeat() {
     const seat = personalSeat();
@@ -391,9 +391,12 @@
 
   const turnWindow = document.createElement('details');
   turnWindow.className = 'room-turn-window';
-  turnWindow.hidden = true;
   turnWindow.innerHTML = '<summary aria-live="polite"></summary><div data-turn-body></div><small data-turn-status role="status"></small>';
-  root.append(turnWindow);
+  const turnBar = document.createElement('div');
+  turnBar.className = 'room-turn-bar';
+  turnBar.hidden = true;
+  turnBar.append(turnWindow, bossShortcut);
+  root.append(turnBar);
   let turnHeading = '';
   let turnMarkup = '';
   let promptedAiRound = '';
@@ -424,7 +427,7 @@
   });
 
   function renderTurn() {
-    turnWindow.hidden = state.closed;
+    turnBar.hidden = state.closed;
     if (state.closed) return;
     const turn = state.turn;
     const activeSeat = turn?.seat;
@@ -947,8 +950,7 @@
   function renderRecap() {
     if (content.querySelector('.room-battle-recap')) return;
     dock.hidden = true;
-    turnWindow.hidden = true;
-    if (toolsDialog.open) toolsDialog.close();
+      if (toolsDialog.open) toolsDialog.close();
     boardMount.hidden = true;
     summary.innerHTML = '';
     content.innerHTML = squadLink.recapMarkup(state.squad.recap)
@@ -1034,34 +1036,62 @@
     return logo ? '<img class="boss-identity-art" src="' + escape(logo) + '" alt="">' : '';
   }
 
-  function roomBossStats() {
+  const bossTokenLabels = {
+    AT: '永世力场', DA: '凶险', ED: '闪避骰', HT: '命中难度',
+    SP: '速度', ps: '闪避难度', py: '命运',
+  };
+  function roomBossTokens(tokens) {
+    if (!tokens) return '';
+    const counters = { demidjinn: '以怨还怨', dragon: '累计指示物', meduketos: '累计损伤' };
+    const entries = tokens.map(token => {
+      const attribute = bossTokenLabels[token.file.slice(0, 2)];
+      const sign = token.file.includes('-') ? '−' : '+';
+      const label = token.text || token.label || (token.midascorePain ? '疼痛增量' : '')
+        || counters[token.c45PanelCounter] || (attribute ? attribute + ' ' + sign + token.count : '')
+        || (token.file === 'CM.jpg' ? '临界质量' : '通用标记');
+      const detail = (attribute && !token.label ? '' : ' ×' + token.count) + (token.perHit ? ' / 命中' : '');
+      const icon = token.file ? '<img src="/aibp/ps/other/token/' + encodeURIComponent(token.file) + '" alt="" loading="lazy">' : '';
+      return '<li>' + icon + '<span>' + escape(label + detail) + '</span></li>';
+    }).join('');
+    return '<h4>当前标记</h4>' + (entries ? '<ul class="room-boss-tokens">' + entries + '</ul>' : '<p>无</p>');
+  }
+
+  function roomBossStats(projection) {
     const { apostle, level } = state.board;
     const rows = window.AIBP_BOSS_LEVEL_DATA?.bosses?.[apostle]?.levels ?? {};
     const levels = Object.values(rows);
     const current = rows[level];
+    const tokens = projection?.tokens;
+    const net = (code, perHit = false) => (tokens || []).reduce((total, token) => {
+      if (Boolean(token.perHit) !== perHit || token.demidjinnWishArmor) return total;
+      return total + (token.file === code + '+.png' ? token.count : token.file === code + '-.png' ? -token.count : 0);
+    }, 0);
+    const signed = value => value > 0 ? '+' + value : value;
     const hit = value => Number.isFinite(value) ? value + '+' : value;
-    const per = (attack, hit) => [
-      attack ? attack + ' / 攻击' : '',
-      hit ? hit + ' / 命中' : '',
-    ].filter(Boolean).join('、') || '—';
+    const adjusted = (value, delta, format = value => value) => Number.isFinite(value)
+      ? format(value + delta) : delta && value !== '∞' ? (value ?? '—') + '（' + signed(delta) + '）' : value;
+    const per = (attack, hit) => [attack ? signed(attack) + ' / 攻击' : '', hit ? signed(hit) + ' / 命中' : '']
+      .filter(Boolean).join('、') || '—';
+    const wounds = row => projection?.damage?.wounds || row?.stats.wounds;
     const columns = [
-      ['生命值', row => row.stats.wounds],
-      ['移动', row => row.stats.movement],
-      ['命中', row => hit(row.stats.hitRequirement)],
-      ['永世力场', row => row.bonuses.at > 0 ? '+' + row.bonuses.at : row.bonuses.at],
-      ['闪避骰', row => row.bonuses.evasionDice],
+      ['生命值', row => row.stats.wounds, wounds],
+      ['速度', row => row.stats.movement, row => adjusted(row?.stats.movement, net('SP'), value => Math.max(0, value))],
+      ['命中难度', row => hit(row.stats.hitRequirement), row => adjusted(row?.stats.hitRequirement, net('HT'), hit)],
+      ['永世力场修正', row => signed(row.bonuses.at), () => signed(net('AT'))],
+      ['闪避骰修正', row => signed(row.bonuses.evasionDice), () => signed(net('ED'))],
       ['开战晋升', row => row.bonuses.promotions],
     ];
-    if (levels.some(({ bonuses }) => bonuses.dangerPerAttack || bonuses.dangerPerHit)) {
-      columns.push(['凶险', row => per(row.bonuses.dangerPerAttack, row.bonuses.dangerPerHit)]);
+    if (net('ps')) columns.push(['闪避难度修正', () => '—', () => signed(net('ps'))]);
+    if (net('DA') || net('DA', true) || levels.some(({ bonuses }) => bonuses.dangerPerAttack || bonuses.dangerPerHit)) {
+      columns.push(['凶险', row => per(row.bonuses.dangerPerAttack, row.bonuses.dangerPerHit), () => per(net('DA'), net('DA', true))]);
     }
-    if (levels.some(({ bonuses }) => bonuses.fatePerAttack || bonuses.fatePerHit)) {
-      columns.push(['命运', row => per(row.bonuses.fatePerAttack, row.bonuses.fatePerHit)]);
+    if (net('py') || net('py', true) || levels.some(({ bonuses }) => bonuses.fatePerAttack || bonuses.fatePerHit)) {
+      columns.push(['命运', row => per(row.bonuses.fatePerAttack, row.bonuses.fatePerHit), () => per(net('py'), net('py', true))]);
     }
     const cell = value => escape(value ?? '—');
-    const attrs = current
-      ? '<dl>' + columns.map(([label, value]) =>
-        '<div><dt>' + label + '</dt><dd>' + cell(value(current)) + '</dd></div>').join('') + '</dl>'
+    const attrs = current || projection
+      ? '<dl>' + (projection ? [['损伤', () => projection.damage.total]] : []).concat(columns).map(([label, base, live]) =>
+        '<div><dt>' + label + '</dt><dd>' + cell(live && (tokens || live === wounds) ? live(current) : current ? base(current) : undefined) + '</dd></div>').join('') + '</dl>'
       : '<p>此等级的属性暂无记录。</p>';
     const comparison = levels.length > 1
       ? '<details class="room-boss-levels"><summary>各等级属性对照</summary>'
@@ -1074,13 +1104,13 @@
         + '</tbody></table></div></details>'
       : '';
     return '<section class="room-boss-stats"><h4>骇物属性 · Lv ' + cell(current?.label ?? level)
-      + '</h4>' + attrs + comparison + '</section>';
+      + '</h4>' + attrs + roomBossTokens(tokens) + comparison + '</section>';
   }
 
   function roomProjection(showStats = false) {
     const projection = state.projection;
     const heading = '<h3>' + bossIdentityArt() + '骇物战况</h3>';
-    const stats = showStats && state.board ? roomBossStats() : '';
+    const stats = showStats && state.board ? roomBossStats(projection) : '';
     if (!projection) return state.board
       ? '<section class="room-projection">' + heading + stats + '<p>等待房主同步 AIBP 战况。</p></section>' : '';
     const { title, level, panel, signature, ai, bp, aiDeck, bpDeck, damage } = projection;
@@ -1098,10 +1128,13 @@
     }
     const damageText = damage.total + (damage.wounds ? ' / ' + damage.wounds : '')
       + (damage.damage1 == null ? '' : '（' + damage.damage1 + ' + ' + damage.damage2 + '）');
-    return '<section class="room-projection">' + heading + '<p>' + escape([title, level].filter(Boolean).join(' · ')) + '</p>' + stats
+    const signatureCard = signature
+      ? '<div class="room-projection-panel"><h4>招牌技</h4>' + bossArt(signature, '招牌技') + '</div>' : '';
+    return '<section class="room-projection">' + heading + '<p>' + escape([title, level].filter(Boolean).join(' · ')) + '</p>'
+      + (showStats ? '<div class="room-boss-quick">' + signatureCard + stats + '</div>' : '')
       + '<div class="room-projection-cards">' + deckCards('AI', ai, aiDeck) + deckCards('BP', bp, bpDeck)
       + '<div class="room-projection-panel"><h4>骇物面板</h4>' + (bossArt(panel, title) || '<p>暂无面板图</p>') + '</div>'
-      + (signature ? '<div class="room-projection-panel"><h4>招牌技</h4>' + bossArt(signature, '招牌技') + '</div>' : '') + '</div>'
+      + (showStats ? '' : signatureCard) + '</div>'
       + '<dl class="room-projection-counts"><div><dt>损伤</dt><dd>' + damageText + '</dd></div>'
       + deckCounts('AI 牌堆', aiDeck) + deckCounts('BP 牌堆', bpDeck) + '</dl></section>';
   }
@@ -1336,8 +1369,7 @@
 
   function renderViewer() {
     document.body.classList.add('room-viewer');
-    turnWindow.hidden = true;
-    dock.hidden = true;
+      dock.hidden = true;
     const active = state.turn?.seat == null ? '' : state.heroes[state.turn.seat]?.name;
     const phase = state.turn?.phase === 'apostle' ? '骇物轮次' : state.turn?.phase === 'titans' ? '泰坦轮次' : '';
     const heading = ['第 ' + state.round + ' 轮', phase, active, state.closed && '已结束'].filter(Boolean).join(' · ');

@@ -1928,13 +1928,29 @@
   async function prepareSquadBattle() {
     const credential = squadLink.read(squadId);
     const back = squadLink.link('/aibp/squad', squadId);
+    function openBattle(board) {
+      const url = new URL(location.href);
+      url.searchParams.delete('squad');
+      url.searchParams.set('battle', squadId);
+      url.searchParams.set('apostle', board.apostle);
+      url.hash = '';
+      location.assign(url);
+    }
     root.hidden = false;
+    say('正在读取备战资料…');
     toggle.hidden = false;
     toggle.setAttribute('aria-expanded', 'true');
     try {
       const data = await squadLink.request(squadId, 'state', credential?.token);
-      if (data.actor.role !== 'host' || data.room.squad?.phase !== 'prep') throw new Error('请先由房主开启备战。');
+      if (data.actor.role !== 'host' || data.room.closed) throw new Error('请先由房主开启备战。');
+      if (data.room.squad?.phase === 'battle' && data.room.board) {
+        say('战斗已开启，正在打开战斗室…');
+        return openBattle(data.room.board);
+      }
+      if (data.room.squad?.phase !== 'prep') throw new Error('请先由房主开启备战。');
+      const battleNumber = data.room.squad.battleNumber;
       squadLink.language(data.room.squad.language);
+      const levelsReady = window.refreshAibpRecordLevels?.();
       let available;
       try {
         const [campaignResponse, dictionary] = await Promise.all([
@@ -1949,7 +1965,8 @@
           available = battleConfig.availability(lobbyCampaign, abilityDictionary);
         }
       } catch { /* An invited host still has the squad's saved configuration. */ }
-      await window.refreshAibpRecordLevels?.();
+      await levelsReady;
+      say('');
       content.innerHTML = '<h2>' + escape(data.room.title) + '</h2>'
         + '<ol><li>按战斗段落要求更新<a href="../record/" target="_blank" rel="noopener">阿尔戈号记录表</a>，在 AIBP 核对骇物与等级。</li>'
         + '<li>让队员在备战页确认泰坦、装备及旧忆。三曲盘沿用剧情数值。</li>'
@@ -1959,7 +1976,7 @@
         + (available ? configFields(available) : '')
         + '<label><input name="confirmed" type="checkbox" required>已核对配装、牌堆和本场特殊设置</label>'
         + (data.room.squad.cycle === 'c1' ? '<label><input type="checkbox" name="tutorial"> 教程战</label> ' : '')
-        + '<button type="submit">用当前骇物开战</button> <a href="' + escape(back) + '">返回小队</a></form>';
+        + '<button type="submit">用当前骇物开战</button> <a href="' + escape(back) + '">返回小队</a><p data-prep-status role="status" aria-live="polite"></p></form>';
       const form = content.querySelector('[data-prepare-battle]');
       const showBoss = () => {
         const selected = window.getAibpRoomProjection?.();
@@ -1969,28 +1986,45 @@
       };
       showBoss();
       window.addEventListener('aibp-room-projection', showBoss);
+      const submitStatus = form.querySelector('[data-prep-status]');
+      form.addEventListener('invalid', event => {
+        submitStatus.textContent = event.target.name === 'confirmed'
+          ? '请先勾选已核对配装、牌堆和本场特殊设置。' : event.target.validationMessage;
+      }, true);
       form.addEventListener('submit', async event => {
         event.preventDefault();
         event.stopPropagation();
         const button = form.querySelector('[type="submit"]');
+        if (button.disabled) return;
         button.disabled = true;
+        submitStatus.textContent = '正在核对骇物等级和牌堆…';
+        let submitted = false;
         try {
-          await window.refreshAibpRecordLevels?.();
+          await Promise.all([window.refreshAibpRecordLevels?.(), window.AibpCardBacks?.ready().catch(() => {})]);
           const board = window.getAibpBoardSetup?.();
           if (!board) throw new Error('请先选择骇物。');
-          await window.AibpCardBacks?.ready().catch(() => {});
-          await squadLink.request(squadId, 'action', credential.token, {
-            id: crypto.randomUUID(), type: 'squad-start', battleNumber: data.room.squad.battleNumber,
+          submitStatus.textContent = '正在开启战斗，等待服务器确认…';
+          submitted = true;
+          const result = await squadLink.request(squadId, 'action', credential.token, {
+            id: crypto.randomUUID(), type: 'squad-start', battleNumber,
             board, goal: form.elements.goal.value, projection: window.getAibpRoomProjection?.(), deck: window.getAibpRoomBattleDeck?.(), tutorial: form.elements.tutorial?.checked === true,
             ...(available && { battleConfig: readConfig(form) }),
-          });
-          const url = new URL(location.href);
-          url.searchParams.delete('squad');
-          url.searchParams.set('battle', squadId);
-          url.searchParams.set('apostle', board.apostle);
-          url.hash = '';
-          location.assign(url);
-        } catch (error) { say(error.message); button.disabled = false; }
+          }, { timeout: 25000 });
+          submitStatus.textContent = '战斗已开启，正在打开战斗室…';
+          openBattle(result.room.board);
+        } catch (error) {
+          if (submitted && (!error.status || error.status === 409 || error.status >= 500)) {
+            submitStatus.textContent = '正在确认战斗是否已开启…';
+            const current = await squadLink.request(squadId, 'state', credential.token, undefined, { timeout: 6000 }).catch(() => null);
+            if (!current?.room.closed && current?.room.squad?.phase === 'battle' && current.room.board
+                && current.room.squad.battleNumber === battleNumber + 1) {
+              submitStatus.textContent = '战斗已开启，正在打开战斗室…';
+              return openBattle(current.room.board);
+            }
+          }
+          submitStatus.textContent = error.status || !submitted ? error.message : '连接中断或超时，暂时无法确认是否已开战，请重试。';
+          button.disabled = false;
+        }
       });
       toggle.addEventListener('click', event => {
         event.stopImmediatePropagation();

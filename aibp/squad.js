@@ -106,7 +106,7 @@
       + (projection ? anchor(projection, '打开共享投屏', ' target="_blank" rel="noopener"') : '')
       + (squad.phase !== 'battle' ? button('visibility', room.publicLobby ? '关闭快速加入' : '开放快速加入', !room.publicLobby) : '')
       + (squad.phase === 'story' ? anchor(storyURL(), '打开故事书') + button('phase', '开启备战', 'prep') : '')
-      + (prep ? anchor(api.link('/aibp/', id), '选择骇物并开战') + button('phase', '返回读剧情', 'story') : '')
+      + (prep ? anchor(api.link('/aibp/', id), '选择骇物并开战', ' data-open-prep') + button('phase', '返回读剧情', 'story') : '')
       + anchor('/aibp/trauma', '创伤牌库', ' target="_blank" rel="noopener"')
       + (squad.phase === 'battle' ? anchor(battleURL(actor.role), '打开战斗主控台') : '')
       + button('disband', '解散小队') + '</div>'
@@ -413,6 +413,9 @@
     updatePrepStock();
   });
   content.addEventListener('click', event => {
+    if (event.target.closest('[data-open-prep]') && !(event.ctrlKey || event.metaKey || event.shiftKey || event.altKey)) {
+      show('正在打开骇物备战页…');
+    }
     const node = event.target.closest('button[data-action]');
     if (!node) return;
     const { action: name, value } = node.dataset;
@@ -490,7 +493,11 @@
   });
 
   window.addEventListener('pagehide', () => { stop?.(); });
-  window.addEventListener('pageshow', event => { if (event.persisted && room) startSocket(); });
+  window.addEventListener('pageshow', event => {
+    if (!event.persisted || !room) return;
+    show('');
+    startSocket();
+  });
   void run(async () => {
     if (!credentials && !invite && !quick) {
       const owner = (await api.home().catch(() => null))?.squad;

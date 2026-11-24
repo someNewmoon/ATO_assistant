@@ -57,7 +57,6 @@
   let lastSecondAbility;
 
   let parentRoll = '';
-  let extraAttack = false;
   let armedCard = '';
   let pending = false;
   let writing = false;
@@ -466,7 +465,6 @@
       if (Number.isInteger(target)) rollSeat = target;
       rollMode = 'dodge';
       parentRoll = '';
-      extraAttack = false;
       turnWindow.open = false;
       render();
       const panel = content.querySelector('#room-dice');
@@ -1172,8 +1170,7 @@
   function canSubmitAttack(seat) {
     if (rollMode !== 'attack' && rollMode !== 'power') return true;
     if (state.heroes[seat]?.condition === 'dead') return false;
-    const extra = rollMode === 'attack' ? extraAttack : powerRollParent(seat)?.extraAttack;
-    return Boolean(extra) || dice.canAttackNormally(state.turn, seat);
+    return (rollMode === 'power' && Boolean(powerRollParent(seat)?.extraAttack)) || dice.canAttackNormally(state.turn, seat);
   }
 
   function weaponPowerReference(seat) {
@@ -1288,12 +1285,10 @@
     };
     const weapon = rollMode === 'attack' && selectedWeapon(seat);
     const canSubmit = canSubmitAttack(seat);
-    const extraToggle = rollMode === 'attack' && '<button type="button" data-extra-attack aria-pressed="' + extraAttack
-      + '">按牌面声明额外攻击</button>';
     const form = '<form data-roll data-dice-seat="' + seat + '" class="battle-room-dice">'
       + (weapon ? '<input type="hidden" name="weapon" value="' + escape(weapon.id) + '">' : '')
-      + '<div>' + fields + (extraToggle || '') + '<button type="submit"' + (canSubmit ? '' : ' disabled') + '>投掷'
-      + (rollMode === 'attack' && extraAttack ? '额外攻击' : dice.modes[rollMode].name) + '</button></div>'
+      + '<div>' + fields + '<button type="submit"' + (canSubmit ? '' : ' disabled') + '>投掷'
+      + dice.modes[rollMode].name + '</button></div>'
       + (!canSubmit ? '<p class="room-dice-help">'
         + (state.heroes[seat]?.condition === 'dead' ? '该泰坦已死亡。' : rollMode === 'attack'
           ? '普通攻击须等该泰坦的回合。' : '威力须在该泰坦回合结算，或从本轮的额外攻击结果进入。') + '</p>' : '') + '</form>';
@@ -2120,14 +2115,8 @@
       if (state.heroes[selected] && selected !== rollSeat) {
         rollSeat = selected;
         parentRoll = '';
-        extraAttack = false;
         render();
       }
-      return;
-    }
-    if (button.hasAttribute('data-extra-attack')) {
-      extraAttack = !extraAttack;
-      render();
       return;
     }
     if (button.dataset.attackWeapon !== undefined) {
@@ -2177,7 +2166,6 @@
       return;
     }
     if (mode || rollFollowup) {
-      extraAttack = false;
       rollMode = mode || rollFollowup;
       parentRoll = rollFollowup ? rollId : '';
       const source = rollFollowup && state.rolls.find(roll => roll.id === rollId);
@@ -2268,10 +2256,8 @@
       const weapon = rollMode === 'attack' && fields.get('weapon');
       const linked = rollMode === 'power' ? powerRollParent(seat)?.id : parentRoll;
       send({ id: crypto.randomUUID(), type: 'roll', mode: rollMode, seat, counts,
-        ...(weapon && { weapon }), ...(linked && { parentRoll: linked }),
-        ...(rollMode === 'attack' && extraAttack && { extraAttack: true }) });
+        ...(weapon && { weapon }), ...(linked && { parentRoll: linked }) });
       parentRoll = '';
-      extraAttack = false;
 
       return;
     }

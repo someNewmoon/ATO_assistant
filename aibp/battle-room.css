@@ -683,10 +683,6 @@ body.aibp-active-online-battle #heroBattleRoster { display: none; }
 .room-armor-results > section { min-width: 0; padding: .45rem; border: 1px solid var(--room-border); border-radius: .45rem; }
 .room-armor-results h5 { margin: 0; font-size: .9rem; }
 
-.battle-room [data-extra-attack][aria-pressed="true"] {
-  border-color: #99663f; background: var(--accent-soft, #ede0ca); box-shadow: inset 0 0 0 1px #99663f;
-}
-
 .room-roll-next {
   grid-column: 1 / -1;
   display: flex;

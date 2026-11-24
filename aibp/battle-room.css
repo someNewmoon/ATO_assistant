@@ -665,3 +665,10 @@ body.aibp-active-online-battle .battle-map-layout > #battleMapControl { display:
 .room-roll-reference [data-weapon-hits] { max-width: 4.5rem; }
 .room-roll-reference > .room-defense-cards { display: grid; justify-items: start; }
 .room-roll-reference > [data-roll-mode="defense"] { justify-self: start; }
+
+.room-armor-results {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 17rem), 1fr));
+  align-items: start; gap: .65rem;
+}
+.room-armor-results > section { min-width: 0; padding: .45rem; border: 1px solid var(--room-border); border-radius: .45rem; }
+.room-armor-results h5 { margin: 0; font-size: .9rem; }

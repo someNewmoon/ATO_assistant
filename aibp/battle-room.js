@@ -591,18 +591,20 @@
           guidance += '<p>本次目标：<b>' + escape(state.heroes[turn.aiTarget]?.name || '') + '</b></p>';
           if (turn.aiMovement) {
             guidance += aiMovementResult(turn.aiMovement, host, action);
+          } else if (turn.aiManualMovementEnded) {
+            guidance += '<p>已结束本次手动移动。</p>';
           } else if (!host) {
             guidance += '<p>房主执行移动后，版图会同步路线和冲撞标记。</p>';
           } else {
             const routes = aiGuide.apostleRoutes(state, aiRange, window.BattleTerrain, window.BattleLOS);
             route = routes.find(path => path.id === aiRouteId) || routes[0];
+            guidance += '<label>有效射程（近战 1 格） <input data-ai-range type="number" min="1" max="20" value="' + aiRange + '"></label>';
             if (route) {
-              guidance += '<label>按牌面填写攻击范围 <input data-ai-range type="number" min="1" max="20" value="' + aiRange + '"></label>'
-                + '<div class="room-ai-route-options" role="group" aria-label="移动路线">' + routes.map((path, i) =>
+              guidance += '<div class="room-ai-route-options" role="group" aria-label="移动路线">' + routes.map((path, i) =>
                   '<button type="button" data-ai-route="' + path.id + '" aria-pressed="' + (route === path) + '">'
                   + '<strong>' + (path.steps ? path.label : '原地就位') + (i === 0 ? ' · 推荐' : '') + '</strong><small>'
                   + path.steps + ' 格 · ' + (path.collisions ? '冲撞 ' + path.collisions + ' 位泰坦' : '避开泰坦') + '</small></button>').join('')
-                + '</div><small>虚线和半透明模型预览路线与落点。按牌面核对移动、视线和转向例外。</small>';
+                + '</div><small>最短正交路线，未对齐时逐格换轴。卡牌有专门指示时，用版图的「移动骇物」按牌面处理。</small>';
               if (Object.hasOwn(aiHeadings, route.facing)) {
                 const begin = route.firstFacing;
                 guidance += '<p>' + (route.steps ? '起步朝' + aiHeadings[begin] + ' · ' : '')
@@ -615,6 +617,8 @@
                   + action('board-ai-route', route.steps ? '按所选路线移动' : '按推荐朝向就位', routeAttrs)
                   + (route.steps ? action('ai-face', '只转到起步朝向', ' data-value="' + begin + '"') : '') + '</div>';
               }
+            } else if (state.board?.apostleMovement) {
+              guidance += '<p>已走路线无法按当前目标和射程继续推荐。请撤回不符的步数，或按牌面手动处理。</p>';
             }
           }
         }
@@ -929,8 +933,8 @@
         + (entry.detail ? '<span data-dice-activity="' + escape(entry.id) + '"> · ' + escape(entry.detail) + '</span>' : '') + '</span></li>').join('') + '</ol></section>';
   }
 
-  function rollCard(roll, latest, quickFeedback = false, showBpControls = true) {
-    const editable = Boolean(roll.id) && !state.closed && (actor.role === 'host' || (actor.role === 'player' && actor.seat === roll.seat));
+  function rollCard(roll, latest, { quickFeedback = false, showBpControls = true, readOnly = false } = {}) {
+    const editable = !readOnly && Boolean(roll.id) && !state.closed && (actor.role === 'host' || (actor.role === 'player' && actor.seat === roll.seat));
     const selection = selectedDice.get(roll.id);
     const attrs = ' data-roll-id="' + escape(roll.id) + '" data-seat="' + roll.seat + '"';
     const mode = dice.modes[roll.mode]?.name;
@@ -969,7 +973,7 @@
           '<button type="button" data-action="roll-wounds" data-value="' + value + '"' + attrs
           + ' aria-pressed="' + (roll.wounds === value) + '">' + label + '</button>').join('') + '</div>' : '')
       + '</div>' : '';
-    const feedback = reactions(roll, latest);
+    const feedback = readOnly ? '' : reactions(roll, latest);
     const heading = '<h4>' + rollAvatar(roll.seat) + escape(roll.hero) + (mode ? ' · ' + mode : '')
       + ' <small>第 ' + roll.round + ' 轮</small></h4>';
     return '<li class="room-roll" data-motion-roll="' + escape(roll.id) + '">' + (quickFeedback ? '<div class="room-roll-head">' + heading + feedback + '</div>' : heading)
@@ -987,7 +991,7 @@
   function latestHeroRolls() {
     const rolls = dice.latestByHero(state.rolls, state.lastBattleRollId);
     const seats = new Set(rolls.map(roll => roll.seat));
-    return '<ol class="room-last-rolls">' + rolls.map(roll => rollCard(roll, true, true)).join('')
+    return '<ol class="room-last-rolls">' + rolls.map(roll => rollCard(roll, true, { quickFeedback: true })).join('')
       + state.heroes.map((hero, seat) => seats.has(seat) ? '' : '<li class="room-roll room-roll-empty"><h4>'
         + rollAvatar(seat) + escape(hero.name) + '</h4><small>本场尚未掷骰</small></li>').join('') + '</ol>';
   }
@@ -1206,8 +1210,16 @@
       return diceCountField(kind, label, minimum, dice.limits[kind], rollMode === 'defense' && kind === 'red' ? 1 : minimum);
     }).join('');
     const last = dice.latestByHero(state.rolls, state.lastBattleRollId).find(roll => roll.seat === seat);
-    const latestResult = last
-      ? '<ol class="room-last-rolls">' + rollCard(last, true, false, false) + '</ol>' : '<p>该英雄本场尚未掷骰。</p>';
+    const dodgeId = rollMode === 'defense' && parentRoll
+      || (last?.mode === 'defense' && last.parentRoll);
+    const dodge = dodgeId && state.rolls.find(roll => roll.id === dodgeId && roll.seat === seat && roll.mode === 'dodge');
+    const resultList = last
+      ? '<ol class="room-last-rolls">' + rollCard(last, true, { showBpControls: false }) + '</ol>' : '<p>该英雄本场尚未掷骰。</p>';
+    const latestResult = dodge && dodge !== last
+      ? '<div class="room-armor-results"><section><h5>本次闪避结果</h5><ol class="room-last-rolls">'
+        + rollCard(dodge, false, { readOnly: true }) + '</ol></section><section><h5>'
+        + (last?.mode === 'defense' ? '本次护甲结果' : '最新投掷') + '</h5>' + resultList + '</section></div>'
+      : resultList;
     const notes = {
       attack: '宣告武器，增加 1 怒气并检查首要目标，再按武器牌投攻击骰。命中后先结算第一能力时段，再揭示部位卡牌。',
       dodge: '先投闪避并按牌面结算格挡。仍受命中且会获得凶险时，再投护甲。',
@@ -1237,7 +1249,7 @@
     ]);
     const results = panel.querySelector('.room-personal-result');
     renderSections(results, [
-      '<h4>最新投掷</h4>',
+      '<h4>' + (dodge === last && dodge ? '本次闪避结果' : dodge ? '闪避与护甲' : '最新投掷') + '</h4>',
       latestResult,
       (rollMode === 'power' || pendingPower) && powerPartCard(seat, pendingPower),
     ]);
@@ -1734,7 +1746,7 @@
     }
     const personal = (role === 'player' || (host && hostPersonalView)) && edit;
     const latestRoll = personal ? null : state.rolls.find(roll => roll.id === state.lastBattleRollId) || state.rolls[0];
-    const logCard = (roll, latest) => rollCard(roll, latest, false, roll.seat !== rollSeat);
+    const logCard = (roll, latest) => rollCard(roll, latest, { showBpControls: roll.seat !== rollSeat });
     const rolls = latestRoll ? logCard(latestRoll, true)
       + state.rolls.filter(roll => roll !== latestRoll).map(roll => logCard(roll, false)).join('') : '';
     const rollLog = '<section class="battle-room-rolls"><h3>掷骰记录</h3>'

@@ -18,6 +18,7 @@
 
   function apostleRoutes(room, reach, terrain, los) {
     const { board, heroes, turn, projection } = room;
+    if (turn?.aiManualMovementEnded) return [];
     const pieces = board?.map?.pieces;
     const target = pieces?.titans?.[turn?.aiTarget];
     const profile = terrain?.getApostleProfile(board?.apostle, board?.level);
@@ -25,13 +26,29 @@
     const modifier = (projection?.tokens || []).reduce((value, token) =>
       value + (token.file === 'SP+.png' ? token.count : token.file === 'SP-.png' ? -token.count : 0), 0);
     const limit = profile.speed === Infinity ? Infinity : Math.max(0, (Number(profile.speed) || 0) + modifier);
-    const speed = Math.min(limit, board.apostleMovement?.remaining ?? Infinity);
+    // Rebuild from the original square so a hand-moved segment cannot restart the zig-zag.
+    const active = board.apostleMovement;
+    const walked = active?.route || [];
+    const used = Math.max(0, walked.length - 1);
+    const sameCell = (a, b) => a?.column === b.column && a?.row === b.row;
+    if (used && !sameCell(walked.at(-1), pieces.apostle)) return [];
+    const speed = Math.min(limit, active?.remaining == null ? Infinity : active.remaining + used);
     const paths = los.computeApostleMovePaths({
-      sourceAnchor: pieces.apostle, targetAnchor: target, size: profile.size, speed, reach, facing: pieces.apostle.facing,
+      sourceAnchor: walked[0] || pieces.apostle, targetAnchor: target, size: profile.size, speed, reach, facing: pieces.apostle.facing,
     });
+    const continuations = (paths?.rules || []).filter(path => walked.every((cell, i) => sameCell(path.centers[i], cell)))
+      .map(path => {
+        if (!used) return path;
+        const centers = path.centers.slice(used);
+        const [origin, next] = centers;
+        const firstFacing = !next ? null : next.column !== origin.column
+          ? (next.column > origin.column ? 90 : 270) : (next.row > origin.row ? 0 : 180);
+        return { ...path, label: '接续已走路线', centers, steps: centers.length - 1,
+          footprints: path.footprints.slice(used), firstFacing };
+      });
     const titans = pieces.titans.flatMap((piece, seat) =>
       piece && heroes[seat]?.condition !== 'dead' ? [{ ...piece, seat }] : []);
-    return los.rankApostleRoutes(paths?.rules || [], titans)
+    return los.rankApostleRoutes(continuations, titans)
       .map(path => ({ ...path, speed: Number.isFinite(limit) ? limit : null }));
   }
 

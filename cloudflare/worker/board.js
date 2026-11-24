@@ -196,6 +196,10 @@ export function applyRoomBoard(room, actor, body) {
       if (!active || active.id !== body.move) fail('骇物移动已更新。', 409);
       if (body.type === 'board-apostle-end') {
         delete board.apostleMovement;
+        const turn = room.turn;
+        if (turn?.phase === 'apostle' && guide.resolvesMovement(turn.aiGuide) && !turn.aiMovement) {
+          turn.aiManualMovementEnded = true;
+        }
         return;
       }
       const guided = room.turn?.aiMovement?.id === active.id && room.turn.aiMovement;

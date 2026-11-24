@@ -764,6 +764,48 @@ test('推荐移动执行所选逐格路线，冲撞待确认时保留标记并�
   assert.deepEqual(r.board.lastApostleMove.route, collision.centers);
 });
 
+test('推荐移动从已走路线接续换轴，拒绝未对齐时连续同轴的前缀', () => {
+  const r = room();
+  r.board = api.setupRoomBoard({ apostle: 'HERMESIAN_PURSUER', level: 1 }, 2);
+  r.turn = { phase: 'apostle', seat: null, finished: [], aiGuide: 'resolve', aiTarget: 0 };
+  const start = { column: 2.5, row: 2.5 };
+  const right = { column: 3.5, row: 2.5 };
+  const again = { column: 4.5, row: 2.5 };
+  r.board.map.pieces.apostle = { ...start, facing: 90 };
+  r.board.map.pieces.titans = [{ column: 9, row: 6 }, { column: 19, row: 9 }];
+
+  const shortest = guide.apostleRoutes(r, 1, terrain, los).find(path => path.id === 'horizontal-first');
+  reducer.apply(r, host, { type: 'board-apostle-move', id: 'right', from: start, point: right, speed: 6 });
+  const [continuation] = guide.apostleRoutes(r, 1, terrain, los);
+  assert.equal(guide.apostleRoutes(r, 1, terrain, los).length, 1);
+  assert.equal(continuation.firstFacing, 0);
+  assert.deepEqual(continuation.centers, shortest.centers.slice(1, 7));
+  assert.equal(continuation.stopReason, 'speed-limit');
+  reducer.apply(r, host, { type: 'board-apostle-move', id: 'again', from: right, point: again, move: 'right' });
+  assert.deepEqual(guide.apostleRoutes(r, 1, terrain, los), []);
+  reducer.apply(r, host, { type: 'board-apostle-undo', move: 'again' });
+  const [valid] = guide.apostleRoutes(r, 1, terrain, los);
+  reducer.apply(r, host, { type: 'board-ai-route', id: 'continue', reach: 1, route: valid.id, stamp: guide.routeStamp(r, valid) });
+  assert.deepEqual(r.board.lastApostleMove.route, shortest.centers.slice(0, 7));
+  assert.equal(r.board.apostleMovement.remaining, 0);
+});
+
+test('手动结束骇物移动后，本次指令技不重新推荐或补发速度', () => {
+  const r = room();
+  r.board = api.setupRoomBoard({ apostle: 'HERMESIAN_PURSUER', level: 1 }, 2);
+  r.turn = { phase: 'apostle', seat: null, finished: [], aiGuide: 'resolve', aiTarget: 0 };
+  const start = { column: 2.5, row: 2.5 };
+  r.board.map.pieces.apostle = { ...start, facing: 90 };
+  r.board.map.pieces.titans = [{ column: 9, row: 6 }, { column: 19, row: 9 }];
+  reducer.apply(r, host, { type: 'board-apostle-move', id: 'manual', from: start, point: { column: 3.5, row: 2.5 }, speed: 1 });
+  reducer.apply(r, host, { type: 'board-apostle-end', move: 'manual' });
+  assert.equal(r.turn.aiManualMovementEnded, true);
+  assert.deepEqual(guide.apostleRoutes(r, 1, terrain, los), []);
+  reducer.apply(r, host, { type: 'ai-guide', phase: 'apostle', round: 1, value: 'resolve' });
+  assert.equal(r.turn.aiManualMovementEnded, undefined);
+  assert.equal(r.board.lastApostleMove.id, 'manual');
+});
+
 test('目标已在远程攻击范围内时只调整朝向，招牌技也可使用推荐移动', () => {
   const r = room();
   r.board = api.setupRoomBoard({ apostle: 'HERMESIAN_PURSUER', level: 1 }, 2);
@@ -844,6 +886,11 @@ test('攻击保存当前英雄的武器，护甲可接在无预填防御骰的�
   assert.throws(() => roll('duplicate', 'defense', { red: 1 }, { parentRoll: 'evade' }), /已结算/);
   assert.throws(() => reducer.apply(r, player, { type: 'convert', seat: 0, roll: 'armor',
     die: r.rolls[0].dice[0].id, symbol: 'potential' }), /只计威力/);
+  for (let i = 0; i < 31; i++) {
+    reducer.apply(r, { role: 'player', seat: 1 }, { type: 'roll', id: 'teammate-' + i, seat: 1, mode: 'check', counts: { d10: 1 } });
+  }
+  assert.equal(r.rolls.find(entry => entry.id === 'armor').parentRoll, 'evade');
+  assert.equal(r.rolls.find(entry => entry.id === 'evade').defenseRoll, 'armor');
 });
 
 test('only a white ten in an attack or dodge earns the matching critical badge', () => {

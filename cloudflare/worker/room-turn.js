@@ -25,9 +25,9 @@ export function claimTurn(room, seat) {
 }
 
 export function finishAiMovement(room) {
-  if (!room.turn.aiMovement) return;
-  if (room.turn.aiMovement.pending) throw new ApiError(409, '请先处理并确认本次冲撞。');
+  if (room.turn.aiMovement?.pending) throw new ApiError(409, '请先处理并确认本次冲撞。');
   delete room.turn.aiMovement;
+  delete room.turn.aiManualMovementEnded;
   if (room.board) delete room.board.apostleMovement;
 }
 

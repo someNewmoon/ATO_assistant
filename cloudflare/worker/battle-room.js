@@ -959,7 +959,8 @@ export class BattleRoom extends DurableObject {
     room.rolls.unshift(roll);
     if (room.rolls.length > 30) {
       const keep = new Set(roomDice.latestByHero(room.rolls, room.lastBattleRollId));
-      const oldest = room.rolls.findLastIndex(entry => !keep.has(entry));
+      const linkedDodges = new Set([...keep].flatMap(entry => entry.mode === 'defense' && entry.parentRoll ? [entry.parentRoll] : []));
+      const oldest = room.rolls.findLastIndex(entry => !keep.has(entry) && !linkedDodges.has(entry.id));
       room.rolls.splice(oldest, 1);
     }
   }

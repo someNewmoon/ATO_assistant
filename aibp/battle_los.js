@@ -1019,9 +1019,7 @@
         : footprintDeltaToTarget(current, size, target);
       const hasH = delta.h > 0;
       const hasV = delta.v > 0;
-      let axis = hasH && hasV ? nextAxis : (hasH ? "h" : "v");
-      if (axis === "h" && !hasH) axis = "v";
-      if (axis === "v" && !hasV) axis = "h";
+      const axis = hasH && hasV ? nextAxis : (hasH ? "h" : "v");
       const sign = axis === "h" ? Math.sign(delta.dx) : Math.sign(delta.dy);
       if (!sign) break;
       current = axis === "h"

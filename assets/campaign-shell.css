@@ -199,7 +199,6 @@ body #storySettlement .story-settlement-chip.proposed {
   color: #483323;
   border: 2px solid #8d6736;
 }
-body .hero-tool-stats > div { background: #f0e5d3; }
 body .campaign-hero-tool footer a { color: #795236; }
 
 /* Phase I. The dashboard keeps its existing layout and native controls. */

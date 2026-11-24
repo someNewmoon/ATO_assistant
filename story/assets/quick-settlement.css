@@ -220,18 +220,23 @@
   height: 40px;
   overflow: hidden;
   border-radius: 5px;
-  background: #e0eeea;
-  color: #176c62;
+  background: #f0e5d3;
+  color: #795236;
 }
-.hero-tool-portrait::before,
-.hero-tool-portrait::after { content: ""; grid-area: 1 / 1; background: currentColor; }
-.hero-tool-portrait::before { width: 9px; height: 9px; border-radius: 50%; transform: translateY(-5px); }
-.hero-tool-portrait::after { width: 17px; height: 9px; border-radius: 9px 9px 2px 2px; transform: translateY(6px); }
+.hero-tool-portrait:not(:has(img))::before,
+.hero-tool-portrait:not(:has(img))::after { content: ""; grid-area: 1 / 1; background: currentColor; }
+.hero-tool-portrait:not(:has(img))::before { width: 9px; height: 9px; border-radius: 50%; transform: translateY(-5px); }
+.hero-tool-portrait:not(:has(img))::after { width: 17px; height: 9px; border-radius: 9px 9px 2px 2px; transform: translateY(6px); }
 .hero-tool-portrait img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
-.hero-tool-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
-.hero-tool-stats > div { background: #f6f8f7; border-radius: 5px; padding: 5px; text-align: center; }
+.hero-tool-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.hero-tool-stats [data-hero-stat="fury"] { --hero-stat-color: #9b3829; }
+.hero-tool-stats [data-hero-stat="fate"] { --hero-stat-color: #33658a; }
+.hero-tool-stats [data-hero-stat="danger"] { --hero-stat-color: #865515; }
+.hero-tool-stats [data-hero-stat="despair"] { --hero-stat-color: #6c497e; }
+.hero-tool-stats > div { background: color-mix(in srgb, #fcf5e8 88%, var(--hero-stat-color)); border-radius: 5px; padding: 5px; text-align: center; }
 .hero-tool-stats > div > div:first-child { display: flex; justify-content: center; align-items: center; gap: 5px; margin-bottom: 4px; }
-.hero-tool-stats img { box-sizing: border-box; width: 22px; height: 22px; padding: 4px; border-radius: 50%; background: #2f3135; }
+.hero-tool-stats img { box-sizing: border-box; width: 22px; height: 22px; padding: 4px; border-radius: 50%; background: var(--hero-stat-color); }
+.hero-tool-stats [data-hero-stat="despair"] > div:first-child { min-height: 22px; color: var(--hero-stat-color); font-weight: 700; }
 .hero-tool-controls { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 3px; align-items: center; }
 .hero-tool-controls button { min-width: 0; min-height: 32px; padding: 4px 7px; }
 .hero-tool-controls output { font-weight: 700; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
@@ -239,8 +244,6 @@
 .campaign-hero-tool footer { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 8px; margin-top: 12px; }
 .campaign-hero-tool footer a { margin-inline-end: auto; color: #176c62; }
 .campaign-hero-tool [role=status]:empty { display: none; }
-@media (max-width: 450px) {
-  .hero-tool-stats { grid-template-columns: 1fr; }
-  .hero-tool-stats > div { display: grid; grid-template-columns: minmax(0, 1fr) minmax(105px, 1fr); gap: 6px; align-items: center; }
-  .hero-tool-stats > div > div:first-child { justify-content: start; margin-bottom: 0; }
+@media (max-width: 540px) {
+  .hero-tool-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }

@@ -1,11 +1,12 @@
 (function () {
   if (new URLSearchParams(location.search).get("second") === "1") return;
 
-  const root = new URL("../", document.currentScript.src).href;
+  const script = document.currentScript;
+  const root = new URL("../", script.src).href;
   const options = window.ATO_CAMPAIGN_TOOLBOX_OPTIONS || {};
   const tooltip = document.createElement("details");
   tooltip.className = "campaign-toolbox";
-  tooltip.open = true;
+  tooltip.open = !script.hasAttribute("data-start-collapsed");
   tooltip.innerHTML = `<summary>工具箱 <span data-toolbox-draft hidden></span></summary>
     <div class="campaign-toolbox-menu">
       <button type="button" data-tool="settlement" aria-haspopup="dialog">阿尔戈号快捷结算</button>
@@ -20,7 +21,7 @@
   const buttons = [...tooltip.querySelectorAll("[data-tool]")];
   const style = document.createElement("link");
   style.rel = "stylesheet";
-  style.href = `${root}story/assets/quick-settlement.css?v=20261120-hero-portrait`;
+  style.href = `${root}story/assets/quick-settlement.css?v=20261124-hero-status`;
   if (!document.querySelector('link[href*="quick-settlement.css"]')) document.head.append(style);
 
   function load(path, api) {
@@ -60,7 +61,7 @@
       await Promise.all([
         session,
         load("hero/hero-catalog.js?v=20261117-battle-polish", "ATO_HERO_CATALOG"),
-        load("assets/campaign-hero-tool.js?v=20261120-hero-portrait", "ATO_MOUNT_HERO_TOOL"),
+        load("assets/campaign-hero-tool.js?v=20261124-hero-status", "ATO_MOUNT_HERO_TOOL"),
       ]);
       return openHeroes ||= window.ATO_MOUNT_HERO_TOOL(root, options);
     }

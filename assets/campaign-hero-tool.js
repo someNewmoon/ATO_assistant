@@ -7,14 +7,15 @@ window.ATO_MOUNT_HERO_TOOL = function mountHeroTool(root, options) {
     ["fury", "怒气", "tri_rage.png"],
     ["fate", "命运", "tri_fate.png"],
     ["danger", "凶险", "tri_danger.png"],
+    ["despair", "绝望", "", "markers"],
   ];
-  const valueOf = (hero, key) => Math.max(0, parseInt(hero.triskelion?.[key], 10) || 0);
+  const valueOf = (hero, group, key) => Math.max(0, Math.min(Number.MAX_SAFE_INTEGER, parseInt(hero[group]?.[key], 10) || 0));
   const panel = document.createElement("dialog");
   panel.className = "campaign-hero-tool";
   panel.setAttribute("aria-labelledby", "campaignHeroToolTitle");
   panel.innerHTML = `<form>
     <h2 id="campaignHeroToolTitle">英雄状态</h2>
-    <fieldset class="hero-tool-roster" aria-label="当前队伍三幅节"></fieldset>
+    <fieldset class="hero-tool-roster" aria-label="当前队伍英雄状态"></fieldset>
     <p role="status"></p>
     <footer>
       <a href="${root}hero/index.html">打开英雄页</a>
@@ -73,17 +74,20 @@ window.ATO_MOUNT_HERO_TOOL = function mountHeroTool(root, options) {
       card.append(identity);
       const grid = document.createElement("div");
       grid.className = "hero-tool-stats";
-      for (const [key, label, file] of stats) {
-        const value = valueOf(hero, key);
-        const field = { heroId: hero.id, key, before: value, after: value };
+      for (const [key, label, file, group = "triskelion"] of stats) {
+        const value = valueOf(hero, group, key);
+        const field = { heroId: hero.id, group, key, before: value, after: value };
         fields.push(field);
         const cell = document.createElement("div");
         cell.dataset.heroStat = key;
         const name = document.createElement("div");
-        const icon = document.createElement("img");
-        icon.src = `${root}hero/assets/${file}`;
-        icon.alt = "";
-        name.append(icon, label);
+        if (file) {
+          const icon = document.createElement("img");
+          icon.src = `${root}hero/assets/${file}`;
+          icon.alt = "";
+          name.append(icon);
+        }
+        name.append(label);
         const controls = document.createElement("div");
         controls.className = "hero-tool-controls";
         const output = document.createElement("output");
@@ -131,15 +135,15 @@ window.ATO_MOUNT_HERO_TOOL = function mountHeroTool(root, options) {
       if (snapshot.profileId !== latest.profileId) throw new Error("战役档案已切换，请关闭并重新打开。");
       const state = structuredClone(latest.state || {});
       const changes = fields.filter(field => field.after !== field.before);
-      for (const { heroId, key, before, after } of changes) {
+      for (const { heroId, group, key, before, after } of changes) {
         const hero = state.heroes?.find(entry => entry.id === heroId);
-        if (!hero || valueOf(hero, key) !== before) {
+        if (!hero || valueOf(hero, group, key) !== before) {
           throw new Error("该英雄的状态已在其他页面更新，请关闭并重新打开。");
         }
-        if (!hero.triskelion || typeof hero.triskelion !== "object" || Array.isArray(hero.triskelion)) {
-          hero.triskelion = {};
+        if (!hero[group] || typeof hero[group] !== "object" || Array.isArray(hero[group])) {
+          hero[group] = {};
         }
-        hero.triskelion[key] = after;
+        hero[group][key] = after;
       }
       const { heroes, dashboard } = latest.revisions;
       const expectedRevisions = latest.profileId ? { heroes, dashboard } : { heroes };

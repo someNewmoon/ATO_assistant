@@ -58,6 +58,7 @@
 
   let parentRoll = '';
   let armedCard = '';
+  let exportingLoadout = false;
   let pending = false;
   let writing = false;
   let failedAction = null;
@@ -855,7 +856,7 @@
       src: art?.gearSrc(item.id, roomLanguage), thumb: art?.gearThumbSrc(item.id, roomLanguage), editable, detail: item.count > 1 ? String(slot + 1) + '/' + item.count : '',
     })).join('') + (item.count > 48 ? '<li>' + escape(item.name) + ' 另有 ' + (item.count - 48) + ' 件</li>' : '');
     const gear = inventory.groupGear(hero.gear, item => item.category).map(group => '<div class="room-card-group"><h5>'
-      + group.label + '</h5><ul class="battle-room-card-list">' + group.items.map(gearCards).join('') + '</ul></div>').join('');
+      + group.label + (own ? ' <small>' + group.items.reduce((count, item) => count + item.count, 0) + ' 件</small>' : '') + '</h5><ul class="battle-room-card-list">' + group.items.map(gearCards).join('') + '</ul></div>').join('');
     const mnemos = hero.mnemos.map(item => playableCard({
       item, type: 'mnemos-card', seat, value: item.state || 'ready', src: art?.mnemosSrc(item.id), thumb: art?.thumbSrc(item.id),
       memory: memoryCatalog.get(item.id), editable, detail: item.fated ? '命业旧忆' : item.progress + '/' + item.limit,
@@ -878,17 +879,56 @@
         + '"' + (hasExhausted ? '' : ' disabled') + '>一键回正</button>' : '';
     const deck = (name, cards) => cards ? '<section class="room-card-group"><h4>' + name + '</h4>'
       + '<ul class="battle-room-card-list">' + cards + '</ul></section>' : '';
+    const equipment = '<section class="room-card-group room-loadout-equipment"><h4>' + (own ? '已配装备' : '装备') + '</h4>'
+      + (gear || '<p>未分配装备</p>') + '</section>';
+    const reference = deck('样式卡牌', patternCards) + deck('旧忆', mnemos);
+    const loadout = own ? '<div class="room-loadout-folio">' + equipment + '<div class="room-loadout-side">'
+      + (titanImage ? '<section class="room-card-group room-loadout-titan"><h4>泰坦面板</h4>' + titanImage + '</section>' : '')
+      + reference + '</div></div>'
+      : deck('旧忆', mnemos) + deck('样式卡牌', patternCards) + equipment;
+    const exportButton = own && actor.role !== 'viewer'
+      ? '<button type="button" class="room-export-loadout" data-export-loadout="' + seat + '"'
+        + (exportingLoadout ? ' disabled' : '') + '>' + (exportingLoadout ? '正在生成…' : '导出图片') + '</button>' : '';
     return '<article class="battle-room-hero" data-hero-seat="' + seat + '"><header><div class="battle-room-identity">'
       + avatar + '<div><h3>' + escape(hero.name) + '</h3><small>' + escape(hero.player || '待认领') + '</small></div></div>'
-      + titanImage + '<div class="battle-room-titan-status"><span>' + titan + '</span>' + condition + '</div></header>'
+      + (own ? '' : titanImage) + '<div class="battle-room-titan-status"><span>' + titan + '</span>' + condition + '</div></header>'
       + '<section class="room-hero-status"' + (own ? ' id="room-status"' : '') + '><h4>状态</h4>'
       + '<div class="battle-room-stats" role="group" aria-label="三曲盘">' + stats + '</div>'
       + '<div class="battle-room-stats room-titan-markers" role="group" aria-label="泰坦状态标记">' + markers + '</div>'
       + traumaControls(hero, seat, editable) + '</section>'
-      + '<section class="room-card-groups"' + (own ? ' id="room-equipment"' : '') + '><div class="room-equipment-head"><h4>战斗卡牌</h4>'
-      + readyGear + '</div>' + deck('旧忆', mnemos) + deck('样式卡牌', patternCards)
-      + '<section class="room-card-group"><h4>装备</h4>' + (gear || '<p>未分配装备</p>') + '</section></section>'
+      + '<section class="room-card-groups"' + (own ? ' id="room-equipment"' : '') + '><div class="room-equipment-head"><h4>'
+      + (own ? '战斗配装' : '战斗卡牌') + '</h4><div class="room-loadout-actions">' + readyGear + exportButton
+      + '</div></div>' + loadout + '</section>'
       + summary + '</article>';
+  }
+
+  async function exportBattleLoadout(seat) {
+    const hero = state?.heroes[seat];
+    if (!hero || exportingLoadout) return;
+    const art = window.ATO_BATTLE_ASSETS;
+    const inventory = window.ATO_GEAR_INVENTORY;
+    const portrait = heroPortrait(hero);
+    const titan = hero.titan && art?.titanArt(hero.titan);
+    const titanLabel = hero.titan ? inventory.titanLabel(hero.titan) : '未分配泰坦';
+    const gear = inventory.groupGear(hero.gear, item => item.category).flatMap(group => group.items.map(item => ({
+      name: item.name, quantity: item.count, art: art?.gearSrc(item.id, roomLanguage), category: group.label,
+    })));
+    const patterns = inventory.TITAN_PATTERNS.filter(pattern => hero.titan?.patternIds?.includes(pattern.id))
+      .map(pattern => ({ name: pattern.name, art: '../' + pattern.art }));
+    const memories = hero.mnemos.map(item => item.name + ' · ' + (item.fated ? '命业旧忆' : item.progress + '/' + item.limit));
+    exportingLoadout = true;
+    render();
+    try {
+      await window.ATO_LOADOUT_IMAGE.download([{
+        name: hero.name, avatar: portrait ? '../hero/assets/' + portrait : '', titanLabel, gear, patterns, memories,
+        titan: titan ? { name: titanLabel, art: titan.src } : null,
+      }]);
+    } catch (error) {
+      say(error.message || '导出配装失败，请重试。');
+    } finally {
+      exportingLoadout = false;
+      render();
+    }
   }
 
   function diceDraftKey(seat, mode) {
@@ -2131,6 +2171,10 @@
     }
     if (button.hasAttribute('data-fill-weapon-power')) {
       fillWeaponPower(button);
+      return;
+    }
+    if (button.dataset.exportLoadout !== undefined) {
+      if (actor?.role === 'host' || actor?.role === 'player') await exportBattleLoadout(Number(button.dataset.exportLoadout));
       return;
     }
     if (button.dataset.equipmentSeat !== undefined) {

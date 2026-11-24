@@ -646,6 +646,66 @@ body.room-viewer > .app > main { padding: 8px; }
 .room-card-group h5 { margin: 7px 0 4px; font-size: .8rem; }
 .room-equipment-head, .room-reroll-controls, .room-reroll-fate { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .room-equipment-head { justify-content: space-between; }
+#room-equipment { container-type: inline-size; }
+#room-equipment .room-equipment-head {
+  padding: .65rem .8rem;
+  color: #fff5df;
+  background: #263d35;
+  border-radius: 7px;
+  border-bottom: 2px solid #a88854;
+}
+#room-equipment .room-equipment-head h4 { border: 0; padding: 0; font-size: 1rem; }
+.room-loadout-actions { display: flex; flex-wrap: wrap; gap: .4rem; }
+.battle-room .room-loadout-actions button { color: #f8efdc; background: #384f45; border: 1px solid #7c9386; }
+.battle-room .room-loadout-actions .room-export-loadout { color: #263d35; background: #f3e7ce; border-color: #f3e7ce; }
+.room-loadout-folio, .room-loadout-side { display: grid; align-items: start; gap: .65rem; }
+.room-loadout-side { align-content: start; }
+.room-loadout-folio .room-loadout-equipment, .room-loadout-side > section {
+  min-width: 0;
+  padding: .65rem;
+  border: 1px solid var(--room-border);
+  border-radius: 8px;
+  background: var(--room-surface);
+}
+.room-loadout-folio .room-loadout-equipment {
+  display: flex; flex-wrap: wrap; align-items: flex-start; gap: .35rem .85rem;
+}
+.room-loadout-equipment > :is(h4, p) { flex-basis: 100%; }
+.room-loadout-equipment > .room-card-group { min-width: 0; max-width: 100%; }
+.room-loadout-folio .room-loadout-equipment .battle-room-card-list {
+  display: flex; flex-wrap: wrap;
+}
+.room-loadout-equipment .battle-room-playable { width: min(132px, 100%); }
+.room-loadout-folio .room-card-group h4 { border: 0; padding: 0; margin-bottom: .45rem; }
+.room-loadout-folio .room-card-group h5 { margin: .65rem 0 .35rem; }
+.room-loadout-folio h5 small { margin-left: .3rem; font-weight: 400; }
+.room-loadout-folio .battle-room-card-list {
+  grid-template-columns: repeat(auto-fill, minmax(min(128px, 100%), 1fr));
+  gap: .45rem;
+}
+.room-loadout-folio .battle-room-playable {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  min-width: 0;
+  gap: .3rem;
+  padding: .35rem;
+  border: 1px solid var(--room-border);
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--room-surface) 96%, var(--room-text));
+}
+.room-loadout-folio .battle-room-card-name { overflow-wrap: anywhere; }
+.room-loadout-folio .battle-room-card-window { height: 142px; }
+.room-loadout-folio .battle-room-card-window > :is(button, .battle-room-reference) { width: min(92px, 100%); }
+.room-loadout-folio .battle-room-card-controls button { padding-inline: .42rem; }
+.room-loadout-folio .battle-room-card-controls [aria-pressed="true"] { background: #7a3728; }
+.battle-room .room-loadout-titan .battle-room-card-art { width: min(100%, 18rem); padding: 0; }
+.room-loadout-titan .battle-room-card-art img { height: auto; width: 100%; max-height: 12rem; object-fit: contain; }
+@container (min-width: 720px) {
+  .room-loadout-folio:has(.room-loadout-side > section) {
+    grid-template-columns: minmax(0, 1.65fr) minmax(270px, 1fr);
+  }
+}
+
 .room-reroll-fate .battle-room-marker img { width: 1.25rem; height: 1.25rem; }
 
 .room-ai-targets { display: flex; flex-wrap: wrap; gap: .35rem; }

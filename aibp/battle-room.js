@@ -426,10 +426,28 @@
   let turnHeading = '';
   let turnMarkup = '';
   let promptedAiRound = '';
+  let aiRange = 1;
+  let aiRouteId = '';
+  let aiPlanKey = '';
+  turnWindow.addEventListener('change', event => {
+    if (event.target.matches('[data-ai-range]')) {
+      aiRange = Math.max(1, Math.min(20, Math.floor(Number(event.target.value) || 1)));
+      aiRouteId = '';
+    } else if (event.target.matches('[data-ai-route]')) {
+      aiRouteId = event.target.value;
+    } else return;
+    renderTurn();
+  });
   turnWindow.addEventListener('click', event => {
     const button = event.target.closest('[data-turn-action]');
     if (!button || !state || state.closed) return;
     const { turnAction: type, seat, value } = button.dataset;
+    const selection = type === 'ai-guide' && ['target', 'hope-target'].includes(value)
+      ? turnWindow.querySelector('[data-ai-target]').value : '';
+    if (type === 'ai-guide' && ['target', 'hope-target'].includes(value) && !selection) {
+      say('请选择本次目标，或选择按牌面处理。');
+      return;
+    }
     if (type === 'ai-guide-discard') {
       send({ id: crypto.randomUUID(), type, card: state.projection?.ai?.src });
       return;
@@ -453,8 +471,34 @@
       return;
     }
     send({ id: crypto.randomUUID(), type, round: state.round, phase: state.turn?.phase ?? null,
-      ...(seat !== undefined && { seat: Number(seat) }), ...(value && { value }) });
+      ...(seat !== undefined && { seat: Number(seat) }), ...(value && { value }),
+      ...(selection && { target: selection === 'manual' ? null : Number(selection) }) });
   });
+
+  function aiRouteOptions() {
+    const board = state.board;
+    const pieces = board?.map?.pieces;
+    const target = pieces?.titans?.[state.turn?.aiTarget];
+    const profile = window.BattleTerrain?.getApostleProfile(board?.apostle, board?.level);
+    if (!target || !pieces.apostle || !profile || state.heroes[state.turn.aiTarget]?.condition === 'dead') return [];
+    const modifier = (state.projection?.tokens || []).reduce((value, token) =>
+      value + (token.file === 'SP+.png' ? token.count : token.file === 'SP-.png' ? -token.count : 0), 0);
+    const limit = profile.speed === Infinity ? Infinity : Math.max(0, (Number(profile.speed) || 0) + modifier);
+    const remaining = board.apostleMovement?.remaining;
+    const speed = remaining == null ? limit : Math.min(limit, remaining);
+    const paths = window.BattleLOS?.computeApostleMovePaths({
+      sourceAnchor: pieces.apostle, targetAnchor: target, size: profile.size, speed, reach: aiRange, facing: pieces.apostle.facing,
+    });
+    return window.BattleLOS.rankApostleRoutes(paths?.rules || [],
+      pieces.titans.filter((piece, seat) => piece && state.heroes[seat]?.condition !== 'dead'));
+  }
+
+  function renderAiTargetChoice() {
+    return '<label>本次目标 <select data-ai-target><option value="">请选择</option>'
+      + state.heroes.map((hero, seat) => hero.condition === 'dead' ? ''
+        : '<option value="' + seat + '">' + escape(hero.name) + '</option>').join('')
+      + '<option value="manual">无单一目标，按牌面处理</option></select></label>';
+  }
 
   function renderTurn() {
     turnBar.hidden = state.closed;
@@ -465,7 +509,7 @@
     const host = actor.role === 'host';
     const aiRound = (state.squad?.battleNumber || 0) + ':' + state.round;
     const guideAvailable = turn?.phase === 'apostle' && aiGuide.bosses.includes(state.board?.apostle);
-    const step = guideAvailable && turn.aiGuide;
+    const step = guideAvailable && aiGuide.stepFor(turn.aiGuide);
     const shouldDrawAi = host && turn?.phase === 'apostle' && !state.projection?.aiPending
       && Boolean(window.drawAibpRoomCard || (guideAvailable && state.deckRevision));
     if (host && (guideAvailable || shouldDrawAi) && promptedAiRound !== aiRound) {
@@ -498,26 +542,56 @@
     const guideAction = (value, label) => action('ai-guide', label, ' data-value="' + value + '"');
     let controls = '';
     let guidance = '';
+    const planKey = [state.squad?.battleNumber, state.round, step, turn?.aiTarget].join(':');
+    if (aiPlanKey !== planKey) {
+      aiPlanKey = planKey;
+      aiRange = 1;
+      aiRouteId = '';
+    }
+    let route;
     if (guideAvailable) {
       if (!step && host) controls = guideAction('begin', '开始逐步结算');
       if (step) {
-        const [title, detail, confirm] = aiGuide.steps[step];
+        const [title, detail] = aiGuide.steps[step];
         const projection = state.projection;
-        const current = projection?.ai;
-        const showCard = ['target', 'move', 'evade', 'effects', 'after', 'discard'].includes(step);
-        guidance = '<div class="room-ai-guide"><strong>' + title + '</strong>' + (detail ? '<p>' + detail + '</p>' : '')
-          + (showCard && current?.src ? cardImage('/aibp/' + current.src, current.label || '当前 AI') : '')
-          + '</div>';
+        const signature = step.startsWith('hope-');
+        const current = signature ? { src: projection?.signature, label: '招牌技' } : projection?.ai;
+        const targeting = step === 'target' || step === 'hope-target';
+        const resolving = step === 'resolve' || step === 'hope-resolve';
+        guidance = '<div class="room-ai-guide"><strong>' + title + '</strong><p>' + detail + '</p>'
+          + ((targeting || resolving) && current?.src ? cardImage('/aibp/' + current.src, current.label || '当前 AI') : '');
+        if (targeting && host) guidance += renderAiTargetChoice();
+        if (resolving && Number.isInteger(turn.aiTarget)) {
+          guidance += '<p>本次目标：<b>' + escape(state.heroes[turn.aiTarget]?.name || '') + '</b></p>';
+          const routes = aiRouteOptions();
+          route = routes.find(path => path.id === aiRouteId) || routes[0];
+          if (host && routes.length) {
+            guidance += '<label>按牌面填写攻击范围 <input data-ai-range type="number" min="1" max="20" value="' + aiRange + '"></label>'
+              + '<label>路线 <select data-ai-route>' + routes.map((path, i) => '<option value="' + path.id + '"'
+                + (route === path ? ' selected' : '') + '>' + (i ? '' : '推荐 · ') + path.label + ' · ' + path.steps
+                + ' 步 · ' + (path.collisions ? '可能冲撞 ' + path.collisions + ' 位泰坦' : '避开泰坦') + '</option>').join('')
+              + '</select></label><small>版图虚线是建议路线。请按牌面核对移动限制和视线。</small>';
+          }
+        }
+        const hope = projection?.hopeEnds;
+        if (step === 'other' && hope) guidance += '<p>希望终结生效，处理完其他行动后执行招牌技。</p>';
+        guidance += '</div>';
         if (host) {
-          if (step === 'ready') controls = action('turn-phase', confirm, ' data-value="titans"');
-          else if (step === 'draw' && !projection?.aiPending) {
-            controls = drawAi();
-            if (!shouldDrawAi) guidance += '<p>请先由房主在 AIBP 同步牌堆。</p>';
-          } else if (step === 'discard' && projection?.aiPending) {
-            if (state.deckRevision && current?.src) controls = action('ai-guide-discard', '弃置当前 AI');
-          } else {
-            controls = guideAction(step, confirm);
-            if (step === 'other') controls += guideAction('extra', '结算额外 AI');
+          if (step === 'start' || step === 'draw') {
+            if (projection?.aiPending) controls = guideAction('start', '确认已揭示');
+            else controls = action('draw-ai', step === 'start' ? '开始效果已处理，抽取 AI' : '抽取 AI',
+              turnAiAction || !shouldDrawAi ? ' disabled' : '');
+            if (!shouldDrawAi && !projection?.aiPending) guidance += '<p>请先由房主在 AIBP 同步牌堆。</p>';
+          } else if (targeting) controls = guideAction(step, '确认目标');
+          else if (step === 'resolve') {
+            if (projection?.aiPending && state.deckRevision && current?.src) {
+              controls = action('ai-guide-discard', '结算完毕，弃置 AI');
+            } else if (!projection?.aiPending) controls = guideAction('resolve', '牌面已处理');
+          } else if (step === 'hope-resolve') controls = guideAction(step, '招牌技已结算');
+          else {
+            if (step === 'other') controls = guideAction('extra', '结算额外 AI');
+            if (step === 'other' && hope) controls += guideAction('hope', '希望终结 · 执行招牌技');
+            else controls += action('turn-phase', '结束骇物轮次', ' data-value="titans"');
           }
         }
       }
@@ -532,10 +606,14 @@
       : everyoneFinished ? '<p>结算本轮结束效果后，由房主开启下一轮。</p>'
         : activeSeat === null ? '<p>首次主动移动或投掷攻击／威力骰会认领回合。</p>' : '';
     const actions = controls ? '<div class="room-turn-controls">' + controls + '</div>' : '';
-    const next = guidance + actions + '<ul>' + roster + '</ul>' + hint;
+    roomBoard?.setAiRoute(route?.centers);
+    const next = guidance + actions + (step ? '' : '<ul>' + roster + '</ul>') + hint;
     if (turnMarkup !== next) {
+      const picked = turnWindow.querySelector('[data-ai-target]')?.value;
       turnMarkup = next;
       turnWindow.querySelector('[data-turn-body]').innerHTML = next;
+      const selection = turnWindow.querySelector('[data-ai-target]');
+      if (picked && selection && [...selection.options].some(option => option.value === picked)) selection.value = picked;
     }
   }
 
@@ -1768,7 +1846,7 @@
 
   root.addEventListener('click', async event => {
     const button = event.target.closest('button');
-    if (!button || (!summary.contains(button) && !content.contains(button) && !toolsBody.contains(button))) return;
+    if (!button || (!summary.contains(button) && !content.contains(button) && !toolsBody.contains(button) && !turnWindow.contains(button))) return;
     if (button.dataset.rollSeat !== undefined && actor?.role === 'host') {
       const selected = Number(button.dataset.rollSeat);
       if (state.heroes[selected] && selected !== rollSeat) {

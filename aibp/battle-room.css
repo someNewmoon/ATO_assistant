@@ -450,7 +450,10 @@ body.aibp-room-only > .app > main > :not(#battleRoom) { display: none !important
 .room-turn-window .roll-hero-avatar { width: 1.75rem; height: 1.75rem; }
 .room-turn-window button { white-space: nowrap; }
 .room-ai-guide { display: grid; gap: .35rem; padding-block: .45rem; }
-.room-ai-guide > strong { color: var(--accent-strong); }
+.room-ai-guide > strong { color: #ffe09d; }
+.room-ai-guide label { display: flex; flex-wrap: wrap; align-items: center; gap: .35rem; }
+.room-ai-guide :is(select, input) { background: #fff7e8; color: #342d24; }
+.room-ai-guide input { width: 4rem; }
 .room-ai-guide > .battle-room-card-art { max-width: 8rem; }
 .room-ai-guide > .battle-room-card-art img { max-height: 7rem; }
 .room-turn-controls { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .4rem; }

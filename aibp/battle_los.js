@@ -1084,6 +1084,16 @@
     return { target, sourceCenter, directDestination, size: footprintSize, rules, direct };
   }
 
+  function rankApostleRoutes(paths, titanCells) {
+    if (!paths.length) return [];
+    const shortest = Math.min(...paths.map(path => path.steps));
+    return paths.filter(path => path.steps === shortest).map(path => {
+      const crossed = new Set(path.footprints.slice(1).flatMap(cells => cells.map(({ c, r }) => cellKey(c, r))));
+      const collisions = titanCells.filter(({ column, row }) => crossed.has(cellKey(column, row))).length;
+      return { ...path, collisions };
+    }).sort((a, b) => a.collisions - b.collisions);
+  }
+
   // ---- shared overlay (aibp 主控台 + ss 第二屏共用) ----------------------
   // aibp 的视线面板与第二屏必须画得一模一样，所以「算哪些格子」与「怎么画」都
   // 只留一份实现放在这里，两端各自只负责取状态和给容器。
@@ -1482,6 +1492,7 @@
     computeTitanMoves,
     computeDistanceMap,
     computeApostleMovePaths,
+    rankApostleRoutes,
     elevatedOcc,
     mazesenseOcc,
     segmentBlocked,

@@ -43,7 +43,7 @@
     return svg;
   }
 
-  function drawTrail(layer, trail, boss = false) {
+  function drawTrail(layer, trail, boss = false, suggested = false) {
     const route = trail?.route;
     if (!route || route.length < 2) return;
     const document = layer.ownerDocument;
@@ -52,9 +52,10 @@
     svg.setAttribute("preserveAspectRatio", "none");
     svg.setAttribute("class", "battle-piece-trail" + (boss ? " battle-piece-boss-trail" : ""));
     svg.setAttribute("role", "img");
+    if (suggested) svg.classList.add("battle-piece-suggested-route");
     const square = ({ column, row }) => String.fromCharCode(64 + row) + column;
-    svg.setAttribute("aria-label", (boss ? "骇物正交移动路线 " : "泰坦移动路线 ") + route.map(square).join(" → "));
-    svg.style.setProperty("--piece-accent", boss ? "#f4a284" : accents[trail.seat]);
+    svg.setAttribute("aria-label", (suggested ? "AI 建议路线 " : boss ? "骇物正交移动路线 " : "泰坦移动路线 ") + route.map(square).join(" → "));
+    svg.style.setProperty("--piece-accent", suggested ? "#f9d478" : boss ? "#f4a284" : accents[trail.seat]);
     const line = document.createElementNS(svgNS, "polyline");
     line.setAttribute("points", route.map(({ column, row }) => (column - 0.5) + "," + (14.5 - row)).join(" "));
     line.setAttribute("vector-effect", "non-scaling-stroke");
@@ -97,12 +98,13 @@
   }
 
   function render(layer, pieces, {
-    apostle, size = 1, selected = 0, mode, names = [], roster, portraits = [], deadSeats = [], priorityTarget, priorityVisible, trail, bossTrail, onSelect, onSelectBoss,
+    apostle, size = 1, selected = 0, mode, names = [], roster, portraits = [], deadSeats = [], priorityTarget, priorityVisible, aiTarget, aiRoute, trail, bossTrail, onSelect, onSelectBoss,
   } = {}) {
     layer.replaceChildren();
     layer.hidden = false;
     if (!deadSeats.includes(trail?.seat)) drawTrail(layer, trail);
     drawTrail(layer, bossTrail, true);
+    if (aiRoute) drawTrail(layer, { route: aiRoute }, true, true);
     if (priorityVisible) drawPriorityLink(layer, pieces.apostle, pieces.titans[priorityTarget]);
     const document = layer.ownerDocument;
     const sprites = window.BattleBoardSprites || {};
@@ -120,6 +122,7 @@
       }
       marker.className = "battle-piece " + (boss ? "battle-piece-apostle" : "battle-piece-titan");
       marker.classList.toggle("is-selected", boss ? mode?.startsWith("apostle-") : selected === index && mode?.startsWith("titan-"));
+      marker.classList.toggle("is-ai-target", !boss && index === aiTarget);
       if (!boss) marker.style.setProperty("--piece-accent", accents[index]);
       marker.style.left = (piece.column - 0.5) * 5 + "%";
       marker.style.top = (14 - piece.row + 0.5) / 14 * 100 + "%";

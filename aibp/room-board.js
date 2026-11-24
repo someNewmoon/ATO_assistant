@@ -37,6 +37,7 @@
       active, mode, selectedTitan, weaponControls, titanSpeeds, forced, elevated,
     });
 
+    let aiRoute, aiRouteStamp = "";
     let selectingPoint = false;
     let shownPing = null;
     let pingTimer;
@@ -153,6 +154,8 @@
           window.ATO_GEAR_INVENTORY.dreamwalkerPanel(titan)?.name || titan?.name || name),
         titanRoster: () => room.heroes.map(hero => hero.titan),
         priorityTarget: () => room.priorityTarget?.seat,
+        aiTarget: () => room.turn?.aiTarget,
+        aiRoute: () => aiRoute,
         deadSeats: () => room.heroes.flatMap((hero, seat) => hero.condition === "dead" ? [seat] : []),
         heroPortraits: () => room.heroes.map(hero => {
           const path = window.ATO_HERO_CATALOG.heroPortrait(hero);
@@ -217,7 +220,7 @@
         finishTurn.hidden = room.turn?.phase !== "titans" || !Number.isInteger(seat) || !canMove(seat);
         const livingRoster = room.heroes.map(hero => hero.condition === 'dead' ? null : hero.name);
         const nextBoardStamp = room.board === previous ? boardStamp : JSON.stringify(room.board);
-        const stateKey = JSON.stringify([actor.role, room.closed, room.turn?.phase, room.priorityTarget, livingRoster]);
+        const stateKey = JSON.stringify([actor.role, room.closed, room.turn?.phase, room.priorityTarget, room.turn?.aiTarget, livingRoster]);
         if (nextBoardStamp === boardStamp && stateKey === stamp) return;
         boardStamp = nextBoardStamp;
         stamp = stateKey;
@@ -248,6 +251,13 @@
         if (existing && Number.isInteger(previousSeat) && room.turn?.finished.includes(previousSeat)) {
           control.closeFinishedMovement(previousSeat);
         }
+      },
+      setAiRoute(route) {
+        const next = JSON.stringify(route) || "";
+        if (next === aiRouteStamp) return;
+        aiRouteStamp = next;
+        aiRoute = route;
+        control?.render();
       },
       openForcedMovement(seat) {
         if (!control || room.turn?.phase !== "apostle" || !canMove(seat) || !control.openTitanMovement(seat)) return false;

@@ -790,17 +790,17 @@ test('循环一逐步结算由房主确认，核对牌面并洗回空的指令�
     apply(host, 'turn-phase', { value: 'apostle' });
     assert.throws(() => apply(player, 'ai-guide', { value: 'begin' }), /房主/);
     confirm('begin');
-    assert.throws(() => apply(host, 'ai-request'), /当前骇物步骤/);
     assert.throws(() => confirm('target'), /步骤/);
     assert.throws(() => apply(host, 'turn-phase', { value: 'titans' }), /逐步结算/);
-    confirm('start');
-    assert.throws(() => confirm('draw'), /牌面/);
     for (let pass = 0; pass < 2; pass++) {
       apply(host, 'ai-request');
       assert.equal(r.turn.aiGuide, 'target');
       assert.equal(r.projection.aiPending, true);
       assert.throws(() => apply(host, 'ai-guide-discard', { card: src }), /无法弃置/);
-      for (const step of ['target', 'move', 'evade', 'effects', 'after']) confirm(step);
+      assert.throws(() => confirm('target'), /目标/);
+      apply(host, 'ai-guide', { value: 'target', target: 1 });
+      assert.equal(r.turn.aiGuide, 'resolve');
+      assert.equal(r.turn.aiTarget, 1);
       assert.throws(() => apply(host, 'ai-guide-discard', { card: src.replace('001', '002') }), /指令技已更新/);
       apply(host, 'ai-guide-discard', { card: src });
       assert.equal(r.turn.aiGuide, 'other');
@@ -808,8 +808,18 @@ test('循环一逐步结算由房主确认，核对牌面并洗回空的指令�
       assert.equal(r.projection.aiDeck.count, 1);
       if (pass === 0) confirm('extra');
     }
-    confirm('other');
-    confirm('end');
+    if (apostle === 'HERMESIAN_PURSUER') {
+      r.projection.hopeEnds = true;
+      r.projection.signature = 'ps/HERMESIAN_PURSUER/HERMESIAN_PURSUER_SIGNATURE_X_001.jpg';
+      assert.throws(() => apply(host, 'turn-phase', { value: 'titans' }), /逐步结算/);
+      confirm('hope');
+      assert.equal(r.turn.aiGuide, 'hope-target');
+      apply(host, 'ai-guide', { value: 'hope-target', target: 0 });
+      assert.equal(r.turn.aiGuide, 'hope-resolve');
+      confirm('hope-resolve');
+      assert.equal(r.turn.aiGuide, 'ready');
+      assert.equal(r.battleDeck.data.AI.deck.length, 1, '招牌技不进入指令技牌堆');
+    }
     apply(host, 'turn-phase', { value: 'titans' });
     assert.equal(r.turn.phase, 'titans');
     assert.equal(r.turn.aiGuide, undefined);

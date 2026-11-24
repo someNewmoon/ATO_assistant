@@ -156,6 +156,7 @@
         priorityTarget: () => room.priorityTarget?.seat,
         aiTarget: () => room.turn?.aiTarget,
         aiRoute: () => aiRoute,
+        pendingCollisionSeats: () => room.turn?.aiMovement?.pending ? room.turn.aiMovement.crossedSeats : [],
         deadSeats: () => room.heroes.flatMap((hero, seat) => hero.condition === "dead" ? [seat] : []),
         heroPortraits: () => room.heroes.map(hero => {
           const path = window.ATO_HERO_CATALOG.heroPortrait(hero);
@@ -220,7 +221,7 @@
         finishTurn.hidden = room.turn?.phase !== "titans" || !Number.isInteger(seat) || !canMove(seat);
         const livingRoster = room.heroes.map(hero => hero.condition === 'dead' ? null : hero.name);
         const nextBoardStamp = room.board === previous ? boardStamp : JSON.stringify(room.board);
-        const stateKey = JSON.stringify([actor.role, room.closed, room.turn?.phase, room.priorityTarget, room.turn?.aiTarget, livingRoster]);
+        const stateKey = JSON.stringify([actor.role, room.closed, room.turn?.phase, room.priorityTarget, room.turn?.aiTarget, room.turn?.aiMovement, livingRoster]);
         if (nextBoardStamp === boardStamp && stateKey === stamp) return;
         boardStamp = nextBoardStamp;
         stamp = stateKey;

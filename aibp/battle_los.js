@@ -992,9 +992,10 @@
 
   function facingToTargetFromFootprint(center, size, target, fallback) {
     const delta = footprintDeltaToTarget(center, size, target);
-    if (delta.h > 0 && delta.v === 0) return facingFromStep("h", Math.sign(delta.dx));
-    if (delta.v > 0 && delta.h === 0) return facingFromStep("v", Math.sign(delta.dy));
-    return fallback;
+    const valid = [];
+    if (delta.h > 0) valid.push(facingFromStep("h", Math.sign(delta.dx)));
+    if (delta.v > 0) valid.push(facingFromStep("v", Math.sign(delta.dy)));
+    return valid.includes(fallback) ? fallback : (valid[0] ?? fallback);
   }
 
   function buildMovementPath({ kind, firstAxis, sourceCenter, size, target, destination, limit, reach, facing }) {
@@ -1040,7 +1041,7 @@
       : (finalDelta.distance <= stopReach
         ? (steps === 0 ? "already-in-range" : "in-range")
         : (limit === 0 ? "speed-zero" : "speed-limit"));
-    const finalFacing = kind === "rules" && finalDelta.distance <= stopReach
+    const finalFacing = kind === "rules"
       ? facingToTargetFromFootprint(current, size, target, lastFacing ?? facing)
       : (lastFacing ?? noMoveFacing(kind, current, size, target, destination, facing));
     return {
@@ -1093,7 +1094,9 @@
     return paths.filter(path => path.steps === shortest).map(path => {
       const crossed = new Set(path.footprints.slice(1).flatMap(cells => cells.map(({ c, r }) => cellKey(c, r))));
       const collisions = titanCells.filter(({ column, row }) => crossed.has(cellKey(column, row)));
-      return { ...path, collisions: collisions.length, crossedSeats: collisions.map(cell => cell.seat) };
+      const end = new Set(path.finalFootprint.map(({ c, r }) => cellKey(c, r)));
+      return { ...path, collisions: collisions.length, crossedSeats: collisions.map(cell => cell.seat),
+        endSeats: collisions.filter(({ column, row }) => end.has(cellKey(column, row))).map(cell => cell.seat) };
     }).sort((a, b) => a.collisions - b.collisions);
   }
 

@@ -203,3 +203,10 @@ button.battle-piece { pointer-events: auto; cursor: pointer; min-height: 0; }
 
 .battle-piece.battle-piece-route-ghost { opacity: .55; border: 2px dashed #ffd56e; background: #96632855; box-shadow: none; }
 .battle-piece.battle-piece-titan.is-ai-route-crossed:not(.is-ai-target) { outline: 2px dashed #f98977; }
+
+.battle-piece.battle-piece-titan.is-ai-collision-pending { outline: 3px solid #ffc1a8; outline-offset: 2px; }
+.battle-piece-collision-badge {
+  position: absolute; z-index: 3; right: -.4rem; top: -.35rem;
+  min-width: 1.1rem; padding: .1rem; border-radius: .25rem; background: #9d291e; color: white;
+  font: 700 .68rem/1.1 system-ui, sans-serif; pointer-events: none;
+}

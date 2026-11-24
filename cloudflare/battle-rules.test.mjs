@@ -6,6 +6,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import dice from '../aibp/room-dice.js';
+import guide from '../aibp/ai-turn-guide.js';
+import los from '../aibp/battle_los.js';
+import terrain from '../ss/terrain-data.js';
 
 // Exercise the real Worker reducers; only the Cloudflare base class is replaced.
 // Run: cd cloudflare && node --test battle-rules.test.mjs
@@ -713,6 +716,66 @@ test('骇物轮次的非主动移动可经过其他泰坦，单独记步且不�
     point: { column: 2, row: 3 }, speed: 2 });
   assert.equal(r.turn.seat, 0);
   assert.equal(r.board.titanMoves[0].remaining, 1);
+});
+
+test('推荐移动执行所选逐格路线，冲撞待确认时保留标记并阻止推进', () => {
+  const r = room();
+  r.board = api.setupRoomBoard({ apostle: 'HERMESIAN_PURSUER', level: 1 }, 2);
+  r.turn = { phase: 'apostle', seat: null, finished: [], aiGuide: 'resolve', aiTarget: 0 };
+  const pieces = r.board.map.pieces;
+  const origin = { column: 2.5, row: 2.5, facing: 270 };
+  pieces.apostle = { ...origin };
+  pieces.titans = [{ column: 7, row: 4 }, { column: 4, row: 2 }];
+
+  const [safe, collision] = guide.apostleRoutes(r, 1, terrain, los);
+  assert.equal(safe.id, 'vertical-first');
+  assert.deepEqual(safe.crossedSeats, []);
+  assert.equal(collision.id, 'horizontal-first');
+  assert.deepEqual(collision.crossedSeats, [1]);
+  assert.deepEqual(collision.endSeats, []);
+  const action = { type: 'board-ai-route', id: 'guided', reach: 1, route: collision.id, stamp: guide.routeStamp(r, collision) };
+  assert.throws(() => reducer.apply(r, player, action), /房主/);
+  assert.throws(() => reducer.apply(r, host, { ...action, stamp: 'stale' }), /路线已更新/);
+  assert.deepEqual(pieces.apostle, origin);
+
+  reducer.apply(r, host, action);
+  assert.deepEqual(r.board.lastApostleMove.route, collision.centers);
+  assert.deepEqual(pieces.apostle, { ...collision.finalCenter, facing: collision.facing });
+  assert.equal(r.turn.aiMovement.pending, true);
+  assert.deepEqual(r.turn.aiMovement.crossedSeats, [1]);
+  assert.equal(r.heroes[1].condition, 'standing');
+  assert.equal(r.heroes[1].stats.danger, 0);
+  assert.throws(() => reducer.apply(r, host, action), /已经执行过/);
+
+  reducer.apply(r, host, { type: 'board-apostle-undo', move: action.id });
+  assert.deepEqual(pieces.apostle, origin);
+  assert.equal(r.turn.aiMovement, undefined);
+  reducer.apply(r, host, { ...action, id: 'retried', stamp: guide.routeStamp(r, collision) });
+  const finish = { type: 'ai-guide', round: 1, phase: 'apostle', value: 'resolve' };
+  assert.throws(() => reducer.apply(r, host, finish), /先处理并确认/);
+  assert.throws(() => reducer.apply(r, host, { type: 'board-ai-trample-confirm', move: 'guided' }), /已更新/);
+  reducer.apply(r, host, { type: 'board-ai-trample-confirm', move: 'retried' });
+  assert.equal(r.turn.aiMovement.pending, false);
+  reducer.apply(r, host, finish);
+  assert.equal(r.turn.aiGuide, 'other');
+  assert.equal(r.turn.aiMovement, undefined);
+  assert.equal(r.board.apostleMovement, undefined);
+  assert.deepEqual(r.board.lastApostleMove.route, collision.centers);
+});
+
+test('目标已在远程攻击范围内时只调整朝向，招牌技也可使用推荐移动', () => {
+  const r = room();
+  r.board = api.setupRoomBoard({ apostle: 'HERMESIAN_PURSUER', level: 1 }, 2);
+  r.turn = { phase: 'apostle', seat: null, finished: [], aiGuide: 'hope-resolve', aiTarget: 0 };
+  r.board.map.pieces.apostle = { column: 2.5, row: 2.5, facing: 270 };
+  r.board.map.pieces.titans = [{ column: 4, row: 4 }, { column: 9, row: 9 }];
+  const [route] = guide.apostleRoutes(r, 2, terrain, los);
+  assert.equal(route.steps, 0);
+  assert.equal(route.facing, 90);
+  reducer.apply(r, host, { type: 'board-ai-route', id: 'turn-only', reach: 2, route: route.id, stamp: guide.routeStamp(r, route) });
+  assert.deepEqual(r.board.map.pieces.apostle, { column: 2.5, row: 2.5, facing: 90 });
+  assert.equal(r.turn.aiMovement.pending, false);
+  assert.equal(r.board.apostleMovement, undefined);
 });
 
 test('版图点位由房主或队员标记，经校验且不改变棋子、移动或回合', () => {

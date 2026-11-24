@@ -1,6 +1,7 @@
 import '../../aibp/boss-levels-data.js';
 import terrain from '../../ss/terrain-data.js';
 import los from '../../aibp/battle_los.js';
+import guide from '../../aibp/ai-turn-guide.js';
 import { ApiError, object } from './campaign.js';
 import { claimTurn, forcedTitanMove } from './room-turn.js';
 
@@ -79,6 +80,33 @@ export function priorityTarget(room) {
     if (seat === null || hero.stats.rage > room.heroes[seat].stats.rage) seat = index;
   });
   return { seat, locked: false };
+}
+
+function applyAiMovement(room, body) {
+  const { turn, board } = room;
+  if (turn?.phase !== 'apostle' || !guide.bosses.includes(board.apostle) || !guide.resolvesMovement(turn.aiGuide)) {
+    fail('当前步骤无法执行推荐移动。', 409);
+  }
+  if (body.type === 'board-ai-trample-confirm') {
+    if (!turn.aiMovement?.pending || turn.aiMovement.id !== body.move) fail('冲撞记录已更新。', 409);
+    turn.aiMovement.pending = false;
+    return;
+  }
+  if (turn.aiMovement) fail('当前指令已经执行过推荐移动。', 409);
+  if (!Number.isInteger(body.reach) || body.reach < 1 || body.reach > 20) fail('攻击范围无效。');
+  const route = guide.apostleRoutes(room, body.reach, terrain, los).find(path => path.id === body.route);
+  if (!route || guide.routeStamp(room, route) !== body.stamp) fail('路线已更新，请重新核对。', 409);
+  const current = board.map.pieces.apostle;
+  const active = board.apostleMovement;
+  const originalFacing = current.facing;
+  if (route.steps) {
+    const move = los.appendTitanMove(active, { id: body.id, speed: active ? active.speed : route.speed, route: route.centers });
+    board.apostleMovement = board.lastApostleMove = move;
+  }
+  Object.assign(current, route.finalCenter, { facing: route.facing });
+  board.layoutRevision++;
+  turn.aiMovement = { id: body.id, steps: route.steps, facing: route.facing, originalFacing,
+    crossedSeats: route.crossedSeats, endSeats: route.endSeats, pending: route.collisions > 0, stopReason: route.stopReason };
 }
 
 export function applyRoomBoard(room, actor, body) {
@@ -160,15 +188,25 @@ export function applyRoomBoard(room, actor, body) {
     return;
   }
   if (!board) fail('请先载入房间版图。');
+  if (['board-ai-route', 'board-ai-trample-confirm'].includes(body.type)) return applyAiMovement(room, body);
   if (['board-apostle-move', 'board-apostle-undo', 'board-apostle-end'].includes(body.type)) {
     const active = board.apostleMovement;
     const current = board.map.pieces.apostle;
     if (body.type !== 'board-apostle-move') {
       if (!active || active.id !== body.move) fail('骇物移动已更新。', 409);
+      if (body.type === 'board-apostle-end') {
+        delete board.apostleMovement;
+        return;
+      }
+      const guided = room.turn?.aiMovement?.id === active.id && room.turn.aiMovement;
+      if (guided && guided.crossedSeats.length && !guided.pending) fail('冲撞已经确认，请按牌面手动校正版图。', 409);
       delete board.apostleMovement;
-      if (body.type === 'board-apostle-end') return;
       const { origin, previous } = los.rewindTitanMove(active);
       Object.assign(current, origin);
+      if (guided) {
+        current.facing = guided.originalFacing;
+        delete room.turn.aiMovement;
+      }
       if (previous) board.apostleMovement = previous;
       if (previous) board.lastApostleMove = previous;
       else delete board.lastApostleMove;

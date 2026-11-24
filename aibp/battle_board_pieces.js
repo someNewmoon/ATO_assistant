@@ -118,7 +118,7 @@
   }
 
   function render(layer, pieces, {
-    apostle, size = 1, selected = 0, mode, names = [], roster, portraits = [], deadSeats = [], priorityTarget, priorityVisible, aiTarget, aiRoute, trail, bossTrail, onSelect, onSelectBoss,
+    apostle, size = 1, selected = 0, mode, names = [], roster, portraits = [], deadSeats = [], priorityTarget, priorityVisible, aiTarget, aiRoute, pendingCollisionSeats = [], trail, bossTrail, onSelect, onSelectBoss,
   } = {}) {
     layer.replaceChildren();
     layer.hidden = false;
@@ -145,14 +145,23 @@
       marker.classList.toggle("is-selected", boss ? mode?.startsWith("apostle-") : selected === index && mode?.startsWith("titan-"));
       marker.classList.toggle("is-ai-target", !boss && index === aiTarget);
       marker.classList.toggle("is-ai-route-crossed", !boss && aiRoute?.crossedSeats?.includes(index));
+      const pendingCollision = !boss && pendingCollisionSeats.includes(index);
       if (!boss) marker.style.setProperty("--piece-accent", accents[index]);
       marker.style.left = (piece.column - 0.5) * 5 + "%";
       marker.style.top = (14 - piece.row + 0.5) / 14 * 100 + "%";
       marker.style.width = span * 5 + "%";
       marker.style.height = span / 14 * 100 + "%";
       const square = String.fromCharCode(64 + Math.ceil(piece.row)) + Math.ceil(piece.column);
-      marker.setAttribute("aria-label", name + " " + square);
-      marker.title = name + " " + square;
+      marker.title = name + " " + square + (pendingCollision ? " · 待结算冲撞" : "");
+      marker.setAttribute("aria-label", marker.title);
+      marker.classList.toggle("is-ai-collision-pending", pendingCollision);
+      if (pendingCollision) {
+        const badge = document.createElement("span");
+        badge.className = "battle-piece-collision-badge";
+        badge.setAttribute("aria-hidden", "true");
+        badge.textContent = "冲";
+        marker.appendChild(badge);
+      }
       if (sprite) marker.appendChild(spriteNode(document, sprite, piece.facing));
       else if (fallback) {
         const image = document.createElement("img");

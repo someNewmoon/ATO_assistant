@@ -7,7 +7,7 @@ import aiGuide from '../../aibp/ai-turn-guide.js';
 import roomDice from '../../aibp/room-dice.js';
 import { roomProjection } from './room-projection.js';
 import { discardRoomAi, prepareRoomDeck, revealRoomAi, revealRoomBp, roomDeckProjection, settleRoomBp } from './room-deck.js';
-import { applyTurn, claimTurn, setTurnPhase } from './room-turn.js';
+import { applyTurn, claimTurn, finishAiMovement, setTurnPhase } from './room-turn.js';
 import { battleRecap, battleStats, countReaction, setRollWounds } from './room-recap.js';
 import battleConfig from '../../technology/battle-config.js';
 import techDictionary from '../../technology/tech_card_dictionary.min.json';
@@ -161,6 +161,7 @@ function publicSquadLoadouts(room) {
 const activityLabels = {
   'turn-phase': '切换轮次', 'turn-take': '开始英雄回合', 'turn-finish': '结束英雄回合',
   'board-move': '移动泰坦', 'board-undo-move': '撤回上一步', 'board-apostle-move': '移动骇物',
+  'board-ai-route': '执行推荐移动', 'board-ai-trample-confirm': '确认冲撞',
   'board-apostle-undo': '撤回骇物移动', 'board-face': '调整骇物朝向', 'priority-target': '调整首要目标', round: '开启新一轮',
   stat: '调整三曲盘', 'titan-marker': '调整泰坦标记', condition: '调整泰坦状态', gear: '使用装备', 'gear-card': '调整装备卡', 'gear-ready-all': '回正所有横置卡牌',
   'mnemos-card': '调整旧忆卡', 'pattern-card': '调整样式卡牌', 'argo-use': '使用阿尔戈能力', 'argo-undo': '撤回阿尔戈能力',
@@ -220,6 +221,10 @@ function recordBattleActivity(room, actor, body, previousProjection) {
     const { row, column } = body.point;
     detail = Number.isInteger(row) ? String.fromCharCode(64 + row) + column : '落点（列 ' + column + ' · 行 ' + row + '）';
   }
+  if (body.type === 'board-ai-route') {
+    const movement = room.turn.aiMovement;
+    detail = movement.steps + ' 格' + (movement.pending ? ' · 待结算冲撞 ' + movement.crossedSeats.length + ' 位泰坦' : '');
+  }
   if (body.type === 'board-face') detail = { 0: '朝上', 90: '朝右', 180: '朝下', 270: '朝左' }[body.facing];
   if (body.type === 'priority-target') detail = body.locked ? '锁定' : '未锁定';
   if (body.type === 'condition') detail = { standing: '站立', down: '倒地', rising: '起身', dead: '死亡' }[hero.condition];
@@ -253,7 +258,7 @@ function combatPatch(room, { type, id, seat, key, delta }) {
   } else if (type === 'condition') {
     hero = { seat, fields: { condition: room.heroes[seat].condition } };
     changes = { board: room.board, turn: room.turn, priorityTarget: priorityTarget(room) };
-  } else if (['board-move', 'board-undo-move', 'board-end-move'].includes(type)) {
+  } else if (['board-move', 'board-undo-move', 'board-end-move', 'board-ai-route', 'board-ai-trample-confirm'].includes(type)) {
     changes = { board: room.board, turn: room.turn };
   } else return null;
 
@@ -268,11 +273,13 @@ function cardActionPatch(room, body, previousDeckRevision) {
   let changes, roll;
   if (body.type === 'ai-guide') {
     changes = { turn: room.turn };
+    if (aiGuide.resolvesMovement(body.value)) changes.board = room.board;
   } else if (body.type === 'turn-finish') {
     changes = { turn: room.turn, board: room.board };
   } else if (['ai-request', 'ai-guide-discard', 'bp-request', 'bp-settle'].includes(body.type)) {
     changes = { turn: room.turn, projection: room.projection,
       deckRevision: room.battleDeck.revision, bpSeat: room.battleDeck.bpSeat ?? null };
+    if (body.type === 'ai-guide-discard') changes.board = room.board;
     if (body.type === 'bp-settle') {
       changes.secondAbility = room.secondAbility;
       if (room.squad) changes.damageBySeat = room.heroes.map((_, seat) => room.battleStats?.[seat]?.damage ?? 0);
@@ -638,7 +645,9 @@ export class BattleRoom extends DurableObject {
       if (actor.role !== 'host') reject('指令技由房主确认弃置。', 403);
       const deck = room.battleDeck;
       if (!deck || room.turn?.phase !== 'apostle' || aiGuide.stepFor(room.turn.aiGuide) !== 'resolve') reject('当前无法弃置指令技。', 409);
+      if (room.turn.aiMovement?.pending) reject('请先处理并确认本次冲撞。', 409);
       discardRoomAi(deck, body.card, randomInt);
+      finishAiMovement(room);
       deck.revision++;
       deck.operation = body.id;
       room.projection = roomDeckProjection(deck, room.projection);

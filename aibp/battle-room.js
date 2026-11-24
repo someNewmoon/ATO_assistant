@@ -464,6 +464,13 @@
       send({ id: crypto.randomUUID(), type: 'board-face', facing: Number(value) });
       return;
     }
+    if (type === 'board-ai-route' || type === 'board-ai-trample-confirm') {
+      if (actions.some(action => action.type === type)) return;
+      send({ id: crypto.randomUUID(), type, ...(type === 'board-ai-route'
+        ? { route: value, reach: aiRange, stamp: button.dataset.routeStamp }
+        : { move: value }) });
+      return;
+    }
     if (type === 'ai-guide-discard') {
       send({ id: crypto.randomUUID(), type, card: state.projection?.ai?.src });
       return;
@@ -491,22 +498,18 @@
       ...(selection && { target: selection === 'manual' ? null : Number(selection) }) });
   });
 
-  function aiRouteOptions() {
-    const board = state.board;
-    const pieces = board?.map?.pieces;
-    const target = pieces?.titans?.[state.turn?.aiTarget];
-    const profile = window.BattleTerrain?.getApostleProfile(board?.apostle, board?.level);
-    if (!target || !pieces.apostle || !profile || state.heroes[state.turn.aiTarget]?.condition === 'dead') return [];
-    const modifier = (state.projection?.tokens || []).reduce((value, token) =>
-      value + (token.file === 'SP+.png' ? token.count : token.file === 'SP-.png' ? -token.count : 0), 0);
-    const limit = profile.speed === Infinity ? Infinity : Math.max(0, (Number(profile.speed) || 0) + modifier);
-    const remaining = board.apostleMovement?.remaining;
-    const speed = remaining == null ? limit : Math.min(limit, remaining);
-    const paths = window.BattleLOS?.computeApostleMovePaths({
-      sourceAnchor: pieces.apostle, targetAnchor: target, size: profile.size, speed, reach: aiRange, facing: pieces.apostle.facing,
-    });
-    return window.BattleLOS.rankApostleRoutes(paths?.rules || [],
-      pieces.titans.flatMap((piece, seat) => piece && state.heroes[seat]?.condition !== 'dead' ? [{ ...piece, seat }] : []));
+  const aiHeadings = { 0: '上', 90: '右', 180: '下', 270: '左' };
+
+  function aiMovementResult(move, host, action) {
+    const outOfRange = ['speed-limit', 'speed-zero'].includes(move.stopReason);
+    const result = '<p>已执行 · ' + move.steps + ' 格 · 朝' + aiHeadings[move.facing]
+      + (outOfRange ? ' · 目标仍在填写的攻击范围外，请核对是否跳过攻击' : '') + '</p>';
+    if (!move.pending) return result;
+    const heroes = move.crossedSeats.map(seat => '<li>' + rollAvatar(seat) + '<span>' + escape(state.heroes[seat]?.name || '')
+      + (move.endSeats.includes(seat) ? ' · 骇物落点重叠，另结算绝对击退' : '') + '</span></li>').join('');
+    return result + '<section class="room-ai-collisions"><strong>待结算冲撞</strong><ul>' + heroes + '</ul>'
+      + '<p>每位受冲撞的泰坦获得 1 凶险并被击倒。按牌面核对例外后确认。</p>'
+      + (host ? action('board-ai-trample-confirm', '确认冲撞已结算', ' data-value="' + escape(move.id) + '"') : '') + '</section>';
   }
 
   function renderAiTargetChoice(step) {
@@ -556,7 +559,8 @@
         + '</small></span>' + actions + '</li>';
     }).join('');
     const drawAi = () => action('draw-ai', '抽取 AI', turnAiAction || !shouldDrawAi ? ' disabled' : '');
-    const guideAction = (value, label) => action('ai-guide', label, ' data-value="' + value + '"');
+    const guideAction = (value, label) => action('ai-guide', label, ' data-value="' + value + '"'
+      + (aiGuide.resolvesMovement(value) && turn.aiMovement?.pending ? ' disabled' : ''));
     let controls = '';
     let guidance = '';
     const planKey = [state.squad?.battleNumber, state.round, step, turn?.aiTarget].join(':');
@@ -574,29 +578,35 @@
         const signature = step.startsWith('hope-');
         const current = signature ? { src: projection?.signature, label: '招牌技' } : projection?.ai;
         const targeting = step === 'target' || step === 'hope-target';
-        const resolving = step === 'resolve' || step === 'hope-resolve';
+        const resolving = aiGuide.resolvesMovement(step);
         guidance = '<div class="room-ai-guide"><strong>' + title + '</strong><p>' + detail + '</p>'
           + ((targeting || resolving) && current?.src ? cardImage('/aibp/' + current.src, current.label || '当前 AI') : '');
         if (targeting && host) guidance += renderAiTargetChoice(step);
         if (resolving && Number.isInteger(turn.aiTarget)) {
           guidance += '<p>本次目标：<b>' + escape(state.heroes[turn.aiTarget]?.name || '') + '</b></p>';
-          const routes = aiRouteOptions();
-          route = routes.find(path => path.id === aiRouteId) || routes[0];
-          if (host && routes.length) {
-            guidance += '<label>按牌面填写攻击范围 <input data-ai-range type="number" min="1" max="20" value="' + aiRange + '"></label>'
-              + '<label>路线 <select data-ai-route>' + routes.map((path, i) => '<option value="' + path.id + '"'
-                + (route === path ? ' selected' : '') + '>' + (i ? '' : '推荐 · ') + path.label + ' · ' + path.steps
-                + ' 步 · ' + (path.collisions ? '可能冲撞 ' + path.collisions + ' 位泰坦' : '避开泰坦') + '</option>').join('')
-              + '</select></label><small>版图虚线与半透明模型标出建议落点。按牌面核对移动、视线和转向例外。</small>';
-            const headings = { 0: '上', 90: '右', 180: '下', 270: '左' };
-            if (Object.hasOwn(headings, route.facing)) {
-              const begin = route.firstFacing;
-              const currentFacing = route.steps ? begin : route.facing;
-              guidance += '<p>' + (route.steps && begin != null ? '移动前朝' + headings[begin] + ' · ' : '')
-                + '落点／攻击前朝' + headings[route.facing] + '</p>'
-                + (Number.isInteger(currentFacing)
-                  ? action('ai-face', route.steps ? '转到起步朝向' : '转向目标', ' data-value="' + currentFacing + '"')
-                  : '');
+          if (turn.aiMovement) {
+            guidance += aiMovementResult(turn.aiMovement, host, action);
+          } else {
+            const routes = aiGuide.apostleRoutes(state, aiRange, window.BattleTerrain, window.BattleLOS);
+            route = routes.find(path => path.id === aiRouteId) || routes[0];
+            if (host && route) {
+              guidance += '<label>按牌面填写攻击范围 <input data-ai-range type="number" min="1" max="20" value="' + aiRange + '"></label>'
+                + '<label>路线 <select data-ai-route>' + routes.map((path, i) => '<option value="' + path.id + '"'
+                  + (route === path ? ' selected' : '') + '>' + (i ? '' : '推荐 · ') + path.label + ' · ' + path.steps
+                  + ' 格 · ' + (path.collisions ? '冲撞 ' + path.collisions + ' 位泰坦' : '避开泰坦') + '</option>').join('')
+                + '</select></label><small>虚线和半透明模型预览路线与落点。按牌面核对移动、视线和转向例外。</small>';
+              if (Object.hasOwn(aiHeadings, route.facing)) {
+                const begin = route.firstFacing;
+                guidance += '<p>' + (route.steps ? '起步朝' + aiHeadings[begin] + ' · ' : '')
+                  + '落点／攻击前朝' + aiHeadings[route.facing] + '</p>';
+                if (route.crossedSeats.length) guidance += '<p class="room-ai-collision-preview">冲撞预览：'
+                  + route.crossedSeats.map(seat => escape(state.heroes[seat].name)
+                    + (route.endSeats.includes(seat) ? '（落点重叠）' : '')).join('、') + '</p>';
+                const routeAttrs = ' data-value="' + route.id + '" data-route-stamp="' + escape(aiGuide.routeStamp(state, route)) + '"';
+                guidance += '<div class="room-ai-move-actions">'
+                  + action('board-ai-route', route.steps ? '按所选路线移动' : '按推荐朝向就位', routeAttrs)
+                  + (route.steps ? action('ai-face', '只转到起步朝向', ' data-value="' + begin + '"') : '') + '</div>';
+              }
             }
           }
         }
@@ -611,7 +621,7 @@
             if (!shouldDrawAi && !projection?.aiPending) guidance += '<p>请先由房主在 AIBP 同步牌堆。</p>';
           } else if (step === 'resolve') {
             if (projection?.aiPending && state.deckRevision && current?.src) {
-              controls = action('ai-guide-discard', '结算完毕，弃置 AI');
+              controls = action('ai-guide-discard', '结算完毕，弃置 AI', turn.aiMovement?.pending ? ' disabled' : '');
             } else if (!projection?.aiPending) controls = guideAction('resolve', '牌面已处理');
           } else if (step === 'hope-resolve') controls = guideAction(step, '招牌技已结算');
           else if (!targeting) {
@@ -1038,14 +1048,16 @@
     const unlocked = table.rows.filter(([threshold]) => threshold <= rage);
     const next = table.rows.find(([threshold]) => threshold > rage);
     function rowMarkup([threshold, options]) {
-      return '<li' + (threshold === unlocked.at(-1)?.[0] ? ' class="room-kratos-latest"' : '') + '><strong>怒气 ' + threshold + '</strong><div>' + options.map(effects =>
-        '<span>' + effects.map(effect => {
+      return '<li' + (threshold === unlocked.at(-1)?.[0] ? ' class="room-kratos-latest"' : '') + '><strong>怒气 ' + threshold
+        + '</strong><div class="room-kratos-options">' + options.map(effects =>
+        '<span class="room-kratos-option">' + effects.map(effect => {
           const icon = kratos.icons[effect];
           const label = escape(kratos.labels[effect]);
           const visual = icon ? '<img alt="" src="images/' + icon + '">'
             : '<span class="room-kratos-glyph" aria-hidden="true">' + escape(kratos.glyphs[effect]) + '</span>';
           return '<span class="room-kratos-effect">' + visual + '<span>' + label + '</span></span>';
-        }).join(' + ') + '</span>').join('<small>或</small>') + '</div></li>';
+        }).join('<b class="room-kratos-plus" aria-label="加">+</b>') + '</span>')
+        .join('<small class="room-kratos-or">或</small>') + '</div></li>';
     }
     return '<section class="room-kratos-reminder" aria-label="克拉托斯表能力">'
       + '<h4>克拉托斯表 · ' + escape(table.name) + '</h4><p aria-live="polite">当前怒气 ' + rage

@@ -24,6 +24,13 @@ export function claimTurn(room, seat) {
   if (canClaimTurn(room, seat)) room.turn.seat = seat;
 }
 
+export function finishAiMovement(room) {
+  if (!room.turn.aiMovement) return;
+  if (room.turn.aiMovement.pending) throw new ApiError(409, '请先处理并确认本次冲撞。');
+  delete room.turn.aiMovement;
+  if (room.board) delete room.board.apostleMovement;
+}
+
 function confirmAiStep(room, actor, action) {
   const { turn } = room;
   if (actor.role !== 'host') throw new ApiError(403, '骇物行动由房主确认。');
@@ -58,11 +65,13 @@ function confirmAiStep(room, actor, action) {
     return;
   }
   if (value === 'resolve' && step === 'resolve' && !pending) {
+    finishAiMovement(room);
     turn.aiGuide = 'other';
     delete turn.aiTarget;
     return;
   }
   if (value === 'hope-resolve' && step === 'hope-resolve' && !pending) {
+    finishAiMovement(room);
     turn.aiGuide = 'ready';
     delete turn.aiTarget;
     return;

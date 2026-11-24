@@ -14,7 +14,35 @@
   };
   const previousSteps = { move: 'resolve', evade: 'resolve', effects: 'resolve', after: 'resolve', discard: 'resolve', end: 'other' };
   const stepFor = step => previousSteps[step] || step;
-  const api = { bosses, steps, stepFor };
+  const resolvesMovement = step => ['resolve', 'hope-resolve'].includes(stepFor(step));
+
+  function apostleRoutes(room, reach, terrain, los) {
+    const { board, heroes, turn, projection } = room;
+    const pieces = board?.map?.pieces;
+    const target = pieces?.titans?.[turn?.aiTarget];
+    const profile = terrain?.getApostleProfile(board?.apostle, board?.level);
+    if (!target || !pieces.apostle || !profile || !los || heroes[turn.aiTarget]?.condition === 'dead') return [];
+    const modifier = (projection?.tokens || []).reduce((value, token) =>
+      value + (token.file === 'SP+.png' ? token.count : token.file === 'SP-.png' ? -token.count : 0), 0);
+    const limit = profile.speed === Infinity ? Infinity : Math.max(0, (Number(profile.speed) || 0) + modifier);
+    const speed = Math.min(limit, board.apostleMovement?.remaining ?? Infinity);
+    const paths = los.computeApostleMovePaths({
+      sourceAnchor: pieces.apostle, targetAnchor: target, size: profile.size, speed, reach, facing: pieces.apostle.facing,
+    });
+    const titans = pieces.titans.flatMap((piece, seat) =>
+      piece && heroes[seat]?.condition !== 'dead' ? [{ ...piece, seat }] : []);
+    return los.rankApostleRoutes(paths?.rules || [], titans)
+      .map(path => ({ ...path, speed: Number.isFinite(limit) ? limit : null }));
+  }
+
+  function routeStamp(room, route) {
+    const step = stepFor(room.turn.aiGuide);
+    const card = step === 'hope-resolve' ? room.projection?.signature : room.projection?.ai?.src;
+    return JSON.stringify([room.board.layoutRevision, room.board.apostleMovement?.id, step, card,
+      room.turn.aiTarget, route.centers, route.facing, route.crossedSeats, route.endSeats, route.stopReason]);
+  }
+
+  const api = { bosses, steps, stepFor, resolvesMovement, apostleRoutes, routeStamp };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.ATO_AI_TURN_GUIDE = api;
 })(globalThis);

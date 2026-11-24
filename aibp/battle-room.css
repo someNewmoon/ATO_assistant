@@ -457,6 +457,11 @@ body.aibp-room-only > .app > main > :not(#battleRoom) { display: none !important
 .room-turn-window button { white-space: nowrap; }
 .room-ai-guide { display: grid; gap: .35rem; padding-block: .45rem; }
 .room-ai-guide > strong { color: #ffe09d; }
+.room-ai-move-actions { display: flex; flex-wrap: wrap; gap: .4rem; }
+.room-ai-collisions { border-inline-start: 3px solid #ff9b7b; padding: .35rem .5rem; background: #542e28; }
+.room-ai-collisions ul { margin-block: .25rem; }
+.room-ai-collisions p { margin-block: .25rem; }
+.room-ai-collision-preview { color: #ffd1bd; }
 .room-ai-guide label { display: flex; flex-wrap: wrap; align-items: center; gap: .35rem; }
 .room-ai-guide :is(select, input) { background: #fff7e8; color: #342d24; }
 .room-ai-guide input { width: 4rem; }
@@ -516,8 +521,21 @@ body.aibp-room-only > .app > main > :not(#battleRoom) { display: none !important
 }
 .room-kratos-reminder h4, .room-kratos-reminder p { margin: 0 0 .35rem; }
 .room-kratos-reminder ul { list-style: none; padding: 0; margin: .3rem 0; }
-.room-kratos-reminder li { display: flex; flex-wrap: wrap; align-items: center; gap: .35rem .7rem; padding: .25rem .35rem; }
-.room-kratos-reminder li div, .room-kratos-reminder li div > span { display: inline-flex; align-items: center; flex-wrap: wrap; gap: .3rem; }
+.room-kratos-reminder li {
+  display: grid; grid-template-columns: max-content minmax(0, 1fr); align-items: start;
+  gap: .5rem .85rem; padding: .4rem .5rem; border-inline-start: 3px solid transparent;
+}
+.room-kratos-reminder li > strong { padding-block: .3rem; }
+.room-kratos-options { display: flex; align-items: center; flex-wrap: wrap; gap: .4rem; }
+.room-kratos-option {
+  display: inline-flex; align-items: center; flex-wrap: wrap; gap: .3rem .4rem;
+  padding: .28rem .45rem; border: 1px solid var(--room-border); border-radius: .4rem; background: var(--room-surface);
+}
+.room-kratos-plus { color: #9c3f26; }
+.room-kratos-or { padding-inline: .15rem; font-weight: 700; }
+@media (max-width: 490px) {
+  .room-kratos-reminder li { grid-template-columns: minmax(0, 1fr); gap: .25rem; }
+}
 .room-kratos-reminder .room-kratos-latest { border-inline-start: 3px solid #9c3f26; }
 .room-kratos-effect { display: inline-flex; align-items: center; gap: .28rem; }
 .room-kratos-effect :is(img, .room-kratos-glyph) {

@@ -18,11 +18,9 @@
   z-index: 3;
   top: 0;
   padding: 16px 23px;
-  background:
-    linear-gradient(110deg, #34291f, #28241d 80%),
-    var(--folio-nav);
-  color: #f5e7cb;
-  border-bottom: 4px double #c29b68;
+  background: var(--folio-nav);
+  color: var(--folio-on-dark);
+  border-bottom: 3px double var(--folio-rule);
 }
 .loadout-folio > .arsenal-player-identity > img {
   width: 55px;
@@ -65,14 +63,14 @@
   gap: 12px;
   background: var(--folio-sheet);
 }
-.loadout-folio .folio-assigned { background: #efe4d2; }
+.loadout-folio .folio-assigned { background: var(--folio-inset); }
 .loadout-folio .folio-supply { background: var(--folio-paper); }
 .loadout-folio .folio-title {
   margin: 0;
   padding-bottom: 8px;
   border-bottom: 3px double var(--folio-edge);
   font: 700 22px/1.2 "Songti SC", "Noto Serif CJK SC", SimSun, Georgia, serif;
-  color: #68482c;
+  color: var(--folio-label);
 }
 .loadout-folio label { color: var(--folio-muted); font-size: 12px; font-weight: 700; }
 .loadout-folio :is(input[type="search"], select) {
@@ -99,7 +97,7 @@
   border-bottom: 1px solid var(--folio-edge);
   padding-bottom: 9px;
 }
-.loadout-folio .folio-titan summary { cursor: pointer; font-weight: 700; color: #68482c; }
+.loadout-folio .folio-titan summary { cursor: pointer; font-weight: 700; color: var(--folio-label); }
 .loadout-folio .arsenal-assigned-cards { display: grid; gap: 12px; }
 .loadout-folio .arsenal-assigned-cards > .folio-gear-group { width: 100%; display: block; }
 .loadout-folio .folio-gear-heading {
@@ -110,7 +108,7 @@
   padding: 4px 7px;
   border-bottom: 1px solid var(--folio-rule);
   background: #704a2820;
-  color: #68482c;
+  color: var(--folio-label);
   font-size: 13px;
 }
 .loadout-folio .folio-gear-heading span { font-size: 11px; color: var(--folio-muted); }
@@ -165,7 +163,7 @@
   cursor: pointer;
   font-size: 12px;
 }
-.loadout-folio .folio-category[aria-pressed="true"] { background: #55402e; color: #fff0d3; border-color: #55402e; }
+.loadout-folio .folio-category[aria-pressed="true"] { background: var(--folio-action); color: var(--folio-on-dark); border-color: var(--folio-action); }
 .loadout-folio label.folio-available { display: inline-flex; align-items: center; gap: 5px; }
 .loadout-folio .folio-available input { width: auto; accent-color: #755336; }
 .loadout-folio [data-loadout-choices] > section + section { margin-top: 16px; }
@@ -186,10 +184,10 @@
   gap: 5px;
   border: 1px solid var(--folio-edge);
   border-radius: 2px;
-  background: #f3e9d9;
+  background: var(--folio-inset);
   line-height: 1.4;
 }
-.loadout-folio .arsenal-kit-card:has([data-add-loadout-gear]:disabled) { background: #eee8dc; }
+.loadout-folio .arsenal-kit-card:has([data-add-loadout-gear]:disabled) { background: var(--folio-sheet); }
 .loadout-folio .arsenal-kit-card .arsenal-kit-art { padding: 0; width: 100%; }
 .loadout-folio .arsenal-kit-card .arsenal-kit-art img { width: 100%; height: 104px; object-fit: contain; border-radius: 2px; }
 .loadout-folio .arsenal-kit-card .arsenal-gear-owners { gap: 3px 5px; font-size: 10px; color: var(--folio-muted); }

@@ -178,6 +178,10 @@
     if (state.squad && (state.closed || state.squad.phase !== 'battle')) {
       if (actor.role === 'host' && !state.closed && state.squad.phase === 'story' && state.squad.recap
           && state.squad.recap.battleNumber === state.squad.battleNumber) {
+        if (state.board) window.setAibpRoomBattleLevel?.(state.board.apostle, state.board.level);
+        const finalDeck = state.hostBattleDeck;
+        if (finalDeck && finalDeck.revision !== hostDeckRevision
+            && window.setAibpRoomBattleDeck?.(finalDeck.data)) hostDeckRevision = finalDeck.revision;
         renderRecap();
         if (wasFighting) void window.openAibpLoot?.();
         return;

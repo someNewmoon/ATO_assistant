@@ -101,3 +101,12 @@ button.modal-tech-item:hover { box-shadow: none; }
   .unlocked-list.big { grid-template-columns: minmax(0, 1fr); }
   .unlocked-page { --unlocked-card-short-edge: 128px; }
 }
+
+.technology-return {
+  display: grid;
+  justify-items: end;
+  gap: 4px;
+  font-size: .82rem;
+}
+#technologyReturnStatus:empty { display: none; }
+#viewStorySelect[hidden], #search[hidden] { display: none; }

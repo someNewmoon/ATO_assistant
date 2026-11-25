@@ -1089,7 +1089,7 @@ button.gear-group-name:hover {
 </style>
 <link rel="stylesheet" href="../api/cycle-theme.css?v=20261125-folio">
 <link rel="stylesheet" href="../assets/theme.css?v=20261001">
-<link rel="stylesheet" href="editorial.css?v=20261125-module-folio">
+<link rel="stylesheet" href="editorial.css?v=20261125-technology-tabs">
 <link rel="stylesheet" href="tech-tree.css?v=20261125-module-folio">
 <link rel="stylesheet" href="arsenal.css?v=20261124-loadout-image">
 <link rel="stylesheet" href="arsenal-loadout.css?v=20261125-module-folio">
@@ -1112,7 +1112,10 @@ button.gear-group-name:hover {
       <div>
         <h1 id="technologyTitle">科技</h1>
       </div>
-      <button class="tool-btn return-main" id="returnMain" type="button">保存并返回主控台</button>
+      <div class="technology-return">
+        <button class="tool-btn return-main" id="returnMain" type="button">保存并返回主控台</button>
+        <span id="technologyReturnStatus" role="status"></span>
+      </div>
     </header>
     <div class="topbar">
       <span id="campaignSaveStatus" class="campaign-save-status" data-state="saving" aria-live="polite">正在连接...</span>
@@ -1120,6 +1123,7 @@ button.gear-group-name:hover {
       <div class="tools">
         <select id="accountSelect" class="account-select" aria-label="账户" hidden></select>
         <button class="tool-btn" id="languageToggle" type="button">中文名</button>
+        <select id="viewStorySelect" class="cycle-select" aria-label="浏览故事集"></select>
         <button class="badge" id="cycleBadge" type="button" popovertarget="cycleMenu" aria-label="选择当前循环">循环 I ▾</button>
         <div id="cycleMenu" popover aria-label="选择当前循环"></div>
         <input id="search" class="search" placeholder="搜索科技" autocomplete="off">
@@ -2166,6 +2170,7 @@ function applyGearSearch() {
 function renderGearInventoryView() {
   if (currentTab === 'gear-production') renderGearProductionPage();
   else if (currentTab === 'arsenal') renderArsenalPage();
+  else if (currentTab === 'loadout') renderLoadoutPage();
 }
 
 function arsenalCatalog() {
@@ -2675,8 +2680,6 @@ function renderArsenalPage() {
     </div>
   </div><div class="arsenal-meta"><span>制造自动入库。补录和制造共用实物上限。</span><span class="arsenal-summary">显示 ${visible.length}/${recorded.length} 种 · ${visibleQuantity} 件</span></div>`;
   html += gearMutationInFlight ? '<div class="arsenal-message" role="status">正在保存军械库...</div>' : arsenalMessageHtml();
-  const loadouts = gearRecordState ? arsenalLoadoutModels() : [];
-  if (gearRecordState) html += arsenalLoadoutsHtml(loadouts, unavailable);
   if (gearRecordError) html += `<div class="gear-empty">军械库读取失败：${esc(gearRecordError)}。请点击刷新重试。</div>`;
   else if (!gearRecordState) html += '<div class="gear-empty">正在读取军械库...</div>';
   else if (!recorded.length) html += '<div class="gear-empty">军械库还没有装备。在“装备制造”中制造，或在上方补录已有装备。</div>';
@@ -2691,30 +2694,6 @@ function renderArsenalPage() {
     html += '</div>';
   }
   mainView.innerHTML = html + '</div>';
-  mainView.querySelectorAll('[data-edit-loadout]').forEach(button => {
-    button.addEventListener('click', () => editArsenalLoadout(button.dataset.editLoadout, catalog));
-  });
-  mainView.querySelectorAll('.arsenal-loadout-card [data-preview-gear]').forEach(button => {
-    const id = button.dataset.previewGear;
-    button.addEventListener('click', () => showGearImageModal(gearImageSrc(id), getGearName(id)));
-  });
-  mainView.querySelectorAll('[data-export-loadout], [data-export-all-loadouts]').forEach(button => {
-    button.addEventListener('click', async () => {
-      const kits = button.hasAttribute('data-export-all-loadouts') ? loadouts
-        : loadouts.filter(kit => kit.hero.id === button.dataset.exportLoadout);
-      const status = mainView.querySelector('[data-loadout-export-status]');
-      button.disabled = true;
-      status.textContent = '正在生成配装图片…';
-      try {
-        await window.ATO_LOADOUT_IMAGE.download(kits);
-        status.textContent = '已开始下载 PNG。';
-      } catch (error) {
-        status.textContent = error.message || '导出失败，请重试。';
-      } finally {
-        button.disabled = false;
-      }
-    });
-  });
   mainView.querySelectorAll('[data-arsenal-filter]').forEach(input => input.addEventListener('change', () => {
     if (input.dataset.arsenalFilter === 'part') arsenalPartFilter = input.value;
     if (input.dataset.arsenalFilter === 'cycle') arsenalCycleFilter = input.value;
@@ -2764,6 +2743,44 @@ function renderArsenalPage() {
       button.classList.add('empty');
       button.textContent = button.dataset.gearName;
     }, { once: true });
+  });
+}
+
+function renderLoadoutPage() {
+  mainView.classList.remove('tech-tree-view');
+  requestGearRecordState();
+  const catalog = arsenalCatalog();
+  const loadouts = gearRecordState ? arsenalLoadoutModels() : [];
+  const unavailable = gearMutationInFlight || Boolean(gearRecordError);
+  count.textContent = gearRecordState ? `${loadouts.length} 位英雄` : '';
+  const status = gearRecordError
+    ? `<div class="gear-empty">配装读取失败：${esc(gearRecordError)}。 <button class="tool-btn" type="button" data-loadout-retry>重试</button></div>`
+    : gearRecordState ? '' : '<div class="gear-empty" role="status">正在读取配装…</div>';
+  mainView.innerHTML = `<div class="gear-page arsenal-page">${arsenalMessageHtml()}${status}${gearRecordState ? arsenalLoadoutsHtml(loadouts, unavailable) : ''}</div>`;
+  mainView.querySelector('[data-loadout-retry]')?.addEventListener('click', () => void loadGearRecordState());
+  mainView.querySelectorAll('[data-edit-loadout]').forEach(button => {
+    button.addEventListener('click', () => editArsenalLoadout(button.dataset.editLoadout, catalog));
+  });
+  mainView.querySelectorAll('.arsenal-loadout-card [data-preview-gear]').forEach(button => {
+    const id = button.dataset.previewGear;
+    button.addEventListener('click', () => showGearImageModal(gearImageSrc(id), getGearName(id)));
+  });
+  mainView.querySelectorAll('[data-export-loadout], [data-export-all-loadouts]').forEach(button => {
+    button.addEventListener('click', async () => {
+      const kits = button.hasAttribute('data-export-all-loadouts') ? loadouts
+        : loadouts.filter(kit => kit.hero.id === button.dataset.exportLoadout);
+      const status = mainView.querySelector('[data-loadout-export-status]');
+      button.disabled = true;
+      status.textContent = '正在生成配装图片…';
+      try {
+        await window.ATO_LOADOUT_IMAGE.download(kits);
+        status.textContent = '已开始下载 PNG。';
+      } catch (error) {
+        status.textContent = error.message || '导出失败，请重试。';
+      } finally {
+        button.disabled = false;
+      }
+    });
   });
 }
 
@@ -3515,7 +3532,9 @@ const count = document.getElementById('count');
 const search = document.getElementById('search');
 const accountSelect = document.getElementById('accountSelect');
 const returnMain = document.getElementById('returnMain');
-if (window.ATO_VOYAGE?.current()?.step === 'development') {
+const technologyReturnStatus = document.getElementById('technologyReturnStatus');
+const developmentVoyage = window.ATO_VOYAGE?.current()?.step === 'development';
+if (developmentVoyage) {
   returnMain.textContent = '保存并返回发展';
   const hint = document.createElement('p');
   hint.className = 'tech-discovery-message has-discovery';
@@ -3642,10 +3661,16 @@ function viewPageFor(cycleKey) {
 }
 function restoreTechnologyTab() {
   let savedTab = lastTechnologyTab;
+  const voyage = window.ATO_VOYAGE?.current();
   try {
-    savedTab = window.localStorage.getItem('ato-technology-last-tab') || savedTab;
+    if (voyage?.step === 'development') {
+      const visit = JSON.parse(window.sessionStorage.getItem('ato-technology-voyage-tab'));
+      if (visit?.id === voyage.id) savedTab = visit.tab;
+    } else {
+      savedTab = window.localStorage.getItem('ato-technology-last-tab') || savedTab;
+    }
   } catch (_) {}
-  currentTab = ['unlocked', 'gear-production', 'arsenal'].includes(savedTab) || validPageKey(savedTab)
+  currentTab = ['unlocked', 'gear-production', 'arsenal', 'loadout'].includes(savedTab) || validPageKey(savedTab)
     ? savedTab : viewPage;
   if (currentTab === savedTab) lastTechnologyTab = savedTab;
   if (validPageKey(currentTab)) viewPage = currentTab;
@@ -4479,6 +4504,8 @@ async function writeSnapshotToMainArchive(snapshot, targetCycleId = requestedMai
 }
 async function saveAndReturnMain() {
   const previousText = returnMain.textContent;
+  const voyage = window.ATO_VOYAGE?.current();
+  technologyReturnStatus.textContent = '';
   const dashboardUrl = new URL('../index.html', window.location.href).href;
   const dashboardModule = window.ATO_PAGE_ROUTER?.moduleFromUrl?.(dashboardUrl) || 'dashboard';
   const singleWindow = Boolean(window.ATO_ANDROID_SINGLE_WINDOW || window.ATOAndroid)
@@ -4491,23 +4518,28 @@ async function saveAndReturnMain() {
   // BroadcastChannel task).
   // hasOpenModule() also covers a live console tab whose background heartbeat is
   // throttled; a known window handle lets us return without rediscovering the tab.
-  const dashboardWindow = window.ATO_VOYAGE?.current() || singleWindow || !window.ATO_PAGE_ROUTER?.hasOpenModule?.(dashboardModule)
+  const dashboardWindow = singleWindow || !window.ATO_PAGE_ROUTER?.hasOpenModule?.(dashboardModule)
     ? null
     : window.ATO_PAGE_ROUTER?.focusModuleWindow?.(dashboardModule) || null;
   returnMain.disabled = true;
   try {
-    if (window.ATO_VOYAGE?.current()) {
-      returnMain.textContent = '正在读取战役存档…';
+    if (voyage) {
+      technologyReturnStatus.textContent = '正在读取战役存档…';
       await initialTechnologyLoad;
     }
+    technologyReturnStatus.textContent = '正在存档…';
     saveAccounts();
     if (!await flushCampaignTechnologySave()) {
       throw new Error('科技进度尚未写入服务器，已保留当前修改并等待重连。');
     }
     await writeSnapshotToMainArchive(unlockedTechSnapshot());
-    returnMain.textContent = '已保存';
-    if (window.ATO_VOYAGE?.current()) {
-      await window.ATO_VOYAGE.navigate(window.ATO_VOYAGE.returnUrl());
+    if (voyage) {
+      technologyReturnStatus.textContent = '已存档，正在返回航行…';
+      const openedDashboard = await window.ATO_VOYAGE.navigate(window.ATO_VOYAGE.returnUrl(voyage));
+      if (openedDashboard) {
+        technologyReturnStatus.textContent = developmentVoyage
+          ? '已存档，请到主控台标签页查看发展步骤。' : '已存档，请到主控台标签页查看航行。';
+      }
       return;
     }
     if (dashboardWindow) {
@@ -4528,7 +4560,7 @@ async function saveAndReturnMain() {
     }
   } catch (error) {
     console.error(error);
-    alert(`保存科技列表失败：${String(error.message || error)}`);
+    technologyReturnStatus.textContent = `科技存档失败：${String(error.message || error)}`;
   } finally {
     returnMain.textContent = previousText;
     returnMain.disabled = false;
@@ -4927,6 +4959,7 @@ function refreshUnlockState() {
   if (currentTab === 'unlocked') renderUnlockedPage();
   else if (currentTab === 'gear-production') renderGearProductionPage();
   else if (currentTab === 'arsenal') renderArsenalPage();
+  else if (currentTab === 'loadout') renderLoadoutPage();
   else renderTree({ preserveViewport: true, announce: true });
   if (typeof renderStructureTechActions === 'function' && typeof activeUnlockedRecord !== 'undefined'
     && activeUnlockedRecord && unlockedModal.classList.contains('open')) {
@@ -4978,28 +5011,40 @@ function renderCard(card, node) {
 function renderTabs(remember = false) {
   if (remember) {
     lastTechnologyTab = currentTab;
+    const voyage = window.ATO_VOYAGE?.current();
     try {
-      window.localStorage.setItem('ato-technology-last-tab', currentTab);
+      if (voyage?.step === 'development') {
+        window.sessionStorage.setItem('ato-technology-voyage-tab', JSON.stringify({ id: voyage.id, tab: currentTab }));
+      } else {
+        window.localStorage.setItem('ato-technology-last-tab', currentTab);
+      }
     } catch (_) {}
   }
   updateTechnologyTheme();
   search.placeholder = currentTab === 'arsenal' ? '搜索装备名称或编号' : currentTab === 'gear-production' ? '搜索装备或生产科技' : '搜索科技';
+  const isTree = Boolean(validPageKey(currentTab));
+  const storySelect = document.getElementById('viewStorySelect');
+  storySelect.hidden = !isTree;
+  storySelect.innerHTML = data.pages.map(page => `<option value="${esc(page.key)}">${esc(page.label)}</option>`).join('');
+  storySelect.value = viewPage;
+  search.hidden = currentTab === 'loadout';
   const tabItems = [
-    ...data.pages.map(page => ({ key: page.key, label: page.label })),
+    { key: 'tree', label: '科技树' },
     { key: 'unlocked', label: '已解锁科技' },
     { key: 'gear-production', label: '装备制造' },
     { key: 'arsenal', label: '军械库' },
+    { key: 'loadout', label: '配装' },
   ];
-  tabs.innerHTML = tabItems.map(p => `<button class="tab ${p.key === currentTab ? 'active' : ''}" data-page="${esc(p.key)}">${esc(p.label)}</button>`).join('');
+  tabs.innerHTML = tabItems.map(p => `<button type="button" class="tab ${p.key === (isTree ? 'tree' : currentTab) ? 'active' : ''}" data-page="${esc(p.key)}">${esc(p.label)}</button>`).join('');
   tabs.querySelectorAll('.tab').forEach(btn => btn.addEventListener('click', () => {
-    currentTab = btn.dataset.page;
+    currentTab = btn.dataset.page === 'tree' ? viewPage : btn.dataset.page;
     if (currentTab === 'unlocked') {
       selectedNodeId = null;
       renderTabs(true);
       renderUnlockedPage();
       return;
     }
-    if (currentTab === 'gear-production' || currentTab === 'arsenal') {
+    if (['gear-production', 'arsenal', 'loadout'].includes(currentTab)) {
       selectedNodeId = null;
       renderTabs(true);
       renderGearInventoryView();
@@ -5022,7 +5067,7 @@ function renderCycleButton() {
   updateTechnologyTheme();
   const index = data.pages.findIndex(page => page.key === currentCycle);
   const page = data.pages[index] || data.pages[0];
-  cycleBadge.textContent = `${page.label} ▾`;
+  cycleBadge.textContent = `当前${page.label} ▾`;
   cycleBadge.title = `当前${page.label}，点击选择循环`;
   cycleBadge.setAttribute('aria-label', cycleBadge.title);
   document.getElementById('cycleMenu').innerHTML = data.pages.map(item => `<button type="button" data-cycle="${esc(item.key)}" aria-pressed="${item.key === currentCycle}">${esc(item.label)}</button>`).join('');
@@ -5294,6 +5339,7 @@ function conditionCellDisplayText(pageKey, node, index) {
   return CONDITION_TEXT_ZH[caption] || caption;
 }
 function applySearch() {
+  if (currentTab === 'loadout') return;
   if (currentTab === 'arsenal') {
     renderArsenalPage();
     return;
@@ -5365,7 +5411,7 @@ window.addEventListener('ato-module-sync-request', () => {
 });
 search.addEventListener('input', () => {
   applySearch();
-  if (!search.value.trim() || currentTab === 'unlocked' || currentTab === 'gear-production' || currentTab === 'arsenal') return;
+  if (!search.value.trim() || !validPageKey(currentTab)) return;
   const match = mainView.querySelector('.tech-module:not(.filtered) .node');
   if (match) focusTreeNode(match.dataset.nodeId);
 });
@@ -5389,8 +5435,8 @@ languageToggle.addEventListener('click', () => {
     renderUnlockedPage();
   } else if (currentTab === 'gear-production') {
     renderGearProductionPage();
-  } else if (currentTab === 'arsenal') {
-    renderArsenalPage();
+  } else if (currentTab === 'arsenal' || currentTab === 'loadout') {
+    renderGearInventoryView();
   } else {
     renderTree();
   }
@@ -5413,6 +5459,13 @@ function selectTechnologyCycle(cycleKey) {
   renderTree();
   refreshUnlockState();
 }
+document.getElementById('viewStorySelect').addEventListener('change', event => {
+  viewPage = event.target.value;
+  currentTab = viewPage;
+  selectedNodeId = null;
+  renderTabs(true);
+  renderTree();
+});
 const cycleMenu = document.getElementById('cycleMenu');
 cycleMenu.addEventListener('beforetoggle', event => {
   if (event.newState !== 'open') return;

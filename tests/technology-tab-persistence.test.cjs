@@ -8,9 +8,11 @@ const pages = Array.from({ length: 5 }, (_, i) => ({ key: `cycle${i + 1}`, label
 const noop = () => {};
 
 function setup(storage = new Map(), blocked = false) {
-  const keys = [...pages.map(page => page.key), 'unlocked', 'gear-production', 'arsenal'];
+  const keys = ['tree', 'unlocked', 'gear-production', 'arsenal', 'loadout'];
   const buttons = keys.map(key => ({ dataset: { page: key }, addEventListener(_type, fn) { this.click = fn; } }));
+  const storySelect = {};
   const c = vm.createContext({
+    document: { getElementById: () => storySelect },
     data: null, currentTab: null, lastTechnologyTab: null, currentCycle: null, viewPage: null,
     URLSearchParams, TECH_CYCLE_BY_MAIN_CYCLE: { c1: 'cycle1', c2: 'cycle2', c3: 'cycle3' },
     window: { location: { search: '' }, localStorage: {
@@ -21,6 +23,7 @@ function setup(storage = new Map(), blocked = false) {
     isPlainObject: value => !!value && typeof value === 'object' && !Array.isArray(value),
     computeDisambiguatedTechNames: () => new Set(), unlockAutomaticCyclesThrough: noop,
     updateLanguageToggle: noop, syncHideUnknownToggle: noop, renderAccountSelect: noop,
+    renderLoadoutPage: () => { c.rendered = 'loadout'; },
     renderCycleButton: noop, updateTechnologyTheme: noop, loadCampaignTechnologySection: noop,
     technologySectionState: () => ({}), loadGearRecordState: noop,
   });
@@ -37,6 +40,7 @@ function setup(storage = new Map(), blocked = false) {
     assert.ok(match, name);
     vm.runInContext(match[0], c);
   }
+  c.storySelect = storySelect;
   c.chooseTab = key => buttons.find(button => button.dataset.page === key).click();
   return c;
 }
@@ -49,11 +53,12 @@ function campaign(cycle = 'cycle2') {
 }
 
 test('refresh restores each selected option through boot, campaign loading and later sync', () => {
-  for (const tab of ['gear-production', 'arsenal', 'unlocked', 'cycle4']) {
+  for (const tab of ['gear-production', 'arsenal', 'loadout', 'unlocked', 'cycle4']) {
     const storage = new Map();
     const first = setup(storage);
     first.boot({ pages });
-    first.chooseTab(tab);
+    if (tab === 'cycle4') first.viewPage = tab;
+    first.chooseTab(tab === 'cycle4' ? 'tree' : tab);
     assert.equal(first.rendered, tab);
     const refreshed = setup(storage);
     refreshed.boot({ pages });
@@ -67,7 +72,8 @@ test('refresh restores each selected option through boot, campaign loading and l
     assert.equal(refreshed.currentTab, tab);
     assert.equal(refreshed.rendered, tab);
     assert.ok(refreshed.unlocked.has('remote-tech'));
-    assert.ok(refreshed.tabs.innerHTML.includes(`class="tab active" data-page="${tab}"`));
+    assert.equal(refreshed.storySelect.hidden, tab !== 'cycle4');
+    assert.ok(refreshed.tabs.innerHTML.includes(`class="tab active" data-page="${tab === 'cycle4' ? 'tree' : tab}"`));
   }
 });
 

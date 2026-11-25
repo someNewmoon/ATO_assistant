@@ -107,6 +107,8 @@
   const secondScreenStoryModeToggle = document.querySelector("#secondScreenStoryModeToggle");
   const secondScreenStoryContentLabel = document.querySelector("#secondScreenStoryContentLabel");
   const secondScreenStoryContentToggle = document.querySelector("#secondScreenStoryContentToggle");
+  const projectionChoices = document.querySelector("#storyProjectionChoices");
+  const projectionStatus = document.querySelector("#storyProjectionStatus");
   const battleShortcutPanel = document.createElement("div");
   battleShortcutPanel.id = "battleShortcutPanel";
   battleShortcutPanel.className = "battle-shortcuts";
@@ -3483,6 +3485,55 @@
     return missingOfficialScans.has(`${currentBook()?.id}:${entry?.key}`);
   }
 
+  function syncStoryProjectionMenu() {
+    if (!projectionChoices) return;
+    const online = hostedStory || Boolean(explicitSquadId);
+    const onlineReady = Boolean(squadId && squadCredentials?.token && squadPhase === "story" && !squadProjectionClosed);
+    const canChoose = online ? onlineReady : !secondScreenStoryModeToggle.disabled;
+    const canScan = storyVersion === "官方版" && supportsOfficialVersion()
+      && Boolean(activeOfficialScan()?.src) && !officialScanMissingLocally();
+    const storyMode = online ? onlineReady : secondScreenStoryModeToggle.checked;
+    const mode = storyMode
+      ? canScan && secondScreenStoryContentToggle.checked ? "scan" : "text"
+      : online ? "" : "map";
+    for (const choice of projectionChoices.querySelectorAll("input")) {
+      choice.checked = choice.value === mode;
+      choice.disabled = !canChoose || secondScreenModeBusy || (online && choice.value === "map")
+        || (choice.value === "scan" && !canScan);
+      if (choice.value === "scan") choice.closest("label").hidden = !canScan;
+    }
+    if (online) {
+      projectionStatus.textContent = onlineReady
+        ? "小队投屏支持正文和原书扫描图。" : "小队进入读剧情后可投屏。";
+    } else {
+      projectionStatus.textContent = secondScreenModeFailure || secondScreenSnapshotFailure
+        || (canChoose || secondScreenModeBusy ? "" : "请先在主控台开启第二屏幕。");
+    }
+  }
+
+  async function chooseStoryProjection(event) {
+    const choice = event.target;
+    if (choice.name !== "storyProjection" || choice.disabled || secondScreenModeBusy) return;
+    const previous = secondScreenStoryImagesPreference;
+    const storyMode = choice.value !== "map";
+    if (storyMode) {
+      secondScreenStoryImagesPreference = choice.value === "scan";
+      storeSecondScreenStoryContentPreference();
+      refreshSecondScreenStoryContentToggle(true);
+    }
+    if (!hostedStory && !explicitSquadId && secondScreenStoryModeToggle.checked !== storyMode) {
+      secondScreenStoryModeToggle.checked = storyMode;
+      if (!await toggleSecondScreenStoryMode()) {
+        secondScreenStoryImagesPreference = previous;
+        storeSecondScreenStoryContentPreference();
+        refreshSecondScreenStoryContentToggle(secondScreenStoryModeToggle.checked);
+      }
+    } else if (storyMode) {
+      scheduleSecondScreenStorySnapshot();
+    }
+    syncStoryProjectionMenu();
+  }
+
   function refreshSecondScreenStoryContentToggle(storyMode = false) {
     if (!secondScreenStoryContentLabel || !secondScreenStoryContentToggle) return;
     const officialVersion = storyVersion === "官方版" && supportsOfficialVersion();
@@ -3491,6 +3542,7 @@
       secondScreenStoryContentToggle.disabled = true;
       secondScreenStoryContentLabel.classList.remove("disabled");
       secondScreenStoryContentLabel.title = "";
+      syncStoryProjectionMenu();
       return;
     }
 
@@ -3507,11 +3559,10 @@
         : storyMode
           ? SECOND_SCREEN_STORY_CONTENT_TITLE
           : "请先开启第二屏故事文本模式，再切换图片或文字";
+    syncStoryProjectionMenu();
   }
 
-  function toggleSecondScreenStoryContent() {
-    if (!secondScreenStoryContentToggle || secondScreenStoryContentToggle.disabled) return;
-    secondScreenStoryImagesPreference = secondScreenStoryContentToggle.checked;
+  function storeSecondScreenStoryContentPreference() {
     try {
       localStorage.setItem(
         "ato-second-screen-story-content-v1",
@@ -3520,6 +3571,13 @@
     } catch {
       // 浏览器隐私模式可能禁止 localStorage；本次切换仍需立即同步。
     }
+  }
+
+  function toggleSecondScreenStoryContent() {
+    if (!secondScreenStoryContentToggle || secondScreenStoryContentToggle.disabled) return;
+    secondScreenStoryImagesPreference = secondScreenStoryContentToggle.checked;
+    storeSecondScreenStoryContentPreference();
+    syncStoryProjectionMenu();
     scheduleSecondScreenStorySnapshot();
   }
 
@@ -3915,6 +3973,7 @@
   function reportSecondScreenSnapshotFailure(reason) {
     secondScreenSnapshotFailure = reason;
     console.warn("第二屏故事文本同步失败：", reason);
+    syncStoryProjectionMenu();
     if (!secondScreenStoryModeLabel) return;
     secondScreenStoryModeLabel.classList.add("sync-error");
     secondScreenStoryModeLabel.title = `故事文本同步失败：${reason}。第二屏会停在上一屏内容，请检查登录状态或稍后重试。`;
@@ -3923,6 +3982,7 @@
   function clearSecondScreenSnapshotFailure() {
     if (!secondScreenSnapshotFailure) return;
     secondScreenSnapshotFailure = "";
+    syncStoryProjectionMenu();
     secondScreenStoryModeLabel?.classList.remove("sync-error");
     if (secondScreenStoryModeLabel && !secondScreenStoryModeToggle?.disabled) {
       secondScreenStoryModeLabel.title = SECOND_SCREEN_STORY_MODE_TITLE;
@@ -4031,6 +4091,7 @@
   async function toggleSecondScreenStoryMode() {
     if (!secondScreenStoryModeToggle || secondScreenModeBusy) return;
     secondScreenModeBusy = true;
+    syncStoryProjectionMenu();
     secondScreenStoryModeToggle.disabled = true;
     if (secondScreenStoryModeToggle.checked) scheduleSecondScreenStorySnapshot();
     const requestedMode = secondScreenStoryModeToggle.checked ? "story" : "map";
@@ -4044,6 +4105,7 @@
     }
     secondScreenModeBusy = false;
     await refreshSecondScreenStoryModeToggle();
+    return result.ok;
   }
 
   // C5 的 AI 翻译条目按普通条目排版（见 renderStory）：用同一套分段/正文渲染，不再有
@@ -5076,6 +5138,7 @@
     renderResults(searchEntries(searchInput.value));
     scheduleSecondScreenStorySnapshot();
   });
+  projectionChoices?.addEventListener("change", chooseStoryProjection);
   secondScreenStoryModeToggle?.addEventListener("change", toggleSecondScreenStoryMode);
   secondScreenStoryContentToggle?.addEventListener("change", toggleSecondScreenStoryContent);
   rememberButton.addEventListener("click", rememberParagraph);

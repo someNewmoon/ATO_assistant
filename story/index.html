@@ -6,7 +6,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>ATO 故事书跳转器</title>
-    <link rel="stylesheet" href="./assets/styles.css?v=20261125-voyage-reader" />
+    <link rel="stylesheet" href="./assets/styles.css?v=20261125-reader-controls" />
     <link rel="stylesheet" href="../api/cycle-theme.css" />
   <script src="../story/data/english-source-data.js?v=20261011-english4"></script>
   <script src="../assets/theme.js?v=20261114-light-sidebar1" defer></script>
@@ -110,25 +110,43 @@
           <button id="pharosTitleDecodeButton" type="button" class="pharos-title-decode" hidden>标题解密</button>
         </div>
         <div class="reader-actions">
-          <label id="secondScreenStoryModeLabel" class="second-screen-mode-toggle" title="勾选后第二屏显示当前故事文本，取消勾选后显示地图">
-            <input type="checkbox" id="secondScreenStoryModeToggle" />
-            第二屏显示文本
-          </label>
-          <label id="secondScreenStoryContentLabel" class="second-screen-mode-toggle" hidden title="官方版有扫描图时，勾选后第二屏显示原书扫描图，取消勾选后显示官方正文">
-            <input type="checkbox" id="secondScreenStoryContentToggle" />
-            第二屏显示图片
-          </label>
-          <button id="storyRulesToggle" type="button" class="tts-btn" aria-pressed="true">规则高亮</button>
-          <button id="entityBioToggle" type="button" class="entity-bio-toggle" aria-pressed="false" title="显示或隐藏人物小传">人物小传：关</button>
-          <button id="ttsButton" type="button" class="tts-btn" title="朗读">朗读</button>
-          <button id="ttsPauseButton" type="button" class="tts-btn" title="暂停朗读" aria-pressed="false" hidden>暂停</button>
-          <select id="ttsSpeed" class="tts-select">
-            <option value="1" selected>1x</option>
-            <option value="1.25">1.25x</option>
-            <option value="1.5">1.5x</option>
-            <option value="1.75">1.75x</option>
-            <option value="2">2x</option>
-          </select>
+          <div class="reader-voice-controls" role="group" aria-label="朗读控制">
+            <button id="ttsButton" type="button" class="tts-btn" title="朗读">朗读</button>
+            <button id="ttsPauseButton" type="button" class="tts-btn" title="暂停朗读" aria-pressed="false" hidden>暂停</button>
+            <select id="ttsSpeed" class="tts-select" aria-label="朗读倍速">
+              <option value="1" selected>1x</option>
+              <option value="1.25">1.25x</option>
+              <option value="1.5">1.5x</option>
+              <option value="1.75">1.75x</option>
+              <option value="2">2x</option>
+            </select>
+          </div>
+          <details class="reader-controls-menu" id="storyProjectionMenu">
+            <summary>投屏</summary>
+            <fieldset id="storyProjectionChoices" aria-label="投屏内容">
+              <label><input type="radio" name="storyProjection" disabled value="map">地图</label>
+              <label><input type="radio" name="storyProjection" disabled value="text">正文</label>
+              <label hidden><input type="radio" name="storyProjection" disabled value="scan">原书扫描图</label>
+            </fieldset>
+            <p id="storyProjectionStatus" role="status"></p>
+          </details>
+          <details class="reader-controls-menu" id="storyReadingSettings">
+            <summary>阅读设置</summary>
+            <div class="reader-reading-options">
+              <button id="storyRulesToggle" type="button" class="tts-btn" aria-pressed="true">规则高亮</button>
+              <button id="entityBioToggle" type="button" class="entity-bio-toggle" aria-pressed="false" title="显示或隐藏人物小传">人物小传：关</button>
+            </div>
+          </details>
+          <div hidden>
+            <label id="secondScreenStoryModeLabel" class="second-screen-mode-toggle" title="勾选后第二屏显示当前故事文本，取消勾选后显示地图">
+              <input type="checkbox" id="secondScreenStoryModeToggle" />
+              第二屏显示文本
+            </label>
+            <label id="secondScreenStoryContentLabel" class="second-screen-mode-toggle" hidden title="官方版有扫描图时，勾选后第二屏显示原书扫描图，取消勾选后显示官方正文">
+              <input type="checkbox" id="secondScreenStoryContentToggle" />
+              第二屏显示图片
+            </label>
+          </div>
           <div id="entryBadge" class="entry-badge">----</div>
           <a class="home-link reader-voyage-return" data-story-voyage-return hidden href="../index.html">返回航行</a>
         </div>
@@ -181,7 +199,7 @@
     <script src="../assets/story-doom-card-data.js?v=20261014-card-face-audit2"></script>
     <script src="./assets/rule-highlights.js?v=20261125-narration"></script>
     <script src="./assets/reading-highlight.js?v=20261125-narration"></script>
-    <script src="./assets/app.js?v=20261125-story-nav"></script>
+    <script src="./assets/app.js?v=20261125-reader-controls"></script>
     <script src="./assets/centimanes.js?v=20261020-record-live1"></script>
     <script src="./assets/cryptic/glyph-catalog.js?v=20261004-manual1"></script>
     <script src="./assets/cryptic/vendor/text-format.js?v=20261004-manual1"></script>

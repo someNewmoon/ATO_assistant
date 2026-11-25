@@ -47,6 +47,7 @@
       link.className = 'art-sidebar-tab';
       link.textContent = module.label;
       if (module.direct) link.dataset.pageRouterIgnore = 'true';
+      if (activePath === '/story' && ['/record', '/hero'].includes(module.path)) link.dataset.storySideRecord = 'true';
       if (module.path === activePath) link.setAttribute('aria-current', 'page');
       if (module.glyph) setSidebarIcon(link, module.glyph);
       if (module.icon) {
@@ -77,7 +78,9 @@
         const url = new URL(module.path + (module.direct ? '' : '/index.html'), location.origin);
         if (module.cycle) url.searchParams.set('cycle', cycle);
         if (module.path === '/story') url.searchParams.set('book', cycle);
-        links[index].href = url.pathname + url.search;
+        const voyage = window.ATO_VOYAGE;
+        links[index].href = links[index].dataset.storySideRecord && voyage?.current()
+          ? voyage.storyRecordUrl(url.href) : url.pathname + url.search;
         if (module.path === '/theatre') links[index].hidden = activePath !== '/theatre' && !theatreUnlocked;
       });
     }

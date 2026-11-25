@@ -665,3 +665,9 @@ body[data-theme-module="second-screen"]:not([data-theme-dark]) .squad-projection
   background: var(--folio-sheet);
   color: var(--ink);
 }
+
+@media screen {
+  body.art-module-shell:has(> .art-sidebar) :is(.aibp-home-fallback, .story-navigation) {
+    display: none;
+  }
+}

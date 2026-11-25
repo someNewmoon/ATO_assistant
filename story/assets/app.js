@@ -616,12 +616,11 @@
 
   function updateRecordLinks(cycleId) {
     const voyage = window.ATO_VOYAGE;
-    const story = voyage?.storyUrl(location.href);
-    for (const link of document.querySelectorAll("[data-cycle-link]")) {
+    const selector = voyage?.current() ? "[data-cycle-link], [data-story-side-record]" : "[data-cycle-link]";
+    for (const link of document.querySelectorAll(selector)) {
       const url = new URL(link.href);
       if (cycleId) url.searchParams.set("cycle", cycleId);
-      if (story) url.searchParams.set("returnStory", story);
-      link.href = voyage?.carry(url.href, voyage.current()) || url.href;
+      link.href = voyage?.storyRecordUrl(url.href) || url.href;
     }
   }
 

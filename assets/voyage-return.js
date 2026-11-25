@@ -58,6 +58,13 @@
     return url.pathname + url.search;
   }
 
+  function storyRecordUrl(href) {
+    const url = new URL(href, location.href);
+    const story = storyUrl(location.href);
+    if (story) url.searchParams.set('returnStory', story);
+    return carry(url.href, current());
+  }
+
   function bind(entry, battle) {
     const latest = read(entry?.id);
     if (!latest?.encounter || (latest.battle && latest.battle !== battle)) return false;
@@ -110,5 +117,5 @@
     }
   }
 
-  window.ATO_VOYAGE = { read, create, current, carry, resumeUrl, returnUrl, storyUrl, bind, settle, navigate, wireReturn };
+  window.ATO_VOYAGE = { read, create, current, carry, resumeUrl, returnUrl, storyUrl, storyRecordUrl, bind, settle, navigate, wireReturn };
 })();

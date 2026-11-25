@@ -2474,7 +2474,7 @@
   <script src="../assets/mobile/play.js?v=20261114-theatre-return" defer></script>
   <link rel="stylesheet" href="room-recap.css?v=20261125-critical">
   <link rel="stylesheet" href="battle-room.css?v=20261125-bp-zoom-markers">
-  <link rel="stylesheet" href="table-battle.css?v=20261125-locked-level">
+  <link rel="stylesheet" href="table-battle.css?v=20261125-table-tools">
   <link rel="stylesheet" href="room-style.css?v=20261125-folio">
   <link rel="stylesheet" href="./die-cube.css?v=3">
   <script src="theatre-battle.js?v=2"></script>
@@ -2575,7 +2575,7 @@
         <h3>实体桌战</h3>
         <p data-table-level-note hidden></p>
         <nav aria-label="桌战操作">
-          <button type="button" data-table-action="cards">AI／BP 牌桌</button>
+          <button type="button" data-table-action="cards" hidden>回到牌桌</button>
           <button type="button" data-table-action="panel" aria-expanded="false" aria-controls="viewer">骇物面板</button>
           <button type="button" data-table-action="settle">结束桌战</button>
           <button type="button" data-table-action="resume" hidden>返回战斗</button>
@@ -7165,6 +7165,10 @@
       drawBpButton.disabled = Boolean(bpPending);
       drawBpButton.textContent = bpPending ? "已抽取 BP" : returnedBp ? "重抽此 BP" : "抽取 BP";
       drawAiButton.disabled = combo && Boolean(aiPending);
+      if (tableBattle) {
+        drawAiButton.closest(".draw-actions").toggleAttribute("data-table-pending", Boolean(aiPending));
+        drawBpButton.closest(".draw-actions").toggleAttribute("data-table-pending", Boolean(bpPending));
+      }
 
       if (aiBack) {
         renderPileBackPreview(aiDrawPreview, "AI", aiBack);
@@ -9370,7 +9374,7 @@
         openImageZoom(cardSrc(drawnCard), "达哈卡 AI/BP（AI 半区）", null, { bpActions: true });
         return true;
       }
-      openImageZoom(cardSrc(drawnCard), drawnApostle === "BLACKBEAK" ? "抽取的 AI（牌堆底部）" : "抽取的 AI", hasAiCombo() ? null : () => {
+      openImageZoom(cardSrc(drawnCard), drawnApostle === "BLACKBEAK" ? "抽取的 AI（牌堆底部）" : "抽取的 AI", activeTableBattle || hasAiCombo() ? null : () => {
         if (currentApostle !== drawnApostle) return;
         const pending = piles[currentApostle]?.AI?.pending;
         if (!pending || pending.level !== drawnCard.level || pending.index !== drawnCard.index) return;
@@ -10265,7 +10269,7 @@
   <script src="ps/other/resouce/bp_resource_map_c4_c5.js?v=20261018a" defer></script>
   <script src="c45_specials.js?v=room-bp-20261118-battle-recap" defer></script>
   <script src="bp_loot_calculator_addon.js?v=20261125-damage-recap" defer></script>
-  <script src="table-battle.js?v=20261125-return-encounter" defer></script>
+  <script src="table-battle.js?v=20261125-table-tools" defer></script>
   <script src="../story/data/english-source-data.js?v=20261011-english4" defer></script>
   <script src="../assets/ato-terms.js?v=20261110-loop-terms" defer></script>
   <script src="../assets/english-terms.js?v=20261011-english4" defer></script>

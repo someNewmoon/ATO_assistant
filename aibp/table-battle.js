@@ -154,10 +154,33 @@
     localStorage.setItem(context.key, JSON.stringify(entry));
   }
 
+  function configureDeckControls() {
+    const common = new Set([
+      'drawAiButton', 'undoAiButton', 'confirmAiButton', 'breakAiComboButton', 'continueAiComboButton',
+      'defeatAiAsBpButton', 'criticalAiAsBpButton',
+      'drawBpButton', 'undoBpButton', 'discardBpButton', 'defeatBpButton', 'criticalBpButton', 'returnBpTopButton'
+    ]);
+    for (const actions of cards.querySelectorAll('.draw-actions')) {
+      if (actions.querySelector('.table-deck-tools')) continue;
+      const tools = document.createElement('details');
+      tools.className = 'table-deck-tools';
+      const summary = document.createElement('summary');
+      summary.textContent = '牌堆工具';
+      const buttons = document.createElement('div');
+      buttons.className = 'table-deck-tool-buttons';
+      for (const button of [...actions.querySelectorAll(':scope > button')]) {
+        if (!common.has(button.id)) buttons.append(button);
+      }
+      tools.append(summary, buttons);
+      actions.append(tools);
+    }
+    document.getElementById('deathblowBpButton').textContent = '致死一击';
+  }
+
   function showStage() {
     const stage = battle.stage;
     document.body.dataset.tableBattle = stage;
-    controls.cards.hidden = stage === 'settled';
+    controls.cards.hidden = stage === 'settled' || !document.body.hasAttribute('data-table-show-panel');
     controls.panel.hidden = stage === 'settled';
     controls.settle.hidden = stage === 'settled';
     controls.settle.textContent = stage === 'loot' ? '查看战利品' : '结束桌战';
@@ -201,6 +224,7 @@
     heroes = await loadAttackers();
     for (const picker of attackers) picker.replaceChildren();
     await deck.activate(entry);
+    configureDeckControls();
     battle = entry;
     const url = new URL(location.href);
     url.searchParams.set('tableBattle', entry.id);
@@ -319,12 +343,21 @@
     return voyage.navigate(voyage.returnUrl(null));
   }
 
-  controls.cards.addEventListener('click', () => cards.scrollIntoView({ block: 'start' }));
+  function showBossPanel(expanded) {
+    controls.panel.setAttribute('aria-expanded', String(expanded));
+    document.body.toggleAttribute('data-table-show-panel', expanded);
+    controls.cards.hidden = !expanded;
+  }
+
+  controls.cards.addEventListener('click', () => {
+    showBossPanel(false);
+    controls.panel.focus({ preventScroll: true });
+    cards.scrollIntoView({ block: 'start' });
+  });
   controls.panel.addEventListener('click', () => {
-    const expanded = controls.panel.getAttribute('aria-expanded') === 'true';
-    controls.panel.setAttribute('aria-expanded', String(!expanded));
-    document.body.toggleAttribute('data-table-show-panel', !expanded);
-    if (!expanded) panel.scrollIntoView({ block: 'nearest' });
+    const expanded = controls.panel.getAttribute('aria-expanded') !== 'true';
+    showBossPanel(expanded);
+    if (expanded) panel.scrollIntoView({ block: 'nearest' });
   });
   controls.settle.addEventListener('click', () => void run(async () => {
     if (battle.stage === 'play' && deck.hasPending()) throw Error('请先处理当前待结算的牌或观星，再结束桌战。');

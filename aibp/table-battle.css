@@ -149,3 +149,42 @@ body[data-table-battle] :is(#tableBpAttacker, #tableZoomBpAttacker) button[aria-
   left: .35rem;
   pointer-events: none;
 }
+
+body[data-table-battle] .table-battle-bar nav [hidden],
+body[data-table-battle] .draw-actions > button:is([disabled], [hidden]),
+body[data-table-battle] .draw-actions[data-table-pending] > :is(#drawAiButton, #drawBpButton) {
+  display: none !important;
+}
+
+.table-deck-tools {
+  grid-column: 1 / -1;
+  border-top: 1px solid var(--folio-rule, #b99769);
+  padding-top: .4rem;
+  color: var(--accent-strong);
+}
+
+.table-deck-tools summary {
+  cursor: pointer;
+  padding-block: .35rem;
+}
+
+.table-deck-tool-buttons {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 7rem), 1fr));
+  gap: .4rem;
+}
+
+body[data-table-battle] :is(.table-deck-tool-buttons, .draw-actions) button {
+  white-space: normal !important;
+}
+
+body[data-table-battle] :is(#confirmAiButton, #continueAiComboButton, #defeatBpButton) {
+  grid-column: 1 / -1;
+  background: var(--accent-strong);
+  border-color: var(--accent-strong);
+  color: #fff;
+}
+
+body[data-table-battle] :is(#confirmAiButton, #continueAiComboButton, #defeatBpButton):hover {
+  background: var(--accent);
+}

@@ -188,3 +188,14 @@ body[data-table-battle] :is(#confirmAiButton, #continueAiComboButton, #defeatBpB
 body[data-table-battle] :is(#confirmAiButton, #continueAiComboButton, #defeatBpButton):hover {
   background: var(--accent);
 }
+
+.table-battle-recap {
+  margin-block: .75rem;
+  padding: .85rem 1rem;
+  border: 1px solid var(--folio-rule, #b99769);
+  background: var(--folio-sheet, #f7efe1);
+}
+
+.table-battle-recap[hidden] { display: none; }
+.table-battle-recap h3 { margin: 0; }
+:is(.table-battle-recap, .table-battle-loot-recap) li small { display: block; }

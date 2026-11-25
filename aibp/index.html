@@ -2474,7 +2474,7 @@
   <script src="../assets/mobile/play.js?v=20261114-theatre-return" defer></script>
   <link rel="stylesheet" href="room-recap.css?v=20261125-critical">
   <link rel="stylesheet" href="battle-room.css?v=20261125-bp-zoom-markers">
-  <link rel="stylesheet" href="table-battle.css?v=20261125-table-tools">
+  <link rel="stylesheet" href="table-battle.css?v=20261125-table-recap">
   <link rel="stylesheet" href="room-style.css?v=20261125-folio">
   <link rel="stylesheet" href="./die-cube.css?v=3">
   <script src="theatre-battle.js?v=2"></script>
@@ -2583,6 +2583,8 @@
         </nav>
         <p data-table-status role="status"></p>
       </section>
+
+      <section id="tableBattleRecap" class="table-battle-recap room-battle-recap" aria-label="桌战战后复盘" hidden></section>
 
       <dialog id="tableBattlePrep" class="table-battle-prep" aria-labelledby="tableBattlePrepTitle">
         <form method="dialog">
@@ -5621,17 +5623,19 @@
       return card.tableCritical ?? ["暴击", "VP暴击"].includes(history?.result);
     }
 
+    function tableDamageCredit(card) {
+      const history = Object.hasOwn(card, "tableCritical") && Object.hasOwn(card, "tableAttacker")
+        ? null : tableDamageHistory(card);
+      return {
+        attacker: Object.hasOwn(card, "tableAttacker") ? card.tableAttacker
+          : history && { id: history.heroId, name: history.hero },
+        critical: isTableCriticalDamage(card, history)
+      };
+    }
+
     function renderCardsIntoGrid(grid, cards, emptyText, type = "", view = "") {
       const damageView = activeTableBattle && type === "BP" && view.includes("损伤");
-      const credits = damageView ? cards.map(card => {
-        const history = Object.hasOwn(card, "tableCritical") && Object.hasOwn(card, "tableAttacker")
-          ? null : tableDamageHistory(card);
-        return {
-          attacker: Object.hasOwn(card, "tableAttacker") ? card.tableAttacker
-            : history && { id: history.heroId, name: history.hero },
-          critical: isTableCriticalDamage(card, history)
-        };
-      }) : [];
+      const credits = damageView ? cards.map(tableDamageCredit) : [];
       if (window.AibpCardImages?.unchanged(grid, [currentApostle, type, view, emptyText,
         aibpImageIndexRevision, credits, cards.map((card) => [card, cardAlt(card),
           window.AibpCardImages.sourceFor(cardSrc(card))])])) return;
@@ -9972,9 +9976,22 @@
         const group = currentApostle === "TITAN_X" && piles.TITAN_X?.special?.titanX?.group;
         const damage = isChimera() ? [...bp.damage1, ...bp.damage2]
           : group ? bp.damage.filter(card => card.titanXOwner === group.target) : bp.damage;
-        const critical = damage.reduce((total, card) => total + (isTableCriticalDamage(card,
-          card.tableCritical === undefined ? tableDamageHistory(card) : null) ? bpDamageValue(card) : 0), 0);
-        return { total: currentBpDamageSummary().total, critical };
+        const byHero = new Map();
+        let critical = 0;
+        for (const card of damage) {
+          const credit = tableDamageCredit(card);
+          const attacker = credit.attacker;
+          const id = attacker?.id || attacker?.name || null;
+          if (!byHero.has(id)) byHero.set(id, { attacker, damage: 0, critical: 0 });
+          const entry = byHero.get(id);
+          const value = bpDamageValue(card);
+          entry.damage += value;
+          if (credit.critical) {
+            entry.critical += value;
+            critical += value;
+          }
+        }
+        return { total: currentBpDamageSummary().total, critical, byHero: [...byHero.values()] };
       },
       async selection() {
         await refreshRecordApostleLevels();
@@ -10269,7 +10286,7 @@
   <script src="ps/other/resouce/bp_resource_map_c4_c5.js?v=20261018a" defer></script>
   <script src="c45_specials.js?v=room-bp-20261118-battle-recap" defer></script>
   <script src="bp_loot_calculator_addon.js?v=20261125-damage-recap" defer></script>
-  <script src="table-battle.js?v=20261125-table-tools" defer></script>
+  <script src="table-battle.js?v=20261125-table-recap" defer></script>
   <script src="../story/data/english-source-data.js?v=20261011-english4" defer></script>
   <script src="../assets/ato-terms.js?v=20261110-loop-terms" defer></script>
   <script src="../assets/english-terms.js?v=20261011-english4" defer></script>

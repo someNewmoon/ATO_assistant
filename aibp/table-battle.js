@@ -13,6 +13,7 @@
   const entryStatus = document.getElementById('campaignBattleStatus');
   const bar = document.getElementById('tableBattleBar');
   const prep = document.getElementById('tableBattlePrep');
+  const recap = document.getElementById('tableBattleRecap');
   const cards = document.getElementById('tableBattleCards');
   const panel = document.getElementById('viewer');
   const status = bar.querySelector('[data-table-status]');
@@ -177,9 +178,25 @@
     document.getElementById('deathblowBpButton').textContent = '致死一击';
   }
 
+  function damageRecapMarkup() {
+    const { total, critical, byHero } = deck.damageRecap();
+    const { escape } = window.ATO_HERO_CATALOG;
+    const rows = byHero.map(({ attacker, damage, critical }) => {
+      const portrait = attacker?.portrait || heroes.find(hero => hero.id === attacker?.id)?.portrait;
+      return '<li>' + (portrait ? '<img alt="" src="../hero/assets/' + encodeURIComponent(portrait) + '">' : '')
+        + '<div><strong>' + escape(attacker?.name || '未归属') + '</strong>'
+        + '<small>损伤 ' + damage + (critical ? ' · 暴击造成 ' + critical : '') + '</small></div></li>';
+    });
+    return '<h3>战后复盘</h3><p class="room-damage-recap"><strong>骇物损伤 ' + total + '</strong>'
+      + (critical ? ' · 其中暴击造成 ' + critical : '') + '</p>'
+      + (rows.length ? '<ul>' + rows.join('') + '</ul>' : '<p>本场未记录损伤。</p>');
+  }
+
   function showStage() {
     const stage = battle.stage;
     document.body.dataset.tableBattle = stage;
+    recap.hidden = stage === 'play';
+    recap.innerHTML = recap.hidden ? '' : damageRecapMarkup();
     controls.cards.hidden = stage === 'settled' || !document.body.hasAttribute('data-table-show-panel');
     controls.panel.hidden = stage === 'settled';
     controls.settle.hidden = stage === 'settled';
@@ -388,10 +405,7 @@
     renderBpAttacker,
     celebrateCritical: (attacker, damage) => squadLink.celebrateCritical(attacker?.name, damage),
     damageRecap() {
-      if (battle?.stage !== 'loot') return '';
-      const { total, critical } = deck.damageRecap();
-      return '<p class="room-damage-recap"><strong>骇物损伤 ' + total + '</strong>'
-        + (critical ? ' · 其中暴击造成 ' + critical : '') + '</p>';
+      return battle?.stage === 'loot' ? '<section class="room-battle-recap table-battle-loot-recap">' + damageRecapMarkup() + '</section>' : '';
     },
     attackerPortrait: id => heroes.find(hero => hero.id === id)?.portrait,
     settlement() {

@@ -979,6 +979,15 @@ h2 {
 .reader-voyage-return[hidden] { display: none; }
 .reader-foot .reader-voyage-return { margin-top: 12px; }
 .reader-actions .reader-voyage-return { flex: none; }
+.reader-voyage-feedback {
+  display: block;
+  padding: 6px 0;
+  color: var(--accent-strong);
+  font-size: .87em;
+}
+.reader-voyage-feedback[hidden] { display: none; }
+.reader-actions .reader-voyage-feedback { flex-basis: 100%; }
+
 
 .link-panel {
   display: flex;

@@ -73,3 +73,25 @@ test('records return to a same-origin paragraph after saving and keep its voyage
   await click({ button: 0, preventDefault() {} });
   assert.deepEqual(calls, ['saved', anchor.href]);
 });
+
+test('story readers see feedback when an existing dashboard accepts the return', async () => {
+  let click;
+  const feedback = { setAttribute() {} };
+  const anchor = {
+    addEventListener: (_, handler) => { click = handler; },
+    setAttribute() {},
+    removeAttribute() {},
+    after: node => assert.equal(node, feedback),
+  };
+  const voyage = voyageHelper({
+    location: new URL('http://localhost/story/?voyage=' + first),
+    document: { querySelectorAll: () => [anchor], createElement: () => feedback },
+    window: { ATO_PAGE_ROUTER: { focusOrNavigate: async () => true } },
+  });
+  voyage.create({ step: 'story' }, first);
+  voyage.wireReturn('[data-story-voyage-return]', undefined, { storyReader: true });
+  assert.equal(feedback.hidden, true);
+  await click({ button: 0, preventDefault() {} });
+  assert.equal(feedback.hidden, false);
+  assert.match(feedback.textContent, /主控台已收到返回请求/);
+});

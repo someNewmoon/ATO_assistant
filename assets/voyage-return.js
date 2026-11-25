@@ -97,6 +97,13 @@
       anchor.href = href;
       anchor.textContent = label;
       anchor.hidden = false;
+      const feedback = storyReader ? document.createElement('span') : null;
+      if (feedback) {
+        feedback.className = 'reader-voyage-feedback';
+        feedback.setAttribute('role', 'status');
+        feedback.hidden = true;
+        anchor.after(feedback);
+      }
       let returning = false;
       anchor.addEventListener('click', async event => {
         if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
@@ -104,11 +111,17 @@
         if (returning) return;
         returning = true;
         anchor.setAttribute('aria-busy', 'true');
+        if (feedback) {
+          feedback.hidden = false;
+          feedback.textContent = '正在返回航行…';
+        }
         try {
           if (!await beforeReturn()) throw new Error('当前修改尚未保存，请重试。');
-          await navigate(anchor.href);
+          const usedDashboard = await navigate(anchor.href);
+          if (feedback && usedDashboard) feedback.textContent = '主控台已收到返回请求，请切换到主控台标签页查看。';
         } catch (error) {
-          window.alert(error.message);
+          if (feedback) feedback.textContent = error.message;
+          else window.alert(error.message);
         } finally {
           returning = false;
           anchor.removeAttribute('aria-busy');

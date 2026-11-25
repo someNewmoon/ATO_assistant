@@ -227,12 +227,19 @@
     const source = voyage?.current();
     if (source && (source.accountId !== context.accountId || source.profileId !== context.profileId
         || source.cycle !== context.activeCycle || String(context.day) !== source.day)) throw Error('来源战役已变更，请返回航行。');
-    if (context.online?.room.squad.phase === 'battle') return goOnline(context.online);
-    if (current?.voyage === source?.id && source?.result && current?.stage === 'settled') return openTable(current);
-    if (current && current.stage !== 'settled') return openTable(current);
+    const onlineActive = context.online?.room.squad.phase === 'battle';
+    const tableActive = current && current.stage !== 'settled';
     if (continueOnly) {
-      resume.hidden = true;
+      if (onlineActive) return goOnline(context.online);
+      if (tableActive) return openTable(current);
+      showEntryButtons(current);
       entryStatus.textContent = '当前没有进行中的战斗。';
+      return;
+    }
+    if (current?.voyage === source?.id && source?.result && current?.stage === 'settled') return openTable(current);
+    if (onlineActive || tableActive) {
+      showEntryButtons(current);
+      entryStatus.textContent = '已有进行中的战斗，请先继续并结算该场。';
       return;
     }
     const selection = await deck.selection();
@@ -259,7 +266,10 @@
         if (context.online) return routeBattle();
         const begin = async () => {
           const existing = saved(context.key);
-          if (existing && existing.stage !== 'settled') return openTable(existing);
+          if (existing && existing.stage !== 'settled') {
+            showEntryButtons(existing);
+            throw Error('已有进行中的桌战，请先继续并结算该场。');
+          }
           const entry = { ...selection, id: crypto.randomUUID().replaceAll('-', ''),
             stage: 'play', returnTo: voyage.storyUrl(), ...(source?.encounter && { voyage: source.id }) };
           store(entry);
@@ -353,13 +363,19 @@
     }
   };
 
+  function showEntryButtons(current) {
+    const active = context.online?.room.squad.phase === 'battle' || (current && current.stage !== 'settled');
+    start.hidden = Boolean(active);
+    resume.hidden = !active;
+  }
+
   async function refresh() {
     context = await readContext();
     const current = saved(context.key);
     const onlineActive = context.online?.room.squad.phase === 'battle';
     if (battle) return;
     if (route.searchParams.get('tableBattle') === current?.id && !onlineActive) return openTable(current);
-    resume.hidden = !(onlineActive || (current && current.stage !== 'settled'));
+    showEntryButtons(current);
     if (route.searchParams.has('tableBattle')) {
       entryStatus.textContent = '当前存档没有这场实体桌战。';
       if (voyage?.current()?.encounter) start.hidden = true;

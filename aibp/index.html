@@ -2474,7 +2474,7 @@
   <script src="../assets/mobile/play.js?v=20261114-theatre-return" defer></script>
   <link rel="stylesheet" href="room-recap.css?v=20261125-critical">
   <link rel="stylesheet" href="battle-room.css?v=20261125-bp-zoom-markers">
-  <link rel="stylesheet" href="table-battle.css?v=20261125-shared-critical">
+  <link rel="stylesheet" href="table-battle.css?v=20261125-locked-level">
   <link rel="stylesheet" href="room-style.css?v=20261125-folio">
   <link rel="stylesheet" href="./die-cube.css?v=3">
   <script src="theatre-battle.js?v=2"></script>
@@ -2573,6 +2573,7 @@
       </details>
       <section id="tableBattleBar" class="table-battle-bar" aria-label="实体桌战" hidden>
         <h3>实体桌战</h3>
+        <p data-table-level-note hidden></p>
         <nav aria-label="桌战操作">
           <button type="button" data-table-action="cards">AI／BP 牌桌</button>
           <button type="button" data-table-action="panel" aria-expanded="false" aria-controls="viewer">骇物面板</button>
@@ -5224,6 +5225,17 @@
         option.hidden = !visible;
         option.disabled = option.hidden;
       });
+      if (activeTableBattle) {
+        const level = currentApostleLevel();
+        const recordLevel = recordApostleLevels[currentApostle];
+        apostleLevelSelect.value = "";
+        apostleLevelSelect.options[0].textContent = `本场等级 ${levelRoman[level] || level}`;
+        const note = document.querySelector("[data-table-level-note]");
+        note.hidden = recordLevel == null || recordLevel === level;
+        note.textContent = note.hidden ? ""
+          : `记录表当前为 ${levelRoman[recordLevel] || recordLevel} 级。本场沿用开战等级和牌堆；新开战时可使用记录表等级。`;
+        return;
+      }
       if (blackbeak) {
         apostleLevelSelect.value = "";
         apostleLevelSelect.options[0].textContent = "固定（沿用追踪者升级轨）";
@@ -10253,7 +10265,7 @@
   <script src="ps/other/resouce/bp_resource_map_c4_c5.js?v=20261018a" defer></script>
   <script src="c45_specials.js?v=room-bp-20261118-battle-recap" defer></script>
   <script src="bp_loot_calculator_addon.js?v=20261125-damage-recap" defer></script>
-  <script src="table-battle.js?v=20261125-shared-critical" defer></script>
+  <script src="table-battle.js?v=20261125-locked-level" defer></script>
   <script src="../story/data/english-source-data.js?v=20261011-english4" defer></script>
   <script src="../assets/ato-terms.js?v=20261110-loop-terms" defer></script>
   <script src="../assets/english-terms.js?v=20261011-english4" defer></script>

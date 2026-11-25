@@ -8,6 +8,7 @@
 }
 
 .table-battle-bar[hidden],
+:is(#newCampaignButton, #continueCampaignBattle)[hidden],
 body[data-table-battle] :is(#newCampaignButton, #bpLootButton, #battleRoomToggle,
   #cloudSquadHub, #cloudBattleProjection, #heroBattleRoster, #sidebarToggle, .battle-map-layout,
   .title-actions .second-screen-mode-toggle, .title-actions .second-screen-sync-status),

@@ -50,7 +50,8 @@
 
   function storyUrl(value = route.searchParams.get('storyReturn')) {
     if (!value) return '';
-    const url = new URL(value, location.href);
+    let url;
+    try { url = new URL(value, location.href); } catch { return ''; }
     if (url.origin !== location.origin || !/^\/story\/(?:index\.html)?$/.test(url.pathname)) return '';
     const allowed = ['book', 'cycle', 'chapter', 'encounter', 'entry', 'key', 'squad'];
     for (const name of [...url.searchParams.keys()]) if (!allowed.includes(name)) url.searchParams.delete(name);
@@ -84,14 +85,21 @@
     for (const anchor of document.querySelectorAll(selector)) {
       anchor.href = returnUrl(entry);
       anchor.textContent = '返回航行';
+      let returning = false;
       anchor.addEventListener('click', async event => {
         if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
         event.preventDefault();
+        if (returning) return;
+        returning = true;
+        anchor.setAttribute('aria-busy', 'true');
         try {
           if (!await beforeReturn()) throw new Error('当前修改尚未保存，请重试。');
           await navigate(anchor.href);
         } catch (error) {
           window.alert(error.message);
+        } finally {
+          returning = false;
+          anchor.removeAttribute('aria-busy');
         }
       });
     }

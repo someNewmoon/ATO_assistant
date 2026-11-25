@@ -3170,6 +3170,7 @@
         serverSaveNeedsRetry = false;
         recordSyncChannel?.postMessage({ revision: serverSectionRevision });
         setSaveStatus(`已同步到 NAS ${new Date().toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })}`);
+        return true;
       } catch (error) {
         serverConflictMerging = false;
         serverSaveNeedsRetry = true;
@@ -3182,10 +3183,11 @@
     }
 
     window.ATO_VOYAGE?.wireReturn(".back-to-console", async () => {
+      while (serverLoadInFlight || serverSaveInFlight) await new Promise(resolve => setTimeout(resolve, 40));
       clearTimeout(serverSaveTimer);
+      const saved = !jsonEqual(state, serverStateBaseline) && await saveStateToServer();
       while (serverSaveInFlight) await new Promise(resolve => setTimeout(resolve, 40));
-      if (!jsonEqual(state, serverStateBaseline)) await saveStateToServer();
-      return jsonEqual(state, serverStateBaseline) && !serverSaveNeedsRetry;
+      return !serverSaveNeedsRetry && (saved === true || jsonEqual(state, serverStateBaseline));
     });
 
     function flushPendingServerSave() {

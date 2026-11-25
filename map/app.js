@@ -2411,6 +2411,7 @@ async function saveAndReturnToDashboard() {
   const dashboardWindow = !window.ATO_VOYAGE?.current() && !singlePageMode && window.ATO_PAGE_ROUTER?.hasOpenModule?.(dashboardModule)
     ? window.ATO_PAGE_ROUTER.focusModuleWindow?.(dashboardModule)
     : null;
+  if (window.ATO_VOYAGE?.current()) await initialMapLoad;
   if (!await flushCampaignMapSave()) {
     window.alert("地图尚未保存，已保留当前修改并等待服务恢复。");
     return;

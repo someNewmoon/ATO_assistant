@@ -4484,6 +4484,10 @@ async function saveAndReturnMain() {
     : window.ATO_PAGE_ROUTER?.focusModuleWindow?.(dashboardModule) || null;
   returnMain.disabled = true;
   try {
+    if (window.ATO_VOYAGE?.current()) {
+      returnMain.textContent = '正在读取战役存档…';
+      await initialTechnologyLoad;
+    }
     saveAccounts();
     if (!await flushCampaignTechnologySave()) {
       throw new Error('科技进度尚未写入服务器，已保留当前修改并等待重连。');
@@ -5455,12 +5459,12 @@ function boot(appData) {
   renderCycleButton();
   renderTabs();
   refreshUnlockState();
-  loadCampaignTechnologySection();
+  return loadCampaignTechnologySection();
 }
 
-loadDictionaryData().then(async (appData) => {
+const initialTechnologyLoad = loadDictionaryData().then(async (appData) => {
   await loadGearProductionData();
-  boot(appData);
+  return boot(appData);
 }).catch(showLoadError);
 </script>
   <script src="../assets/ato-terms.js?v=20261110-loop-terms"></script>

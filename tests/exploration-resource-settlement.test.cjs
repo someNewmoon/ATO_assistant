@@ -679,7 +679,7 @@ function settleHarness(options = {}) {
     campaignSessionEpoch: 1,
     structureTechContext: null,
     cloneJson: clone,
-    currentCycleConfig: () => ({ id: cycle }),
+    currentCycleConfig: () => ({ id: cycle, storyBook: cycle }),
     mapFactionLabel: (cycleId, factionId) => labels[factionId] || factionId,
     diplomacyValue: (_cycleId, factionId, record) => typeof options.diplomacyFromRecord === 'function'
       ? options.diplomacyFromRecord(factionId, record)
@@ -710,7 +710,8 @@ function settleHarness(options = {}) {
     explorationRules: () => deckRules,
     getSelectedExplorationIds: () => [...drawState.drawPile, ...drawState.activePiles.flat().map((entry) => entry.id)],
     shuffleList: (entries) => [...entries],
-    getStoryHref: ({ battle }) => `./story/index.html?book=${cycle}&module=battle&battle=${encodeURIComponent(battle || '')}`,
+    getStoryHref: ({ battle, key }) => key ? `./story/index.html?book=${cycle}&key=${encodeURIComponent(key)}` : `./story/index.html?book=${cycle}&module=battle&battle=${encodeURIComponent(battle || '')}`,
+    wireFlowVoyageLink: (link, step, scene, roundId) => Object.assign(link.dataset, { step, scene, roundId }),
     refreshCachedArgoRecord: async () => { ctx.cachedArgoRecord = clone(server.record); },
     todayTrackIcons: () => [],
     // 探索步骤整体渲染：卡面/标签/特殊规则与折叠菜单都用最简桩，够跑通结构断言。
@@ -765,6 +766,10 @@ function settleHarness(options = {}) {
     fn('explorationDelayRules'),
     fn('explorationDayNumber'),
     fn('explorationRoundId'),
+    fn('explorationRoundElementId'),
+    fn('explorationStoryReference'),
+    fn('explorationBattleReference'),
+    fn('createExplorationStoryLink'),
     fn('scheduleExplorationDelay'),
     fn('registerAutomaticExplorationDelays'),
     fn('processExplorationDelays'),
@@ -1238,12 +1243,21 @@ test('next exploration map event snapshots gate later rewards without inventing 
     const entry = drawnEntry('6437', 'Maze Pilgrim');
     const h = settleHarness({ factions: ['labyrinthians'], activePiles: [[entry], []],
       fullRecord: nextRecord('c1', { strangers: String(before), fate: '5' }) });
+    const links = () => h.ctx.createExplorationSettleBlock(entry).descendants().filter(node => node.className === 'exploration-story-link');
+    assert.equal(links().length, 0, 'settle the base gain before opening a conditional event');
     await clickAndWait(buttonNamed(h.ctx.createExplorationSettleBlock(entry), '自动结算'));
     assert.deepEqual(h.alerts, []);
     assert.equal(h.record.cycleStats.c1.strangers, '3');
     const core = h.ctx.explorationEffectDescriptors(entry, dataset.cards['c1:6437'], h.ctx.explorationCardContext(entry, dataset.cards['c1:6437']))
       .find(item => item.id === 'conditional:maze-pilgrim');
     assert.equal(Boolean(core.remainder), before === 1, 'later Fate bonus must not retroactively enable the preceding event');
+    assert.equal(links().length, before === 1 ? 1 : 0);
+    if (before === 1) {
+      const [link] = links();
+      assert.match(link.href, /key=c1-3-19$/);
+      assert.equal(link.dataset.step, 'explore');
+      assert.equal(link.dataset.roundId, h.ctx.explorationRoundId(entry));
+    }
     if (before === 1) {
       assert.equal(h.ctx.pendingExplorationEffects().length, 2);
       await clickAndWait(buttonNamed(h.ctx.createExplorationSettleBlock(entry), '已处理其余效果'));
@@ -2888,4 +2902,46 @@ test('identical Save abilities render one reminder while retaining every source 
   assert.equal(new Set(images.map(node=>node.src)).size,4);
   assert.equal(tools.buttons.filter(node=>node.textContent==='豁免').length,1);
   for (const name of ['高级船员扩招','阿尔戈号安保','阿尔戈号时光安保','阿尔戈号哲学']) assert.ok(textOf(tools).includes(name));
+});
+
+test('exploration card follow-ups have exact story entries, including registered battle instructions', () => {
+  const { ctx } = settleHarness();
+  const story = { window: {} };
+  vm.runInNewContext(fs.readFileSync(path.join(root, 'story/storybook-placeholder.js'), 'utf8'), story);
+  const entries = story.window.STORYBOOK_DATA.books.flatMap(book => book.entries);
+  const cases = [
+    ['c1:6437', 'conditional:maze-pilgrim', '0014', 'c1-3-19'],
+    ['c2:13634', 'manual-group:0-1-2-3-4', 'Rude Awakening', 'c2-10-7'],
+    ['c3:13541', 'conditional:tomorrows-edge-map', 'Tomorrow’s Edge', 'c3-10-6'],
+    ['c4:9334', 'conditional:curselenders', 'Shortages', 'c4-10-7'],
+    ['c5:10314', 'conditional:drown-in-fear', 'Fractures', 'c5-supplement-裂痕-fractures'],
+  ];
+  for (const [card, id, remainder, key] of cases) {
+    assert.equal(ctx.explorationStoryReference(dataset.cards[card], { id, remainder }).key, key);
+    assert.ok(entries.some(entry => entry.key === key), key);
+    assert.equal(ctx.explorationStoryReference(dataset.cards[card], { id, remainder: '' }), null);
+  }
+  for (const [card, key] of [
+    ['c1:6434', 'c1-15-12'], ['c1:6440', 'c1-15-18'], ['c2:13638', 'c2-733'], ['c4:9327', 'c4-13-2'],
+  ]) {
+    const item = delayRules.delayed(dataset.cards[card]).find(item => item.kind === 'end-step-battle');
+    assert.equal(ctx.explorationBattleReference(item).key, key);
+    assert.ok(entries.some(entry => entry.key === key), key);
+  }
+});
+
+test('manual hero markers can open the shared hero tool without completing the effect', async () => {
+  const entry = drawnEntry('6401', 'Minoan Fleet');
+  const h = settleHarness({ cycle: 'c1', diplomacyBonus: 0, activePiles: [[entry], []],
+    fullRecord: nextRecord('c1', { fate: '7' }) });
+  let opens = 0;
+  h.ctx.document.querySelector = selector => selector === '.campaign-toolbox [data-tool="heroes"]'
+    ? { click() { opens++; } } : null;
+  const button = buttonNamed(h.ctx.createExplorationSettleBlock(entry), '调整英雄状态');
+  await clickAndWait(button);
+  assert.equal(opens, 1);
+  assert.ok(h.ctx.pendingExplorationEffects().some(text => text.includes('绝望')));
+  await clickAndWait(buttonNamed(button.parentNode, '已手动处理'));
+  assert.ok(!h.ctx.pendingExplorationEffects().some(text => text.includes('绝望')));
+  assert.match(textOf(h.ctx.createExplorationSettleBlock(entry)), /手动效果已处理/);
 });

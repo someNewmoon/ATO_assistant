@@ -92,7 +92,8 @@
     if (!story && !entry) return;
     const href = story ? carry(story, entry) : returnUrl(entry);
     const label = story ? '保存并返回故事段落'
-      : storyReader && entry.step === 'story' ? '返回航行 · 剧情' : '返回航行';
+      : storyReader && entry.step === 'story' ? '返回航行 · 剧情'
+      : storyReader && entry.step === 'explore' && entry.explorationRound ? '返回航行 · 探索' : '返回航行';
     for (const anchor of document.querySelectorAll(selector)) {
       anchor.href = href;
       anchor.textContent = label;

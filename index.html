@@ -1238,6 +1238,21 @@
     }
     .exploration-effect-controls button:disabled { opacity: .55; cursor: default; }
     .exploration-option-tools, .exploration-delay-tools { margin-top: 7px; padding-top: 6px; border-top: 1px solid var(--line); }
+    .exploration-story-link {
+      display: inline-flex;
+      align-items: center;
+      min-height: 28px;
+      padding: 3px 8px;
+      border: 1px solid var(--accent);
+      background: var(--accent-soft);
+      color: var(--accent-strong);
+      font-weight: 750;
+      text-decoration: none;
+    }
+    .exploration-story-link:hover {
+      background: var(--accent-strong);
+      color: #fff;
+    }
     .exploration-effect-controls input[type="number"] { max-width: 70px; padding: 3px; font: inherit; }
     .exploration-delay-tools details { flex-basis: 100%; }
     .exploration-delay-tools details label { display: flex; align-items: center; gap: 5px; margin: 3px 0; }
@@ -3103,7 +3118,7 @@
   <script src="./assets/exploration-card-effects.js?v=20261120-ledger"></script>
   <script src="./assets/dice-motion.js?v=7" defer></script>
   <script src="./assets/campaign-session.js?v=20260917"></script>
-  <script src="./assets/exploration-card-conditions.js?v=20261018-card-audit1"></script>
+  <script src="./assets/exploration-card-conditions.js?v=20261125-story-references"></script>
   <script src="./assets/exploration-card-options.js?v=20261117-resource-types1"></script>
   <script src="./assets/exploration-card-choices.js?v=20261013-next-choices12"></script>
   <script src="./assets/exploration-card-delays.js?v=20261013-automation5"></script>
@@ -3391,10 +3406,10 @@
             { id: "6430", name: "Bronze People Armory" },
             { id: "6429", name: "Old Armory" },
             { id: "6435", name: "Informant Network" },
-            { id: "6434", name: "Hekatrap" },
+            { id: "6434", name: "百手陷阱" },
             { id: "6433", name: "Untamed Titan" },
             { id: "6438", name: "Maze Storm" },
-            { id: "6437", name: "Maze Pilgrim" },
+            { id: "6437", name: "迷阵朝圣者" },
             { id: "6436", name: "Cackle" },
             { id: "6440", name: "Heart of the Maze" },
             { id: "6439", name: "Recruitment Drive" },
@@ -3464,7 +3479,7 @@
             { id: "13631", name: "Propylon" },
             { id: "13632", name: "Triskelion System" },
             { id: "13633", name: "Titan Armory" },
-            { id: "13634", name: "Krypteia Assassination Attempt" },
+            { id: "13634", name: "克里普提刺杀行动" },
             { id: "13635", name: "Ambrosia Spill" },
             { id: "13636", name: "Black Sludge" },
             { id: "13637", name: "Cackle" },
@@ -9983,8 +9998,9 @@
       return encounters.map(item => ({ ...item, saved: state.voyageEncounters?.[item.key] }));
     }
 
-    async function leaveVoyage(href, step, encounter = "", insideGesture = true) {
+    async function leaveVoyage(href, step, encounter = "", insideGesture = true, explorationRound = "") {
       const context = voyageContext(step, encounter);
+      if (explorationRound && step === "explore") context.explorationRound = explorationRound;
       if (!context.accountId || !ownsDashboardWriteLease()) throw new Error("请在可编辑的战役主控台开启航行入口。");
       const voyage = window.ATO_VOYAGE;
       const prior = encounter && state.voyageEncounters?.[encounter];
@@ -10000,7 +10016,7 @@
       await voyage.navigate(voyage.resumeUrl(entry) || voyage.carry(href, entry), insideGesture);
     }
 
-    function wireFlowVoyageLink(anchor, stepId, scene) {
+    function wireFlowVoyageLink(anchor, stepId, scene, explorationRound = "") {
       if (scene) {
         anchor.dataset.bgmStage = scene;
         anchor.title = [anchor.title, "自动模式下临时切换背景音乐；手动锁定时保持当前音乐"].filter(Boolean).join("；");
@@ -10009,7 +10025,7 @@
         if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
         event.preventDefault();
         if (scene) window.ATO_BGM?.setScene?.(scene);
-        void leaveVoyage(anchor.href, stepId).catch(error => window.alert(error.message));
+        void leaveVoyage(anchor.href, stepId, "", true, explorationRound).catch(error => window.alert(error.message));
       });
     }
 
@@ -10092,7 +10108,14 @@
       url.searchParams.delete("returnVoyage");
       history.replaceState(null, "", url);
       renderFlow();
-      focusFlowStep(step);
+      const card = same && step === "explore" && typeof entry.explorationRound === "string"
+        ? document.getElementById(explorationRoundElementId(entry.explorationRound)) : null;
+      if (!card) {
+        focusFlowStep(step);
+        return;
+      }
+      card.focus({ preventScroll: true });
+      card.scrollIntoView({ block: "nearest" });
     }
 
     function appendNemesisEncounterTag(heading, encounter) {
@@ -10221,7 +10244,8 @@
 
     function renderFlow() {
       const focusedStep = document.activeElement?.id?.startsWith("flow-step-") ? document.activeElement.id : "";
-      const focusedCard = document.activeElement?.closest(".step-card-tracks") ? document.activeElement.id : "";
+      const focusedCard = document.activeElement?.closest(".step-card-tracks")
+        || document.activeElement?.id?.startsWith("exploration-round-") ? document.activeElement.id : "";
       renderTheatreLink();
       elements.flowList.innerHTML = "";
       const fragment = document.createDocumentFragment();
@@ -10761,6 +10785,11 @@
         row.appendChild(text);
         const actions = automatic ? document.createElement("div") : row;
         if (automatic) actions.className = "exploration-settle-actions";
+        const destination = explorationBattleReference(item);
+        if (destination && item.conditionState === true && !effects.skipped[item.id] && receipt?.status !== "done") {
+          const link = createExplorationStoryLink(destination, "explore", explorationRoundId(entry));
+          if (link) actions.appendChild(link);
+        }
         if (effects.skipped[item.id]) {
           text.textContent += " · 已确认未触发";
           action(actions, "恢复待办", () => { if (!ownsDashboardWriteLease()) return; delete effects.skipped[item.id]; saveState(); renderFlow(); });
@@ -10851,6 +10880,9 @@
         text.className = "step-track-desc";
         text.textContent = `${technologyReferenceText(item.techKey, item.label || item.text)}${item.status === "ready" ? " · 到期待处理" : ""}`;
         row.append(title, text);
+        const destination = explorationBattleReference(item);
+        const link = destination && createExplorationStoryLink(destination, stepId);
+        if (link) row.appendChild(link);
         if (item.cycleId === "c4" && item.cardId === "9327" && item.id === "manual:2" && /\/3\+$/.test(item.badge || "")) {
           text.textContent += " · 旧登记条件已更正为命运 ≥8，请核对此安排";
         }
@@ -10861,6 +10893,10 @@
 
     function explorationRoundId(entry) {
       return `${currentCycleConfig().id}:${entry.id}:${entry.drawnAt || entry.day}`;
+    }
+
+    function explorationRoundElementId(roundId) {
+      return `exploration-round-${encodeURIComponent(roundId)}`;
     }
 
     function explorationDayNumber(value, cycleId = currentCycleConfig().id) {
@@ -12590,6 +12626,45 @@
       return box;
     }
 
+    function explorationBattleReference(item) {
+      if (item.kind !== "end-step-battle") return null;
+      const references = {
+        "Ambush Battle": { key: "c1-15-12", label: "查看伏击战（第 112 页）" },
+        "Temenos Battle": { key: "c1-15-18", label: "查看战斗 · 卫域" },
+        "Cruel Lesson Battle": { key: "c2-733", label: "查看战斗 · 残酷一课" },
+        "Pandora Horizon Battle": { key: "c4-13-2", label: "查看潘多拉视界之战" },
+      };
+      const reference = references[item.battle];
+      return reference ? { ...reference, scene: "encounter" } : null;
+    }
+
+    function createExplorationStoryLink(reference, stepId, roundId = "") {
+      if (!currentCycleConfig().storyBook) return null;
+      const link = document.createElement("a");
+      link.className = "exploration-story-link";
+      link.href = getStoryHref({ key: reference.key });
+      link.textContent = reference.label;
+      wireFlowVoyageLink(link, stepId, reference.scene || "story", roundId);
+      return link;
+    }
+
+    function explorationStoryReference(card, item) {
+      // The same paragraph number may appear in several chapters. These keys
+      // identify the printed card's exact storybook destinations.
+      const references = {
+        "c1:6437": { effect: "conditional:maze-pilgrim", trigger: /0014/, key: "c1-3-19", label: "打开宿命的迷境 · 0014" },
+        "c2:13634": { effect: "manual-group:0-1-2-3-4", key: "c2-10-7", label: "检定失败后 · 查看粗暴觉醒" },
+        "c3:13541": { effect: "conditional:tomorrows-edge-map", trigger: /Tomorrow.s Edge/i, key: "c3-10-6", label: "打开特殊事件 · 明日边缘" },
+        "c4:9334": { effect: "conditional:curselenders", trigger: /Shortages/i, key: "c4-10-7", label: "打开特殊事件 · 短缺" },
+        "c5:10314": { effect: "conditional:drown-in-fear", trigger: /Fractures/i, key: "c5-supplement-裂痕-fractures", label: "打开特殊事件 · 裂痕" },
+      };
+      const reference = references[card.key];
+      const matchesEffect = reference?.effect === item.id || (card.key === "c2:13634" && item.id === "manual:4");
+      if (!reference || !matchesEffect || !item.remainder
+          || (reference.trigger && !reference.trigger.test(item.remainder))) return null;
+      return reference;
+    }
+
     function createExplorationEffectList(entry, card, context) {
       const items = explorationEffectDescriptors(entry, card, context);
       if (!items.length) return null;
@@ -12700,12 +12775,22 @@
         if (item.automatic) status.textContent = "已应用整堆限制";
         else if (effectState.skipped[item.id]) status.textContent = "已确认不适用";
         else if (automaticItem(item) && item.remainder) status.textContent = effectState.manual[item.id] ? "手动效果已处理" : "待手动处理";
-        else if (manualDynamic) status.textContent = "手动效果已处理";
+        else if (effectState.manual[item.id]) status.textContent = "手动效果已处理";
         else if (applied && item.receiptMismatch) status.textContent = `旧版结算需更正：${applied.summary || "旧图标记录"}。请先撤销再重新结算。`;
         else if (applied) status.textContent = `${applied.automaticSingle ? "已自动结算" : "记录表已结算"}：${applied.summary || "数值未变化"}`;
         else if (item.blocked && !item.effects.length) status.textContent = "本堆禁止该项收益";
         else status.textContent = item.requiresResource && !getExplorationSettlement(entry) ? "选择资源时一并结算" : item.conditionState === null ? "条件需确认" : "待处理";
         controls.appendChild(status);
+        const reference = explorationStoryReference(card, item);
+        const handled = Boolean(effectState.manual[item.id]);
+        const storyPending = reference && !handled && !effectState.skipped[item.id] && !item.receiptMismatch;
+        const waitingForBase = storyPending && !applied && explorationHasRecordOperation(item);
+        if (waitingForBase) {
+          status.textContent = "先结算本卡基础效果，再打开对应剧情";
+        } else if (storyPending) {
+          const link = createExplorationStoryLink(reference, "explore", explorationRoundId(entry));
+          if (link) controls.appendChild(link);
+        }
         if (!automaticItem(item) && typeof createStructureSaveTools === "function") {
           const saveTools = createStructureSaveTools(entry, item);
           if (saveTools) row.appendChild(saveTools);
@@ -12718,6 +12803,11 @@
           button.addEventListener("click", callback);
           controls.appendChild(button);
         };
+        const heroCounter = /(?:英雄[^。；]*(?:获得|失去)[^。；]*(?:绝望|凶险|命运|怒气)|(?:argonauts?|heroes?)\s+(?:gains?|loses?)\s+[+-]?\d+\s+(?:despair|danger|fate|fury))/i;
+        if (!handled && !effectState.skipped[item.id] && item.remainder
+            && heroCounter.test(item.displayText || item.remainder)) {
+          addButton("调整英雄状态", () => document.querySelector('.campaign-toolbox [data-tool="heroes"]')?.click());
+        }
         if (effectState.skipped[item.id]) {
           if (!effectState.choices.saveManual?.[item.id]) addButton("恢复待办", () => mark("skipped", item.id, false));
         } else if (!item.automatic) {
@@ -12769,13 +12859,7 @@
               remainder.textContent = `其余效果：${item.remainder}`;
               controls.appendChild(remainder);
             }
-            const handled = Boolean(effectState.manual[item.id]);
             addButton(handled ? "恢复手动待办" : item.dynamic ? (applied ? "已处理其余效果" : "已手动处理完整效果") : "已手动处理", () => mark("manual", item.id, !handled));
-            if (handled) {
-              const done = document.createElement("span");
-              done.textContent = "手动效果已处理";
-              controls.appendChild(done);
-            }
           }
           if (manualDynamic && !item.remainder && !effectState.choices.saveManual?.[item.id]) addButton("恢复手动待办", () => mark("manual", item.id, false));
           if (item.conditionState === null && !applied && !effectState.manual[item.id]) {
@@ -13426,6 +13510,8 @@
         }
         drawnCard.append(drawnFace);
         if (options.interactive) {
+          drawnCard.id = explorationRoundElementId(explorationRoundId(entry));
+          drawnCard.tabIndex = -1;
           const settleBlock = createExplorationSettleBlock(entry);
           if (settleBlock) drawnCard.appendChild(settleBlock);
         }
@@ -13677,6 +13763,7 @@
       if (options.battle) params.set("battle", options.battle);
       if (options.encounter) params.set("encounter", options.encounter);
       if (options.entry) params.set("entry", options.entry);
+      if (options.key) params.set("key", options.key);
       if (options.face) params.set("face", options.face);
       return `./story/index.html?${params.toString()}`;
     }

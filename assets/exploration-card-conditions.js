@@ -384,7 +384,7 @@
     const lenders = isCard(card, context, "c4", "9334");
     if (!maze && !tomorrow && !lenders) return null;
     const base = conditionalBase(maze ? "maze-pilgrim" : tomorrow ? "tomorrows-edge-map" : "curselenders",
-      maze ? "迷宫朝圣者：按地图派系获得陌生人并判断事件" : tomorrow ? "明日边缘：判断太阳后裔地图板块" : "Curselenders：按云贼地图板块结算债务并判断事件",
+      maze ? "迷阵朝圣者：按地图派系获得陌路人并判断事件" : tomorrow ? "明日边缘：判断太阳后裔地图板块" : "Curselenders：按云贼地图板块结算债务并判断事件",
       maze ? [0, 1] : tomorrow ? [0, 1] : [0, 1, 2]);
     // Later printed bonuses cannot run before the map/base operation or its story event.
     base.blockedManualIndexes = maze ? [2] : lenders ? [3] : [];
@@ -412,7 +412,7 @@
     if (lenders && !eventTriggered) effects.push({ type, amount: 1 });
     const result = resolvedConditional(base, effects, "remove");
     if (eventTriggered) result.remainder = maze
-      ? "获得基础陌生人后已达到 3：请处理 Fated Conundrum（命运难题）0014，然后继续处理命运 5+ 的额外陌生人。"
+      ? "获得基础陌路人后已达到 3：请处理「宿命的迷境」0014，然后继续处理命运 5+ 的额外陌路人。"
       : "获得基础债务后已达到 3：请处理 Shortages（短缺）特殊事件，然后继续处理 At War 的额外债务。";
     return result;
   }

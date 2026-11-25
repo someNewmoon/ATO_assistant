@@ -275,8 +275,7 @@
       border-color: #815a00;
     }
 
-    body.dashboard-readonly #appShell :is(button, input:not([readonly]), select, textarea, [role="button"]):not([data-dashboard-readonly-allowed]),
-    body.dashboard-readonly #cardTrackDialog :is(button, input, select, textarea):not([data-dashboard-readonly-allowed]) {
+    body.dashboard-readonly #appShell :is(button, input:not([readonly]), select, textarea, [role="button"]):not([data-dashboard-readonly-allowed]) {
       pointer-events: none;
       opacity: 0.55;
       cursor: not-allowed;
@@ -1653,8 +1652,6 @@
 
     .card-track-dialog {
       width: min(1440px, calc(100vw - 28px));
-      /* 上限不再死卡在 920px：卡面按窗口高度缩放（见下面 doom 那组规则），
-         弹窗给足高度，内容就不会挤出上下滚动条。 */
       max-height: min(1120px, calc(100vh - 28px));
       max-height: min(1120px, calc(100dvh - 28px));
       border: 1px solid var(--line);
@@ -1763,88 +1760,41 @@
     }
     #mnemosChoiceConfirm:disabled { opacity: .5; cursor: default; }
 
-    .card-track-shell {
-      display: grid;
-      grid-template-rows: auto minmax(0, 1fr);
-      max-height: min(1120px, calc(100vh - 28px));
-      max-height: min(1120px, calc(100dvh - 28px));
-    }
-
-    .card-track-head {
-      display: flex;
-      gap: 12px;
-      align-items: center;
-      justify-content: space-between;
-      border-bottom: 1px solid var(--line);
-      padding: 14px 16px;
-    }
-
-    .card-track-head h2 {
-      font-size: 20px;
-    }
-
-    .card-track-close {
-      width: 34px;
-      min-height: 34px;
-      padding: 0;
+    .step-card-tracks {
+      margin-block: 12px;
       border: 1px solid var(--line);
-      background: #f8faf7;
-      color: var(--ink);
-      font-size: 20px;
-      line-height: 1;
+      background: var(--panel);
+    }
+
+    .step-card-tracks > summary {
+      cursor: pointer;
+      padding: 10px 12px;
+      font-weight: 700;
+      overflow-wrap: anywhere;
+    }
+
+    .step-card-tracks > summary small {
+      margin-inline-start: .65em;
+      color: var(--muted);
+      font-weight: 500;
     }
 
     .card-track-body {
-      overflow: auto;
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(520px, 1fr));
-      gap: 14px;
-      padding: 14px;
-    }
-
-    .card-track-dialog[data-group="story"] .card-track-body {
-      grid-template-columns: minmax(0, 1fr) minmax(240px, 300px);
-      align-items: start;
-    }
-
-    .card-track-dialog[data-group="story"] .card-track-item {
-      min-width: 0;
-      align-content: start;
-    }
-
-    /* 按可用高度缩放卡面，为标题、进展和推进/回退操作预留空间。 */
-    .card-track-dialog[data-group="story"] .card-track-face,
-    .card-track-dialog[data-group="story"] .card-track-empty {
-      width: min(100%, 896px, max(252px, calc(140vh - 392px)));
-      width: min(100%, 896px, max(252px, calc(140dvh - 392px)));
-    }
-
-    .card-track-dialog[data-group="doom"] .card-track-body {
       grid-template-columns: minmax(0, 1fr);
-      justify-items: center;
+      align-items: start;
+      gap: 12px;
+      padding: 0 12px 12px;
     }
 
-    .card-track-dialog[data-group="doom"] .card-track-item {
-      width: min(100%, 1080px);
-    }
-
-    /* 灾祸卡面按窗口高度缩放，弹窗里不留上下滚动条。
-
-       高度预算（从 dvh 里扣掉）：弹窗外边距 28 + 标题栏约 61 + 正文内边距 28 +
-       卡片自身（内边距 20 + 边框 2 + 标题行 22 + 两处 10 间距 + 灾祸/进展与回退/推进
-       两行控件约 118）≈ 299px；卡面高度以 1.4 的宽高比保守限高，所以宽度上限
-
-       = 1.4 × (dvh - 299)，再留约 60px 余量写成 140dvh - 500px（仍在 1040px 以内）。
-
-       和故事卡同宽：灾难卡面不能比故事卡小。容器留够 1px 边框 + 10px 内边距。 */
-    .card-track-dialog[data-group="doom"] .card-track-face,
-    .card-track-dialog[data-group="doom"] .card-track-empty {
-      width: min(100%, 1040px, max(300px, calc(140vh - 500px)));
-      width: min(100%, 1040px, max(300px, calc(140dvh - 500px)));
+    .step-card-tracks[data-card-track-group="story"] .card-track-body {
+      grid-template-columns: minmax(0, 1fr) minmax(210px, 25%);
     }
 
     .card-track-item {
+      min-width: 0;
       display: grid;
+      grid-template-columns: minmax(0, 1fr);
       gap: 10px;
       border: 1px solid var(--line);
       border-radius: 8px;
@@ -2013,7 +1963,7 @@
 
     .card-track-counter-row {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
       gap: 10px;
       align-items: center;
     }
@@ -2048,7 +1998,10 @@
       color: var(--ink);
     }
 
-    .card-track-progress input {
+    .card-track-progress input,
+    .card-track-counter input {
+      width: 100%;
+      min-width: 0;
       height: 34px;
       padding: 6px 8px;
       text-align: center;
@@ -2057,7 +2010,7 @@
 
     .card-track-step-actions {
       display: grid;
-      grid-template-columns: 1fr 1fr;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 8px;
     }
 
@@ -2718,12 +2671,7 @@
         grid-template-columns: 42px minmax(74px, auto) minmax(0, 1fr);
       }
 
-      .card-track-body {
-        grid-template-columns: minmax(0, 1fr);
-      }
-
-      .card-track-dialog[data-group="story"] .card-track-body,
-      .card-track-dialog[data-group="doom"] .card-track-body {
+      .step-card-tracks[data-card-track-group="story"] .card-track-body {
         grid-template-columns: minmax(0, 1fr);
       }
 
@@ -2732,36 +2680,19 @@
         max-height: calc(100vh - 14px);
       }
 
-      .card-track-shell {
-        max-height: calc(100vh - 14px);
-      }
-
       .card-track-face,
       .card-track-empty {
         width: min(100%, 520px);
       }
 
-      .card-track-dialog[data-group="story"] .card-track-knowledge {
+      .card-track-knowledge {
         min-height: 0;
         grid-template-columns: auto 1fr;
         padding: 10px;
       }
 
-      .card-track-dialog[data-group="story"] .card-track-knowledge-value {
-        font-size: 32px;
-      }
-
-      .card-track-dialog[data-group="story"] .card-track-knowledge-icon {
-        width: 24px;
-        height: 30px;
-      }
-
-      /* 单列时也为下方的知识面板预留高度，小屏仍可滚动查看完整内容。 */
-      .card-track-dialog[data-group="story"] .card-track-face,
-      .card-track-dialog[data-group="story"] .card-track-empty {
-        width: min(100%, 520px, max(196px, calc(140vh - 728px)));
-        width: min(100%, 520px, max(196px, calc(140dvh - 728px)));
-      }
+      .card-track-knowledge-value { font-size: 32px; }
+      .card-track-knowledge-icon { width: 24px; height: 30px; }
 
       .session-card {
         grid-template-columns: minmax(0, 1fr) auto;
@@ -2776,7 +2707,7 @@
       }
     }
   </style>
-  <link rel="stylesheet" href="./api/dashboard.css?v=20261125-folio">
+  <link rel="stylesheet" href="./api/dashboard.css?v=20261125-inline-cards">
   <link rel="stylesheet" href="./assets/theme.css?v=20261114-misc-settings21">
   <script src="./story/data/english-source-data.js?v=20261011-english4"></script>
   <script src="./assets/theme.js?v=20261114-light-sidebar1" defer></script>
@@ -3093,16 +3024,6 @@
     </section>
   </main>
 
-  <dialog id="cardTrackDialog" class="card-track-dialog">
-    <div class="card-track-shell">
-      <div class="card-track-head">
-        <h2 id="cardTrackTitle">故事</h2>
-        <button id="cardTrackClose" class="card-track-close" type="button" aria-label="关闭" data-dashboard-readonly-allowed>×</button>
-      </div>
-      <div id="cardTrackBody" class="card-track-body"></div>
-    </div>
-  </dialog>
-
   <dialog id="theatreRestoreDialog" class="card-track-dialog" aria-labelledby="theatreRestoreTitle" aria-describedby="theatreRestoreDescription">
     <form method="dialog">
       <h2 id="theatreRestoreTitle">导入幻忆剧场进度</h2>
@@ -3242,14 +3163,12 @@
     const storyDoomData = window.ATO_STORY_DOOM_DATA || { cycles: {} };
     const cardTrackGroups = {
       story: {
-        title: "故事",
         tracks: [
           { key: "story", label: "故事卡", source: "storySteps", fixed: false },
           { key: "inwardOdyssey", label: "内蕴奥德赛", source: "inwardOdyssey", fixed: true },
         ],
       },
       doom: {
-        title: "灾祸",
         tracks: [
           { key: "doom", label: "灾祸卡", source: "doomSteps", fixed: false },
         ],
@@ -4243,10 +4162,6 @@
       flowList: document.querySelector("#flowList"),
       progressFill: document.querySelector("#progressFill"),
       progressText: document.querySelector("#progressText"),
-      cardTrackDialog: document.querySelector("#cardTrackDialog"),
-      cardTrackTitle: document.querySelector("#cardTrackTitle"),
-      cardTrackBody: document.querySelector("#cardTrackBody"),
-      cardTrackClose: document.querySelector("#cardTrackClose"),
       exportButton: document.querySelector("#exportButton"),
       importButton: document.querySelector("#importButton"),
       importInput: document.querySelector("#importInput"),
@@ -4438,7 +4353,7 @@
         }
       }
       document.querySelectorAll(
-        "#appShell button, #appShell input:not([readonly]), #appShell select, #appShell textarea, #appShell [role=button], #cardTrackDialog button, #cardTrackDialog input, #cardTrackDialog select, #cardTrackDialog textarea"
+        "#appShell button, #appShell input:not([readonly]), #appShell select, #appShell textarea, #appShell [role=button]"
       ).forEach((control) => {
         if (control.hasAttribute("data-dashboard-readonly-allowed")) return;
         if (writable) control.removeAttribute("aria-disabled");
@@ -4571,7 +4486,7 @@
       if (!(target instanceof Element) || ownsDashboardWriteLease()) return false;
       const control = target.closest("button, input, select, textarea, [role=button]");
       if (!control || control.hasAttribute("data-dashboard-readonly-allowed")) return false;
-      return Boolean(control.closest("#appShell, #cardTrackDialog"));
+      return Boolean(control.closest("#appShell"));
     }
 
     function blockReadOnlyDashboardEvent(event) {
@@ -7306,7 +7221,6 @@
 
     function refreshCardTokenViews() {
       saveState();
-      renderCardTrackDialog();
       renderFlow();
     }
 
@@ -7341,10 +7255,7 @@
           throw new Error("当前战役或日期已变化，请重新打开结算。");
         }
       };
-      const cardDialog = elements.cardTrackDialog;
-      const wasInert = cardDialog.inert;
       elements.appShell.inert = true;
-      cardDialog.inert = true;
       try {
         saveState();
         if (!await flushCampaignSave()) throw new Error("当前进度尚未保存，请恢复连接后重试。");
@@ -7362,14 +7273,12 @@
         const result = await importCampaignSections({ dashboard }, { dashboard: campaign.sectionRevisions.dashboard });
         campaign.sectionRevisions.dashboard = result.sections.dashboard;
         await applyStructureTechCommit({ campaign }, target, { saveMessage });
-        if (cardDialog.open) renderCardTrackDialog();
         campaignSyncChannel?.postMessage({ revision: result.sections.dashboard, pageId: dashboardPageId });
         return true;
       } catch (error) {
         window.alert(error?.code === "SAVE_CONFLICT" ? "战役已在其他页面更新，请核对最新卡面和计数后重试。" : error.message);
         await syncDashboardFromExternalUpdate();
       } finally {
-        cardDialog.inert = wasInert;
         elements.appShell.inert = false;
       }
     }
@@ -7438,7 +7347,6 @@
       if (next > tracks[key].progress && !cardTrackTokenState(key, "progress").allowed) return;
       ensureCardTracks()[key].progress = next;
       saveState();
-      renderCardTrackDialog();
       renderFlow();
     }
 
@@ -7455,7 +7363,6 @@
       if (next > tracks[key][field] && !cardTrackTokenState(key, field).allowed) return;
       ensureCardTracks()[key][field] = next;
       saveState();
-      renderCardTrackDialog();
       renderFlow();
     }
 
@@ -7559,30 +7466,6 @@
       if (saved) await openCardTrackRules("doom", details.next);
     }
 
-    function createDoomAdvanceTools() {
-      const details = doomAdvanceDetails();
-      if (!details.card) return null;
-      const panel = document.createElement("section");
-      panel.className = "story-reward-placement doom-advance-panel";
-      const summary = document.createElement("p");
-      const threshold = details.limits.length ? ` · 卡面触发点 ${details.limits.join(" / ")}` : "";
-      summary.textContent = `${details.card.label} · 当前 ${details.count} 枚灾厄${threshold}`;
-      panel.appendChild(summary);
-      if (details.next) {
-        const button = document.createElement("button");
-        button.type = "button";
-        button.className = "secondary";
-        button.textContent = "查看翻卡账单";
-        button.addEventListener("click", () => void requestDoomAdvance());
-        panel.appendChild(button);
-      } else {
-        const last = document.createElement("p");
-        last.textContent = "已是最后一面，按当前卡面结算。";
-        panel.appendChild(last);
-      }
-      return panel;
-    }
-
     function cardTrackRulesHref(key, card) {
       const cycle = currentCycleConfig();
       // The Story Book includes these rule chapters only for the supported cycles.
@@ -7595,7 +7478,7 @@
     async function openCardTrackRules(key, card) {
       const href = cardTrackRulesHref(key, card);
       if (!href) {
-        if (card && !elements.cardTrackDialog.open) openCardTrackDialog(key);
+        if (card) elements.flowList.querySelector(`[data-card-track-group="${key}"]`)?.setAttribute("open", "");
         return;
       }
       try { await leaveVoyage(href, key, "", false); }
@@ -7608,7 +7491,6 @@
       tracks[key].position = normalizeCounterValue(Number(tracks[key].position || 0) + 1);
       if (key !== "inwardOdyssey") tracks[key].progress = 0;
       saveState();
-      renderCardTrackDialog();
       if (typeof renderFlow === "function") renderFlow();
       if (key === "story") void openCardTrackRules(key, activeStoryDoomData().storySteps[tracks[key].position - 1]);
     }
@@ -7620,18 +7502,14 @@
       tracks[key].position = Math.max(minimum, normalizeCounterValue(Number(tracks[key].position || 0) - 1));
       if (key !== "inwardOdyssey") tracks[key].progress = 0;
       saveState();
-      renderCardTrackDialog();
       if (typeof renderFlow === "function") renderFlow();
     }
 
-    function renderCardTrackDialog(groupId = elements.cardTrackDialog?.dataset.group) {
+    function renderCardTrackItems(groupId) {
       const group = cardTrackGroups[groupId];
-      if (!group) return;
       const tracks = ensureCardTracks();
       const cycleData = activeStoryDoomData();
-      elements.cardTrackTitle.textContent = group.title;
-      elements.cardTrackDialog.dataset.group = groupId;
-      elements.cardTrackBody.innerHTML = group.tracks.map((def) => {
+      return group.tracks.map((def) => {
         const track = tracks[def.key] || { position: 0, progress: 0, doom: 0 };
         const card = cardTrackCard(def, track, cycleData);
         const previewCard = cardTrackPreviewCard(def, track, cycleData);
@@ -7639,12 +7517,12 @@
         const progressState = cardTrackTokenState(def.key, "progress");
         const doomState = cardTrackTokenState(def.key, "doom");
         const showProgress = progressState.allowed;
-        const badge = [showProgress ? `进展 ${track.progress}` : "", def.key === "doom" ? `灾祸 ${track.doom}` : ""].filter(Boolean).join(" · ");
+        const badge = [showProgress ? `进展 ${track.progress}` : "", def.key === "doom" ? `灾厄 ${track.doom}` : ""].filter(Boolean).join(" · ");
         const previewBadge = !def.fixed && !track.position && displayedCard ? '<span class="card-track-preview-badge">下张预览</span>' : "";
         const face = def.fixed
           ? `<div class="card-track-knowledge"><div class="card-track-knowledge-value"><span class="card-track-knowledge-icon" aria-hidden="true" style="--icon-src:url(./assets/icons/argo-knowledge.svg?v=apk-ui-a72da92bdf63)"></span><span>${track.position}</span></div><div class="card-track-knowledge-label">当前阿尔戈号知识</div></div>`
           : (displayedCard?.image
-            ? `<div class="card-track-face"><img src="${escapeHtml(displayedCard.image)}" alt="${escapeHtml(`${displayedCard.label} ${displayedCard.name}`)}"><span class="card-track-side-badge">${escapeHtml(displayedCard.label)}</span>${badge ? `<span class="card-track-progress-badge">${badge}</span>` : ""}${previewBadge}</div>`
+            ? `<div class="card-track-face"><img loading="lazy" src="${escapeHtml(displayedCard.image)}" alt="${escapeHtml(`${displayedCard.label} ${displayedCard.name}`)}"><span class="card-track-side-badge">${escapeHtml(displayedCard.label)}</span>${badge ? `<span class="card-track-progress-badge">${badge}</span>` : ""}${previewBadge}</div>`
             : '<div class="card-track-empty">无对应卡面</div>');
         return `
           <article class="card-track-item">
@@ -7657,24 +7535,24 @@
               <div class="${def.key === "doom" ? "card-track-counter-row" : ""}">
               ${def.key === "doom" ? `
                 <div class="card-track-counter">
-                  <span class="card-track-counter-label${doomState.limits.some(limit => track.doom >= limit) ? " card-token-limit-warning" : ""}" title="${escapeHtml(doomState.statusText)}">灾祸<br><small>${escapeHtml(doomState.limits.length ? `上限 ${doomState.limits.join(" / ")}` : "无固定上限")}</small></span>
-                  <button type="button" data-card-counter="${escapeHtml(def.key)}" data-card-counter-field="doom" data-delta="-1" aria-label="灾祸减一">-</button>
-                  <input type="number" min="0" step="1" value="${track.doom}" data-card-counter-input="${escapeHtml(def.key)}" data-card-counter-field="doom" aria-label="灾祸">
-                  <button type="button" data-card-counter="${escapeHtml(def.key)}" data-card-counter-field="doom" data-delta="1" aria-label="灾祸加一">+</button>
+                  <span class="card-track-counter-label${doomState.limits.some(limit => track.doom >= limit) ? " card-token-limit-warning" : ""}" title="${escapeHtml(doomState.statusText)}">灾厄<br><small>${escapeHtml(doomState.limits.length ? `上限 ${doomState.limits.join(" / ")}` : "无固定上限")}</small></span>
+                  <button type="button" data-card-counter="${escapeHtml(def.key)}" data-card-counter-field="doom" data-delta="-1" id="track-doom-counter-minus" aria-label="灾厄减一">-</button>
+                  <input type="number" min="0" step="1" value="${track.doom}" data-card-counter-input="${escapeHtml(def.key)}" data-card-counter-field="doom" id="track-doom-counter" aria-label="灾厄">
+                  <button type="button" data-card-counter="${escapeHtml(def.key)}" data-card-counter-field="doom" data-delta="1" id="track-doom-counter-plus" aria-label="灾厄加一">+</button>
                 </div>
               ` : ""}
                 ${showProgress ? `<div class="card-track-progress">
                   <span class="card-track-counter-label${progressState.limits.some(limit => track.progress >= limit) ? " card-token-limit-warning" : ""}" title="${escapeHtml(progressState.statusText)}">进展<br><small>${escapeHtml(progressState.limits.length ? `上限 ${progressState.limits.join(" / ")}` : "无固定上限")}</small></span>
-                  <button type="button" data-card-progress="${escapeHtml(def.key)}" data-delta="-1" aria-label="${escapeHtml(def.label)}进展减一">-</button>
-                  <input type="number" min="0" step="1" value="${track.progress}" data-card-progress-input="${escapeHtml(def.key)}" aria-label="${escapeHtml(def.label)}进展">
-                  <button type="button" data-card-progress="${escapeHtml(def.key)}" data-delta="1" aria-label="${escapeHtml(def.label)}进展加一">+</button>
+                  <button type="button" data-card-progress="${escapeHtml(def.key)}" data-delta="-1" id="track-${def.key}-progress-minus" aria-label="${escapeHtml(def.label)}进展减一">-</button>
+                  <input type="number" min="0" step="1" value="${track.progress}" id="track-${def.key}-progress" data-card-progress-input="${escapeHtml(def.key)}" aria-label="${escapeHtml(def.label)}进展">
+                  <button type="button" data-card-progress="${escapeHtml(def.key)}" data-delta="1" id="track-${def.key}-progress-plus" aria-label="${escapeHtml(def.label)}进展加一">+</button>
                 </div>` : ""}
               </div>
               <div class="card-track-step-actions">
-                <button type="button" class="card-track-retreat" data-card-retreat="${escapeHtml(def.key)}">回退</button>
+                <button type="button" class="card-track-retreat" id="track-${def.key}-retreat" data-card-retreat="${escapeHtml(def.key)}">回退</button>
                 ${def.key === "doom"
-                  ? `<button type="button" class="card-track-advance" data-doom-advance${track.position >= cycleData.doomSteps.length ? " disabled" : ""}>${track.position ? "查看翻卡账单" : "揭示首面"}</button>`
-                  : `<button type="button" class="card-track-advance" data-card-advance="${escapeHtml(def.key)}">${def.fixed ? "手动增加知识" : "推进"}</button>`}
+                  ? `<button type="button" class="card-track-advance" id="track-doom-advance" data-doom-advance${track.position >= cycleData.doomSteps.length ? " disabled" : ""}>${track.position >= cycleData.doomSteps.length ? "已是最后一面" : track.position ? "查看翻卡账单" : "揭示首面"}</button>`
+                  : `<button type="button" class="card-track-advance" id="track-${def.key}-advance" data-card-advance="${escapeHtml(def.key)}">${def.fixed ? "手动增加知识" : "推进"}</button>`}
               </div>
               <div class="card-track-meta">${escapeHtml(cardTrackMeta(def, track, cycleData, card))}</div>
             </div>
@@ -7683,14 +7561,18 @@
       }).join("");
     }
 
-    function openCardTrackDialog(groupId) {
-      if (!cardTrackGroups[groupId]) return;
-      renderCardTrackDialog(groupId);
-      if (typeof elements.cardTrackDialog.showModal === "function") {
-        elements.cardTrackDialog.showModal();
-      } else {
-        elements.cardTrackDialog.setAttribute("open", "");
-      }
+    function createStepCardTracks(groupId) {
+      const tracks = ensureCardTracks();
+      const cycleData = activeStoryDoomData();
+      const card = cycleData[groupId === "story" ? "storySteps" : "doomSteps"][tracks[groupId].position - 1];
+      const label = groupId === "story" ? "剧情卡牌与内部之旅" : "末日卡牌";
+      const count = groupId === "story" ? `知识 ${tracks.inwardOdyssey.position}` : `灾厄 ${tracks.doom.doom}`;
+      const details = document.createElement("details");
+      details.className = "step-card-tracks";
+      details.dataset.cardTrackGroup = groupId;
+      details.innerHTML = `<summary id="track-${groupId}-summary">${label} <small>${escapeHtml(card?.label || "未揭示")} · ${count}</small></summary>
+        <div class="card-track-body">${renderCardTrackItems(groupId)}</div>`;
+      return rememberConstantDetailsOpen(details, `cardTrack:${groupId}`);
     }
 
     function syncCampaignLog() {
@@ -10351,6 +10233,7 @@
 
     function renderFlow() {
       const focusedStep = document.activeElement?.id?.startsWith("flow-step-") ? document.activeElement.id : "";
+      const focusedCard = document.activeElement?.closest(".step-card-tracks") ? document.activeElement.id : "";
       renderTheatreLink();
       elements.flowList.innerHTML = "";
       const fragment = document.createDocumentFragment();
@@ -10385,9 +10268,7 @@
         const trackReminders = getStepTrackReminders(step.id);
         let currentHeading = "";
         if (mode === "current") {
-          const titleText = step.id === "story" || step.id === "doom"
-            ? `<button type="button" class="flow-title-button" data-term-scope="step-name" data-card-track-open="${step.id}">${escapeHtml(step.title)}</button>`
-            : `<span data-term-scope="step-name"${step.id === "end" ? ' data-english-text="End Step"' : ""}>${escapeHtml(step.title)}</span>`;
+          const titleText = `<span data-term-scope="step-name"${step.id === "end" ? ' data-english-text="End Step"' : ""}>${escapeHtml(step.title)}</span>`;
           currentHeading = `<div class="step-title">
             <span class="step-index">${String(index + 1).padStart(2, "0")}</span>
             ${titleText}
@@ -10483,6 +10364,7 @@
         if (step.id === "development") {
           text.append(createResearchTools(), createStructureTechActionTools());
         }
+        if (step.id === "story" || step.id === "doom") text.appendChild(createStepCardTracks(step.id));
         if (step.id === "story") {
           const constantRow = document.createElement("div");
           constantRow.className = "simple-constant-row";
@@ -10503,8 +10385,6 @@
         if (step.id === "doom") {
           const doomTools = createStoryRewardTools("doom");
           if (doomTools) text.appendChild(doomTools);
-          const advance = createDoomAdvanceTools();
-          if (advance) text.appendChild(advance);
         }
         item.append(text, createFlowStepFooter(step, mode, pending));
         fragment.appendChild(item);
@@ -10519,7 +10399,7 @@
         fragment.appendChild(finished);
       }
       elements.flowList.appendChild(fragment);
-      if (focusedStep) document.getElementById(focusedStep)?.focus({ preventScroll: true });
+      if (focusedStep || focusedCard) document.getElementById(focusedStep || focusedCard)?.focus({ preventScroll: true });
       renderTodayPreview(pending);
       renderStructureTechDue();
       renderProgress();
@@ -16242,9 +16122,6 @@
         runMapCommand(mapButton.dataset.mapCommand, mapButton.dataset.mapTarget || "");
         return;
       }
-      const button = event.target.closest("[data-card-track-open]");
-      if (!button) return;
-      openCardTrackDialog(button.dataset.cardTrackOpen);
     });
     elements.notesInput.addEventListener("input", () => {
       state.notes = elements.notesInput.value;
@@ -16319,11 +16196,8 @@
         window.location.reload();
       };
     }
-    elements.cardTrackClose.addEventListener("click", () => elements.cardTrackDialog.close());
-    elements.cardTrackDialog.addEventListener("click", (event) => {
-      if (event.target === elements.cardTrackDialog) elements.cardTrackDialog.close();
-    });
-    elements.cardTrackBody.addEventListener("click", (event) => {
+    elements.flowList.addEventListener("click", (event) => {
+      if (!event.target.closest(".card-track-body")) return;
       const retreatButton = event.target.closest("[data-card-retreat]");
       if (retreatButton) {
         retreatCardTrack(retreatButton.dataset.cardRetreat);
@@ -16393,7 +16267,8 @@
         document.execCommand("copy");
       }
     });
-    elements.cardTrackBody.addEventListener("change", (event) => {
+    elements.flowList.addEventListener("change", (event) => {
+      if (!event.target.closest(".card-track-body")) return;
       const input = event.target.closest("[data-card-progress-input]");
       if (input) {
         setCardTrackProgress(input.dataset.cardProgressInput, input.value);
@@ -16417,7 +16292,6 @@
       if (addedInteractiveContent) updateDashboardWriteAccessUi();
     });
     dashboardControlObserver.observe(elements.appShell, { childList: true, subtree: true });
-    dashboardControlObserver.observe(elements.cardTrackDialog, { childList: true, subtree: true });
     listenForExternalCampaignSync(campaignSyncChannel, () => syncDashboardFromExternalUpdate());
     listenForExternalCampaignSync(structureTechMapSyncChannel, () => refreshStructureTechContext().catch(() => {}));
     listenForExternalCampaignSync(technologySyncChannel, () => refreshStructureTechContext().catch(() => {}));

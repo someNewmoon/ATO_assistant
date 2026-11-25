@@ -45,7 +45,11 @@ const conditions={dashboard:`document.querySelectorAll('#flowList>.flow-step').l
  await check('all pages run original modules with sandboxed storage and no real business requests',async()=>{assert.equal(requests.filter(r=>r.method!=='GET'&&r.method!=='HEAD').length,0);assert.equal(requests.filter(r=>/\/(api\/[^?]+|briefing\/(api|backups))\.php/.test(r.url)&&!r.url.includes('/api/aibp-image-index.php')).length,0);assert.equal(requests.filter(r=>/pages-(dashboard|play|record-hero|technology-briefing)\.js/.test(r.url)).length,0);for(const page of pages)assert.ok(await evaluate(`(()=>{if(localStorage===parent.localStorage||sessionStorage===parent.sessionStorage||indexedDB===parent.indexedDB)return false;const key='ato-preview-isolation-'+Date.now()+'-'+Math.random();localStorage.setItem(key,'memory-only');const isolated=parent.localStorage.getItem(key)===null;localStorage.removeItem(key);return isolated;})()`,page));});
  await check('dashboard keeps all eight steps, exploration draw and original story-card detail',async()=>{
    await choose('dashboard');await until(conditions.dashboard);await until(`document.querySelector('.exploration-buttons button:not(:disabled)')!==null`);await click('.exploration-buttons button:first-child');await until(`document.querySelectorAll('.exploration-active-grid .exploration-drawn-card').length>0`);
-   await click('[data-card-track-open="story"]');await until(`document.querySelector('#cardTrackDialog').open`);assert.ok(await evaluate(`document.querySelector('#cardTrackBody').children.length>0`));await click('#cardTrackClose');
+   const cards = '[data-card-track-group="story"]';
+   await click(cards+' > summary');
+   await until(`document.querySelector('${cards}').open`);
+   assert.equal(await evaluate(`document.querySelectorAll('${cards} .card-track-item').length`),2);
+   await click(cards+' > summary');
  });
  await check('source navigation preserves module URLs and query parameters',async()=>{await choose('dashboard');await evaluate(`document.querySelector('a[href*="hero/index.html"]').click()`);await until(`document.body.dataset.page==='hero'`,null);await until(`location.pathname.endsWith('/hero/index.html')`,'hero');await until(`document.querySelector('.back-to-console')!==null`,'hero');await evaluate(`document.querySelector('.back-to-console').click()`,'hero');await until(`document.body.dataset.page==='dashboard'`,null);});
  await check('record resource changes save and append the original campaign log',async()=>{

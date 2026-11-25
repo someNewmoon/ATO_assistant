@@ -15,7 +15,7 @@ function dashboardFunction(name) {
 }
 
 function dashboard(cycle = 'c1', positions = {}) {
-  const calls = { save: 0, flow: 0, dialog: 0 };
+  const calls = { save: 0, flow: 0 };
   const sandbox = {
     window: {},
     console,
@@ -30,7 +30,6 @@ function dashboard(cycle = 'c1', positions = {}) {
     currentCycleConfig: () => ({ id: cycle }),
     saveState: () => { calls.save += 1; },
     renderFlow: () => { calls.flow += 1; },
-    renderCardTrackDialog: () => { calls.dialog += 1; },
     ownsDashboardWriteLease: () => true,
     isPlainObject: value => Boolean(value) && typeof value === 'object' && !Array.isArray(value),
     cloneJson: value => JSON.parse(JSON.stringify(value)),
@@ -38,11 +37,6 @@ function dashboard(cycle = 'c1', positions = {}) {
     currentMapTagSet: () => new Set(['progress', 'calamity']),
     currentMapTileLabel: () => '测试板块',
     getMnemosPendingReminders: () => [],
-    elements: {
-      cardTrackDialog: { dataset: { group: 'doom' } },
-      cardTrackBody: { innerHTML: '' },
-      cardTrackTitle: { textContent: '' },
-    },
     updateDashboardWriteAccessUi() {},
   };
   sandbox.ensureCardTracks = (draft = sandbox.state) => draft.cardTracks;
@@ -64,13 +58,12 @@ function dashboard(cycle = 'c1', positions = {}) {
     'cardTrackStatus', 'cardTrackMeta', 'cardTrackTokenState', 'cardTokenLimitText',
     'cardTokenPlacementTargets', 'renderCardTokenPlacementTools', 'refreshCardTokenViews', 'placeCardTrackToken',
     'getMapProgressTechReminders', 'currentTileRevealDayState', 'getStoryMapReminders', 'getDoomMapReminders', 'renderStepTrackReminders',
-    'doomSaveFateSources', 'doomAdvanceDetails', 'applyDoomAdvance', 'inwardExchangeDetails', 'applyInwardExchange',
+    'renderCardTrackItems', 'doomSaveFateSources', 'doomAdvanceDetails', 'applyDoomAdvance', 'inwardExchangeDetails', 'applyInwardExchange',
   ]) vm.runInContext(dashboardFunction(name), context);
   context.inwardOdysseyStoryRanges = {
     c1: { min: 1, max: 20 }, c2: { min: 21, max: 40 },
   };
   context.calls = calls;
-  context.loadDialog = () => vm.runInContext(dashboardFunction('renderCardTrackDialog'), context);
   return context;
 }
 
@@ -283,7 +276,7 @@ test('Inward Odyssey plus, input, and minus controls write live normalized track
   assert.equal(app.state.cardTracks.inwardOdyssey.progress, 3);
   app.setCardTrackProgress('inwardOdyssey', '0');
   assert.equal(app.state.cardTracks.inwardOdyssey.progress, 0);
-  assert.deepEqual(app.calls, { save: 4, flow: 4, dialog: 4 });
+  assert.deepEqual(app.calls, { save: 4, flow: 4 });
 });
 
 test('story progress and doom controls preserve writes when status lookups replace the track object', () => {
@@ -301,7 +294,7 @@ test('story progress and doom controls preserve writes when status lookups repla
   assert.equal(app.state.cardTracks.doom.doom, 8);
   app.stepCardTrackCounter('doom', 'doom', -1);
   assert.equal(app.state.cardTracks.doom.doom, 7);
-  assert.deepEqual(app.calls, { save: 6, flow: 6, dialog: 6 });
+  assert.deepEqual(app.calls, { save: 6, flow: 6 });
 });
 
 test('doom input and plus controls reject increases until a card face is active', () => {
@@ -311,7 +304,7 @@ test('doom input and plus controls reject increases until a card face is active'
   assert.equal(app.state.cardTracks.doom.doom, 0);
   app.stepCardTrackCounter('doom', 'doom', 1);
   assert.equal(app.state.cardTracks.doom.doom, 0);
-  assert.deepEqual(app.calls, { save: 0, flow: 0, dialog: 0 });
+  assert.deepEqual(app.calls, { save: 0, flow: 0 });
 });
 
 test('an active story face accepts progress beyond its soft limit and refreshes both views', () => {
@@ -322,7 +315,6 @@ test('an active story face accepts progress beyond its soft limit and refreshes 
   assert.equal(track.progress, 9);
   assert.equal(app.calls.save, 1);
   assert.equal(app.calls.flow, 1);
-  assert.equal(app.calls.dialog, 1);
   const status = app.cardTrackTokenState('story', 'progress');
   assert.equal(status.allowed, true);
   assert.equal(status.count, 9);
@@ -335,9 +327,9 @@ test('deferred placement lets exploration counters and completion markers save t
   assert.equal(app.placeCardTrackToken('doom', 'doom', 1, false), true);
   assert.equal(app.state.cardTracks.story.progress, 2);
   assert.equal(app.state.cardTracks.doom.doom, 1);
-  assert.deepEqual(app.calls, { save: 0, flow: 0, dialog: 0 });
+  assert.deepEqual(app.calls, { save: 0, flow: 0 });
   app.refreshCardTokenViews();
-  assert.deepEqual(app.calls, { save: 1, flow: 1, dialog: 1 });
+  assert.deepEqual(app.calls, { save: 1, flow: 1 });
 });
 
 test('placement rechecks the current story face, and forbidden or inactive cards do not change', () => {
@@ -417,29 +409,24 @@ test('cycle IV doom investment permits progress and ordinary doom cards reject i
   }
 });
 
-test('doom dialogs hide progress controls outside cycle IV and retain doom controls', () => {
+test('inline doom track hides progress controls outside cycle IV and retains doom controls', () => {
   for (const cycle of ['c1', 'c2', 'c3', 'c5']) {
     const app = dashboard(cycle);
-    app.loadDialog();
-    app.renderCardTrackDialog('doom');
-    const markup = app.elements.cardTrackBody.innerHTML;
+    const markup = app.renderCardTrackItems('doom');
     assert.doesNotMatch(markup, /data-card-progress(?:-input)?="doom"/, cycle);
     assert.match(markup, /data-card-counter="doom"/, cycle);
     assert.match(markup, /title="[^"]*上限/, cycle);
   }
   const special = dashboard('c4');
-  special.loadDialog();
-  special.renderCardTrackDialog('doom');
-  assert.match(special.elements.cardTrackBody.innerHTML, /data-card-progress="doom"/);
-  assert.match(special.elements.cardTrackBody.innerHTML, /data-card-counter="doom"/);
-  const counterTitles = [...special.elements.cardTrackBody.innerHTML.matchAll(/<span\b[^>]*class="card-track-counter-label"[^>]*>/g)];
+  const specialMarkup = special.renderCardTrackItems('doom');
+  assert.match(specialMarkup, /data-card-progress="doom"/);
+  assert.match(specialMarkup, /data-card-counter="doom"/);
+  const counterTitles = [...specialMarkup.matchAll(/<span\b[^>]*class="card-track-counter-label"[^>]*>/g)];
   assert.equal(counterTitles.length, 2);
   for (const [tag] of counterTitles) assert.match(tag, /title="[^"]*上限/);
 
   const story = dashboard('c1', { story: 3 });
-  story.loadDialog();
-  story.renderCardTrackDialog('story');
-  const storyTitles = [...story.elements.cardTrackBody.innerHTML.matchAll(/<span\b[^>]*class="card-track-counter-label"[^>]*>/g)];
+  const storyTitles = [...story.renderCardTrackItems('story').matchAll(/<span\b[^>]*class="card-track-counter-label"[^>]*>/g)];
   assert.equal(storyTitles.length, 2);
   for (const [tag] of storyTitles) assert.match(tag, /title="[^"]*上限/);
   assert.match(storyTitles[0][0], /上限 2 \/ 9/);
@@ -756,7 +743,7 @@ test('an unknown exploration condition can be confirmed before choosing a token 
   confirm.listeners.click();
   assert.equal(app.local.tokenPlacementConditions[item.id], true);
   assert.equal(app.explorationTokenPlacementBlocked(app.entry, item), '');
-  assert.deepEqual(app.calls, { save: 1, flow: 1, dialog: 0 });
+  assert.deepEqual(app.calls, { save: 1, flow: 1 });
   const refreshed = app.createExplorationTokenPlacementTools(app.entry, item);
   const button = refreshed.querySelectorAll('[data-card-token-place]').find(button => button.dataset.cardTokenPlace === 'inwardOdyssey');
   assert.ok(button);
@@ -764,7 +751,7 @@ test('an unknown exploration condition can be confirmed before choosing a token 
   refreshed.listeners.click({ target: button, stopPropagation() {} });
   assert.equal(app.state.cardTracks.inwardOdyssey.progress, 2);
   assert.equal(app.local.manual[item.id], true);
-  assert.deepEqual(app.calls, { save: 2, flow: 2, dialog: 1 });
+  assert.deepEqual(app.calls, { save: 2, flow: 2 });
 });
 
 test('a known false exploration condition cannot be bypassed by a saved confirmation', () => {

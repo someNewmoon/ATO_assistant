@@ -1,6 +1,6 @@
 @import url("./cycle-theme.css?v=20261125-folio");
 
-/* Story and doom dialogs live outside .app and need the same control styles. */
+/* Card tracks and settlement confirmations share the dashboard control styles. */
 .card-track-dialog,
 .card-track-item,
 .card-track-face,
@@ -13,13 +13,6 @@
 .card-track-dialog, .card-track-face { box-shadow: none; }
 .card-track-dialog, .card-track-item { background: var(--panel); }
 .card-track-item { border-color: var(--line); }
-.card-track-head h2 {
-  font-family: "Songti SC", "Noto Serif CJK SC", SimSun, Georgia, serif;
-  font-size: 22px;
-  font-weight: 600;
-  letter-spacing: .05em;
-  color: var(--accent-strong);
-}
 .card-track-title { color: var(--accent-strong); font-weight: 600; }
 .card-track-status, .card-track-counter-label, .card-track-knowledge-label,
 .card-track-meta, .card-track-dialog button { font-weight: 600; }
@@ -28,13 +21,13 @@
 .card-track-knowledge-value { font-family: Georgia, "Times New Roman", serif; font-weight: 400; }
 .card-track-side-badge { border-color: var(--line); background: var(--panel); color: var(--accent-strong); font-weight: 600; }
 .card-track-progress-badge, .card-track-preview-badge { border-color: var(--accent-strong); background: var(--accent-strong); color: #fff; font-weight: 600; }
-.card-track-dialog :is(input, select, textarea) { border-color: var(--line); background: var(--panel); color: var(--ink); font-weight: 500; }
-.card-track-close, .card-track-progress button, .card-track-counter button, .card-track-retreat {
+:is(.card-track-dialog, .step-card-tracks) :is(input, select, textarea) { border-color: var(--line); background: var(--panel); color: var(--ink); font-weight: 500; }
+.card-track-progress button, .card-track-counter button, .card-track-retreat {
   border-color: var(--line);
   background: var(--panel);
   color: var(--accent-strong);
 }
-.card-track-close:hover, .card-track-progress button:hover, .card-track-counter button:hover, .card-track-retreat:hover {
+.card-track-progress button:hover, .card-track-counter button:hover, .card-track-retreat:hover {
   border-color: var(--accent);
   background: var(--accent-soft);
   color: var(--accent-strong);

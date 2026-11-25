@@ -2127,7 +2127,8 @@ async function completeEncounterFromFlow(harness) {
   harness.ctx.adventureRollContext = () => 'test-encounter';
   harness.ctx.bgmFlowStepId = () => harness.ctx.state.completed.encounter ? 'development' : 'encounter';
   harness.ctx.focusFlowStep = () => {};
-  vm.runInContext(fn('completeFlowStep'), harness.ctx);
+  harness.ctx.todayNemesisEncounter = () => null;
+  vm.runInContext(fn('todayEncounters') + '\n' + fn('completeFlowStep'), harness.ctx);
   await harness.ctx.completeFlowStep('encounter');
 }
 
@@ -2176,7 +2177,7 @@ test('once-per-battle limits and temporary card returns do not create encounter 
   assert.ok(harness.drawState.drawPile.includes('13536'));
 });
 
-test('the encounter step completes the Timeline Battle instead of showing buttons', async () => {
+test('the encounter step waits for Timeline Battle settlement before clearing delayed effects', async () => {
   const entry = drawnEntry('6403', 'Labyrinthian Vessel');
   const harness = settleHarness({
     diplomacyBonus: -2, activePiles: [[entry], []],
@@ -2203,6 +2204,13 @@ test('the encounter step completes the Timeline Battle instead of showing button
   assert.equal(harness.record.explorationDelays.queue[0].status, 'ready');
   assert.deepEqual(harness.ctx.createDelayedExplorationStepTools('encounter').buttons, [], '已到期的提醒也没有单独确认按钮');
   harness.ctx.state.completed = {};
+  await completeEncounterFromFlow(harness);
+  assert.equal(harness.ctx.state.completed.encounter, undefined);
+  assert.equal(harness.ctx.state.nextBattleTerrain.terrain, '特殊地形');
+  assert.equal(harness.drawState.temporaryRemoved.length, 1);
+  assert.equal(harness.record.explorationDelays.queue[0].status, 'ready');
+
+  harness.ctx.state.voyageEncounters = { [harness.ctx.state.day + ':timeline']: { result: 'external' } };
   await completeEncounterFromFlow(harness);
   assert.equal(harness.ctx.state.completed.encounter, true);
   assert.equal(harness.ctx.state.nextBattleTerrain, null);

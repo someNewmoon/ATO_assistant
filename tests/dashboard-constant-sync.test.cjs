@@ -188,7 +188,12 @@ function adventureRollHarness() {
     currentCycleConfig: () => ({ id: 'c1' }), ownsDashboardWriteLease: () => true,
     chooseAdventureRoll: async () => 'confirm',
     renderFlow: noop, renderDateTrack: noop, getStoryHref: ({ chapter, entry }) => chapter + '/' + entry,
-    window: { ATO_PAGE_ROUTER: { focusOrNavigate: href => opened.push(href) } },
+    bgmFlowStepId: () => 'survey',
+    leaveVoyage: async href => {
+      if (!await ctx.flushCampaignSave()) throw new Error('保存失败');
+      opened.push(href);
+    },
+    window: { alert: noop },
   });
   vm.runInContext(['surveyConstantData', 'pharosDreamConstants'].map(declaration).join('\n') +
     '\nlet pendingAdventureRoll = null, adventureRollBusy = false;\n' +

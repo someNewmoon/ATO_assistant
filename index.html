@@ -3110,7 +3110,7 @@
   </dialog>
 
   <script src="./assets/page-focus-router.js?v=20261125-no-blank"></script>
-  <script src="./assets/voyage-return.js?v=1"></script>
+  <script src="./assets/voyage-return.js?v=20261125-exploration-same-tab"></script>
   <script src="./assets/story-doom-card-data.js?v=20261014-card-face-audit2"></script>
   <script src="./assets/exploration-card-tags.js?v=20261018-card-audit1"></script>
   <script src="./assets/exploration-card-rules.js?v=20261018-card-audit1"></script>
@@ -10000,7 +10000,10 @@
 
     async function leaveVoyage(href, step, encounter = "", insideGesture = true, explorationRound = "") {
       const context = voyageContext(step, encounter);
-      if (explorationRound && step === "explore") context.explorationRound = explorationRound;
+      if (explorationRound && step === "explore") {
+        context.explorationRound = explorationRound;
+        context.sameTab = typeof window.ATOAndroid?.openModuleTab !== "function";
+      }
       if (!context.accountId || !ownsDashboardWriteLease()) throw new Error("请在可编辑的战役主控台开启航行入口。");
       const voyage = window.ATO_VOYAGE;
       const prior = encounter && state.voyageEncounters?.[encounter];
@@ -10013,7 +10016,7 @@
       if (!await flushCampaignSave()) throw new Error("当前航行进度尚未保存，请重试。");
       if (!sameVoyage(entry)) throw new Error("本次航行的存档或日期已变更。");
       if (encounter) renderFlow();
-      await voyage.navigate(voyage.resumeUrl(entry) || voyage.carry(href, entry), insideGesture);
+      await voyage.navigate(voyage.resumeUrl(entry) || voyage.carry(href, entry), insideGesture, { sameTab: entry.sameTab });
     }
 
     function wireFlowVoyageLink(anchor, stepId, scene, explorationRound = "") {

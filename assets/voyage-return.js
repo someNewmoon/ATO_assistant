@@ -79,8 +79,8 @@
     return true;
   }
 
-  function navigate(href, insideGesture = false) {
-    if (window.ATO_PAGE_ROUTER?.focusOrNavigate) {
+  function navigate(href, insideGesture = false, { sameTab = false } = {}) {
+    if (!sameTab && window.ATO_PAGE_ROUTER?.focusOrNavigate) {
       return window.ATO_PAGE_ROUTER.focusOrNavigate(href, { insideGesture });
     }
     location.assign(href);
@@ -118,7 +118,7 @@
         }
         try {
           if (!await beforeReturn()) throw new Error('当前修改尚未保存，请重试。');
-          const usedDashboard = await navigate(anchor.href);
+          const usedDashboard = await navigate(anchor.href, false, { sameTab: !story && entry?.sameTab });
           if (feedback && usedDashboard) feedback.textContent = '主控台已收到返回请求，请切换到主控台标签页查看。';
         } catch (error) {
           if (feedback) feedback.textContent = error.message;

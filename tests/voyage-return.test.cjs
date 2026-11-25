@@ -95,3 +95,31 @@ test('story readers see feedback when an existing dashboard accepts the return',
   assert.equal(feedback.hidden, false);
   assert.match(feedback.textContent, /主控台已收到返回请求/);
 });
+
+test('an exploration card voyage returns in the current tab after saving', async () => {
+  const location = new URL('http://localhost/story/?voyage=' + first);
+  const calls = [];
+  location.assign = href => calls.push(href);
+  let click;
+  const anchor = {
+    addEventListener: (_, handler) => { click = handler; },
+    setAttribute() {},
+    removeAttribute() {},
+    after() {},
+  };
+  const voyage = voyageHelper({
+    location,
+    document: { querySelectorAll: () => [anchor], createElement: () => ({ setAttribute() {} }) },
+    window: { ATO_PAGE_ROUTER: { focusOrNavigate: () => assert.fail('unexpected tab handoff') } },
+  });
+  const entry = voyage.create({ step: 'explore', explorationRound: 'test-card', sameTab: true }, first);
+  const paragraph = voyage.carry('/story/index.html?key=c1-3-19', entry);
+  await voyage.navigate(paragraph, true, { sameTab: entry.sameTab });
+  voyage.wireReturn('[data-story-voyage-return]', async () => {
+    calls.push('saved');
+    return true;
+  }, { storyReader: true });
+  assert.equal(anchor.textContent, '返回航行 · 探索');
+  await click({ button: 0, preventDefault() {} });
+  assert.deepEqual(calls, [paragraph, 'saved', voyage.returnUrl(entry)]);
+});

@@ -976,6 +976,10 @@ h2 {
   margin-top: 18px;
 }
 
+.reader-voyage-return[hidden] { display: none; }
+.reader-foot .reader-voyage-return { margin-top: 12px; }
+.reader-actions .reader-voyage-return { flex: none; }
+
 .link-panel {
   display: flex;
   flex-wrap: wrap;
@@ -1997,5 +2001,13 @@ button.battle-aibp-button {
 
   .entry-badge {
     width: max-content;
+  }
+
+  html:has(.reader-foot .reader-voyage-return:not([hidden])) {
+    scroll-padding-block-end: var(--story-tts-clearance, 0px);
+  }
+
+  .reader-foot:has(.reader-voyage-return:not([hidden])) {
+    margin-bottom: var(--story-tts-clearance, 0px);
   }
 }

@@ -610,12 +610,19 @@
     const themedCycle = ["c1", "c2", "c3", "c4", "c5"].includes(cycleId) ? cycleId : "";
     if (document.body.dataset.cycle !== themedCycle) document.body.dataset.cycle = themedCycle;
     window.ATO_CYCLE_SYMBOLS?.setModuleLogo(storyMark, "story", "../../");
-    document.querySelectorAll("[data-cycle-link]").forEach((link) => {
-      const url = new URL(link.getAttribute("href"), window.location.href);
-      if (cycleId) url.searchParams.set("cycle", cycleId);
-      link.href = url.href;
-    });
+    updateRecordLinks(cycleId);
     return book;
+  }
+
+  function updateRecordLinks(cycleId) {
+    const voyage = window.ATO_VOYAGE;
+    const story = voyage?.storyUrl(location.href);
+    for (const link of document.querySelectorAll("[data-cycle-link]")) {
+      const url = new URL(link.href);
+      if (cycleId) url.searchParams.set("cycle", cycleId);
+      if (story) url.searchParams.set("returnStory", story);
+      link.href = voyage?.carry(url.href, voyage.current()) || url.href;
+    }
   }
 
   function selectedChapterKey() {
@@ -1257,6 +1264,12 @@
       quickConfig.append(field);
     }
     document.body.append(statusBox, overlay, cloneInput, importInput);
+    if (window.ATO_VOYAGE?.current() && window.ResizeObserver) {
+      new ResizeObserver(() => {
+        const clearance = statusBox.getBoundingClientRect().height + 24;
+        document.documentElement.style.setProperty("--story-tts-clearance", clearance + "px");
+      }).observe(statusBox);
+    }
 
     return { engineSelect, configButton, statusBox, overlay, cloneInput, importInput };
   }
@@ -4114,7 +4127,10 @@
     if (entry.encounterKey) params.set("encounter", entry.encounterKey);
     params.set("entry", entry.id);
     if (cloudStoryStarted) params.set("key", entry.key);
-    window.history.replaceState(null, "", `${window.location.pathname}?${params.toString()}`);
+    const url = `${window.location.pathname}?${params.toString()}`;
+    const voyage = window.ATO_VOYAGE;
+    window.history.replaceState(null, "", voyage?.carry(url, voyage.current()) || url);
+    updateRecordLinks(entryBookId(entry).replace(/\.5$/, ""));
   }
 
   function pharosTitleAnswer(entry) {
@@ -5394,4 +5410,4 @@
   void startStory();
 })();
 
-window.ATO_VOYAGE?.wireReturn(".home-link:not(.record-link)");
+window.ATO_VOYAGE?.wireReturn(".story-navigation .home-link:not(.record-link), [data-story-voyage-return]", undefined, { storyReader: true });

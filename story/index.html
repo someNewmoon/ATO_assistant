@@ -6,7 +6,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>ATO 故事书跳转器</title>
-    <link rel="stylesheet" href="./assets/styles.css?v=20261125-dialogue-turns" />
+    <link rel="stylesheet" href="./assets/styles.css?v=20261125-voyage-reader" />
     <link rel="stylesheet" href="../api/cycle-theme.css" />
   <script src="../story/data/english-source-data.js?v=20261011-english4"></script>
   <script src="../assets/theme.js?v=20261114-light-sidebar1" defer></script>
@@ -61,7 +61,7 @@
 
       <div class="quick-row">
         <button id="goButton" type="button">读取</button>
-        <button id="backButton" type="button" title="返回上一段">返回</button>
+        <button id="backButton" type="button" title="返回上一段">返回上一段</button>
       </div>
 
       <div class="memory-tools">
@@ -130,6 +130,7 @@
             <option value="2">2x</option>
           </select>
           <div id="entryBadge" class="entry-badge">----</div>
+          <a class="home-link reader-voyage-return" data-story-voyage-return hidden href="../index.html">返回航行</a>
         </div>
       </header>
 
@@ -141,13 +142,14 @@
 
       <footer class="reader-foot">
         <div id="linkPanel" class="link-panel"></div>
+        <a class="home-link reader-voyage-return" data-story-voyage-return hidden href="../index.html">返回航行</a>
       </footer>
     </main>
 
     <script src="../assets/campaign-session.js?v=20260917"></script>
     <script src="../assets/campaign-notes.js?v=20261015"></script>
     <script src="../assets/page-focus-router.js?v=20261125-no-blank"></script>
-  <script src="../assets/voyage-return.js?v=1"></script>
+  <script src="../assets/voyage-return.js?v=2"></script>
     <!-- 公共仓库使用占位数据；本地完整数据存在时由后一项覆盖。 -->
     <script src="./storybook-placeholder.js?v=20260813"></script>
     <!-- 官方版正文有十几兆，民间版用不到；只有浏览器已选官方版时才在首屏加载。 -->
@@ -179,7 +181,7 @@
     <script src="../assets/story-doom-card-data.js?v=20261014-card-face-audit2"></script>
     <script src="./assets/rule-highlights.js?v=20261125-narration"></script>
     <script src="./assets/reading-highlight.js?v=20261125-narration"></script>
-    <script src="./assets/app.js?v=20261125-dialogue-turns"></script>
+    <script src="./assets/app.js?v=20261125-voyage-reader"></script>
     <script src="./assets/centimanes.js?v=20261020-record-live1"></script>
     <script src="./assets/cryptic/glyph-catalog.js?v=20261004-manual1"></script>
     <script src="./assets/cryptic/vendor/text-format.js?v=20261004-manual1"></script>

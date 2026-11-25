@@ -8286,7 +8286,7 @@
       const story = getInwardOdysseyStoryLink(entry);
       link.href = story.href;
       link.textContent = story.label;
-      link.addEventListener("click", () => window.ATO_BGM?.setScene?.(story.bgm));
+      wireFlowVoyageLink(link, "story", story.bgm);
       actions.appendChild(link);
       if (entry) {
         const done = document.createElement("button");
@@ -9239,7 +9239,7 @@
         const { bgm, ...options } = pending.route;
         const href = getStoryHref(options);
         window.ATO_BGM?.setScene?.(bgm);
-        await leaveVoyage(href, bgmFlowStepId(), "", false);
+        await leaveVoyage(href, key.startsWith("pharos:") ? "story" : bgmFlowStepId(), "", false);
       } catch (error) {
         if (stillCurrent()) window.alert(error?.message || String(error));
       } finally {
@@ -10102,6 +10102,19 @@
       await voyage.navigate(voyage.resumeUrl(entry) || voyage.carry(href, entry), insideGesture);
     }
 
+    function wireFlowVoyageLink(anchor, stepId, scene) {
+      if (scene) {
+        anchor.dataset.bgmStage = scene;
+        anchor.title = [anchor.title, "自动模式下临时切换背景音乐；手动锁定时保持当前音乐"].filter(Boolean).join("；");
+      }
+      anchor.addEventListener("click", event => {
+        if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+        event.preventDefault();
+        if (scene) window.ATO_BGM?.setScene?.(scene);
+        void leaveVoyage(anchor.href, stepId).catch(error => window.alert(error.message));
+      });
+    }
+
     function encounterControls(encounters) {
       const list = document.createElement("ul");
       list.className = "step-actions";
@@ -10231,6 +10244,10 @@
         }
         if (stepId === "development" && cachedArgoRecord?.explorationDelays
           && !await processExplorationDelays("development")) return;
+        if (stepId === "story") {
+          const outstanding = storyOutstandingItems();
+          if (outstanding.length && !window.confirm(`剧情还有待处理事项：\n${outstanding.join("\n")}\n\n确认继续？`)) return;
+        }
         if (!stillCurrent()) return;
         state.completed[stepId] = true;
         reviewedFlowStep = null;
@@ -10279,6 +10296,15 @@
           hint.className = "flow-footer-hint";
           hint.textContent = "当前探索牌组仍在结算，结束后才能继续。";
           footer.appendChild(hint);
+        }
+        if (step.id === "story") {
+          const outstanding = storyOutstandingItems();
+          if (outstanding.length) {
+            const hint = document.createElement("span");
+            hint.className = "flow-footer-hint";
+            hint.textContent = outstanding.join(" · ");
+            footer.appendChild(hint);
+          }
         }
         complete.addEventListener("click", () => void completeFlowStep(step.id));
         if (step.kind !== "总是执行" && !pending.some(item => item.step === step.id)) {
@@ -10357,6 +10383,9 @@
           text.querySelector(`[data-exploration-token-reminder="${reminderIndex}"]`)
             ?.appendChild(createExplorationTokenPlacementTools(entry, item, field));
         });
+        if (step.id === "story") {
+          text.querySelectorAll(".mnemos-node-link").forEach(link => wireFlowVoyageLink(link, "story", "mnemos"));
+        }
         const actions = document.createElement("div");
         actions.className = "step-actions";
         if (step.id === "survey" && getCurrentSurveyConstantData()) {
@@ -10379,27 +10408,7 @@
           anchor.href = link.href;
           anchor.textContent = link.label;
           if (link.title) anchor.title = link.title;
-          // 带 bgm 的入口（冒险中枢 / R&R / 回忆突破 / 内蕴奥德赛 / 法洛斯之梦 / 主线 / 特殊事件 / 战斗）
-
-          // 自动模式下临时切曲；跳转交给 page-focus-router：多页模式会复用或新开
-          // 模块标签，让主控台留在这页继续播放；单页模式则在当前页切换。
-          // 这里不能再写 target="_blank" + rel="noopener"：noopener 会把新标签放进
-          // 另一个 browsing context group，故事书里的「返回主控台」就找不到原来
-          // 的主控台标签页，只能再开一个，表现为路由不回主控台。
-
-          if (link.bgm) {
-            anchor.dataset.bgmStage = link.bgm;
-            anchor.title = [anchor.title, "自动模式下临时切换背景音乐；手动锁定时保持当前音乐"].filter(Boolean).join("；");
-            anchor.addEventListener("click", () => {
-              const api = window.ATO_BGM;
-              if (api && typeof api.setScene === "function") api.setScene(link.bgm);
-            });
-          }
-          anchor.addEventListener("click", event => {
-            if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-            event.preventDefault();
-            void leaveVoyage(anchor.href, step.id).catch(error => window.alert(error.message));
-          });
+          wireFlowVoyageLink(anchor, step.id, link.bgm);
           actions.appendChild(anchor);
         });
         // 宿敌控制按钮排在 Map 按钮右边，两者同处标题行的操作区。
@@ -14432,6 +14441,17 @@
       return step.links || [];
     }
 
+    function storyOutstandingItems() {
+      const items = [];
+      const dreams = pharosTimelineForDay(state.day).filter(([, event]) => !event.entry);
+      if (dreams.length) items.push(`${dreams.length} 项航标梦境未掷骰`);
+      const inward = pendingInwardOdysseyEntries();
+      if (inward.length) items.push(`${inward.length} 段内部之旅待结算`);
+      const hope = storyRewardCount(state.storyRewards?.hope);
+      if (hope) items.push(`${hope} 枚希望待结算`);
+      return items;
+    }
+
     function todaySettlementItems() {
       const completed = state.completed || {};
       const items = [];
@@ -14449,13 +14469,8 @@
       }
       const tech = structureTechEvents().filter(event => event.kind !== "cooldown" && event.status !== "completed" && event.due);
       if (tech.length) items.push({ step: "development", label: `发展 · ${tech.length} 项科技时间线事项到期` });
-      const dreams = pharosTimelineForDay(state.day).filter(([, event]) => !event.entry);
-      if (dreams.length) items.push({ step: "story", label: `剧情 · ${dreams.length} 项航标梦境未掷骰` });
+      for (const label of storyOutstandingItems()) items.push({ step: "story", label: "剧情 · " + label });
       if (inwardExchangeDetails().available) items.push({ step: "story", label: "剧情末尾 · 内部之旅可消耗希望推进" });
-      const inward = pendingInwardOdysseyEntries();
-      if (inward.length) items.push({ step: "story", label: `剧情末尾 · ${inward.length} 段内部之旅待结算` });
-      const hope = storyRewardCount(state.storyRewards?.hope);
-      if (hope) items.push({ step: "story", label: `剧情 · ${hope} 枚希望待结算` });
       const doom = storyRewardCount(state.storyRewards?.doom);
       if (doom) items.push({ step: "doom", label: `灾祸 · ${doom} 枚灾厄待结算` });
       const doomCard = doomAdvanceDetails();

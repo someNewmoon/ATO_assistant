@@ -53,7 +53,7 @@
     let url;
     try { url = new URL(value, location.href); } catch { return ''; }
     if (url.origin !== location.origin || !/^\/story\/(?:index\.html)?$/.test(url.pathname)) return '';
-    const allowed = ['book', 'cycle', 'chapter', 'encounter', 'entry', 'key', 'squad'];
+    const allowed = ['book', 'cycle', 'chapter', 'module', 'encounter', 'entry', 'key', 'squad'];
     for (const name of [...url.searchParams.keys()]) if (!allowed.includes(name)) url.searchParams.delete(name);
     return url.pathname + url.search;
   }
@@ -79,12 +79,17 @@
     location.assign(href);
   }
 
-  function wireReturn(selector, beforeReturn = async () => true) {
+  function wireReturn(selector, beforeReturn = async () => true, { toStory = false, storyReader = false } = {}) {
     const entry = current();
-    if (!entry) return;
+    const story = toStory && storyUrl(route.searchParams.get('returnStory'));
+    if (!story && !entry) return;
+    const href = story ? carry(story, entry) : returnUrl(entry);
+    const label = story ? '保存并返回故事段落'
+      : storyReader && entry.step === 'story' ? '返回航行 · 剧情' : '返回航行';
     for (const anchor of document.querySelectorAll(selector)) {
-      anchor.href = returnUrl(entry);
-      anchor.textContent = '返回航行';
+      anchor.href = href;
+      anchor.textContent = label;
+      anchor.hidden = false;
       let returning = false;
       anchor.addEventListener('click', async event => {
         if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;

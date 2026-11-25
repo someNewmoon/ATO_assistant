@@ -1003,7 +1003,7 @@
   <link rel="stylesheet" href="../assets/mobile/record-hero.css?v=20261028-apk-portrait1">
   <script src="../assets/mobile/layout.js?v=20261028-apk-portrait1" defer></script>
   <script src="../assets/mobile/record-hero.js?v=20261028-apk-portrait1" defer></script>
-  <script src="../assets/voyage-return.js?v=1"></script>
+  <script src="../assets/voyage-return.js?v=2"></script>
 </head>
 <body>
   <main class="app">
@@ -1391,7 +1391,7 @@
       while (heroLoading || heroSaveInFlight) await new Promise(resolve => setTimeout(resolve, 40));
       if (state._dirty) await saveToServer();
       return !state._dirty;
-    });
+    }, { toStory: true });
 
     function queueSave() {
       state._dirty = true;

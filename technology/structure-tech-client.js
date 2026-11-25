@@ -577,6 +577,7 @@
         source.tier = Math.max(source.tier, Number(action.tier) || 0);
       }
       const available = action => !action.disabled && action.available !== false;
+      const cooldown = item => !available(item) && /冷却/.test(item.reason || "");
       sources.sort((a, b) => Number(b.actions.some(available)) - Number(a.actions.some(available)) || b.tier - a.tier);
       const sourceLabel = item => item.sourceLabel || item.title || item.techKey;
       const breeding = actions.every(item => item.sacrifice && item.models?.length);
@@ -734,7 +735,7 @@
             const pick = doc.createElement('button'); pick.type = 'button';
             pick.className = 'structure-tech-source-pick';
             pick.name = `choice:techSource:${item.techKey}`;
-            pick.textContent = sourceLabel(item);
+            pick.textContent = sourceLabel(item) + (item.actions.every(cooldown) ? ' · 冷却中' : '');
             pick.dataset.available = String(usable);
             pick.title = [sourceLabel(item), usable ? '' : reason || '当前不可用'].filter(Boolean).join('；');
             pick.addEventListener('click', () => {
@@ -1428,8 +1429,10 @@
         const date = message.match(/D(?:ay\s*)?(\d+)/i)?.[1];
         let label = ok ? '可使用' : '待配置';
         if (!ok) {
-          if (/待结算/.test(message)) label = `待结算${date ? ` · D${date}` : ''}`;
-          else if (/冷却/.test(message)) label = `冷却中${date ? ` · D${date}` : ''}`;
+          const blocked = actions.every(cooldown) ? actions[0].reason : "";
+          const cooldownDay = (blocked || message).match(/冷却[^D]*D(?:ay\s*)?(\d+)/i)?.[1];
+          if (cooldownDay || blocked) label = `冷却中${cooldownDay ? ` · D${cooldownDay}` : ''}`;
+          else if (/待结算/.test(message)) label = `待结算${date ? ` · D${date}` : ''}`;
           else if (/不足/.test(message)) label = message.match(/[^，。；：·]*不足/)?.[0]?.trim() || '资源不足';
           else if (/^没有/.test(message)) label = message;
           else if (/请选择型号/.test(message)) label = '待选型号';

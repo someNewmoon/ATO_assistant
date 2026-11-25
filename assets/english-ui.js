@@ -311,8 +311,8 @@
     "弃置": "Discard", "弃牌": "Discard pile", "地形": "Terrain", "仇敌": "Adversary", "侦察船": "Scout ship",
     "生产": "Production", "揭示": "Reveal", "揭示水下": "Reveal underwater", "揭示水上": "Reveal surface", "百臂巨人语": "Centimanes", "巴别语": "Babelian", "塞壬语": "Siren",
     "主线故事": "Main Story", "特殊事件": "Special Events", "特殊后果": "Special Aftermath", "战斗设置": "Battle Setups",
-    "冒险中枢": "Adventure Hubs", "冒险枢纽": "Adventure Hubs", "休憩冒险": "R&R Adventures", "内蕴奥德赛": "Inward Odyssey",
-    "法洛斯之梦": "Dreams of Pharos", "循环纪": "Cycle", "航行时间表": "Timeline", "航行时间线": "Timeline",
+    "冒险中枢": "Adventure Hubs", "分支冒险": "Branch Adventures", "休整冒险": "R&R Adventures", "冒险分支对照表": "Adventure Hub index", "冒险枢纽": "Adventure Hubs", "休憩冒险": "R&R Adventures", "内蕴奥德赛": "Inward Odyssey",
+    "法洛斯之梦": "Dreams of Pharos", "航标梦境": "Dreams of Pharos", "循环纪": "Cycle", "航行时间表": "Timeline", "航行时间线": "Timeline",
   };
   const statusLabels = {
     "卷轴": "Scroll", "石板": "Tablet", "圣典": "Codex", "错误": "Error", "条目": "Entry",

@@ -320,12 +320,12 @@
 
   const moduleNames = [
     { test: /^main$/, label: "主线剧情" },
-    { test: /^hub-/, label: "冒险中枢" },
+    { test: /^hub-/, label: "分支冒险" },
     { test: /mnemos/, label: "回忆突破" },
     { test: /inward-odyssey/, label: "内蕴奥德赛" },
-    { test: /dreams-of-pharos/, label: "法洛斯之梦" },
+    { test: /dreams-of-pharos/, label: "航标梦境" },
     { test: /special-event/, label: "特殊事件" },
-    { test: /rr-adventures/, label: "R&R 冒险" },
+    { test: /rr-adventures/, label: "休整冒险" },
     { test: /ten-thousand/, label: "一万个日夜" },
     { test: /battle/, label: "战斗模块" },
   ];
@@ -637,10 +637,18 @@
   function chapterDisplayName(chapter) {
     const found = moduleNames.find((item) => item.test.test(chapter.key));
     if (!found) return chapter.title;
+    if (/^(?:rr-adventures|dreams-of-pharos)$/.test(chapter.key)) return found.label;
     if (chapter.key.startsWith("hub-")) {
-      return `${found.label} · ${chapter.title.replace(/^Hub\s+/i, "")}`;
+      const title = chapter.title.replace(/^(?:Hub|冒险枢纽|冒险中枢|枢纽)\s*/i, "");
+      return `${found.label} · ${title}`;
     }
     return `${found.label} · ${chapter.title}`;
+  }
+
+  function entryChapterLabel(entry) {
+    if (entry.chapterKey === "rr-adventures") return "休整冒险";
+    if (entry.chapterKey === "dreams-of-pharos") return "航标梦境";
+    return entry.chapter?.replace(/冒险枢纽|冒险中枢/g, "分支冒险") || "未命名模块";
   }
 
   function currentChapterEntries(book = currentBook()) {
@@ -744,11 +752,21 @@
       encounterKey: params.get("encounter") || params.get("battle") || "",
       entryId: params.get("entry") || params.get("id") || "",
       entryKey: params.get("key") || "",
+      cardFace: params.get("face") || "",
       query: params.get("q") || params.get("search") || "",
     };
   }
 
   function entryFromDeepLink(book, target) {
+    if (/^[1-9][AB]$/.test(target.cardFace) && /^(?:story|doom)-card$/.test(selectedChapterKey())) {
+      const entries = currentChapterEntries(book);
+      const index = entries.findIndex(entry => entry.title.startsWith(target.cardFace + " "));
+      // Some books split the rules into the heading immediately below the card's title.
+      const next = index >= 0 || target.cardFace === "1A" ? entries[index + 1] : null;
+      const rules = next && /^规则(?:\s|$)/.test(next.title) ? next : entries[index];
+      if (rules) return rules;
+    }
+
     if (target.entryKey) {
       const byKey = book.entries.find((entry) => entry.key === target.entryKey);
       return byKey || null;
@@ -962,7 +980,7 @@
           .replace(/\s+/g, " ").slice(0, 72);
         button.innerHTML = `
           <span class="result-id">${escapeHtml(title)}</span>
-          <span class="result-section">${escapeHtml(entry.encounter ? `${entry.chapter} / ${entry.encounter}` : entry.chapter || "未命名模块")}</span>
+          <span class="result-section">${escapeHtml(entry.encounter ? `${entryChapterLabel(entry)} / ${entry.encounter}` : entryChapterLabel(entry))}</span>
           <span class="result-preview">${escapeHtml(previewText)}</span>
         `;
         button.addEventListener("click", () => showEntry(entry, true));
@@ -3460,7 +3478,14 @@
     const supplementAibpLink = plainLayoutSupplement && displayEntry.chapterKey === "battle"
       ? battleAibpLink(displayEntry)
       : "";
-    storyText.innerHTML = html + envelopeLink + supplementAibpLink + renderOfficialScan(entry);
+    let ruleCard = "";
+    if (/^(?:story|doom)-card$/.test(entry.chapterKey) && !activeOfficialScan(entry)?.src) {
+      const officialText = officialEntries.get(`${currentBook()?.id}:${entry.key}`)?.officialText;
+      const sourceText = storyVersion === "官方版" && supportsOfficialVersion() ? officialText : displayEntry.text;
+      // The card's title entry may contain only narrative. Show the printed rules there as well.
+      if (!/^规则(?:\s|$)/.test(entry.title) || !sourceText?.trim()) ruleCard = renderRuleCardImage(entry);
+    }
+    storyText.innerHTML = ruleCard + html + envelopeLink + supplementAibpLink + (ruleCard ? "" : renderOfficialScan(entry));
     if (displayEntry.html && !isTranslatedSupplement && mixedMediaRuntime()?.enhanceHTML) {
       mixedMediaRender = mixedMediaRuntime().enhanceHTML(
         storyText.querySelector(".story-html"), mixedMediaContext(displayEntry), displayEntry.text || ""
@@ -3579,6 +3604,24 @@
     storeSecondScreenStoryContentPreference();
     syncStoryProjectionMenu();
     scheduleSecondScreenStorySnapshot();
+  }
+
+  function renderRuleCardImage(entry) {
+    if (!/^(?:story|doom)-card$/.test(entry.chapterKey)) return "";
+    const book = currentBook();
+    const cycle = window.ATO_STORY_DOOM_DATA?.cycles?.[book.id];
+    const cards = entry.chapterKey === "doom-card" ? cycle?.doomSteps : cycle?.storySteps;
+    let title = entry.title;
+    if (/^规则(?:\s|$)/.test(title)) {
+      const entries = book.entries.filter(item => item.chapterKey === entry.chapterKey);
+      const index = entries.findIndex(item => item.key === entry.key);
+      title = index === 0 ? "1A" : entries[index - 1]?.title || "";
+    }
+    const face = title.match(/^[1-9][AB]\b/)?.[0];
+    const card = cards?.find(card => card.label === face);
+    if (!card?.image) return "";
+    const src = new URL(card.image, new URL("../", location.href)).href;
+    return `<figure class="rule-card-fallback"><img src="${escapeHtml(src)}" alt="${escapeHtml(entry.title)} · ${escapeHtml(card.label)}"></figure>`;
   }
 
   function renderOfficialScan(entry) {
@@ -4187,7 +4230,7 @@
     params.set("chapter", entry.chapterKey || "all");
     if (entry.encounterKey) params.set("encounter", entry.encounterKey);
     params.set("entry", entry.id);
-    if (cloudStoryStarted) params.set("key", entry.key);
+    if (cloudStoryStarted || /^(?:story|doom)-card$/.test(entry.chapterKey)) params.set("key", entry.key);
     const url = `${window.location.pathname}?${params.toString()}`;
     const voyage = window.ATO_VOYAGE;
     window.history.replaceState(null, "", voyage?.carry(url, voyage.current()) || url);
@@ -4237,7 +4280,7 @@
     copyParagraphButton.disabled = false;
     syncSelectorsToEntry(entry);
 
-    sectionLabel.textContent = entry.encounter ? `${entry.chapter} / ${entry.encounter}` : entry.chapter || "未命名模块";
+    sectionLabel.textContent = entry.encounter ? `${entryChapterLabel(entry)} / ${entry.encounter}` : entryChapterLabel(entry);
     renderEntryTitle(entry);
     entryBadge.textContent = entry.id;
 

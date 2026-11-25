@@ -159,7 +159,8 @@
     const common = new Set([
       'drawAiButton', 'undoAiButton', 'confirmAiButton', 'breakAiComboButton', 'continueAiComboButton',
       'defeatAiAsBpButton', 'criticalAiAsBpButton',
-      'drawBpButton', 'undoBpButton', 'discardBpButton', 'defeatBpButton', 'criticalBpButton', 'returnBpTopButton'
+      'drawBpButton', 'undoBpButton', 'discardBpButton', 'defeatBpButton', 'criticalBpButton', 'returnBpTopButton',
+      'addSwDamage2Button', 'removeSwDamage2Button', 'addLabyrinthaurosSpecialBpButton', 'removeLabyrinthaurosSpecialBpButton'
     ]);
     for (const actions of cards.querySelectorAll('.draw-actions')) {
       if (actions.querySelector('.table-deck-tools')) continue;

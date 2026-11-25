@@ -1855,10 +1855,11 @@ test('merged source forms preserve separate reward and cooldown locks for each c
   const state = () => f.state.campaign.sections.dashboard.profiles.chosen.cycles.c5.state;
   state().day = 9; f.state.campaign.sectionRevisions.dashboard++;
   await f.client.complete({ ...target, techKey: 'titan breeding', operationId: 'lower' });
-  const panel = f.client.createActionPanel({ ...f.target, techKey: undefined });
+  const panel = f.client.createActionPanel({ ...f.target, techKey: undefined, scope: "voyage" });
   await panel.ready;
   change(control(panel, 'resultTitan'), 'tt_earthshaker');
   assert.equal(findNode(panel, node => node.className === 'structure-tech-action-use').disabled, true, 'completed reward keeps its cooldown lock');
+  assert.equal(findNode(panel, node => node.className === 'structure-tech-entry-state').textContent, '冷却中 · D16');
   state().day = 16; f.state.campaign.sectionRevisions.dashboard++;
   await panel.refresh();
   change(control(panel, 'resultTitan'), 'tt_shadowdancer');

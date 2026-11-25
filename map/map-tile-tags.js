@@ -19,14 +19,14 @@ window.ATO_MAP_TILE_TAGS = {
         },
         {
             "id": "central_adventure",
-            "label": "中枢冒险",
+            "label": "分支冒险",
             "shortcut": "3",
             "cycles": [],
             "scope": "tile"
         },
         {
             "id": "rr_adventure",
-            "label": "RR冒险",
+            "label": "休整冒险",
             "shortcut": "4",
             "cycles": [],
             "scope": "tile"

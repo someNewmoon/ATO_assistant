@@ -140,7 +140,7 @@ window.ATO_BGM_MANIFEST = {
       gain: 0.5,
     },
     pharos: {
-      label: "法洛斯之梦",
+      label: "航标梦境",
       short: "法洛斯",
       files: ["LB_Dreams_of_Pharos.mp3", "LB_Dreams_of_Pharos.ogg"],
       gain: 0.5,

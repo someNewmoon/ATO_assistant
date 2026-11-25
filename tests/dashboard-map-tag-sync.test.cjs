@@ -95,7 +95,7 @@ test('revisits retain the latest revealed tile and marker locations follow saved
   assert.equal(ctx.state.mapCurrentTileIsLatestRevealed, false);
 });
 
-for (const [tileId, adventure] of [['055', '中枢'], ['059', 'R&R']]) {
+for (const [tileId, adventure] of [['055', '分支冒险'], ['059', '休整冒险']]) {
   test(`C3 ${tileId} reminds in Expedition while unexplored, even if another tile was revealed later`, () => {
     const { ctx } = harness();
     const cycle = cycles.find(item => item.id === 'c3');
@@ -130,7 +130,7 @@ test('Expedition uses the current map when the dashboard snapshot is stale', () 
 
   const reminders = ctx.getStepTrackReminders('survey');
   assert.equal(reminders.length, 1);
-  assert.equal(reminders[0].tag.label, 'R&R');
+  assert.equal(reminders[0].tag.label, '休整冒险');
   assert.ok(reminders[0].desc.includes('059'));
   saved.explored = { '059': true };
   assert.equal(ctx.getStepTrackReminders('survey').length, 0);

@@ -510,10 +510,10 @@ Add these script tags after the main viewer script:
       reminders.push("乌尔-生成：落败仍获得 1 张随机的剧场生成装备卡，请手动抽取。");
     }
     if (won && ["HERMESIAN_PURSUER", "THE_BURDEN", "DAHAKA", "TITAN_X"].includes(apostle)) {
-      const event = ["HERMESIAN_PURSUER", "THE_BURDEN"].includes(apostle) ? "法洛斯之梦"
+      const event = ["HERMESIAN_PURSUER", "THE_BURDEN"].includes(apostle) ? "航标梦境"
         : apostle === "DAHAKA" ? "一万个日夜" : "浅滩布道";
       reminders.push(`在时间线上添加 2 天后的${event}事件／冒险。`);
-    } else if (apostle === "THE_BURDEN") reminders.push("在时间线上添加 2 天后的法洛斯之梦事件。");
+    } else if (apostle === "THE_BURDEN") reminders.push("在时间线上添加 2 天后的航标梦境事件。");
     if (outcome === "victory" && ["THE_NIETZSCJEAN", "SUN_DESCENDANT", "THE_BABELIAN_LUNACY", "UR_FLEECE"].includes(apostle)) {
       reminders.push("意料之外的阿尔戈英雄获得 1 个回忆节点，请手动记录。");
       if (apostle === "THE_BABELIAN_LUNACY") reminders.push("在时间线上添加 2 天后的一万个日夜冒险。");

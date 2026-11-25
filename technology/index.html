@@ -1170,7 +1170,7 @@ button.gear-group-name:hover {
   <script src="voyage-action-rules.js?v=20261110-chronosail"></script>
   <script src="exploration-tech-rules.js?v=20261017-automation-audit4"></script>
   <script src="structure-tech-rules.js?v=20261118-moon-resource-types1"></script>
-  <script src="structure-tech-client.js?v=20261019-negotiation-rows2"></script>
+  <script src="structure-tech-client.js?v=20261125-cooldown"></script>
 <script src="../hero/hero-catalog.js?v=20261117-battle-polish"></script>
 <script src="gear-inventory.js?v=20261120-copy-limits"></script>
 <script src="loadout-image.js?v=20261124"></script>
@@ -3515,6 +3515,13 @@ const count = document.getElementById('count');
 const search = document.getElementById('search');
 const accountSelect = document.getElementById('accountSelect');
 const returnMain = document.getElementById('returnMain');
+if (window.ATO_VOYAGE?.current()?.step === 'development') {
+  returnMain.textContent = '保存并返回发展';
+  const hint = document.createElement('p');
+  hint.className = 'tech-discovery-message has-discovery';
+  hint.textContent = '选择要研发的科技并解锁，再保存返回发展步骤。';
+  document.getElementById('mainView').before(hint);
+}
 const languageToggle = document.getElementById('languageToggle');
 const cycleBadge = document.getElementById('cycleBadge');
 const clearUnlocked = document.getElementById('clearUnlocked');
@@ -4432,6 +4439,7 @@ function unlockedTechSnapshot() {
 }
 async function writeSnapshotToMainArchive(snapshot, targetCycleId = requestedMainCycleId()) {
   const cycleId = targetCycleId;
+  const voyage = window.ATO_VOYAGE?.current();
   await mutateCampaignDashboardArchive((current) => {
     let archive = current;
     if (!isPlainObject(archive) || !isPlainObject(archive.profiles)) {
@@ -4451,16 +4459,21 @@ async function writeSnapshotToMainArchive(snapshot, targetCycleId = requestedMai
     const profileId = snapshot.accountId;
     if (!profileId || !archive.profiles[profileId]) throw new Error('原科技档案已不存在，请刷新页面后重试。');
     const profile = archive.profiles[profileId];
-    const existing = profile.cycles?.[cycleId]?.state?.unlockedTech;
+    const saved = profile.cycles?.[cycleId]?.state;
+    const researchVisit = saved && voyage?.step === 'development' && voyage.accountId === campaignSession.accountId
+      && voyage.profileId === profileId && voyage.cycle === cycleId && voyage.day === String(saved.day);
+    const startResearch = researchVisit && saved.developmentResearch?.day !== voyage.day;
+    const existing = saved?.unlockedTech;
     const { savedAt: _previousTime, ...previousValues } = existing || {};
     const { savedAt: _nextTime, ...nextValues } = snapshot;
-    if (existing && technologyStateValuesEqual(previousValues, nextValues)) return null;
+    if (!startResearch && existing && technologyStateValuesEqual(previousValues, nextValues)) return null;
     profile.activeCycleId ||= cycleId;
     if (!isPlainObject(profile.cycles)) profile.cycles = {};
     profile.cycles[cycleId] ||= { id: cycleId, state: {} };
     profile.cycles[cycleId].id = cycleId;
     if (!isPlainObject(profile.cycles[cycleId].state)) profile.cycles[cycleId].state = {};
     profile.cycles[cycleId].state.unlockedTech = snapshot;
+    if (startResearch) saved.developmentResearch = { day: voyage.day, keys: snapshot.unlockedKeys };
     return archive;
   });
 }

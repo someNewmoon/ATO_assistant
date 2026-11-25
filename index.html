@@ -3197,11 +3197,11 @@
   <script src="./technology/exploration-tech-rules.js?v=20261017-automation-audit4"></script>
   <script src="./technology/structure-tech-rules.js?v=20261117-resource-types1"></script>
   <script src="./technology/investigation-rules.js?v=20261018-dark-names1"></script>
-  <script src="./technology/structure-tech-client.js?v=20261020-exploration-fast1"></script>
+  <script src="./technology/structure-tech-client.js?v=20261125-cooldown"></script>
   <script src="./assets/exploration-trade-dialog.js?v=20261019-exploration-trade1"></script>
   <script src="./map/titan-markers.js?v=20261016-map-titan1"></script>
   <script src="./map/titan-capture-rules.js?v=20261016-map-titan1"></script>
-  <script src="./map/map-tile-tags.js?v=20261016-icon-scope"></script>
+  <script src="./map/map-tile-tags.js?v=20261125-adventures"></script>
   <script src="./map/frozen-time-rules.js?v=20261110-silo6"></script>
   <script src="./map/map-data.js?v=20260730-cycle-labels"></script>
   <script src="./map/nemesis-path.js?v=20261120-toolbox"></script>
@@ -3220,7 +3220,7 @@
   <script src="./assets/jsave-import.js?v=20261014-record-tracks1"></script>
   <script src="./assets/record-attachments.js?v=20261009"></script>
   <script>window.ATO_BGM_CONFIG = { expect: "bgm21" };</script>
-  <script src="./assets/bgm/manifest.js?v=20261110-round-end-bgm21"></script>
+  <script src="./assets/bgm/manifest.js?v=20261125-adventure-terms"></script>
   <script src="./assets/bgm/bgm.js?v=20261014-volume-bgm21"></script>
   <script>
     const legacyStorageKey = "ato-campaign-dashboard-v1";
@@ -3933,7 +3933,7 @@
 
     const pharosDreamConstants = {
       c1: {
-        title: "法洛斯之梦",
+        title: "航标梦境",
         module: "dreams-of-pharos",
         boxes: [
           ["1", "1", "卷轴"],
@@ -3949,7 +3949,7 @@
         ],
       },
       c2: {
-        title: "法洛斯之梦",
+        title: "航标梦境",
         module: "dreams-of-pharos",
         boxes: [
           ["1", "1", "卷轴"],
@@ -3965,7 +3965,7 @@
         ],
       },
       c3: {
-        title: "法洛斯之梦",
+        title: "航标梦境",
         module: "dreams-of-pharos",
         boxes: [
           ["1", "1", "卷轴"],
@@ -5485,6 +5485,8 @@
           : knowledge,
         cardTracksVersion: 2,
         unlockedTech: isPlainObject(value.unlockedTech) ? value.unlockedTech : null,
+        developmentResearch: value.developmentResearch?.day === String(day) && Array.isArray(value.developmentResearch.keys)
+          ? value.developmentResearch : null,
         events: Array.isArray(value.events) ? cloneJson(value.events) : [],
         nextBattleTerrain: normalizeNextBattleTerrain(value.nextBattleTerrain),
         completed: isPlainObject(value.completed) ? cloneJson(value.completed) : {},
@@ -7362,6 +7364,7 @@
         await applyStructureTechCommit({ campaign }, target, { saveMessage });
         if (cardDialog.open) renderCardTrackDialog();
         campaignSyncChannel?.postMessage({ revision: result.sections.dashboard, pageId: dashboardPageId });
+        return true;
       } catch (error) {
         window.alert(error?.code === "SAVE_CONFLICT" ? "战役已在其他页面更新，请核对最新卡面和计数后重试。" : error.message);
         await syncDashboardFromExternalUpdate();
@@ -7552,7 +7555,8 @@
       const context = adventureRollContext();
       const cost = await confirmDoomAdvance(details);
       if (cost === null || context !== adventureRollContext()) return;
-      return commitStoryTrackChange(savedState => applyDoomAdvance(savedState, details, cost), "灾厄卡已结算");
+      const saved = await commitStoryTrackChange(savedState => applyDoomAdvance(savedState, details, cost), "灾厄卡已结算");
+      if (saved) await openCardTrackRules("doom", details.next);
     }
 
     function createDoomAdvanceTools() {
@@ -7579,6 +7583,25 @@
       return panel;
     }
 
+    function cardTrackRulesHref(key, card) {
+      const cycle = currentCycleConfig();
+      // The Story Book includes these rule chapters only for the supported cycles.
+      const supported = key === "doom" ? ["c1", "c3"] : ["c1", "c2", "c3"];
+      return card && cycle.storyBook && supported.includes(cycle.id)
+        ? getStoryHref({ chapter: key === "doom" ? "doom-card" : "story-card", face: card.label })
+        : "";
+    }
+
+    async function openCardTrackRules(key, card) {
+      const href = cardTrackRulesHref(key, card);
+      if (!href) {
+        if (card && !elements.cardTrackDialog.open) openCardTrackDialog(key);
+        return;
+      }
+      try { await leaveVoyage(href, key, "", false); }
+      catch (error) { window.alert(error.message); }
+    }
+
     function advanceCardTrack(key) {
       const tracks = ensureCardTracks();
       if (!tracks[key]) return;
@@ -7587,6 +7610,7 @@
       saveState();
       renderCardTrackDialog();
       if (typeof renderFlow === "function") renderFlow();
+      if (key === "story") void openCardTrackRules(key, activeStoryDoomData().storySteps[tracks[key].position - 1]);
     }
 
     function retreatCardTrack(key) {
@@ -8142,15 +8166,15 @@
       const data = getCurrentSurveyConstantData();
       const target = getActiveSurveyHubTarget();
       if (!data || !target) return {
-        label: "冒险中枢",
+        label: "分支冒险",
         bgm: "hub",
-        href: getStoryHref({ module: "冒险中枢" }),
+        href: getStoryHref({ module: "hub" }),
       };
 
       const hub = findSurveyHub(data, target.itemId);
       const [, roll, title] = findSurveyHubBox(hub, target.boxId) || [];
       return {
-        label: "冒险中枢",
+        label: "分支冒险",
         bgm: "hub",
         title: `${hub?.title || ""}${roll ? ` ${roll}` : ""}${title ? ` · ${title}` : ""}`,
         href: getStoryHref({
@@ -8164,14 +8188,14 @@
       const data = getCurrentSurveyConstantData();
       const target = getActiveSurveyRrTarget();
       if (!data || !target) return {
-        label: "R&R",
+        label: "休整冒险",
         bgm: "rest",
         href: getStoryHref({ module: "rr" }),
       };
 
       const row = data.rr.find(([id]) => id === target.itemId);
       return {
-        label: "R&R",
+        label: "休整冒险",
         bgm: "rest",
         title: row ? `${row[0]} · ${row[1]}` : "",
         href: getStoryHref({
@@ -8185,7 +8209,7 @@
       const data = currentPharosDreamConstants();
       const target = getActivePharosDreamTarget();
       if (!data) return {
-        label: "法洛斯之梦",
+        label: "航标梦境",
         bgm: "pharos",
         href: getStoryHref({ chapter: "dreams-of-pharos" }),
       };
@@ -8751,7 +8775,7 @@
       summary.className = "survey-constant-group";
       const heading = document.createElement("div");
       heading.className = "survey-constant-heading";
-      heading.textContent = "冒险中枢总表";
+      heading.textContent = "冒险分支对照表";
 
       const table = document.createElement("div");
       table.className = "survey-hub-summary";
@@ -9017,7 +9041,7 @@
 
       const hubGroup = document.createElement("section");
       hubGroup.className = "survey-constant-group";
-      hubGroup.innerHTML = '<div class="survey-constant-heading">冒险中枢</div>';
+      hubGroup.innerHTML = '<div class="survey-constant-heading">分支冒险</div>';
       const hubGrid = document.createElement("div");
       hubGrid.className = "survey-constant-grid";
       data.hubs.forEach((hub) => hubGrid.appendChild(createSurveyConstantCard(hub, "hubs")));
@@ -9025,7 +9049,7 @@
 
       const rrGroup = document.createElement("section");
       rrGroup.className = "survey-constant-group";
-      rrGroup.innerHTML = '<div class="survey-constant-heading">R&R 冒险</div>';
+      rrGroup.innerHTML = '<div class="survey-constant-heading">休整冒险</div>';
       const rrGrid = document.createElement("div");
       rrGrid.className = "survey-constant-grid";
       data.rr.forEach(([id, title, extra]) => {
@@ -9391,6 +9415,11 @@
 
     function setMainStoryConstant(boxId, checked) {
       setSimpleConstant("mainStoryConstants", "mainStoryConstantsActive", ensureTodayMainStoryConstants, boxId, checked);
+      if (checked && findSimpleConstantRow(currentMainStoryConstants(), boxId)) {
+        const { href, bgm } = getMainStoryLink();
+        window.ATO_BGM?.setScene?.(bgm);
+        void leaveVoyage(href, "story").catch(error => window.alert(error.message));
+      }
     }
 
     function setMnemosBreakthroughConstant(boxId, checked) {
@@ -9419,7 +9448,7 @@
       const values = options.ensure();
       const wrapper = document.createElement("details");
       wrapper.className = "survey-constants";
-      // 故事步骤的三个定数框（法洛斯之梦 / 主线故事 / 特殊事件）都建在这里。官方翻译下
+      // 故事步骤的三个定数框（航标梦境 / 主线故事 / 特殊事件）都建在这里。官方翻译下
       // 用 step-constants 一段术语把它们里面的英文与民间译名换成官方说法。
 
       wrapper.setAttribute("data-term-scope", "step-constants");
@@ -9493,7 +9522,7 @@
     function createPharosDreamConstantTools() {
       const data = currentPharosDreamConstants();
       return createSimpleConstantTools(data, {
-        summary: `${data?.title || "法洛斯之梦"}定数框`,
+        summary: `${data?.title || "航标梦境"}定数框`,
         subtitle: data?.subtitle || "Dreams of Pharos",
         openKey: "pharosDreams",
         ensure: ensureTodayPharosDreams,
@@ -10451,7 +10480,9 @@
           const surveyTools = createSurveyConstantTools();
           if (surveyTools) text.appendChild(surveyTools);
         }
-        if (step.id === "development") text.appendChild(createStructureTechActionTools());
+        if (step.id === "development") {
+          text.append(createResearchTools(), createStructureTechActionTools());
+        }
         if (step.id === "story") {
           const constantRow = document.createElement("div");
           constantRow.className = "simple-constant-row";
@@ -13751,6 +13782,7 @@
       if (options.battle) params.set("battle", options.battle);
       if (options.encounter) params.set("encounter", options.encounter);
       if (options.entry) params.set("entry", options.entry);
+      if (options.face) params.set("face", options.face);
       return `./story/index.html?${params.toString()}`;
     }
 
@@ -13764,14 +13796,14 @@
           available: true,
         },
         {
-          title: "Story 冒险中枢",
-          text: "直接打开冒险中枢区域。",
-          href: getStoryHref({ module: "冒险中枢" }),
+          title: "分支冒险",
+          text: "打开剧情书的分支冒险。",
+          href: getStoryHref({ module: "hub" }),
           available: true,
         },
         {
-          title: "Story R&R",
-          text: "直接打开 R&R 冒险区域。",
+          title: "休整冒险",
+          text: "打开剧情书的休整冒险。",
           href: getStoryHref({ module: "rr" }),
           available: true,
         },
@@ -13792,6 +13824,37 @@
     function getTechnologyHref() {
       const config = currentCycleConfig();
       return `./technology/index.html?cycle=${encodeURIComponent(config.id)}`;
+    }
+
+    function createResearchTools() {
+      const section = document.createElement("section");
+      section.className = "story-reward-placement";
+      const title = document.createElement("strong");
+      title.textContent = "今日研发";
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "secondary";
+      const day = String(state.day);
+      const baseline = state.developmentResearch?.day === day ? state.developmentResearch : null;
+      const unlocked = state.unlockedTech?.unlocked;
+      const researched = baseline && Array.isArray(unlocked) ? unlocked.filter(tech => !baseline.keys.includes(tech.key)) : [];
+      button.textContent = researched?.length ? "查看或调整研发" : "研发科技";
+      const types = todayTrackIcons().filter(icon => ["structure-tech", "battle-tech"].includes(icon.className));
+      const status = document.createElement("p");
+      status.textContent = researched?.length ? researched.map(tech => tech.displayName || tech.nameZh || tech.name).join("、")
+        : baseline ? "尚无已保存的新增科技。"
+        : "在科技树解锁本次研发的科技，保存返回后可在这里查看。";
+      button.addEventListener("click", () => {
+        void leaveVoyage(getTechnologyHref(), "development").catch(error => window.alert(error.message));
+      });
+      section.append(title);
+      if (types.length && !researched?.length) {
+        const guidance = document.createElement("p");
+        guidance.textContent = `今日科技突破 · ${[...new Set(types.map(icon => icon.label))].join("、")}`;
+        section.appendChild(guidance);
+      }
+      section.append(status, button);
+      return section;
     }
 
     function normalizeStructureTechAutomation(value) {
@@ -14429,15 +14492,15 @@
         ] : [];
       }
       if (step.id === "doom") {
-        return currentCycleConfig().storyBook ? [
-          getMainStoryLink(),
-          getSpecialEventLink(),
-        ] : [];
+        const href = cardTrackRulesHref("doom", doomAdvanceDetails().card);
+        return [
+          ...(href ? [{ label: "当前末日卡规则", bgm: "story", href }] : []),
+          ...(currentCycleConfig().storyBook ? [getSpecialEventLink()] : []),
+        ];
       }
       if (step.id === "encounter") {
         return currentCycleConfig().storyBook ? [{ label: "战斗模块", href: getStoryHref({ module: "battle" }) }] : [];
       }
-      if (step.id === "development") return [{ label: "科技", href: getTechnologyHref() }];
       return step.links || [];
     }
 
@@ -14458,8 +14521,8 @@
       if (hasOpenExplorationRound()) items.push({ step: "explore", label: "探索 · 当前牌组尚未结束" });
       if (!completed.survey) {
         for (const reminder of getSurveyMapReminders()) {
-          const rest = reminder.tag?.label === "R&R";
-          items.push({ step: "survey", label: rest ? "勘察 · 确认休整冒险" : "勘察 · 确认冒险中枢" });
+          const rest = reminder.className === "rr";
+          items.push({ step: "survey", label: rest ? "勘察 · 确认休整冒险" : "勘察 · 确认分支冒险" });
         }
       }
       if (!completed.encounter) {
@@ -14890,18 +14953,18 @@
 
       if (tags.has("central_adventure")) {
         reminders.push({
-          title: "当前板块有中枢冒险",
-          tag: { label: "中枢", className: "important" },
-          desc: `${location} 尚未探索，请在本步骤结算冒险中枢。`,
+          title: "当前板块有分支冒险",
+          tag: { label: "分支冒险", className: "important" },
+          desc: `${location} 尚未探索，请在本步骤结算分支冒险。`,
           className: "important",
         });
       }
 
       if (tags.has("rr_adventure")) {
         reminders.push({
-          title: "当前板块有 R&R 冒险",
-          tag: { label: "R&R", className: "battle-tech rr" },
-          desc: `${location} 尚未探索，请在本步骤结算 R&R。`,
+          title: "当前板块有休整冒险",
+          tag: { label: "休整冒险", className: "battle-tech rr" },
+          desc: `${location} 尚未探索，请在本步骤结算休整冒险。`,
           className: "rr",
         });
       }

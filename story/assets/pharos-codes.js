@@ -102,5 +102,5 @@
     }).join("");
     sections.push(`<h2 class="cycle-heading">${escapeHtml(book.id.toUpperCase())}</h2><div class="table-wrap"><table><thead><tr><th scope="col">序号</th><th scope="col">条目</th><th scope="col">官方数字</th><th scope="col">官方明文 · 拼音</th><th scope="col">民间数字</th><th scope="col">民间明文 · 英文</th></tr></thead><tbody>${rows}</tbody></table></div>`);
   }
-  container.innerHTML = sections.join("") || '<p class="empty">本地故事数据未包含法洛斯之梦条目。</p>';
+  container.innerHTML = sections.join("") || '<p class="empty">本地故事数据未包含航标梦境条目。</p>';
 })();

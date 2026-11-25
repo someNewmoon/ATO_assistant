@@ -2084,3 +2084,13 @@ button.battle-aibp-button {
   color: var(--muted);
   font-size: .82em;
 }
+
+.rule-card-fallback {
+  margin: 1rem auto;
+  max-inline-size: 32rem;
+}
+.rule-card-fallback img {
+  display: block;
+  inline-size: 100%;
+  height: auto;
+}

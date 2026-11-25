@@ -1,25 +1,10 @@
-.room-style-preview, .room-style-dock {
-  --battle-paper: #fbf7ee;
-  --battle-sheet: #f7efe1;
-  --battle-inset: #efe4d2;
-  --battle-edge: #cbbb9d;
-  --battle-copper: #a67d4e;
-  --battle-rule: #c29b68;
-  --battle-ink: #38291f;
-  --battle-muted: #675341;
-  --battle-dark: #503a2b;
-  --battle-deep: #29251e;
-  --battle-label: #68482c;
-  --battle-gilt: #f5e7cb;
-  --battle-serif: "Songti SC", "Noto Serif CJK SC", SimSun, Georgia, serif;
-}
 .room-style-preview {
-  --room-border: var(--battle-edge);
-  --room-surface: var(--battle-paper);
-  --room-text: var(--battle-ink);
-  border-color: var(--battle-edge);
+  --room-border: var(--folio-edge);
+  --room-surface: var(--folio-paper);
+  --room-text: var(--folio-ink);
+  border-color: var(--folio-edge);
   border-radius: 2px;
-  background: var(--battle-sheet);
+  background: var(--folio-sheet);
   container: battle-workspace / inline-size;
 }
 
@@ -38,9 +23,9 @@
   gap: .3rem .6rem;
   margin-block: .8rem .45rem;
   padding: .35rem .5rem;
-  border: 3px double var(--battle-rule);
-  background: linear-gradient(110deg, #34291f, var(--battle-deep) 80%);
-  color: var(--battle-gilt);
+  border: 3px double var(--folio-rule);
+  background: var(--folio-nav);
+  color: var(--folio-on-dark);
   box-shadow: 0 .25rem .75rem #39271918;
   pointer-events: auto;
 }
@@ -65,29 +50,29 @@ main:has(> .room-style-dock:not([hidden])) > #viewer { scroll-margin-top: 4.5rem
   border: 1px solid transparent;
   border-radius: 2px;
   background: transparent;
-  color: var(--battle-gilt);
+  color: var(--folio-on-dark);
   font-size: .81rem;
   text-decoration: none;
 }
 .room-tool-dock.room-style-dock .room-primary-nav :is(a, button):hover,
 .room-tool-dock.room-style-dock .room-primary-nav :is(a, button):focus-visible {
-  background: #554331;
-  color: #fff1d6;
-  border-color: #9e8058;
+  background: var(--folio-nav-hover);
+  color: var(--folio-on-dark);
+  border-color: var(--folio-rule);
 }
 .room-tool-dock.room-style-dock .room-primary-nav .room-style-round-jump {
   margin-inline-end: .25rem;
-  border-inline-end-color: #94744e;
+  border-inline-end-color: var(--folio-rule);
 }
 .room-tool-dock.room-style-dock .room-primary-nav .room-style-round-jump[aria-expanded="true"] {
-  background: #554331;
-  border-color: var(--battle-rule);
+  background: var(--folio-nav-hover);
+  border-color: var(--folio-rule);
 }
 .room-style-dock .room-style-tools { position: relative; }
 .room-style-dock .room-style-tools summary {
   cursor: pointer;
   padding: .3rem .5rem;
-  border: 1px solid #937853;
+  border: 1px solid var(--folio-rule);
   font-size: .79rem;
   white-space: nowrap;
 }
@@ -99,9 +84,27 @@ main:has(> .room-style-dock:not([hidden])) > #viewer { scroll-margin-top: 4.5rem
   max-width: min(78vw, 26rem);
   justify-content: start;
   border-radius: 2px;
-  background: var(--battle-sheet);
-  border: 3px double var(--battle-copper);
+  background: var(--folio-sheet);
+  border: 3px double var(--folio-rule);
   box-shadow: 0 .3rem .8rem #30241a28;
+}
+
+.room-style-dock .room-tool-actions button,
+.room-style-preview .room-turn-window button:not(.battle-room-card-art, :disabled) {
+  border-radius: 2px;
+  border-color: var(--folio-edge);
+  background: var(--folio-paper);
+  color: var(--folio-ink);
+}
+.room-style-dock .room-tool-actions button:not(:disabled):hover,
+.room-style-preview .room-turn-window button:not(.battle-room-card-art, :disabled):hover {
+  border-color: var(--folio-rule);
+  background: var(--folio-inset);
+}
+.room-style-dock :focus-visible,
+.room-style-preview :is(button, a, select, input, summary):focus-visible {
+  outline: 2px solid var(--folio-rule);
+  outline-offset: 2px;
 }
 
 .room-style-preview .room-turn-bar {
@@ -115,10 +118,10 @@ main:has(> .room-style-dock:not([hidden])) > #viewer { scroll-margin-top: 4.5rem
 .room-style-preview .room-turn-bar:not(:has(> .room-turn-window[open])) { display: none; }
 .room-style-preview .room-turn-window {
   flex: 1;
-  border: 3px double var(--battle-copper);
+  border: 3px double var(--folio-rule);
   border-radius: 2px;
-  background: var(--battle-paper);
-  color: var(--battle-ink);
+  background: var(--folio-paper);
+  color: var(--folio-ink);
   box-shadow: 0 .5rem 1.7rem #39271933;
 }
 .room-style-preview .room-turn-window[open] {
@@ -130,23 +133,23 @@ main:has(> .room-style-dock:not([hidden])) > #viewer { scroll-margin-top: 4.5rem
   top: 0;
   z-index: 1;
   padding-block: .6rem;
-  background: var(--battle-inset);
-  color: var(--battle-label);
-  font: 700 1rem/1.4 var(--battle-serif);
+  background: var(--folio-inset);
+  color: var(--folio-label);
+  font: 700 1rem/1.4 var(--folio-serif);
 }
 .room-style-preview .room-turn-window [data-turn-body] {
   padding: .45rem .7rem .65rem;
-  border-top: 3px double var(--battle-edge);
+  border-top: 3px double var(--folio-edge);
 }
 .room-style-preview .room-turn-window ul:has(> li .roll-hero-avatar) {
   grid-template-columns: repeat(auto-fit, minmax(min(9rem, 100%), 1fr));
   margin-block: .35rem;
 }
 .room-style-preview .room-turn-bar .room-turn-boss-link {
-  border-color: var(--battle-edge);
+  border-color: var(--folio-edge);
   border-radius: 2px;
-  background: var(--battle-paper);
-  color: var(--battle-dark);
+  background: var(--folio-paper);
+  color: var(--folio-action);
 }
 .room-style-preview .room-ai-guide:has(> .battle-room-card-art) {
   grid-template-columns: clamp(4.75rem, 15cqw, 8rem) minmax(0, 1fr);
@@ -163,32 +166,35 @@ main:has(> .room-style-dock:not([hidden])) > #viewer { scroll-margin-top: 4.5rem
 .room-style-preview .room-style-ai-progress > li {
   display: block;
   padding: .15rem .35rem;
-  border: 1px solid var(--battle-edge);
+  border: 1px solid var(--folio-edge);
   border-radius: 2px;
-  color: var(--battle-muted);
+  color: var(--folio-muted);
   font-size: .72rem;
 }
 .room-style-preview .room-style-ai-progress > [aria-current="step"] {
-  background: var(--battle-inset);
-  border-color: var(--battle-copper);
-  color: var(--battle-ink);
+  background: var(--folio-inset);
+  border-color: var(--folio-rule);
+  color: var(--folio-ink);
   font-weight: 700;
 }
 .room-style-preview .room-style-ai-checklist {
   margin-bottom: .35rem;
-  border: 1px solid var(--battle-edge);
-  background: var(--battle-sheet);
+  border: 1px solid var(--folio-edge);
+  background: var(--folio-sheet);
 }
-.room-style-preview .room-style-ai-checklist > h4 { padding: .28rem .45rem; color: var(--battle-label); }
+.room-style-preview .room-style-ai-checklist > h4 { padding: .28rem .45rem; color: var(--folio-label); }
 .room-style-preview .room-style-ai-checklist ol { margin: 0 .45rem .4rem; padding-inline-start: 1.35rem; }
 .room-style-preview .room-style-ai-checklist li { display: list-item; padding: .15rem 0; }
-.room-style-preview .room-style-ai-checklist > p { padding: .15rem .45rem; color: var(--battle-muted); }
+.room-style-preview .room-style-ai-checklist > p { padding: .15rem .45rem; color: var(--folio-muted); }
 .room-style-preview .room-style-ai-checklist > button { margin: .25rem .45rem .45rem; }
-.room-style-preview .room-turn-controls .room-style-ai-settle {
-  background: var(--battle-dark);
-  border-color: var(--battle-dark);
-  color: var(--battle-gilt);
+.room-style-preview .room-turn-controls .room-style-ai-settle:not(:disabled) {
+  background: var(--folio-action);
+  border-color: var(--folio-action);
+  color: var(--folio-on-dark);
   font-weight: 700;
+}
+.room-style-preview .room-turn-controls .room-style-ai-settle:not(:disabled):hover {
+  background: var(--folio-nav-hover);
 }
 
 .battle-room.room-style-preview :is(#room-dice, #room-movement, #room-status, #room-equipment, #room-kratos-pool) {
@@ -197,59 +203,59 @@ main:has(> .room-style-dock:not([hidden])) > #viewer { scroll-margin-top: 4.5rem
 .room-style-preview #room-dice {
   margin-block: 1rem;
   padding: 0;
-  border: 1px solid var(--battle-edge);
-  background: var(--battle-paper);
+  border: 1px solid var(--folio-edge);
+  background: var(--folio-paper);
 }
 .room-style-preview #room-dice > h3 {
   margin: 0;
   padding: .5rem .8rem;
-  border-bottom: 3px double var(--battle-rule);
-  background: var(--battle-inset);
-  color: var(--battle-label);
-  font: 700 1.15rem/1.4 var(--battle-serif);
+  border-bottom: 3px double var(--folio-rule);
+  background: var(--folio-inset);
+  color: var(--folio-label);
+  font: 700 1.15rem/1.4 var(--folio-serif);
 }
 .room-style-preview #room-dice > :is(.room-seat-tabs, .room-dice-modes) {
   margin: .45rem .7rem 0;
   padding: .15rem .2rem .4rem;
-  border-bottom: 1px solid var(--battle-edge);
+  border-bottom: 1px solid var(--folio-edge);
 }
 .room-style-preview #room-dice .room-dice-modes button[aria-pressed="true"] {
-  background: #eedcc0;
-  color: #493120;
-  border-color: #976d48;
-  outline-color: var(--battle-copper);
+  background: var(--folio-inset);
+  color: var(--folio-ink);
+  border-color: var(--folio-rule);
+  outline-color: var(--folio-rule);
 }
 .room-style-preview #room-dice > :is(.room-roll-reference, .room-personal-result, .room-dice-help, .room-kratos-reminder, .battle-room-pool) {
   margin: .5rem .7rem;
 }
 .room-style-preview #room-dice > .room-roll-reference {
   padding: .6rem .65rem;
-  border: 1px solid var(--battle-edge);
-  background: var(--battle-sheet);
+  border: 1px solid var(--folio-edge);
+  background: var(--folio-sheet);
 }
 .room-style-preview #room-dice .room-roll-reference .battle-room-card-art { max-width: 6.25rem; }
 .room-style-preview #room-dice .room-roll-reference .battle-room-card-art img { max-height: 6rem; }
 .room-style-preview #room-dice form[data-roll] { padding: .3rem .7rem .45rem; }
 .battle-room.room-style-preview #room-dice form[data-roll] button[type="submit"]:not(:disabled) {
-  background: var(--battle-dark);
-  color: var(--battle-gilt);
-  border-color: var(--battle-dark);
+  background: var(--folio-action);
+  color: var(--folio-on-dark);
+  border-color: var(--folio-action);
   font-weight: 700;
 }
 .room-style-preview #room-dice > .room-personal-result {
   padding: .55rem .7rem;
-  border: 1px solid var(--battle-edge);
-  border-top: 3px solid var(--battle-copper);
-  background: var(--battle-paper);
+  border: 1px solid var(--folio-edge);
+  border-top: 3px solid var(--folio-rule);
+  background: var(--folio-paper);
 }
-.room-style-preview #room-dice > .room-personal-result > h4 { margin: 0 0 .45rem; color: var(--battle-label); }
+.room-style-preview #room-dice > .room-personal-result > h4 { margin: 0 0 .45rem; color: var(--folio-label); }
 .room-style-preview #room-kratos-pool {
   padding: .5rem .65rem;
-  border: 1px solid var(--battle-edge);
-  background: var(--battle-inset);
+  border: 1px solid var(--folio-edge);
+  background: var(--folio-inset);
 }
 .room-style-preview #room-kratos-pool > header { gap: .45rem; }
-.room-style-preview #room-kratos-pool:target { outline: 2px solid #98734b; outline-offset: 2px; }
+.room-style-preview #room-kratos-pool:target { outline: 2px solid var(--folio-rule); outline-offset: 2px; }
 
 @container battle-workspace (min-width: 790px) {
   .room-style-preview #room-dice {
@@ -293,7 +299,7 @@ body:has(.room-style-preview:not([hidden])) .title-actions .return-main-link { m
   flex-wrap: wrap;
   align-items: center;
   padding-block: .35rem .65rem;
-  border-bottom: 1px solid var(--battle-edge);
+  border-bottom: 1px solid var(--folio-edge);
 }
 .room-style-preview [data-room-summary] > .battle-room-head {
   flex: 1 1 16rem;
@@ -302,67 +308,80 @@ body:has(.room-style-preview:not([hidden])) .title-actions .return-main-link { m
   border: 0;
 }
 .room-style-preview [data-room-summary] > .battle-room-links { margin: 0; }
-.room-style-preview [data-room-summary] .battle-room-links [data-action="end"] { color: #773d30; }
+.room-style-preview [data-room-summary] .battle-room-links [data-action="end"] { color: var(--danger); }
 .room-style-preview #room-dice > .room-personal-result { align-self: start; }
 
 
 .room-style-preview :is(.battle-room-head h2, .battle-map-head h3, .battle-room-heading, #room-kratos-pool h3, .room-personal-result > h4, .room-tool-sheet > header h3) {
-  font-family: var(--battle-serif);
-  color: var(--battle-label);
+  font-family: var(--folio-serif);
+  color: var(--folio-label);
 }
 .room-style-preview .battle-room-head h2 { font-size: clamp(1.3rem, 2.3vw, 1.9rem); letter-spacing: .025em; }
-.room-style-preview .battle-map-head { border-bottom: 3px double var(--battle-edge); }
+.room-style-preview .battle-map-head { border-bottom: 3px double var(--folio-edge); }
 .room-style-preview #room-movement [data-board-tactics] {
-  background: var(--battle-paper);
-  color: var(--battle-ink);
-  border: 3px double var(--battle-edge);
+  background: var(--folio-paper);
+  color: var(--folio-ink);
+  border: 3px double var(--folio-edge);
   border-radius: 2px;
 }
-.room-style-preview #room-movement .battle-tactics-info { color: var(--battle-muted); }
+.room-style-preview #room-movement .battle-tactics-info { color: var(--folio-muted); }
+.room-style-preview #room-movement [data-board-mode][aria-pressed="false"]:not([data-board-place-boss]) {
+  border: 1px solid var(--folio-edge);
+  border-radius: 2px;
+  background: var(--folio-sheet);
+  color: var(--folio-ink);
+}
+.room-style-preview #room-movement [data-board-mode][aria-pressed="false"]:not([data-board-place-boss], :disabled):hover {
+  border-color: var(--folio-rule);
+  background: var(--folio-inset);
+}
 .room-style-preview #room-movement [data-board-tactics] button[aria-pressed="true"] {
-  background: var(--battle-inset);
-  border-color: var(--battle-copper);
-  color: var(--battle-ink);
-  box-shadow: inset 0 0 0 1px var(--battle-copper);
+  background: var(--folio-inset);
+  border-color: var(--folio-rule);
+  color: var(--folio-ink);
+  box-shadow: inset 0 0 0 1px var(--folio-rule);
 }
 .room-style-preview #room-movement [data-board-tactics] [data-board-mode=""][aria-expanded="false"] {
-  background: var(--battle-paper);
-  border-color: var(--battle-edge);
+  background: var(--folio-paper);
+  border-color: var(--folio-edge);
   box-shadow: none;
 }
 .room-style-preview #room-dice .room-roll > .room-reroll-controls {
   margin-block: .35rem .2rem;
 }
-.room-style-preview .battle-room-head p { color: var(--battle-muted); }
-.room-style-preview .room-turn-window :is(.room-ai-step > strong, li small) { color: var(--battle-label); }
+.room-style-preview .battle-room-head p { color: var(--folio-muted); }
+.room-style-preview .room-turn-window :is(.room-ai-step > strong, li small) { color: var(--folio-label); }
 .room-style-preview .room-turn-window li[aria-current] {
-  background: var(--battle-inset);
-  outline: 1px solid var(--battle-copper);
+  background: var(--folio-inset);
+  outline: 1px solid var(--folio-rule);
   border-radius: 2px;
 }
-.room-style-preview .room-turn-window :is(.room-ai-collision-preview, [data-turn-status]) { color: #7b3f2e; }
+.room-style-preview .room-turn-window :is(.room-ai-collision-preview, [data-turn-status]) { color: var(--danger); }
 .room-style-preview .room-turn-window .room-ai-route-options button[aria-pressed="true"] {
-  border-color: var(--battle-copper);
-  background: var(--battle-inset);
-  box-shadow: inset 0 0 0 1px var(--battle-copper);
+  border-color: var(--folio-rule);
+  background: var(--folio-inset);
+  box-shadow: inset 0 0 0 1px var(--folio-rule);
 }
 .room-style-preview .room-ai-defense,
-.room-style-preview .room-roll-next-defense { background: var(--battle-inset); border-color: var(--battle-edge); border-inline-start-color: var(--battle-copper); }
-.room-style-preview .battle-room-hero { background: var(--battle-paper); border-radius: 2px; }
-.room-style-preview .room-armor-results > section { border-radius: 2px; }
-.room-style-preview :is(.room-tool-sheet, .room-trauma-dialog) {
-  background: var(--battle-paper);
-  color: var(--battle-ink);
-  border: 3px double var(--battle-copper);
+.room-style-preview .room-roll-next-defense { background: var(--folio-inset); border-color: var(--folio-edge); border-inline-start-color: var(--folio-rule); }
+.room-style-preview .battle-room-hero {
+  background: color-mix(in srgb, var(--room-seat, #79d1ef) 5%, var(--folio-paper));
   border-radius: 2px;
 }
-.room-style-preview .room-tool-sheet > header { padding-bottom: .5rem; border-bottom: 3px double var(--battle-edge); }
+.room-style-preview .room-armor-results > section { border-radius: 2px; }
+.room-style-preview :is(.room-tool-sheet, .room-trauma-dialog) {
+  background: var(--folio-paper);
+  color: var(--folio-ink);
+  border: 3px double var(--folio-rule);
+  border-radius: 2px;
+}
+.room-style-preview .room-tool-sheet > header { padding-bottom: .5rem; border-bottom: 3px double var(--folio-edge); }
 .room-style-preview :is(.room-tool-sheet, .room-trauma-dialog)::backdrop { background: #29251e73; }
 .room-style-preview .room-loadout-folio :is(.room-loadout-equipment, .room-loadout-side > section) {
-  border-color: var(--battle-edge);
-  background: var(--battle-paper);
+  border-color: var(--folio-edge);
+  background: var(--folio-paper);
 }
 .room-style-preview .room-loadout-folio :is(h4, h5) {
-  color: var(--battle-label);
-  font-family: var(--battle-serif);
+  color: var(--folio-label);
+  font-family: var(--folio-serif);
 }

@@ -2059,7 +2059,8 @@ Add these script tags after the main viewer script:
       if (safeGetCurrentApostle() !== apostle) return;
       const result = calculateBpLoot({ recordMultiplier });
       renderLootResult(lootDialog, result);
-      lootDialog.querySelector("[data-loot-recap]").innerHTML = window.getAibpBattleRecap?.() || "";
+      lootDialog.querySelector("[data-loot-recap]").innerHTML = window.getAibpBattleRecap?.()
+        || window.AIBP_TABLE_BATTLE?.damageRecap() || "";
       if (!lootDialog.open) lootDialog.showModal();
     } catch (err) {
       window.alert(`战利品计算失败：\n${err.message || err}`);

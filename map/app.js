@@ -2407,7 +2407,7 @@ async function saveAndReturnToDashboard() {
   // BroadcastChannel task), so the navigation waits until the save is done.
   // hasOpenModule() also covers a live console tab whose background heartbeat is
   // throttled (hidden tabs update it about once a minute): focusModuleWindow()
-  // probes it by name, so returning does not fall back to a full page load.
+  // can still focus it if we have its window handle.
   const dashboardWindow = !window.ATO_VOYAGE?.current() && !singlePageMode && window.ATO_PAGE_ROUTER?.hasOpenModule?.(dashboardModule)
     ? window.ATO_PAGE_ROUTER.focusModuleWindow?.(dashboardModule)
     : null;

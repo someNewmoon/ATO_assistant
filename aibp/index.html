@@ -2454,7 +2454,7 @@
   <link rel="stylesheet" href="c45_specials.css?v=20260926-titan-group-layout1">
   <link rel="stylesheet" href="battle_map_control.css?v=20261117-battle-polish">
   <link rel="stylesheet" href="battle_tactics.css?v=20261124-route-origin">
-  <link rel="stylesheet" href="../api/cycle-theme.css">
+  <link rel="stylesheet" href="../api/cycle-theme.css?v=20261125-folio">
   <script src="../assets/theme.js?v=20261114-light-sidebar1" defer></script>
   <link rel="stylesheet" href="editorial.css?v=20261123-room-boss-nav">
   <link rel="stylesheet" href="../assets/card-art.css?v=20261017-fan-fringe5">
@@ -2473,9 +2473,9 @@
   <script src="../assets/mobile/layout.js?v=20261028-apk-portrait1" defer></script>
   <script src="../assets/mobile/play.js?v=20261114-theatre-return" defer></script>
   <link rel="stylesheet" href="room-recap.css?v=20261125-critical">
-  <link rel="stylesheet" href="battle-room.css?v=20261124-member-nav">
-  <link rel="stylesheet" href="table-battle.css?v=20261125">
-  <link rel="stylesheet" href="room-style.css?v=20261124-member-nav">
+  <link rel="stylesheet" href="battle-room.css?v=20261125-bp-zoom-markers">
+  <link rel="stylesheet" href="table-battle.css?v=20261125-shared-critical">
+  <link rel="stylesheet" href="room-style.css?v=20261125-folio">
   <link rel="stylesheet" href="./die-cube.css?v=3">
   <script src="theatre-battle.js?v=2"></script>
   <script src="../theatre/terms.js?v=2"></script>
@@ -2560,7 +2560,10 @@
         <div data-room-content></div>
         <dialog id="battleRoomImage">
           <form method="dialog"><button type="button" data-art-switch hidden>招牌技</button> <button type="submit">关闭卡图</button></form>
-          <img alt="">
+          <div class="room-zoom-card">
+            <img alt="">
+            <div class="room-zoom-markers" data-art-markers aria-label="当前卡牌标记" hidden></div>
+          </div>
           <p role="status" data-art-error hidden>卡图加载失败，请重试。</p>
         </dialog>
       </section>
@@ -2681,6 +2684,11 @@
               <div class="deck-info" id="deathblowBpStatus" role="status" hidden></div>
             </div>
             <div class="card-column-piles">
+              <div id="tableBpAttacker" class="table-bp-attacker" hidden></div>
+              <details id="tableBpHistory" class="table-bp-history" hidden>
+                <summary>BP 攻击记录</summary>
+                <ol></ol>
+              </details>
               <div class="babelian-bp-control" id="babelianFusionControl" hidden></div>
               <div class="bp-combined-counter" id="bpCombinedControl" hidden>
                 <span class="bp-combined-title">累积强度</span>
@@ -2981,6 +2989,7 @@
         <button type="button" data-ai-combo-action="finish" hidden>结算完成</button>
       </div>
       <div class="image-zoom-actions" id="imageZoomBpActions" aria-label="BP 处置">
+        <div id="tableZoomBpAttacker" class="table-bp-attacker" hidden></div>
         <button type="button" data-bp-zoom-action="discard">弃置</button>
         <button type="button" data-bp-zoom-action="defeat">击败</button>
         <button type="button" data-bp-zoom-action="vp-defeat" hidden>VP击败</button>
@@ -3007,13 +3016,14 @@
 
   <script src="../assets/campaign-session.js?v=20260917"></script>
   <script src="../hero/hero-catalog.js?v=20261117-battle-polish"></script>
-  <script src="room-assets.js?v=20261120-signature" defer></script>
+  <script src="room-assets.js?v=20261125-bp-zoom-markers" defer></script>
   <script src="room-board.js?v=20261124-terrain-toggle" defer></script>
   <script src="room-card-state.js" defer></script>
   <script src="../technology/battle-config.js" defer></script>
   <script src="../assets/dice-motion.js?v=7" defer></script>
   <script src="room-dice.js?v=20261124-combat-rules" defer></script>
-  <script src="gear-roll-profiles.js?v=20261124-weapon-dice" defer></script>
+  <script src="../assets/titan-panel-reference.js?v=20261125-power" defer></script>
+  <script src="gear-roll-profiles.js?v=20261125-titan-power" defer></script>
   <script src="squad-link.js?v=20261125-critical" defer></script>
   <script src="../record/enemy-evolution.js?v=20261120"></script>
   <script src="kratos-tables.js?v=20261124-ability-icons" defer></script>
@@ -3024,7 +3034,7 @@
   <script src="../assets/campaign-notes.js?v=20261015-aibp-summary1"></script>
   <script src="../assets/cycle-symbols.js?v=20261115-module-logo"></script>
   <script src="cycle-theme.js?v=20261001"></script>
-  <script src="../assets/page-focus-router.js?v=20261113-theatre"></script>
+  <script src="../assets/page-focus-router.js?v=20261125-no-blank"></script>
   <script src="../assets/voyage-return.js?v=1"></script>
   <script src="../map/map-tile-tags.js"></script>
   <script src="ps/CHIMERA_METASTASIOS/bp_status_map.js"></script>
@@ -5379,10 +5389,10 @@
       return { total: damage1 + damage2, damage1, damage2 };
     }
 
-    function pushBpDamage(card) {
+    function pushBpDamage(card, attacker) {
       ensurePiles(currentApostle);
       const damageKey = currentBpDamageKey();
-      piles[currentApostle].BP[damageKey].push(card);
+      piles[currentApostle].BP[damageKey].push(attacker !== undefined ? { ...card, tableAttacker: attacker, tableCritical: card.tableCritical === true } : card);
       if (isCyclonus() || currentApostle === "HEKATON" || currentApostle === "HYPERTIME_ORACLE") {
         addCriticalMass(bpDamageValue(card));
       }
@@ -5473,9 +5483,9 @@
       return true;
     }
 
-    function addChimeraSecondDamage(card) {
+    function addChimeraSecondDamage(card, attacker) {
       ensurePiles(currentApostle);
-      piles[currentApostle].BP.damage2.push(card);
+      piles[currentApostle].BP.damage2.push(attacker !== undefined ? { ...card, tableAttacker: attacker, tableCritical: card.tableCritical === true } : card);
       addCriticalMass(1);
     }
 
@@ -5578,9 +5588,40 @@
       return `${card.type} ${card.level} ${card.index}`;
     }
 
+    function tableDamageHistory(card) {
+      if (card.special) return null;
+
+      // Older tabletop saves stored attribution only in the BP history.
+      const bp = piles[currentApostle].BP;
+      const labelOf = card => cardAlt({ ...card, damageValue: 0 });
+      const label = labelOf(card);
+      const results = (card.bpLevel || card.level) === "III"
+        ? ["暴击", "VP暴击"] : ["记录损伤", "暴击", "VP击败", "VP暴击"];
+      const history = (bp.tableAttackHistory || []).filter(entry => entry.card === label && results.includes(entry.result));
+      if (history.length !== 1) return null;
+      const matches = [bp.damage, bp.damage1, bp.damage2].flatMap(pile => pile || [])
+        .filter(damage => labelOf(damage) === label);
+      if (matches.length !== 1) return null;
+      return history[0];
+    }
+
+    function isTableCriticalDamage(card, history) {
+      return card.tableCritical ?? ["暴击", "VP暴击"].includes(history?.result);
+    }
+
     function renderCardsIntoGrid(grid, cards, emptyText, type = "", view = "") {
+      const damageView = activeTableBattle && type === "BP" && view.includes("损伤");
+      const credits = damageView ? cards.map(card => {
+        const history = Object.hasOwn(card, "tableCritical") && Object.hasOwn(card, "tableAttacker")
+          ? null : tableDamageHistory(card);
+        return {
+          attacker: Object.hasOwn(card, "tableAttacker") ? card.tableAttacker
+            : history && { id: history.heroId, name: history.hero },
+          critical: isTableCriticalDamage(card, history)
+        };
+      }) : [];
       if (window.AibpCardImages?.unchanged(grid, [currentApostle, type, view, emptyText,
-        aibpImageIndexRevision, cards.map((card) => [card, cardAlt(card),
+        aibpImageIndexRevision, credits, cards.map((card) => [card, cardAlt(card),
           window.AibpCardImages.sourceFor(cardSrc(card))])])) return;
       grid.replaceChildren();
 
@@ -5609,6 +5650,27 @@
           badge.className = "damage-badge";
           badge.textContent = `×${card.damageValue}`;
           tile.appendChild(badge);
+        }
+        const { attacker, critical } = credits[index] || {};
+        if (critical) {
+          tile.classList.add("table-critical-card");
+          const badge = document.createElement("span");
+          badge.className = "table-critical-badge";
+          badge.textContent = "暴击";
+          tile.append(badge);
+        }
+        if (attacker) {
+          const credit = document.createElement("div");
+          credit.className = "table-bp-credit";
+          const portrait = attacker.portrait || window.AIBP_TABLE_BATTLE?.attackerPortrait(attacker.id);
+          if (portrait) {
+            const avatar = document.createElement("img");
+            avatar.src = "../hero/assets/" + portrait;
+            avatar.alt = "";
+            credit.append(avatar);
+          }
+          credit.append(attacker.name);
+          tile.appendChild(credit);
         }
         grid.appendChild(tile);
       });
@@ -6467,18 +6529,18 @@
       insertPromotedCard("AI", "III");
     }
 
-    function resolveBpDefeat(card) {
+    function resolveBpDefeat(card, attacker) {
       const bp = piles[currentApostle].BP;
 
       if (card.level === "I") {
-        pushBpDamage(card);
+        pushBpDamage(card, attacker);
         insertPromotedCard("BP", "II");
         promoteAiFromLevel("I", "II");
         return;
       }
 
       if (card.level === "II") {
-        pushBpDamage(card);
+        pushBpDamage(card, attacker);
         insertPromotedCard("BP", "III");
         promoteAiFromLevel("II", "III");
         return;
@@ -6487,7 +6549,7 @@
       // BP III（普通击败）：按规则不把这张 BP3 当作损伤；向损伤堆加入 1 张通用双重
       // 损伤 DW，把这张 BP3 放在一旁，等晋升结算完再放回 BP 卡组底部
       // （规则书 P52 损伤堆叠 / P53 晋升表：最后将击伤的此 BP3 卡放在 BP 卡组底部）。
-      pushBpDamage({ special: "DW" });
+      pushBpDamage({ special: "DW" }, attacker);
 
       if (hasSupply("BP", "III")) {
         removeLowestCard("BP");
@@ -6501,19 +6563,20 @@
       promoteAiForBpIII();
     }
 
-    function resolveBpCritical(card) {
+    function resolveBpCritical(card, attacker) {
+      if (attacker !== undefined) card = { ...card, tableCritical: true };
       const bp = piles[currentApostle].BP;
 
       if (card.level !== "III") {
         // 规则图中“关键一击”只列在 BP III；非 BP III 时按普通击败处理。
-        resolveBpDefeat(card);
+        resolveBpDefeat(card, attacker);
         return;
       }
 
       // BP III 关键一击：击伤的 BP3 本体进入损伤堆，视作 2 个损伤。
       const firstLastWish = currentApostle === "DEMIDJINN"
         && !piles[currentApostle].special?.demidjinn?.lastWishAiIvAdded;
-      pushBpDamage({ ...card, damageValue: 2 });
+      pushBpDamage({ ...card, damageValue: 2 }, attacker);
       const lastWishReplacedPromotion = firstLastWish
         && piles[currentApostle].special?.demidjinn?.lastWishAiIvAdded;
 
@@ -7123,10 +7186,17 @@
         }
       }
       renderEmptyDrawActions();
+      renderTableBpAttribution();
       if (activeAiComboZoom) {
         setImageZoomAiComboActions(activeAiComboZoom.apostle === currentApostle
           && sameCard(activeAiComboZoom.card, aiPending));
       }
+    }
+
+    function renderTableBpAttribution() {
+      if (!activeTableBattle) return;
+      const bp = piles[currentApostle]?.BP;
+      window.AIBP_TABLE_BATTLE?.renderBpAttacker(bp);
     }
 
     function renderAibpCards() {
@@ -8718,7 +8788,7 @@
       if (!img || !img.src) return false;
       if (img.closest("dialog")) return false;
       if (img.closest(".image-zoom-overlay")) return false;
-      if (img.closest("button, .segmented, .draw-actions, .title-actions")) return false;
+      if (img.closest("button, .segmented, .draw-actions, .title-actions, .table-bp-credit")) return false;
       return Boolean(img.closest("#panelWrap, #routineWrap, #signatureWrap, #extraGrid, #aiGrid, #bpGrid, #aiDrawPreview, #bpDrawPreview"));
     }
 
@@ -9322,6 +9392,7 @@
         return;
       }
       bp.pending = bp.deck[0];
+      if (activeTableBattle) delete bp.tableAttacker;
       rememberRevealedCard("BP", bp.pending);
       if (bp.combinedAttack && !sameCard(bp.combinedAttack.card, bp.pending)) {
         delete bp.combinedAttack;
@@ -9366,6 +9437,20 @@
       rememberUndo(currentApostle, "BP");
       const card = removePendingFromDeck("BP");
       rememberRevealedCard("BP", bp.pending);
+      const attacker = activeTableBattle ? bp.tableAttacker || null : undefined;
+      const tableCritical = activeTableBattle && !card?.specialBp
+        && (mode === "critical" || mode === "vp-critical");
+      const damageBefore = tableCritical ? currentBpDamageSummary().total : 0;
+      if (attacker) {
+        const result = card.specialBp && mode !== "return-top" ? "移除" : {
+          "return-top": "放回牌堆顶", discard: "弃置", defeat: "记录损伤",
+          critical: "暴击", "vp-defeat": "VP击败", "vp-critical": "VP暴击"
+        }[mode];
+        (bp.tableAttackHistory ||= []).push({
+          heroId: attacker.id, hero: attacker.name, card: cardAlt(card), result
+        });
+        delete bp.tableAttacker;
+      }
       bp.pending = null;
 
       if (mode === "return-top") {
@@ -9389,22 +9474,27 @@
         bp.discard.push(card);
       } else if (mode === "defeat") {
         setChimeraPhaseFromCard(card);
-        resolveBpDefeat(card);
+        resolveBpDefeat(card, attacker);
       } else if (mode === "vp-defeat") {
         setChimeraPhaseFromCard(card);
-        resolveBpDefeat(card);
-        addChimeraSecondDamage({ special: "SW" });
+        resolveBpDefeat(card, attacker);
+        addChimeraSecondDamage({ special: "SW" }, attacker);
       } else if (mode === "vp-critical") {
         setChimeraPhaseFromCard(card);
-        resolveBpCritical(card);
-        addChimeraSecondDamage({ special: "SW" });
+        resolveBpCritical(card, attacker);
+        addChimeraSecondDamage(tableCritical ? { special: "SW", tableCritical: true } : { special: "SW" }, attacker);
       } else if (mode === "critical") {
         setChimeraPhaseFromCard(card);
-        resolveBpCritical(card);
+        resolveBpCritical(card, attacker);
       }
 
+      if (tableCritical) currentBpView = currentBpDamageView();
       savePiles();
       renderAibpCards();
+      if (tableCritical) {
+        const gained = currentBpDamageSummary().total - damageBefore;
+        if (gained > 0) window.AIBP_TABLE_BATTLE?.celebrateCritical(attacker, gained);
+      }
     }
 
     function discardAiPending(remember = true) {
@@ -9861,6 +9951,15 @@
       battleMapControl?.render();
     });
     window.AIBP_TABLE_DECK = {
+      damageRecap() {
+        const bp = piles[currentApostle].BP;
+        const group = currentApostle === "TITAN_X" && piles.TITAN_X?.special?.titanX?.group;
+        const damage = isChimera() ? [...bp.damage1, ...bp.damage2]
+          : group ? bp.damage.filter(card => card.titanXOwner === group.target) : bp.damage;
+        const critical = damage.reduce((total, card) => total + (isTableCriticalDamage(card,
+          card.tableCritical === undefined ? tableDamageHistory(card) : null) ? bpDamageValue(card) : 0), 0);
+        return { total: currentBpDamageSummary().total, critical };
+      },
       async selection() {
         await refreshRecordApostleLevels();
         return { boss: currentApostle, level: currentApostleLevel(), label: title.textContent.trim() };
@@ -9887,6 +9986,14 @@
         loadSavedPiles();
         renderApostle(battle.boss);
         restoreScrySession();
+      },
+      setBpAttacker(hero) {
+        const bp = piles[currentApostle]?.BP;
+        if (!activeTableBattle || !bp?.pending) return;
+        if (hero.id === bp.tableAttacker?.id) delete bp.tableAttacker;
+        else bp.tableAttacker = { id: hero.id, name: hero.name, portrait: hero.portrait };
+        savePiles();
+        renderTableBpAttribution();
       },
       hasPending() {
         const state = piles[currentApostle];
@@ -10145,8 +10252,8 @@
   <script src="ps/other/resouce/bp_resource_map_c1_c3.js?v=20261017a" defer></script>
   <script src="ps/other/resouce/bp_resource_map_c4_c5.js?v=20261018a" defer></script>
   <script src="c45_specials.js?v=room-bp-20261118-battle-recap" defer></script>
-  <script src="bp_loot_calculator_addon.js?v=20261125-encounter" defer></script>
-  <script src="table-battle.js?v=20261125-encounter" defer></script>
+  <script src="bp_loot_calculator_addon.js?v=20261125-damage-recap" defer></script>
+  <script src="table-battle.js?v=20261125-shared-critical" defer></script>
   <script src="../story/data/english-source-data.js?v=20261011-english4" defer></script>
   <script src="../assets/ato-terms.js?v=20261110-loop-terms" defer></script>
   <script src="../assets/english-terms.js?v=20261011-english4" defer></script>

@@ -67,8 +67,8 @@ body[data-cycle="c5"] {
   --gold: #95702b;
 }
 
-/* Shared surfaces for the main campaign modules. */
-body[data-campaign-folio] {
+/* Shared surfaces, rules and controls for the campaign and battle interfaces. */
+body {
   --folio-serif: "Songti SC", "Noto Serif CJK SC", SimSun, Georgia, serif;
   --folio-paper: var(--panel);
   --folio-sheet: color-mix(in srgb, var(--accent-soft) 55%, var(--panel));
@@ -83,7 +83,7 @@ body[data-campaign-folio] {
   --folio-nav-hover: color-mix(in srgb, var(--accent-strong) 60%, #4b463e);
   --folio-on-dark: #fff5e4;
 }
-body[data-campaign-folio]:is([data-theme-cycle="c1"], :not([data-theme-cycle]):is([data-cycle="c1"], :not([data-cycle]))):not([data-theme-dark]) {
+body:is([data-theme-cycle="c1"], :not([data-theme-cycle]):is([data-cycle="c1"], :not([data-cycle]))):not([data-theme-dark]) {
   --folio-paper: #fbf7ee;
   --folio-sheet: #f7efe1;
   --folio-inset: #efe4d2;
@@ -96,7 +96,7 @@ body[data-campaign-folio]:is([data-theme-cycle="c1"], :not([data-theme-cycle]):i
   --folio-nav: #302b24;
   --folio-nav-hover: #554331;
 }
-body[data-campaign-folio][data-theme-dark] {
+body[data-theme-dark] {
   --folio-sheet: color-mix(in srgb, var(--ink) 5%, var(--panel));
   --folio-inset: color-mix(in srgb, var(--ink) 10%, var(--panel));
   --folio-rule: var(--line);

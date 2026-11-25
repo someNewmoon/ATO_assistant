@@ -69,6 +69,7 @@
 
   const currentModule = moduleFromUrl();
   const pending = new Map();
+  const openedWindows = new Map();
   if (currentModule) window.name = `ato-module-${currentModule}`;
 
   function moduleWindowName(module) {
@@ -84,44 +85,32 @@
     if (!targetWindowName) return false;
     try {
       const targetWindow = window.open(url, targetWindowName);
-      targetWindow?.focus?.();
+      if (targetWindow) {
+        openedWindows.set(module, targetWindow);
+        targetWindow.focus?.();
+      }
       return targetWindow || false;
     } catch {
       return false;
     }
   }
 
-  // Bring an already-open module tab to the front without loading anything into
-  // it. window.open(url, name) on an existing tab navigates it, i.e. a visible
-  // reload; and a background tab cannot focus itself, because Chromium ignores
-  // window.focus() coming from a BroadcastChannel task. Focusing therefore has
-  // to happen inside the click gesture. Callers that will navigate the tab
-  // themselves once their save finishes should use this and keep the URL out of
-  // the early call.
+  // Focus a window we can still reach, without creating a tab or interrupting a save.
   function focusModuleWindow(module) {
-    const targetWindowName = moduleWindowName(module);
-    if (!targetWindowName) return null;
-    try {
-      const targetWindow = window.open("", targetWindowName);
-      if (!targetWindow) return null;
-      // window.open("", name) creates a blank popup when no tab with that name
-      // exists (closed tab, or one outside this browsing context group). Close it
-      // so the caller can open the module normally instead of leaving it blank.
-      let targetHref = "";
+    if (!module) return null;
+    for (const target of [openedWindows.get(module), window.opener]) {
+      if (!target || target.closed) continue;
       try {
-        targetHref = targetWindow.location.href;
-      } catch {}
-      if (targetHref === "about:blank") {
-        try {
-          targetWindow.close();
-        } catch {}
-        return null;
+        const { href, origin } = target.location;
+        if (origin !== window.location.origin || moduleFromUrl(href) !== module) continue;
+        target.focus();
+        return target;
+      } catch {
+        // A related tab may have moved to another origin.
       }
-      targetWindow.focus?.();
-      return targetWindow;
-    } catch {
-      return null;
     }
+    openedWindows.delete(module);
+    return null;
   }
 
   // Backwards-compatible alias for callers that still reference the old name.
@@ -166,7 +155,7 @@
   // "fresh"  — a heartbeat within 15s; no liveness probe needed.
   // "stale"  — a record exists but its heartbeat is older (throttled or frozen
   //            background tab, or a tab that closed without pagehide). The tab may
-  //            still be alive, so callers probe it with focusModuleWindow().
+  //            still be alive, so callers can try a known handle or BroadcastChannel.
   // "absent" — no record at all.
   function moduleOpenState(module) {
     if (isSingleWindowMode()) return "absent";
@@ -352,10 +341,8 @@
       window.location.href = absolute;
       return false;
     }
-    // Fresh, or a live tab whose heartbeat is merely throttled: probe by name
-    // first. focusModuleWindow() returns null for a closed tab (and closes the
-    // blank popup it had to create for the probe), which falls through to opening
-    // the module normally.
+    // Reuse a known window when available. A named tab without a handle can
+    // only be reached via a real destination, so never probe with an empty URL.
     if (hasOpenModule(module)) {
       const target = focusModuleWindow(module);
       if (target) {

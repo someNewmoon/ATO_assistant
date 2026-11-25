@@ -266,11 +266,14 @@
     EJ2954: ["Mortal Reinforce 1"],
   };
 
-  function power(primary, bonus, hits) {
+  function power(primary, bonus, hits, titanDice = {}) {
     const totals = { red: 0, black: 0, white: 0, raw: 0 };
     const kinds = { r: 'red', b: 'black', w: 'white', '+': 'raw' };
     for (const glyph of primary) totals[kinds[glyph]] += hits;
-    if (hits > 0) for (const glyph of bonus) totals[kinds[glyph]]++;
+    if (hits > 0) {
+      for (const glyph of bonus) totals[kinds[glyph]]++;
+      for (const kind of ['red', 'black', 'white']) totals[kind] += titanDice[kind] || 0;
+    }
     return totals;
   }
 

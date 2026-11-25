@@ -1105,7 +1105,7 @@ button.gear-group-name:hover {
   <script src="../assets/mobile/layout.js?v=20261028-apk-portrait1" defer></script>
   <script src="../assets/mobile/technology.js?v=20261028-apk-portrait1" defer></script>
 </head>
-<body data-theme-module="technology" data-campaign-folio>
+<body data-theme-module="technology">
 <div class="app">
   <main class="main">
     <header class="page-heading">
@@ -1151,7 +1151,7 @@ button.gear-group-name:hover {
     </div>
   </div>
 </div>
-  <script src="../assets/page-focus-router.js?v=20261028-android-return1"></script>
+  <script src="../assets/page-focus-router.js?v=20261125-no-blank"></script>
   <script src="../assets/voyage-return.js?v=1"></script>
   <script src="../assets/campaign-session.js?v=20260917"></script>
   <script src="../assets/campaign-notes.js?v=20261015"></script>
@@ -4477,8 +4477,7 @@ async function saveAndReturnMain() {
   // background tab cannot focus itself (Chromium ignores window.focus() from a
   // BroadcastChannel task).
   // hasOpenModule() also covers a live console tab whose background heartbeat is
-  // throttled; focusModuleWindow() probes it by name, so returning does not fall
-  // back to a full page load.
+  // throttled; a known window handle lets us return without rediscovering the tab.
   const dashboardWindow = window.ATO_VOYAGE?.current() || singleWindow || !window.ATO_PAGE_ROUTER?.hasOpenModule?.(dashboardModule)
     ? null
     : window.ATO_PAGE_ROUTER?.focusModuleWindow?.(dashboardModule) || null;

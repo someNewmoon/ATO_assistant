@@ -9,10 +9,13 @@ const scripts = [
   'aibp/boss-levels-data.js', 'ss/terrain-data.js', 'aibp/battle_los.js',
   'aibp/tactical-sprites.js', 'aibp/battle_board_pieces.js', 'aibp/battle_map_control.js',
   'aibp/room-assets.js', 'aibp/room-card-state.js', 'aibp/room-dice.js', 'aibp/gear-roll-profiles.js', 'assets/dice-motion.js',
-  'aibp/room-board.js', 'assets/voyage-return.js', 'aibp/squad-link.js', 'aibp/kratos-tables.js', 'aibp/ai-turn-guide.js', 'aibp/battle-room.js',
+  'assets/titan-panel-reference.js', 'aibp/room-board.js', 'assets/voyage-return.js', 'aibp/squad-link.js', 'aibp/kratos-tables.js', 'aibp/ai-turn-guide.js', 'aibp/battle-room.js',
   'assets/ato-terms.js', 'assets/term-language.js',
 ];
-const styles = ['battle_map_control.css', 'battle_tactics.css', 'battle-room.css', 'die-cube.css', 'room-style.css', 'room-recap.css'];
+const styles = [
+  'api/cycle-theme.css', 'aibp/battle_map_control.css', 'aibp/battle_tactics.css',
+  'aibp/battle-room.css', 'aibp/die-cube.css', 'aibp/room-style.css', 'aibp/room-recap.css',
+];
 
 function findById(node, id) {
   if (node.attrs?.some(attr => attr.name === 'id' && attr.value === id)) return node;
@@ -52,7 +55,7 @@ export async function buildBattleRoom(staging, repo) {
   const version = createHash('sha256').update(runtime.code).digest('hex').slice(0, 16);
   const filename = 'room-runtime-' + version + '.js';
   await writeFile(join(staging, 'aibp', filename), runtime.code);
-  const css = (await Promise.all(styles.map(path => readFile(join(staging, 'aibp', path), 'utf8')))).join('\n');
+  const css = (await Promise.all(styles.map(path => readFile(join(staging, path), 'utf8')))).join('\n');
   const compact = await transform(css, { loader: 'css', minify: true, legalComments: 'none' });
   const html = `<!doctype html>
 <html lang="zh-CN"><head>
@@ -60,13 +63,14 @@ export async function buildBattleRoom(staging, repo) {
 <title>ATO 在线战斗室</title>
 <link rel="preload" as="script" href="${filename}">
 <style>
-:root{color-scheme:light dark;--line:#cdbca9;--panel:#faf7f1;--text:#342d24}
-*{box-sizing:border-box}body{margin:0;background:#eee9e1;color:var(--text);font-family:system-ui,sans-serif}
+:root{color-scheme:light}
+*{box-sizing:border-box}body{--text:var(--folio-ink);margin:0;background:var(--bg);color:var(--text);font-family:system-ui,sans-serif}
 button,select,input{font:inherit;color:inherit}button,select{background:var(--panel);border:1px solid var(--line);border-radius:5px}
 button:not(:disabled){cursor:pointer}button:disabled{opacity:.5}
 [hidden]{display:none!important}
 ${compact.code}
 </style>
+<script src="../assets/theme.js?v=20261114-light-sidebar1" defer></script>
 <script src="${filename}" defer></script></head>
 <body class="aibp-room-only">
 <button id="battleRoomToggle" hidden>在线战斗室</button>

@@ -159,6 +159,7 @@
     const wasFighting = prior?.squad?.phase === 'battle';
     state = data.room;
     actor = data.actor;
+    window.ATO_BATTLE_ASSETS?.refreshZoomMarkers();
     document.body.classList.toggle('aibp-active-online-battle', !state.closed && (!state.squad || state.squad.phase === 'battle'));
     if (first && actor.role === 'host') equipmentSeat = rollSeat = personalSeat() ?? 0;
     const language = state.squad?.language || state.language;
@@ -1130,11 +1131,24 @@
   }
 
   function readDiceDraft(seat, mode) {
-    try { return JSON.parse(storageGet(diceDraftKey(seat, mode))) || {}; } catch { return {}; }
+    try {
+      const draft = JSON.parse(storageGet(diceDraftKey(seat, mode))) || {};
+      return mode === 'power' && draft.attackContext !== powerDraftContext(seat) ? {} : draft;
+    } catch { return {}; }
   }
 
   function saveDiceDraft(seat, mode, fields) {
-    storageSet(diceDraftKey(seat, mode), JSON.stringify(fields));
+    const draft = mode === 'power' ? { ...fields, attackContext: powerDraftContext(seat) } : fields;
+    storageSet(diceDraftKey(seat, mode), JSON.stringify(draft));
+  }
+
+  function powerDraftContext(seat) {
+    const attack = attackForPower(seat);
+    return attack?.round === state.round ? attack.id : `round-${state.squad?.battleNumber || 0}-${state.round}`;
+  }
+
+  function titanPowerDice(seat) {
+    return window.ATO_TITAN_PANEL_REFERENCE?.forTitan(state.heroes[seat]?.titan, window.ATO_GEAR_INVENTORY)?.powerDice || {};
   }
 
   function faceArt(die) {
@@ -1410,21 +1424,24 @@
   function weaponPowerReference(seat) {
     const attack = attackForPower(seat);
     const item = attack ? state.heroes[seat].gear.find(gear => gear.id === attack.weapon) : selectedWeapon(seat);
-    if (!item) return '<p class="room-dice-help">攻击时选择武器后，这里会显示该次攻击的武器面板。</p>';
     const profile = gearProfile(item);
-    const text = (expression) => {
-      const results = gearRolls.power(expression, '', 1);
-      return ['red', 'black', 'white', 'raw'].filter(kind => results[kind])
-        .map(kind => (dice.names[kind] || '原始威力') + ' ' + results[kind]).join(' · ');
-    };
-    const summary = profile?.[1] ? '<p>每次命中 · ' + text(profile[1])
-      + (profile[2] ? '</p><p>有命中时另加 · ' + text(profile[2]) : '') + '</p>'
-      : '<p>威力请按牌面填写。</p>';
-    return '<section class="room-roll-reference"><h4>激活武器 · ' + escape(item.name) + '</h4><div>'
-      + gearCardReference(item) + '<div>' + summary
+    const titanDice = titanPowerDice(seat);
+    const text = (totals) => ['red', 'black', 'white', 'raw'].filter(kind => totals[kind])
+      .map(kind => (dice.names[kind] || '原始威力') + ' ' + totals[kind]).join(' · ');
+    const expression = (value) => text(gearRolls.power(value, '', 1));
+    const titanSummary = text(titanDice);
+    const titanLine = titanSummary ? '<p>泰坦面板 · ' + titanSummary + '（每次威力投掷加一次）</p>' : '';
+    const heading = item ? '激活武器 · ' + escape(item.name) : '威力骰';
+    const summary = !item ? '<p>攻击时选择武器后，这里会显示该次攻击的武器面板。</p>'
+      : profile?.[1] ? '<p>每次命中 · ' + expression(profile[1])
+        + (profile[2] ? '</p><p>有命中时另加 · ' + expression(profile[2]) : '') + '</p>'
+        : '<p>武器威力请按牌面填写。</p>';
+    return '<section class="room-roll-reference" data-power-context="' + escape(powerDraftContext(seat)) + '"><h4>'
+      + heading + '</h4><div>' + (item ? gearCardReference(item) : '') + '<div>' + titanLine + summary
       + (profile?.[1] ? diceCountField('weaponHits', '命中数', 0, attack?.dice.length ?? dice.limits.d10, 0, '次')
-        + ' <button type="button" data-fill-weapon-power>带入武器威力骰</button>'
-        + '<small>再按泰坦、能力和牌面条件补入其他骰子。原始威力单独计入。</small><p data-weapon-power-status role="status"></p>' : '')
+        + ' <button type="button" data-fill-weapon-power>' + (titanSummary ? '带入泰坦与武器威力骰' : '带入武器威力骰') + '</button>'
+        + '<small>' + (titanSummary ? '其他能力与牌面修正请手动补入。' : '泰坦面板骰及其他修正请按牌面补入。')
+        + '原始威力单独计入。</small><p data-weapon-power-status role="status"></p>' : '')
       + '</div></div></section>';
   }
 
@@ -1476,11 +1493,8 @@
     if (!profile?.[1] || !hitInput.reportValidity()) return;
     const status = reference.querySelector('[data-weapon-power-status]');
     const hits = Number(hitInput.value);
-    if (hits === 0) {
-      status.textContent = '命中数为 0，本次无需带入武器威力骰。';
-      return;
-    }
-    const total = gearRolls.power(profile[1], profile[2] || '', hits);
+    const titanDice = titanPowerDice(seat);
+    const total = gearRolls.power(profile[1], profile[2] || '', hits, titanDice);
     for (const [lower, higher] of [['red', 'black'], ['black', 'white']]) {
       const excess = Math.max(0, total[lower] - dice.limits[lower]);
       total[lower] -= Math.ceil(excess / 2) * 2;
@@ -1494,16 +1508,19 @@
     const counts = Object.fromEntries(dice.modes.power.kinds.map(kind => [kind, total[kind]]));
     saveDiceDraft(seat, 'power', counts);
     restoreDiceDraft(form, seat);
-    status.textContent = total.raw ? '已带入武器骰。另计 ' + total.raw + ' 原始威力。' : '已带入武器骰。';
+    const applied = Object.keys(titanDice).length ? '已带入泰坦与武器骰。' : '已带入武器骰。';
+    status.textContent = hits === 0 ? '命中数为 0，本次无需投掷威力。'
+      : applied + (total.raw ? '另计 ' + total.raw + ' 原始威力。' : '');
   }
 
   function renderDicePanel(panel, powerPool) {
     const seat = actor.role === 'host' ? rollSeat : actor.seat;
     const previousForm = panel.querySelector('form[data-roll]');
+    const basePower = rollMode === 'power' ? titanPowerDice(seat) : {};
     const fields = dice.modes[rollMode].kinds.map(kind => {
       const label = kind === 'd10' ? '总数量（含 1 枚白色关键骰）' : dice.names[kind];
       const minimum = kind === 'd10' || kind === 'armor' ? 1 : 0;
-      return diceCountField(kind, label, minimum, dice.limits[kind], rollMode === 'defense' && kind === 'red' ? 1 : minimum);
+      return diceCountField(kind, label, minimum, dice.limits[kind], rollMode === 'defense' && kind === 'red' ? 1 : basePower[kind] ?? minimum);
     }).join('');
     const last = dice.latestByHero(state.rolls, state.lastBattleRollId).find(roll => roll.seat === seat);
     const dodgeId = rollMode === 'defense' && parentRoll
@@ -1524,7 +1541,8 @@
     };
     const weapon = rollMode === 'attack' && selectedWeapon(seat);
     const canSubmit = canSubmitAttack(seat);
-    const form = '<form data-roll data-dice-seat="' + seat + '" class="battle-room-dice">'
+    const form = '<form data-roll data-dice-seat="' + seat + '" class="battle-room-dice"'
+      + (rollMode === 'power' ? ' data-power-context="' + escape(powerDraftContext(seat)) + '"' : '') + '>'
       + (weapon ? '<input type="hidden" name="weapon" value="' + escape(weapon.id) + '">' : '')
       + '<div>' + fields + '<button type="submit"' + (canSubmit ? '' : ' disabled') + '>投掷'
       + dice.modes[rollMode].name + '</button></div>'
@@ -1715,6 +1733,17 @@
     AT: '永世力场', DA: '凶险', ED: '闪避骰', HT: '命中难度',
     SP: '速度', ps: '闪避难度', py: '命运',
   };
+  function zoomCardTokens(path) {
+    const projection = state.projection;
+    if (!projection) return [];
+    const matchesCard = src => src && path === '/aibp/' + src;
+    const relevant = matchesCard(projection.bp?.src) ? /^AT[+-]\.png$/
+      : [projection.ai?.src, projection.signature].some(matchesCard) ? /^(?:(?:DA|ED|ps)[+-]|py\+)\.png$/ : null;
+    if (!relevant) return [];
+    return (projection.tokens || []).filter(token => relevant.test(token.file))
+      .map(token => ({ ...token, name: bossTokenLabels[token.file.slice(0, 2)] + (token.file.includes('-') ? ' −' : ' +') }));
+  }
+
   function roomBossTokens(tokens) {
     if (!tokens) return '';
     const counters = { demidjinn: '以怨还怨', dragon: '累计指示物', meduketos: '累计损伤' };
@@ -2270,7 +2299,7 @@
           renderTurn();
           const card = state.projection?.aiPending && state.projection.ai;
           if (card?.src && !state.turn?.aiGuide && !window.openAibpRoomAi?.(state.board?.apostle)) {
-            window.ATO_BATTLE_ASSETS?.zoom('/aibp/' + card.src, card.label || '抽取的 AI');
+            window.ATO_BATTLE_ASSETS?.zoom('/aibp/' + card.src, card.label || '抽取的 AI', null, zoomCardTokens);
           }
         }
         actionRetryDelay = 1500;
@@ -2511,7 +2540,7 @@
       const { panel, signature } = state.projection || {};
       const related = signature && button.dataset.roomArt === '/aibp/' + panel
         ? { src: '/aibp/' + signature, label: '招牌技' } : null;
-      window.ATO_BATTLE_ASSETS?.zoom(button.dataset.roomArt, image.alt, related);
+      window.ATO_BATTLE_ASSETS?.zoom(button.dataset.roomArt, image.alt, related, zoomCardTokens);
     } else if (roomCopy) {
       const url = roomLink(roomCopy, credentials.keys[roomCopy]);
       try {

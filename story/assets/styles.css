@@ -542,6 +542,11 @@ h2 {
   white-space: pre-wrap;
 }
 
+
+::highlight(story-narration-current) {
+  background-color: rgb(196 152 87 / 30%);
+}
+
 .story-version-toggle {
   display: inline-flex;
   align-items: center;
@@ -1316,6 +1321,8 @@ button.battle-aibp-button {
   font-size: 11px;
   font-weight: 700;
 }
+
+.tts-quick-field.tts-dialogue-field[hidden] { display: none; }
 
 .tts-quick-field .tts-select {
   width: 100%;

@@ -189,8 +189,7 @@ test('technology save-and-return notifies the live console instead of reloading 
 test('the page router exposes a focus-only helper that never loads a URL into the tab', () => {
   const router = read('assets/page-focus-router.js');
   const helper = extract(router, 'focusModuleWindow');
-  assert.match(helper, /window\.open\("", targetWindowName\)/, 'an empty URL only focuses the existing tab');
-  assert.doesNotMatch(helper, /window\.open\([^)]*dashboardUrl/, 'the helper must not navigate');
+  assert.doesNotMatch(helper, /window\.open\(/, 'focusing must never open a tab');
   assert.match(router, /^ {4}focusModuleWindow,$/m, 'the helper is part of window.ATO_PAGE_ROUTER');
   assert.match(router, /^ {4}focusOrSync,$/m, 'focusOrSync is part of window.ATO_PAGE_ROUTER');
 });
@@ -304,27 +303,32 @@ test('router opens the module when a stale record no longer has a tab', async ()
   assert.deepEqual(calls, ['open-tab:http://localhost/hero/index.html?cycle=c2']);
 });
 
-test('focusModuleWindow closes the blank popup created when no named tab exists', () => {
-  const router = read('assets/page-focus-router.js');
-  let closed = 0;
-  let focused = 0;
-  for (const [href, expected] of [['about:blank', null], ['http://localhost/map/index.html', 'window']]) {
-    const target = {
-      location: { href },
-      close() { closed += 1; },
-      focus() { focused += 1; },
-    };
-    const context = vm.createContext({
-      moduleWindowName: () => 'ato-module-map',
-      window: { open: () => target },
-    });
-    vm.runInContext(extract(router, 'focusModuleWindow'), context);
-    const result = context.focusModuleWindow('map');
-    if (expected === null) assert.equal(result, null);
-    else assert.equal(result, target);
-  }
-  assert.equal(closed, 1, 'the probe popup is closed, not left blank');
-  assert.equal(focused, 1, 'a real tab is focused');
+test('focusModuleWindow reuses live handles without opening a blank tab', () => {
+  const focus = extract(read('assets/page-focus-router.js'), 'focusModuleWindow');
+  const origin = 'http://localhost';
+  const calls = [];
+  const target = (module, overrides = {}) => ({
+    location: { origin, href: origin + '/' + module + '/index.html' },
+    focus() { calls.push(module); },
+    ...overrides,
+  });
+  const openedWindows = new Map([
+    ['map', target('map')],
+    ['story', target('story', { closed: true })],
+    ['hero', target('record')],
+  ]);
+  const opener = target('dashboard');
+  const context = vm.createContext({
+    openedWindows,
+    moduleFromUrl: href => new URL(href).pathname.split('/')[1],
+    window: { opener, location: { origin }, open() { calls.push('unexpected new tab'); } },
+  });
+  vm.runInContext(focus, context);
+  assert.equal(context.focusModuleWindow('map'), openedWindows.get('map'));
+  assert.equal(context.focusModuleWindow('dashboard'), opener);
+  assert.equal(context.focusModuleWindow('story'), null);
+  assert.equal(context.focusModuleWindow('hero'), null);
+  assert.deepEqual(calls, ['map', 'dashboard']);
 });
 
 test('module liveness keeps throttled heartbeats as stale instead of closed', () => {

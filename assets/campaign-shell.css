@@ -1,87 +1,73 @@
 /* A Cycle I skin over the existing application. Control behavior is owned by the app. */
-body:is([data-cycle="c1"], :not([data-cycle])):not([data-theme-dark], [data-campaign-folio]) {
-  --bg: #eee6d7;
-  --paper: #f8f2e7;
-  --panel: #f9f4e9;
-  --ink: #322a21;
-  --muted: #6d5e4e;
-  --line: #d5c5ac;
-  --line-strong: #9d8569;
-  --accent: #795236;
-  --accent-strong: #513a2b;
-  --accent-soft: #e9dbc5;
-  --shadow: 0 12px 30px #412d1714;
-  background-color: var(--bg);
-  background-image: radial-gradient(ellipse at top, #fff9e9a0, transparent 690px);
+body:is([data-theme-cycle="c1"], :not([data-theme-cycle]):is([data-cycle="c1"], :not([data-cycle]))):not([data-theme-dark]) #appShell {
+  background-image: radial-gradient(ellipse at top, var(--folio-paper), transparent 690px);
 }
 body:not([data-theme-dark]) :is(.cycle-title, .panel-head h2, .record-header h1) {
-  font-family: "Songti SC", "Noto Serif CJK SC", SimSun, Georgia, serif;
+  font-family: var(--folio-serif);
   letter-spacing: .06em;
 }
 body:not([data-theme-dark]) :is(.dashboard-navigation, .record-links) {
-  border-block-color: #b9a17e;
+  border-block-color: var(--folio-rule);
 }
 body:not([data-theme-dark]) :is(.panel-head, .date-track-panel .panel-head) {
-  border-bottom: 3px double #c7b491;
+  border-bottom: 3px double var(--folio-rule);
+}
+#appShell.art-dashboard-shell .panel {
+  border-color: var(--folio-edge);
+  background: var(--folio-paper);
 }
 body .campaign-toolbox {
-  --toolbox-ink: #392e24;
-  --toolbox-accent: #48362a;
+  --toolbox-ink: var(--folio-ink);
+  --toolbox-accent: var(--folio-nav);
 }
 body .campaign-toolbox > summary {
-  border: 3px double #cdb089;
+  border: 3px double var(--folio-rule);
   border-radius: 2px;
   padding: 8px 16px;
-  color: #fcf0d8;
+  color: var(--folio-on-dark);
   letter-spacing: .08em;
 }
 body .campaign-toolbox-menu {
   min-width: min(15rem, calc(100vw - 26px));
   gap: 0;
   padding: 7px 10px;
-  border: 3px double #ae9470;
+  border: 3px double var(--folio-rule);
   border-radius: 2px;
-  background: #f8efdf;
+  background: var(--folio-sheet);
   box-shadow: 0 10px 35px #3f302847;
 }
 body .campaign-toolbox-menu button {
   min-height: 43px;
   border: 0;
   border-radius: 0;
-  border-bottom: 1px solid #ddceb6;
+  border-bottom: 1px solid var(--folio-edge);
   background: transparent;
-  color: #473327;
+  color: var(--folio-ink);
 }
 body .campaign-toolbox-menu button:nth-of-type(3) { border-bottom: 0; }
 body .campaign-toolbox-menu button:not(:disabled):hover {
-  background: #e8d8be;
+  background: var(--folio-inset);
 }
 body :is(.campaign-hero-tool, .campaign-nemesis-tool, .quick-settlement-dialog) {
-  background-color: #f8efdf;
-  color: #392e24;
-  border: 3px double #a98e68;
+  background-color: var(--folio-sheet);
+  color: var(--folio-ink);
+  border: 3px double var(--folio-rule);
   border-radius: 2px;
 }
 body :is(.campaign-hero-tool, .campaign-nemesis-tool) h2 {
-  font-family: "Songti SC", SimSun, serif;
+  font-family: var(--folio-serif);
 }
 body :is(.campaign-hero-tool, .campaign-nemesis-tool) :is(button, select),
 body .hero-tool-roster section {
-  background: #fff8eb;
-  border-color: #c7b38f;
+  background: var(--folio-paper);
+  border-color: var(--folio-edge);
   border-radius: 2px;
 }
 body :is(.campaign-nemesis-tool [data-nemesis-confirm], .campaign-hero-tool button[type="submit"]) {
-  background: #60402b;
-  border-color: #60402b;
-  color: #fff6e6;
+  background: var(--folio-action);
+  border-color: var(--folio-action);
+  color: var(--folio-on-dark);
 }
-body .room-tool-dock {
-  border-color: #ab906b;
-  box-shadow: 0 5px 20px #32241926;
-}
-body .room-tool-sheet { border: 3px double #ab906b; }
-
 body:not([data-theme-dark]) #diplomacyTracks .diplomacy-row {
   grid-template-columns: minmax(0, 1fr);
   gap: 8px;
@@ -201,13 +187,7 @@ body #storySettlement .story-settlement-chip.proposed {
 }
 body .campaign-hero-tool footer a { color: #795236; }
 
-/* Phase I. The dashboard keeps its existing layout and native controls. */
-body[data-cycle="c1"]:not([data-theme-dark]) #appShell {
-  --folio-ink: #392b22;
-  --folio-rule: #bfa784;
-  --folio-paper: #f8f0e0;
-  --folio-sand: #e7d8bc;
-}
+/* Cycle I dashboard ornament. */
 #appShell:has(.topbar #dashboardTitle) .topbar { isolation: isolate; }
 body[data-cycle="c1"]:not([data-theme-dark]) #appShell .topbar {
   position: relative;
@@ -215,7 +195,7 @@ body[data-cycle="c1"]:not([data-theme-dark]) #appShell .topbar {
   margin-bottom: 0;
   padding: 18px clamp(12px, 2.4vw, 30px);
   border-block: 3px double var(--folio-rule);
-  background: linear-gradient(105deg, #f9f2e4, #f0e3cb);
+  background: linear-gradient(105deg, var(--folio-paper), var(--folio-inset));
 }
 body[data-cycle="c1"]:not([data-theme-dark]) #appShell .topbar::after {
   content: "";
@@ -233,7 +213,7 @@ body[data-cycle="c1"]:not([data-theme-dark]) #dashboardTitle {
   line-height: 1.3;
 }
 body[data-cycle="c1"]:not([data-theme-dark]) #appShell .day-card {
-  background: #fbf4e5e8;
+  background: var(--folio-paper);
   border: 1px solid var(--folio-rule);
   border-radius: 0;
   box-shadow: 2px 2px 0 #d5c29f88;
@@ -247,7 +227,7 @@ body[data-cycle="c1"]:not([data-theme-dark]) #appShell .dashboard-navigation {
   margin-bottom: 23px;
   border-top: 0;
   padding-block: 7px;
-  background: #faf4e86b;
+  background: var(--folio-sheet);
 }
 body[data-cycle="c1"]:not([data-theme-dark]) #appShell .record-links {
   gap: 3px clamp(8px, 1vw, 16px);
@@ -256,15 +236,15 @@ body[data-cycle="c1"]:not([data-theme-dark]) #appShell .record-links .record-car
   padding-inline: 6px;
 }
 body[data-cycle="c1"]:not([data-theme-dark]) #appShell .record-links .record-card-link:hover {
-  background: #e9d9bc;
-  color: #4b3221;
+  background: var(--folio-inset);
+  color: var(--folio-label);
 }
 body[data-cycle="c1"]:not([data-theme-dark]) #appShell #todayPreview {
   margin: 0 0 14px;
   padding: 10px 14px;
-  background: #eee0c6;
+  background: var(--folio-inset);
   border: 1px solid var(--folio-rule);
-  border-left: 3px solid #997548;
+  border-left: 3px solid var(--folio-rule);
   border-radius: 0;
   color: var(--folio-ink);
 }
@@ -277,53 +257,53 @@ body[data-cycle="c1"]:not([data-theme-dark]) #appShell #todayPreviewItems:empty 
 body[data-cycle="c1"]:not([data-theme-dark]) #appShell #flowList .flow-step.current {
   padding: clamp(10px, 1.5vw, 20px);
   background: var(--folio-paper);
-  border: 1px solid #b9a07a;
-  box-shadow: inset 0 3px #806248;
+  border: 1px solid var(--folio-edge);
+  box-shadow: inset 0 3px var(--folio-rule);
 }
 body[data-cycle="c1"]:not([data-theme-dark]) #appShell #flowList .flow-step.current > div > .step-title {
   padding: 8px 10px;
   margin: 0;
-  background: #44352a;
-  color: #f8edda;
+  background: var(--folio-nav);
+  color: var(--folio-on-dark);
 }
 body[data-cycle="c1"]:not([data-theme-dark]) #appShell #flowList .flow-step.current > div > .step-title :is(.step-index, .step-kind) {
-  color: #e9d4b1;
+  color: var(--folio-on-dark);
 }
 body[data-cycle="c1"]:not([data-theme-dark]) #appShell #flowList .flow-step.current .step-state:not(.nemesis-encounter-tag) {
-  color: #f8edda;
-  background: #78593e;
+  color: var(--folio-on-dark);
+  background: var(--folio-nav-hover);
 }
 body[data-cycle="c1"]:not([data-theme-dark]) #appShell #flowList .flow-step.locked { background: transparent; }
 body[data-cycle="c1"]:not([data-theme-dark]) #appShell .date-track-panel .panel-head {
   padding: 10px 12px;
-  background: #e9dbc1;
+  background: var(--folio-inset);
   border-bottom: 3px double var(--folio-rule);
 }
 body[data-cycle="c1"]:not([data-theme-dark]) #appShell #dateTrackList {
-  background: #f9f2e6;
-  scrollbar-color: #a88760 transparent;
+  background: var(--folio-paper);
+  scrollbar-color: var(--folio-rule) transparent;
 }
 body[data-cycle="c1"]:not([data-theme-dark]) #appShell #dateTrackList .date-track-item {
   color: var(--folio-ink);
 }
 body[data-cycle="c1"]:not([data-theme-dark]) #appShell #dateTrackList .date-track-item.current {
-  background: #e8d5af;
-  border-color: #9e7751;
-  border-top-color: #765132;
+  background: var(--folio-inset);
+  border-color: var(--folio-rule);
+  border-top-color: var(--folio-action);
 }
 body[data-cycle="c1"]:not([data-theme-dark]) #appShell #dateTrackList .date-track-item.current .date-track-day {
   font-weight: 700;
 }
 body[data-cycle="c1"]:not([data-theme-dark]) #appShell #notesInput {
-  background: #f8f1e4;
+  background: var(--folio-paper);
 }
 body[data-cycle="c1"]:not([data-theme-dark]) .panel-heading.module-head {
-  background: #f0e4cf;
-  border-bottom: 3px double #c9b18f;
+  background: var(--folio-inset);
+  border-bottom: 3px double var(--folio-rule);
 }
 body[data-cycle="c1"]:not([data-theme-dark]) .panel-heading.module-head h2 {
-  color: #473326;
-  font-family: "Songti SC", "Noto Serif CJK SC", SimSun, Georgia, serif;
+  color: var(--folio-label);
+  font-family: var(--folio-serif);
 }
 @media (max-width: 640px) {
   body[data-cycle="c1"]:not([data-theme-dark]) #appShell .topbar {
@@ -339,14 +319,14 @@ body[data-cycle="c1"]:not([data-theme-dark]) .panel-heading.module-head h2 {
   }
 }
 body[data-cycle="c1"]:not([data-theme-dark]) #appShell #flowList .flow-step.current .step-title :is(.flow-title-button, .step-actions a) {
-  color: #f8edda;
+  color: var(--folio-on-dark);
   background: transparent;
-  text-decoration-color: #ccad7e;
+  text-decoration-color: var(--folio-rule);
 }
 body[data-cycle="c1"]:not([data-theme-dark]) #appShell #nextDayButton:disabled {
-  background: #e6d9c3;
-  color: #695844;
-  border-color: #c9b38f;
+  background: var(--folio-inset);
+  color: var(--folio-muted);
+  border-color: var(--folio-edge);
 }
 
 /* Campaign navigation */
@@ -377,16 +357,16 @@ body.art-module-shell .campaign-toolbox { inset-inline-start: var(--art-module-i
   overflow-y: auto;
   scrollbar-width: thin;
   padding: 9px 6px;
-  background: #302d26;
-  color: #f1e4c9;
-  border: 3px double #9d825e;
+  background: var(--folio-nav);
+  color: var(--folio-on-dark);
+  border: 3px double var(--folio-rule);
 }
 .art-sidebar .art-sidebar-brand {
   text-align: center;
   font-family: Georgia, serif;
   font-size: 21px;
   letter-spacing: .13em;
-  border-bottom: 1px solid #8c785c;
+  border-bottom: 1px solid var(--folio-rule);
   margin-bottom: 4px;
   padding: 6px 0;
 }
@@ -410,17 +390,17 @@ body.art-module-shell .campaign-toolbox { inset-inline-start: var(--art-module-i
   line-height: 1.2;
   font-size: 12px;
   font-weight: 600;
-  color: #f1e4c9;
+  color: var(--folio-on-dark);
   background: transparent;
   border: 1px solid transparent;
   text-decoration: none;
 }
 .art-sidebar [hidden] { display: none !important; }
 .art-sidebar .record-card-link::after { content: none; }
-.art-sidebar :is(a:hover, a[aria-current="page"]) {
-  color: #fff5df;
-  border-color: #9d825e;
-  background: #5a4736;
+.art-sidebar :is(a:hover, a:focus-visible, a[aria-current="page"]) {
+  color: var(--folio-on-dark);
+  border-color: var(--folio-rule);
+  background: var(--folio-nav-hover);
 }
 .art-sidebar .art-sidebar-settings { margin-top: auto; }
 .art-sidebar .art-sidebar-tab > span { font-size: 17px; }
@@ -445,13 +425,13 @@ body.art-module-shell .campaign-toolbox { inset-inline-start: var(--art-module-i
 #appShell .art-settings-heading {
   margin: 0 0 20px;
   padding: 15px 18px;
-  border-block: 3px double var(--line);
-  background: var(--accent-soft, var(--panel));
+  border-block: 3px double var(--folio-rule);
+  background: var(--folio-sheet);
 }
 #appShell .art-settings-heading h1 {
   margin: 0;
   color: var(--accent-strong);
-  font: 600 30px / 1.3 "Songti SC", "Noto Serif CJK SC", SimSun, Georgia, serif;
+  font: 600 30px / 1.3 var(--folio-serif);
 }
 #appShell .art-settings-panels {
   display: grid;
@@ -562,8 +542,8 @@ body.art-module-shell .campaign-toolbox { inset-inline-start: var(--art-module-i
   right: var(--art-sidebar-edge);
   bottom: max(14px, env(safe-area-inset-bottom));
   max-width: calc(100vw - var(--art-sidebar-width) - 28px);
-  border: 3px double #a98e68;
-  background: var(--panel);
+  border: 3px double var(--folio-rule);
+  background: var(--folio-paper);
   box-shadow: 0 6px 22px #29221836;
 }
 #appShell .art-log-dock[open] { width: 400px; }
@@ -575,8 +555,8 @@ body.art-module-shell .campaign-toolbox { inset-inline-start: var(--art-module-i
   padding: 8px 13px;
   min-height: 36px;
   list-style: none;
-  background: #393026;
-  color: #fff0d6;
+  background: var(--folio-nav);
+  color: var(--folio-on-dark);
   font-weight: 700;
   cursor: pointer;
 }
@@ -627,17 +607,6 @@ body.art-module-shell .campaign-toolbox { inset-inline-start: var(--art-module-i
 }
 
 /* The module headers and frames share the battle-room material and hierarchy. */
-body:is(.art-module-shell, [data-theme-module="second-screen"]):not([data-campaign-folio]) {
-  --folio-serif: "Songti SC", "Noto Serif CJK SC", SimSun, Georgia, serif;
-  --folio-rule: color-mix(in srgb, var(--gold) 48%, var(--line));
-  --folio-sheet: color-mix(in srgb, var(--accent-soft) 63%, var(--panel));
-}
-body.art-module-shell:not([data-theme-dark], [data-campaign-folio]):is([data-theme-cycle="c1"], :not([data-theme-cycle]):is([data-cycle="c1"], :not([data-cycle]))),
-body[data-theme-module="second-screen"]:not([data-theme-dark])[data-theme-cycle="c1"] {
-  --folio-rule: #b99769;
-  --folio-sheet: #f7efe1;
-}
-
 body.art-module-shell:not([data-theme-dark], .second-screen-map) :is(
   .app > header.topbar, .page-heading, .reader-head, .masthead, .briefing-head,
   .app > main > .title-row
@@ -651,16 +620,16 @@ body.art-module-shell:not([data-theme-dark], .second-screen-map) :is(
   .app > header.topbar, .page-heading, .briefing-head, .masthead
 ) {
   padding: clamp(.7rem, 2vw, 1.25rem);
-  background: linear-gradient(105deg, var(--folio-sheet), var(--panel));
+  background: linear-gradient(105deg, var(--folio-sheet), var(--folio-paper));
 }
-body.art-module-shell:not([data-theme-dark], .second-screen-map) :is(.tree-wrap, .briefing-body .pane, .sheet),
-body.art-module-shell:not([data-theme-dark], .second-screen-map, [data-campaign-folio]) :is(.control-panel, .token-panel
+body.art-module-shell:not([data-theme-dark], .second-screen-map) :is(
+  .tree-wrap, .briefing-body .pane, .sheet
 ) {
   border-color: var(--line);
   border-radius: 2px;
 }
-body.art-module-shell:not([data-theme-dark]) :is(.panel-heading.module-head, .briefing-body .pane-head),
-body.art-module-shell:not([data-theme-dark], [data-campaign-folio]) :is(.hero-column .panel-heading, .tree-tools
+body.art-module-shell:not([data-theme-dark]) :is(
+  .panel-heading.module-head, .briefing-body .pane-head, .tree-tools
 ) {
   border-bottom: 1px solid var(--folio-rule);
   background: var(--folio-sheet);
@@ -695,23 +664,4 @@ body[data-theme-module="second-screen"]:not([data-theme-dark]) .squad-projection
   border-radius: 2px;
   background: var(--folio-sheet);
   color: var(--ink);
-}
-
-/* Use the new palette on the record, hero, technology and map pages. */
-body[data-campaign-folio] .art-sidebar {
-  background: var(--folio-nav);
-  color: var(--folio-on-dark);
-  border-color: var(--folio-rule);
-}
-body[data-campaign-folio] .art-sidebar .art-sidebar-brand { border-bottom-color: var(--folio-rule); }
-body[data-campaign-folio] .art-sidebar :is(.art-sidebar-tab, .record-card-link) { color: var(--folio-on-dark); }
-body[data-campaign-folio] .art-sidebar :is(a:hover, a:focus-visible, a[aria-current="page"]) {
-  color: var(--folio-on-dark);
-  border-color: var(--folio-rule);
-  background: var(--folio-nav-hover);
-}
-body[data-campaign-folio].art-module-shell:not([data-theme-dark], .second-screen-map) :is(
-  .app > header.topbar, .page-heading, .briefing-head, .masthead
-) {
-  background: linear-gradient(105deg, var(--folio-sheet), var(--folio-paper));
 }

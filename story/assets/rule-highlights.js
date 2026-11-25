@@ -202,10 +202,12 @@
   function narrationPlan(root) {
     const plan = [];
     let text = "";
+    let nodes = [];
     let group;
     function visit(node) {
       if (node.nodeType === Node.TEXT_NODE) {
         text += node.data;
+        nodes.push(node);
         return;
       }
       if (node.nodeType !== Node.ELEMENT_NODE) return;
@@ -217,10 +219,11 @@
       if (node.matches(".story-outcome")) {
         const prose = cleanNarration(text);
         if (prose) {
-          plan.push(prose);
+          plan.push({ speech: prose, nodes });
           group = undefined;
         }
         text = "";
+        nodes = [];
         const { storyOutcome: kind, outcomeCount: count, outcomeHeadingLength } = node.dataset;
         if (!group || Boolean(group[0].count) !== Boolean(count) ||
             group.some(option => option.kind === kind && option.count === count)) {
@@ -230,10 +233,9 @@
         const result = kind === "success" ? "成功" : "失败";
         const countLabel = count?.replace(/\+$/, "人及以上").replace(/^([\d–]+)$/, "$1 人");
         const label = count ? countLabel + result : "读" + result;
-        const speech = count
-          ? countLabel.replace(/–/g, "到") + result + "：" + node.textContent.slice(Number(outcomeHeadingLength)).trim()
-          : node.textContent.trim();
-        group.push({ kind, count, label, speech });
+        const prefix = count ? countLabel.replace(/–/g, "到") + result + "：" : "";
+        const speech = prefix + node.textContent.slice(count ? Number(outcomeHeadingLength) : 0).trim();
+        group.push({ kind, count, label, speech, nodes: [node], prefix });
         return;
       }
       const blockBreak = node.matches("p, br, li, blockquote, .story-choice-card");
@@ -243,7 +245,7 @@
     }
     for (const child of root.childNodes) visit(child);
     const ending = cleanNarration(text);
-    if (ending) plan.push(ending);
+    if (ending) plan.push({ speech: ending, nodes });
     return plan;
   }
 
@@ -298,7 +300,7 @@
     try {
       for (const [index, part] of plan.entries()) {
         if (session.signal.aborted) return;
-        if (typeof part === "string") {
+        if (!Array.isArray(part)) {
           if (!await speak(part)) return;
           continue;
         }
@@ -309,7 +311,7 @@
         if (!choice || session.signal.aborted) return;
         if (choice !== "skip") {
           const selected = part[Number(choice)];
-          if (!selected || !await speak(selected.speech)) return;
+          if (!selected || !await speak(selected)) return;
         }
       }
     } finally {

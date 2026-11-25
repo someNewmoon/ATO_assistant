@@ -96,6 +96,13 @@
     id: "ttsVoice",
     className: "tts-select",
   });
+  const dialogueVoiceFields = [
+    { id: "ttsDialogueVoice", key: "dialogueVoice", label: "对话 A", fallback: "与旁白相同" },
+    { id: "ttsDialogueVoiceB", key: "dialogueVoiceB", label: "对话 B", fallback: "与 A 相同" },
+  ].map(field => ({
+    ...field,
+    select: Object.assign(document.createElement("select"), { id: field.id, className: "tts-select" }),
+  }));
   const secondScreenStoryModeLabel = document.querySelector("#secondScreenStoryModeLabel");
   const secondScreenStoryModeToggle = document.querySelector("#secondScreenStoryModeToggle");
   const secondScreenStoryContentLabel = document.querySelector("#secondScreenStoryContentLabel");
@@ -252,6 +259,8 @@
   const defaultTtsConfig = {
     activeEngine: "browser",
     nativeVoice: "",
+    dialogueVoice: "",
+    dialogueVoiceB: "",
     rate: 1,
     volume: 1,
     statusCollapsed: false,
@@ -1238,6 +1247,15 @@
     voiceField.innerHTML = "<span>音色</span>";
     voiceField.append(ttsVoice);
     quickConfig.append(engineField, voiceField);
+    for (const { select, label } of dialogueVoiceFields) {
+      const field = document.createElement("label");
+      field.className = "tts-quick-field tts-dialogue-field";
+      const title = document.createElement("span");
+      title.textContent = label;
+      field.append(title, select);
+      field.hidden = true;
+      quickConfig.append(field);
+    }
     document.body.append(statusBox, overlay, cloneInput, importInput);
 
     return { engineSelect, configButton, statusBox, overlay, cloneInput, importInput };
@@ -1513,6 +1531,7 @@
 
   function stopSpeech() {
     window.ATO_STORY_RULE_HIGHLIGHTS?.cancelNarration();
+    window.ATO_STORY_READING_HIGHLIGHT?.clear();
     activeSpeechToken += 1;
     if (activeNativeTts && window.ATOAndroid) window.ATOAndroid.stopStoryTts();
     activeNativeTts = false;
@@ -2255,14 +2274,14 @@
     if (close) close.focus();
   }
 
-  function configureUtterance(utterance) {
+  function configureUtterance(utterance, voice) {
     const language = storyVersion === "English" ? "en" : "zh";
-    const preferredVoice = voices.find((voice) => voice.name === ttsConfig.nativeVoice)
+    const preferredVoice = voice || voices.find((voice) => voice.name === ttsConfig.nativeVoice)
       || voices[Number(ttsVoice.value || 0)]
       || voices.find((voice) => voice.lang.toLowerCase().startsWith(language))
       || null;
 
-    utterance.lang = storyVersion === "English" ? "en-US" : "zh-CN";
+    utterance.lang = voice?.lang || (storyVersion === "English" ? "en-US" : "zh-CN");
     utterance.rate = ttsConfig.rate || Number(ttsSpeed.value || 1);
     utterance.volume = ttsConfig.volume || 1;
     utterance.voice = preferredVoice;
@@ -2271,6 +2290,7 @@
 
   function finishSpeech(token, keepActive = false) {
     if (token !== activeSpeechToken) return;
+    window.ATO_STORY_READING_HIGHLIGHT?.clear();
     currentUtterance = null;
     if (keepActive) return;
     isSpeaking = false;
@@ -2314,6 +2334,8 @@
           nativeTtsPending = null;
           activeNativeTts = false;
           resolve(false);
+        } else {
+          options.onPlayback?.();
         }
       } catch (error) {
         window.clearTimeout(timeout);
@@ -2351,7 +2373,19 @@
     return new Promise((resolve) => {
       pushTtsStatus("浏览器原生语音朗读中。", "info");
       const utterance = new SpeechSynthesisUtterance(cleanText);
-      configureUtterance(utterance);
+      configureUtterance(utterance, options.voice);
+      utterance.onstart = () => options.onPlayback?.();
+      if (options.onPlayback) {
+        const sentences = [...cleanText.matchAll(/[^。！？!?]+[。！？!?]*/g)];
+        let activeSentence;
+        utterance.onboundary = event => {
+          const sentence = sentences.find(part => event.charIndex >= part.index && event.charIndex < part.index + part[0].length);
+          if (sentence && sentence !== activeSentence) {
+            activeSentence = sentence;
+            options.onPlayback(sentence.index, sentence.index + sentence[0].length);
+          }
+        };
+      }
 
       let remainingTimeoutMs = Math.max(10000, (cleanText.length * 400) / Math.max(ttsConfig.rate || 1, 0.1));
       let timeoutCheckedAt = Date.now();
@@ -3163,7 +3197,7 @@
     }
   }
 
-  function playAudioBlob(audioBlob, token, keepActive = false) {
+  function playAudioBlob(audioBlob, token, keepActive = false, onPlayback) {
     return new Promise((resolve, reject) => {
       const audioUrl = URL.createObjectURL(audioBlob);
       const audio = new Audio(audioUrl);
@@ -3181,6 +3215,7 @@
         clearActiveAudio(audio, audioUrl);
         reject(new Error("音频播放失败"));
       };
+      if (onPlayback) audio.addEventListener("playing", () => onPlayback(), { once: true });
       audio.play().then(applyPendingSpeechPause).catch(reject);
     });
   }
@@ -3242,14 +3277,54 @@
     return chunks.flatMap((part, index) => splitLongSpeechPart(part, targetChunkLength(index) + 40));
   }
 
-  async function speakText(text) {
+  function voiceKey(voice) {
+    return voice.voiceURI || voice.name;
+  }
+
+  function dialogueReading() {
+    if (ttsConfig.activeEngine !== "browser" || voices.length < 2) return null;
+    const [first, second] = dialogueVoiceFields.map(({ key }) =>
+      voices.find(voice => voiceKey(voice) === ttsConfig[key]));
+    return first || second ? { voices: [first, second || first], turn: 0 } : null;
+  }
+
+  function quotedSpeech(text) {
+    return text.matchAll(/“[^“”]+”|"[^"\n]+"/g);
+  }
+
+  function dialogueChunks(text, source, dialogue) {
+    const narrator = value => createSpeechChunks(value).map(text => ({ text }));
+    if (!dialogue || !source || quotedSpeech(text).next().done) return narrator(text);
+    const chunks = [];
+    for (const paragraph of source.speech.split(/\n[ \t\r]*\n+/)) {
+      const line = prepareSpeechText(paragraph.replace(/<[^>]+>/g, ""));
+      const quotes = [...quotedSpeech(line)];
+      if (!quotes.length) {
+        chunks.push(...narrator(line));
+        continue;
+      }
+      const voice = dialogue.voices[dialogue.turn++ % dialogue.voices.length];
+      let offset = 0;
+      for (const match of quotes) {
+        chunks.push(...narrator(line.slice(offset, match.index)));
+        chunks.push(...createSpeechChunks(match[0].slice(1, -1)).map(text => ({ text, voice })));
+        offset = match.index + match[0].length;
+      }
+      chunks.push(...narrator(line.slice(offset)));
+    }
+    return chunks;
+  }
+
+  async function speakText(text, source, dialogue) {
     const cleanText = text.replace(/<[^>]+>/g, "").trim();
     if (!cleanText) return;
 
     const token = ++activeSpeechToken;
-    const chunks = createSpeechChunks(cleanText);
+    const chunks = dialogueChunks(cleanText, source, dialogue);
     if (!chunks.length) return;
     beginSpeech();
+    const match = source && window.ATO_STORY_READING_HIGHLIGHT?.matchChunks(source.nodes);
+    let prefixLength = prepareSpeechText(source?.prefix || "").length;
 
     try {
       let externalUsable = ttsConfig.activeEngine === "cloud" || ttsConfig.activeEngine === "local";
@@ -3259,7 +3334,7 @@
 
       const queueExternalFetch = (index) => {
         if (!externalUsable || fallbackToBrowser || index >= chunks.length || audioJobs.has(index)) return;
-        audioJobs.set(index, getExternalAudioJob(chunks[index], token)
+        audioJobs.set(index, getExternalAudioJob(chunks[index].text, token)
           .then((blob) => ({ ok: true, blob }))
           .catch((error) => ({ ok: false, error })));
       };
@@ -3272,7 +3347,12 @@
 
       for (let index = 0; index < chunks.length; index += 1) {
         if (token !== activeSpeechToken) return;
-        const chunk = chunks[index];
+        const { text: chunk, voice } = chunks[index];
+        const showReading = match?.(chunk, prefixLength);
+        prefixLength = Math.max(0, prefixLength - chunk.length);
+        const onPlayback = showReading && ((start, end) => {
+          if (token === activeSpeechToken) showReading(start, end);
+        });
         const keepActive = index < chunks.length - 1;
         pushTtsStatus(`分句朗读 ${index + 1}/${chunks.length}`, "info");
 
@@ -3285,7 +3365,7 @@
           if (token !== activeSpeechToken) return;
           if (result.ok) {
             queueExternalFetch(index + prefetchWindow + 1);
-            await playAudioBlob(result.blob, token, keepActive);
+            await playAudioBlob(result.blob, token, keepActive, onPlayback);
             usedExternal = true;
           } else {
             const message = String(result.error?.message || result.error || "未知错误");
@@ -3301,7 +3381,7 @@
           pushTtsStatus("外部引擎不可用，后续已回退到浏览器原生语音。", "warn");
           externalUsable = false;
         }
-        await speakWithBrowser(chunk, token, { keepActive });
+        await speakWithBrowser(chunk, token, { keepActive, onPlayback, voice });
       }
       finishSpeech(token);
     } catch (error) {
@@ -3339,6 +3419,7 @@
   }
 
   function renderStory(entry) {
+    window.ATO_STORY_READING_HIGHLIGHT?.clear();
     mixedMediaRuntime()?.dispose?.(storyText);
     mixedMediaRender = null;
     const displayEntry = getDisplayEntry(entry);
@@ -4681,6 +4762,7 @@
     const engine = ttsConfig.activeEngine;
     ttsVoice.innerHTML = "";
     ttsVoice.disabled = false;
+    for (const { select } of dialogueVoiceFields) select.parentElement.hidden = true;
 
     if (engine === "browser") {
       if (window.ATOAndroid && typeof window.ATOAndroid.speakStoryText === "function") {
@@ -4706,6 +4788,14 @@
         if (voice.name === ttsConfig.nativeVoice) option.selected = true;
         ttsVoice.appendChild(option);
       });
+      if (voices.length > 1) {
+        for (const { select, key, fallback } of dialogueVoiceFields) {
+          select.replaceChildren(new Option(fallback, ""));
+          for (const voice of voices) select.add(new Option(voice.name, voiceKey(voice)));
+          select.value = voices.some(voice => voiceKey(voice) === ttsConfig[key]) ? ttsConfig[key] : "";
+          select.parentElement.hidden = false;
+        }
+      }
     } else if (engine === "offline") {
       voices = [];
       offlineAudioPacks.forEach((pack) => {
@@ -4806,23 +4896,28 @@
     const text = prepareSpeechText(spokenSource);
     const rules = window.ATO_STORY_RULE_HIGHLIGHTS;
     const plan = rules?.narrationPlan(storyText);
-    if (plan && !(plan.length === 1 && typeof plan[0] === "string" && prepareSpeechText(plan[0]) === text)) {
+    const dialogue = dialogueReading();
+    const plain = plan?.length === 1 && !Array.isArray(plan[0]) && prepareSpeechText(plan[0].speech) === text;
+    if (plan && !plain) {
       if (!plan.length) {
         pushTtsStatus("当前段落暂无可朗读的正文。", "warn");
         return;
       }
       // Pre-recorded audio cannot pause at a result or omit rule highlights.
-      return rules.playNarration(plan, async content => {
-        const filtered = prepareSpeechText(content);
+      return rules.playNarration(plan, async source => {
+        const filtered = prepareSpeechText(source.speech);
         if (!filtered) return true;
         const token = activeSpeechToken + 1;
-        const completed = await speakText(filtered);
+        const completed = await speakText(filtered, source, dialogue);
         return completed !== false && token === activeSpeechToken;
       });
     }
     if (!text) {
       pushTtsStatus("当前版本暂无可朗读正文。", "warn");
       return;
+    }
+    if (plain && dialogue && !quotedSpeech(text).next().done) {
+      return speakText(text, plan[0], dialogue);
     }
     const token = ++activeSpeechToken;
     await ensureStoryAudioManifest();
@@ -4850,7 +4945,7 @@
       finishSpeech(token);
       return;
     }
-    speakText(text);
+    speakText(text, plain ? plan[0] : undefined);
   }
 
   function getSpeechEntryText(entry) {
@@ -5094,6 +5189,13 @@
       toggleSpeech();
     }
   });
+
+  for (const { select, key } of dialogueVoiceFields) {
+    select.addEventListener("change", () => {
+      ttsConfig[key] = select.value;
+      saveTtsConfig();
+    });
+  }
 
   ttsVoice.addEventListener("change", async () => {
     const engine = ttsConfig.activeEngine;

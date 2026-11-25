@@ -19,6 +19,83 @@
   const controls = Object.fromEntries([...bar.querySelectorAll('[data-table-action]')]
     .map(button => [button.dataset.tableAction, button]));
   let context, battle, busy = false;
+  const attackers = [...document.querySelectorAll('#tableBpAttacker, #tableZoomBpAttacker')];
+  const attackHistory = document.getElementById('tableBpHistory');
+  let heroes = [];
+  let historyMarkup = '';
+
+  async function loadAttackers() {
+    if (!context.accountId) return [];
+    try {
+      const response = await fetch('../api/campaign-state.php?section=heroes', {
+        cache: 'no-store', signal: AbortSignal.timeout(6000),
+      });
+      if (!response.ok) return [];
+      const data = await response.json();
+      if (!data.ok || data.user?.id !== context.accountId) return [];
+      const catalog = window.ATO_HERO_CATALOG;
+      return catalog.activeHeroes({ sections: { heroes: data.state } }, context.profileId)
+        .map(hero => ({ id: hero.id, name: catalog.heroDisplayName(hero), portrait: catalog.heroPortrait(hero) }));
+    } catch {
+      return [];
+    }
+  }
+
+  function renderBpAttacker(bp) {
+    for (const picker of attackers) {
+      picker.hidden = !bp?.pending || !heroes.length;
+      if (picker.hidden) continue;
+      if (!picker.childElementCount) {
+        const label = document.createElement('strong');
+        label.className = 'table-bp-selection';
+        label.setAttribute('role', 'status');
+        const group = document.createElement('div');
+        group.setAttribute('role', 'group');
+        group.setAttribute('aria-label', '本次攻击者');
+        for (const hero of heroes) {
+          const button = document.createElement('button');
+          button.type = 'button';
+          button.dataset.tableAttacker = hero.id;
+          if (hero.portrait) {
+            const image = document.createElement('img');
+            image.src = '../hero/assets/' + hero.portrait;
+            image.alt = '';
+            button.append(image);
+          }
+          button.append(hero.name);
+          button.addEventListener('click', () => deck.setBpAttacker(hero));
+          group.append(button);
+        }
+        picker.append(label, group);
+      }
+      const selection = bp.tableAttacker ? '已选：' + bp.tableAttacker.name : '选择本次攻击者';
+      const label = picker.querySelector('.table-bp-selection');
+      if (label.textContent !== selection) label.textContent = selection;
+      for (const button of picker.querySelectorAll('[data-table-attacker]')) {
+        button.setAttribute('aria-pressed', String(button.dataset.tableAttacker === bp.tableAttacker?.id));
+      }
+    }
+    const history = bp?.tableAttackHistory || [];
+    attackHistory.hidden = history.length === 0;
+    const markup = JSON.stringify(history);
+    if (markup === historyMarkup) return;
+    historyMarkup = markup;
+    const rows = history.slice().reverse().map(({ hero, card, result }) => {
+      const row = document.createElement('li');
+      row.append(hero + ' · ' + card + ' · ');
+      if (result === '暴击' || result === 'VP暴击') {
+        const badge = document.createElement('strong');
+        badge.className = 'table-critical-badge';
+        badge.textContent = result;
+        row.append(badge);
+      } else {
+        row.append(result);
+      }
+      return row;
+    });
+    attackHistory.querySelector('ol').replaceChildren(...rows);
+  }
+
 
   function activeVoyage() {
     return voyage?.read(battle?.voyage) || voyage?.current();
@@ -109,6 +186,8 @@
       throw Error('无法确认桌战对应的遭遇。');
     }
     if (entry.voyage && entry.result) voyage.settle(voyage.read(entry.voyage), 'table-' + entry.id, entry.result);
+    heroes = await loadAttackers();
+    for (const picker of attackers) picker.replaceChildren();
     await deck.activate(entry);
     battle = entry;
     const url = new URL(location.href);
@@ -251,6 +330,15 @@
 
   window.AIBP_TABLE_BATTLE = {
     launch: () => run(routeBattle),
+    renderBpAttacker,
+    celebrateCritical: (attacker, damage) => squadLink.celebrateCritical(attacker?.name, damage),
+    damageRecap() {
+      if (battle?.stage !== 'loot') return '';
+      const { total, critical } = deck.damageRecap();
+      return '<p class="room-damage-recap"><strong>骇物损伤 ' + total + '</strong>'
+        + (critical ? ' · 其中暴击造成 ' + critical : '') + '</p>';
+    },
+    attackerPortrait: id => heroes.find(hero => hero.id === id)?.portrait,
     settlement() {
       if (!battle || battle.stage !== 'loot') return null;
       if (saved(context.key)?.id !== battle.id || saved(context.key)?.stage !== 'loot') {

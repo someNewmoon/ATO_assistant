@@ -1,4 +1,4 @@
-@import url("./cycle-theme.css");
+@import url("./cycle-theme.css?v=20261125-folio");
 
 /* Story and doom dialogs live outside .app and need the same control styles. */
 .card-track-dialog,

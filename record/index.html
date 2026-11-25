@@ -475,8 +475,6 @@
     }
 
     .titan-options { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: .35rem; }
-    .titan-options > label:first-child, .titan-options > small { grid-column: 1 / -1; }
-    .titan-options > small:empty { display: none; }
     .titan-details > a { display: flex; align-items: center; gap: .5rem; }
     .titan-details > a[hidden], .titan-options [hidden] { display: none; }
     .titan-trauma { grid-column: 1 / -1; }
@@ -494,11 +492,6 @@
       padding: 8px 6px;
       text-align: center;
       font-weight: 900;
-    }
-
-    .titan-add-row .titan-total-limit,
-    .titan-add-row .titan-dead-count {
-      width: 96px;
     }
 
     .titan-number-field {
@@ -1569,7 +1562,7 @@
     }
   </style>
   <link rel="stylesheet" href="../api/cycle-theme.css?v=20261125-folio">
-  <link rel="stylesheet" href="./record.css?v=20261125-module-folio">
+  <link rel="stylesheet" href="./record.css?v=20261125-titan-panel-reference">
   <script src="../story/data/english-source-data.js?v=20261011-english4"></script>
   <script src="../assets/theme.js?v=20261114-light-sidebar1" defer></script>
   <link rel="stylesheet" href="../assets/card-art.css?v=20261017-corners1">
@@ -1580,7 +1573,7 @@
   <script src="../assets/mobile/layout.js?v=20261028-apk-portrait1" defer></script>
   <script src="../assets/mobile/record-hero.js?v=20261028-apk-portrait1" defer></script>
 </head>
-<body data-campaign-folio>
+<body>
   <main class="app">
     <header class="topbar">
       <div>
@@ -1608,7 +1601,11 @@
       </div>
     </header>
 
-    <div class="layout">
+    <nav class="record-tabs" role="tablist" aria-label="阿尔戈号">
+      <button type="button" role="tab" id="recordOverviewTab" aria-controls="recordOverview" aria-selected="true">航行记录</button>
+      <button type="button" role="tab" id="recordTitansTab" aria-controls="recordTitans" aria-selected="false" tabindex="-1">泰坦廊柱</button>
+    </nav>
+    <div class="layout record-tab-panel" id="recordOverview" role="tabpanel" aria-labelledby="recordOverviewTab">
       <div class="stack">
         <section class="panel">
           <div class="panel-heading">
@@ -1683,38 +1680,6 @@
             <label data-cycle-field="c5"><span class="item-label">阿尔戈英雄储备</span><input data-cycle-bind="supply" type="number" min="0" step="1"></label>
           </div>
         </section>
-
-        <details class="panel titan-list-panel">
-          <summary class="titan-list-head">
-            <strong><span class="panel-icon" aria-hidden="true" style="--panel-icon-w:15px;--panel-icon-h:19px;--icon-src:url(../assets/icons/titans.svg?v=apk-ui-a72da92bdf63)"></span>泰坦列表</strong>
-            <span id="titanListCount"></span>
-          </summary>
-          <div id="titanList" class="titan-list"></div>
-          <div class="titan-add-row">
-            <input id="titanNameInput" type="text" placeholder="泰坦名称">
-            <label class="titan-number-field">
-              数量
-              <input id="titanCountInput" type="number" min="1" step="1" value="1" title="当前数量" aria-label="泰坦数量">
-            </label>
-            <label class="titan-crippled-add">
-              <input id="titanCrippledInput" type="checkbox">
-              残废
-            </label>
-            <label class="titan-number-field titan-total-limit">
-              总上限
-              <input id="titanLimitInput" type="number" min="0" step="1" value="0" title="泰坦总上限" aria-label="泰坦总上限">
-            </label>
-            <label class="titan-number-field titan-dead-count">
-              已死亡
-              <input id="deadTitansInput" type="number" min="0" step="1" value="0" title="已死亡泰坦累计" aria-label="已死亡泰坦累计">
-            </label>
-            <button id="addTitanButton" type="button">添加泰坦</button>
-            <div class="titan-details">
-              <div id="titanTypeInput"></div>
-              <label class="titan-number-field">备注<input id="titanNotesInput" type="text" maxlength="500"></label>
-            </div>
-          </div>
-        </details>
 
         <section class="panel">
           <div class="panel-heading compact module-head">
@@ -1885,6 +1850,50 @@
 
       </aside>
     </div>
+
+    <section class="panel titan-list-panel record-tab-panel" id="recordTitans" role="tabpanel" aria-labelledby="recordTitansTab" hidden>
+      <header class="titan-list-head">
+        <strong><span class="panel-icon" aria-hidden="true" style="--panel-icon-w:15px;--panel-icon-h:19px;--icon-src:url(../assets/icons/titans.svg?v=apk-ui-a72da92bdf63)"></span>泰坦廊柱</strong>
+        <span id="titanListCount"></span>
+      </header>
+      <div class="titan-ledger">
+        <div class="titan-management">
+          <details class="titan-stock-editor">
+            <summary>调整库存</summary>
+            <div class="titan-ledger-totals" role="group" aria-label="泰坦库存统计">
+              <label class="titan-number-field titan-total-limit">
+                总上限
+                <input id="titanLimitInput" type="number" min="0" step="1" value="0" title="泰坦总上限" aria-label="泰坦总上限">
+              </label>
+              <label class="titan-number-field titan-dead-count">
+                已死亡
+                <input id="deadTitansInput" type="number" min="0" step="1" value="0" title="已死亡泰坦累计" aria-label="已死亡泰坦累计">
+              </label>
+            </div>
+          </details>
+          <details class="titan-add-editor">
+            <summary>添加泰坦</summary>
+            <div class="titan-add-row" role="group" aria-label="添加泰坦">
+              <label class="titan-number-field">泰坦名称<input id="titanNameInput" type="text"></label>
+              <label class="titan-number-field">
+                数量
+                <input id="titanCountInput" type="number" min="1" step="1" value="1" title="当前数量" aria-label="泰坦数量">
+              </label>
+              <label class="titan-crippled-add">
+                <input id="titanCrippledInput" type="checkbox">
+                残废
+              </label>
+              <div class="titan-details">
+                <div id="titanTypeInput"></div>
+                <label class="titan-number-field">备注<input id="titanNotesInput" type="text" maxlength="500"></label>
+              </div>
+              <button id="addTitanButton" type="button">确认添加</button>
+            </div>
+          </details>
+        </div>
+        <div id="titanList" class="titan-list"></div>
+      </div>
+    </section>
   </main>
   <dialog id="noteAttachmentPreview" class="note-attachment-preview" aria-label="查看图片附件">
     <div class="note-preview-heading"><span class="note-preview-title"></span><button type="button">关闭</button></div>
@@ -1896,9 +1905,10 @@
     <button type="button" data-camera-shoot>拍摄并添加</button>
   </dialog>
 
-  <script src="../assets/page-focus-router.js?v=20261028-android-return1"></script>
+  <script src="../assets/page-focus-router.js?v=20261125-no-blank"></script>
   <script src="../assets/voyage-return.js?v=1"></script>
   <script src="./mark-notes.js"></script>
+  <script src="./record-tabs.js?v=20261125" defer></script>
   <script src="./item-icons.js?v=apk-ui-a72da92bdf63"></script>
   <script src="./matrix-data.js?v=20261106-c123-fixes2"></script>
   <script src="../assets/cycle-symbols.js?v=20261115-module-logo"></script>
@@ -1906,6 +1916,7 @@
   <script src="enemy-evolution.js?v=20261120"></script>
   <script src="../aibp/tactical-sprites.js?v=20261123-earthshaker"></script>
   <script src="../technology/gear-inventory.js?v=20261120-titan-management"></script>
+  <script src="../assets/titan-panel-reference.js?v=20261125-power"></script>
   <script src="../assets/campaign-notes.js?v=20261015"></script>
   <script src="../assets/record-attachments.js?v=20261009"></script>
   <script src="./note-attachments.js?v=20261009-rename3"></script>
@@ -3584,6 +3595,8 @@
       elements.titanLimitInput.value = state.titanLimit;
       elements.deadTitansInput.value = state.deadTitans;
       updateTitanListCount();
+      const expanded = new Set([...elements.titanList.querySelectorAll(".titan-entry-details[open]")]
+        .map((entry) => entry.closest(".titan-row").dataset.titanId));
       elements.titanList.innerHTML = "";
 
       if (!state.titans.length) {
@@ -3595,15 +3608,94 @@
       }
 
       state.titans.forEach((titan, index) => {
-        const row = document.createElement("div");
-        row.className = "titan-row";
+        const row = document.createElement("article");
+        row.className = titan.crippled ? "titan-row is-crippled" : "titan-row";
+        row.dataset.titanId = titan.id;
+        const cardHeader = document.createElement("header");
+        cardHeader.className = "titan-card-head";
+        const cardName = document.createElement("h3");
+        cardName.textContent = titan.name || "泰坦";
+        const quantity = document.createElement("span");
+        quantity.className = "titan-card-count";
+        const updateCardCount = () => { quantity.textContent = `数量 ${state.titans[index].count}`; };
+        updateCardCount();
+        const badge = document.createElement("span");
+        badge.className = "titan-card-status";
+        badge.textContent = titan.crippled ? "伤残" : "在库";
+        cardHeader.append(cardName, badge, quantity);
+        const inventory = window.ATO_GEAR_INVENTORY;
+        const abilities = document.createElement("ul");
+        abilities.className = "titan-card-abilities";
+        abilities.setAttribute("aria-label", "泰坦面板能力");
+        let activePanel;
+        const attributes = document.createElement("dl");
+        attributes.className = "titan-card-attributes";
+        let activeTraumaTrack;
+        const refreshAttributes = () => {
+          const { type } = inventory.titanTypeFields(titan);
+          const panel = inventory.dreamwalkerPanel(titan);
+          const reference = window.ATO_TITAN_PANEL_REFERENCE.forTitan(titan, inventory);
+          if (reference !== activePanel) {
+            activePanel = reference;
+            abilities.hidden = !reference;
+            abilities.replaceChildren(...(reference?.abilities || []).map(([name, summary, symbol]) => {
+              const ability = document.createElement("li");
+              const title = document.createElement("strong");
+              title.textContent = name;
+              ability.append(title, summary);
+              if (symbol) {
+                const icon = document.createElement("span");
+                icon.className = "titan-panel-symbol " + symbol;
+                icon.setAttribute("role", "img");
+                icon.setAttribute("aria-label", name + "的牌面效果符号");
+                ability.append(icon);
+              }
+              return ability;
+            }));
+          }
+          const patterns = inventory.loadoutPatterns(titan, null, state.cycle);
+          const ranges = [];
+          activeTraumaTrack?.forEach((deck, step) => {
+            const last = ranges.at(-1);
+            if (last?.deck === deck) last.end = step + 1;
+            else ranges.push({ deck, start: step + 1, end: step + 1 });
+          });
+          const track = ranges.map(({ deck, start, end }) =>
+            `${start === end ? start : `${start}–${end}`} ${inventory.traumaDeckLabel(deck)}`).join(" · ");
+          const items = [
+            ["泰坦种类", type || "未指定种类"],
+            ["梦行者面板", panel?.name],
+            ["移动力", reference && String(reference.movement)],
+            ["面板威力骰", reference && Object.entries({ red: "红", black: "黑", white: "白" })
+              .filter(([color]) => reference.powerDice[color])
+              .map(([color, label]) => `${reference.powerDice[color]} 枚${label}色威力骰`).join(" · ")],
+            ...patterns.map((pattern) => [
+              inventory.PATTERN_FIELDS[pattern.track ? "traumaPatternId" : "kratosPatternId"], pattern.name
+            ]),
+            ["创伤表", track],
+            ["备注", titan.notes?.trim(), "titan-card-note"],
+          ];
+          attributes.replaceChildren(...items.filter(([, value]) => value).map(([label, value, className]) => {
+            const item = document.createElement("div");
+            if (className) item.className = className;
+            const term = document.createElement("dt");
+            term.textContent = label;
+            const description = document.createElement("dd");
+            description.textContent = value;
+            if (className === "titan-card-note") description.setAttribute("data-language-ignore", "");
+            item.append(term, description);
+            return item;
+          }));
+        };
 
         const nameInput = document.createElement("input");
         nameInput.type = "text";
         nameInput.value = titan.name;
         nameInput.placeholder = "泰坦名称";
+        nameInput.setAttribute("aria-label", "泰坦名称");
         nameInput.addEventListener("input", () => {
           state.titans[index].name = nameInput.value;
+          cardName.textContent = nameInput.value || "泰坦";
           refreshPreview();
           queueSave();
         });
@@ -3622,6 +3714,7 @@
         countInput.setAttribute("aria-label", `${titan.name || "泰坦"} 数量`);
         countInput.addEventListener("input", () => {
           state.titans[index].count = Math.max(1, Math.floor(Number(countInput.value || 1)));
+          updateCardCount();
           updateTitanListCount();
           queueSave();
         });
@@ -3678,9 +3771,11 @@
         details.className = "titan-details";
         const type = createTitanTypeField(titan, (fields) => {
           Object.assign(state.titans[index], fields);
+          refreshAttributes();
           queueSave();
         });
         const preview = document.createElement("a");
+        preview.className = "titan-panel-preview";
         preview.target = "_blank";
         preview.rel = "noopener";
         const thumbnail = document.createElement("img");
@@ -3690,6 +3785,9 @@
         thumbnail.loading = "lazy";
         const previewLabel = document.createElement("span");
         preview.append(thumbnail, previewLabel);
+        const artSlot = document.createElement("div");
+        artSlot.className = "titan-card-art";
+        artSlot.appendChild(preview);
         const refreshPreview = () => {
           const art = window.ATO_GEAR_INVENTORY.titanArtwork(state.titans[index]);
           preview.hidden = !art;
@@ -3697,9 +3795,10 @@
             preview.href = "../" + art.path;
             const panel = window.ATO_GEAR_INVENTORY.dreamwalkerPanel(state.titans[index]);
             thumbnail.src = panel ? "../aibp/images/titan-portraits/" + panel.id + ".jpg" : preview.href;
-            thumbnail.alt = art.name;
+            thumbnail.alt = "";
             previewLabel.textContent = art.name;
           }
+          refreshAttributes();
         };
         type.element.addEventListener("change", refreshPreview);
         refreshPreview();
@@ -3711,15 +3810,28 @@
         notesInput.value = titan.notes;
         notesInput.addEventListener("input", () => {
           state.titans[index].notes = notesInput.value;
+          refreshAttributes();
           queueSave();
         });
         notes.append("备注", notesInput);
-        const trauma = createTitanTraumaField(titan);
+        const trauma = createTitanTraumaField(titan, (track) => {
+          activeTraumaTrack = track;
+          refreshAttributes();
+        });
         type.element.addEventListener("change", trauma.refresh);
         const options = createTitanOptionsField(titan, refreshPreview, trauma.refresh);
         type.element.addEventListener("change", options.refresh);
-        details.append(preview, type.element, options.element, notes, trauma.element);
-        row.append(nameInput, countField, crippledLabel, removeButton, details);
+        details.append(type.element, notes, options.element, trauma.element);
+        const edit = document.createElement("details");
+        edit.className = "titan-entry-details";
+        edit.open = expanded.has(titan.id);
+        const editLabel = document.createElement("summary");
+        editLabel.textContent = "编辑记录";
+        const controls = document.createElement("div");
+        controls.className = "titan-entry-controls";
+        controls.append(nameInput, countField, crippledLabel, removeButton);
+        edit.append(editLabel, controls, details);
+        row.append(cardHeader, artSlot, attributes, abilities, edit);
         elements.titanList.appendChild(row);
       });
     }
@@ -3760,7 +3872,10 @@
           queueSave();
         });
         label.append(title, select);
-        element.append(label, card, hint);
+        const fieldRow = document.createElement("div");
+        fieldRow.className = "titan-option";
+        fieldRow.append(label, card, hint);
+        element.append(fieldRow);
         return { field, select, card, image, hint };
       });
       function refresh() {
@@ -3790,7 +3905,7 @@
       return { element, refresh };
     }
 
-    function createTitanTraumaField(titan) {
+    function createTitanTraumaField(titan, onTrackChange) {
       const inventory = window.ATO_GEAR_INVENTORY;
       const element = document.createElement("details");
       element.className = "titan-trauma";
@@ -3825,6 +3940,7 @@
         selectors.forEach((select, index) => { select.value = values?.[index] || ""; });
         reset.disabled = Boolean(pattern) || !titan.traumaTrack;
         status.textContent = pattern ? pattern.name + "创伤表" : titan.traumaTrack ? "使用泰坦自定义表" : values ? "使用种类默认表" : "尚无创伤表";
+        onTrackChange(values);
       }
       save.onclick = () => {
         const values = inventory.traumaTrack(selectors.map(select => select.value));

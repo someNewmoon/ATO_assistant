@@ -57,11 +57,325 @@ textarea { background: var(--bg); }
   padding-block: 0;
 }
 .identity-grid .oxygen-value-pair input { font-size: 13px; }
-.titan-list-panel { background: var(--folio-paper); padding: 14px 16px; }
-.titan-list-head { color: var(--accent-strong); font-size: 14px; }
-.titan-list-head strong, .summon-group-head strong { font-weight: 600; }
-.titan-row { border: 0; border-radius: 0; padding: 10px 0; background: transparent; }
+/* Argo navigation and the Titan inventory. */
+.record-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .35rem;
+  margin: 0 0 .85rem;
+  padding-bottom: .45rem;
+  border-bottom: 1px solid var(--folio-rule);
+}
+.record-tabs button {
+  padding: .45rem .9rem;
+  border: 1px solid var(--folio-edge);
+  background: var(--folio-paper);
+  color: var(--accent-strong);
+}
+.record-tabs [aria-selected="true"] {
+  border-color: var(--accent-strong);
+  background: var(--accent-strong);
+  color: #fff;
+}
+.record-tab-panel[hidden] { display: none !important; }
+
+.titan-list-panel {
+  --titan-warning: var(--danger, var(--red));
+  --titan-numerals: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  container-type: inline-size;
+  min-width: 0;
+  gap: 0;
+  padding: 0;
+  border-color: var(--folio-rule);
+  background: var(--folio-paper);
+}
+.titan-list-head {
+  align-items: center;
+  flex-wrap: wrap;
+  display: flex;
+  gap: .5rem 1rem;
+  padding: .75rem .9rem;
+  border-bottom: 3px double var(--folio-rule);
+  color: var(--folio-label);
+  background: linear-gradient(105deg, var(--folio-inset), var(--folio-sheet));
+}
+.titan-list-head strong {
+  font-size: 1.125rem;
+  font-family: var(--folio-serif);
+  font-weight: 700;
+  letter-spacing: .04em;
+}
+.titan-list-head strong::before { content: none; }
+.titan-list-head strong .panel-icon { color: var(--folio-label); }
+#titanListCount {
+  min-width: 0;
+  padding: .15rem .45rem;
+  border: 1px solid var(--folio-rule);
+  background: var(--folio-paper);
+  color: var(--folio-label);
+  font-size: .75rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+.titan-ledger {
+  display: grid;
+  gap: .7rem;
+  padding: clamp(.55rem, 2.6cqi, 1rem);
+  background: var(--folio-sheet);
+}
+.titan-list {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 18rem), 1fr));
+  align-items: start;
+  gap: .8rem;
+}
+.titan-list .titan-empty { grid-column: 1 / -1; }
+.titan-management {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  gap: .65rem;
+}
+.titan-management > details { border: 1px solid var(--folio-edge); background: var(--folio-paper); }
+.titan-management > details > summary, .titan-entry-details > summary {
+  padding: .5rem .7rem;
+  color: var(--folio-label);
+  background: var(--folio-sheet);
+  cursor: pointer;
+  font-weight: 650;
+}
+.titan-row, .titan-add-row {
+  min-width: 0;
+  align-items: end;
+  padding: .65rem;
+  border: 1px solid var(--folio-edge);
+  border-radius: 2px;
+  background: var(--folio-paper);
+}
+.titan-row {
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  container-type: inline-size;
+  gap: .55rem;
+  border-inline-start: 3px solid var(--folio-action);
+  background: var(--folio-paper);
+}
+.titan-row.is-crippled { border-inline-start-color: var(--titan-warning); }
+.titan-card-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) max-content;
+  align-items: center;
+  gap: .25rem .4rem;
+}
+.titan-card-head h3 {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--folio-label);
+  font-size: 1rem;
+  overflow-wrap: anywhere;
+}
+.titan-card-status { color: var(--folio-action); font-size: .77rem; font-weight: 650; }
+.titan-card-count {
+  padding: .1rem .4rem;
+  border: 1px solid var(--folio-edge);
+  background: var(--folio-sheet);
+  color: var(--folio-label);
+  font-size: .79rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+.titan-row.is-crippled .titan-card-status { color: var(--titan-warning); }
+.titan-card-art {
+  display: grid;
+  place-items: center;
+  min-height: 8.15rem;
+  border: 1px solid var(--folio-edge);
+  background-color: var(--folio-inset);
+  background-image: linear-gradient(90deg, color-mix(in srgb, var(--folio-rule) 16%, transparent) 1px, transparent 1px),
+    linear-gradient(color-mix(in srgb, var(--folio-rule) 16%, transparent) 1px, transparent 1px);
+  background-size: 1rem 1rem;
+}
+.titan-card-art:has(a[hidden])::before {
+  content: "";
+  width: 2.6rem;
+  height: 3.15rem;
+  background: var(--folio-rule);
+  mask: url("../assets/icons/titans.svg") center / contain no-repeat;
+}
+.titan-card-attributes {
+  display: grid;
+  gap: .3rem;
+  margin: 0;
+  color: var(--folio-ink);
+  font-size: .8rem;
+}
+.titan-card-attributes > div {
+  display: grid;
+  grid-template-columns: minmax(5em, auto) minmax(0, 1fr);
+  gap: .45rem;
+  padding-block-end: .25rem;
+  border-bottom: 1px solid var(--folio-edge);
+}
+.titan-card-attributes dt { color: var(--folio-muted); }
+.titan-card-attributes dd { margin: 0; overflow-wrap: anywhere; }
+.titan-card-attributes .titan-card-note { background: var(--folio-sheet); padding: .3rem .4rem; }
+.titan-card-note dd { white-space: pre-wrap; }
+.titan-card-abilities {
+  display: grid;
+  gap: .28rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--folio-ink);
+  font-size: .8rem;
+}
+.titan-card-abilities[hidden] { display: none; }
+.titan-card-abilities > li {
+  padding: .3rem .4rem;
+  border-inline-start: 2px solid var(--folio-rule);
+  background: var(--folio-sheet);
+  overflow-wrap: anywhere;
+}
+.titan-card-abilities strong { margin-inline-end: .42rem; color: var(--folio-label); }
+.titan-panel-symbol {
+  display: inline-block;
+  width: 1.35em;
+  height: 1.35em;
+  margin-inline-start: .2em;
+  vertical-align: -.25em;
+  background-repeat: no-repeat;
+}
+.titan-panel-symbol.disturbance {
+  background-image: url("../aibp/images/titan-cards/回天者.webp");
+  background-size: 5800% auto;
+  background-position: 84.2% 33%;
+}
+
+.titan-entry-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) max-content max-content;
+  align-items: end;
+  gap: .4rem;
+  padding-block: .5rem;
+}
+.titan-entry-controls > input[type="text"] { grid-column: 1 / -1; min-width: 0; }
+.titan-ledger input[type="number"] {
+  color: var(--folio-action);
+  font-family: var(--titan-numerals);
+  font-variant-numeric: tabular-nums;
+}
+.titan-row.is-crippled .titan-crippled { color: var(--titan-warning); }
+.titan-ledger :is(input:not([type="checkbox"]), select) {
+  border-color: var(--folio-edge);
+  background: var(--folio-paper);
+}
+.titan-list-panel :is(summary, input, select, button, a):focus-visible {
+  outline: 2px solid var(--folio-action);
+  outline-offset: 2px;
+}
+.titan-row .titan-remove {
+  border: 1px solid color-mix(in srgb, var(--titan-warning) 45%, var(--line));
+  background: var(--folio-paper);
+  color: var(--titan-warning);
+}
+.titan-row .titan-remove:hover {
+  background: var(--titan-warning);
+  color: #fff;
+}
+.titan-ledger :is(.titan-crippled, .titan-crippled-add) {
+  min-height: 34px;
+  padding-inline: .25rem;
+}
+.titan-row .titan-details {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  padding-block-start: .6rem;
+  border-block-start: 1px solid var(--folio-edge);
+}
+.titan-details > * { min-width: 0; }
+.titan-card-art > .titan-panel-preview {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  justify-items: center;
+  gap: .22rem;
+  padding: .35rem;
+  color: var(--folio-label);
+  text-decoration: none;
+}
+.titan-card-art > .titan-panel-preview[hidden] { display: none; }
+.titan-panel-preview:hover { text-decoration: underline; }
+.titan-panel-preview img { width: min(100%, 12rem); height: 5.75rem; }
+.titan-panel-preview span { font-size: .75rem; overflow-wrap: anywhere; }
+.titan-options {
+  grid-column: 1 / -1;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: end;
+}
+.titan-options > label { grid-column: 1 / -1; }
+.titan-option {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: .35rem;
+  min-width: 0;
+}
+.titan-option > small { grid-column: 1 / -1; }
+.titan-option > small:empty { display: none; }
+.titan-options label {
+  display: grid;
+  gap: 3px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.titan-option > a img { display: block; max-width: 100%; }
+.titan-trauma {
+  padding: .35rem .55rem;
+  border: 1px solid var(--folio-edge);
+  border-inline-start: 3px solid var(--folio-rule);
+  background: var(--folio-sheet);
+}
+.titan-trauma summary { color: var(--folio-label); font-weight: 600; }
+.titan-trauma > small { display: inline-block; color: var(--muted); }
+.titan-ledger-totals {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 7rem));
+  gap: .5rem;
+  padding: .55rem .65rem;
+}
+.titan-ledger-totals input { width: 100%; text-align: center; }
+.titan-ledger-totals .titan-dead-count input { color: var(--titan-warning); }
+.titan-ledger :is(#addTitanButton, .titan-trauma > button:first-of-type) {
+  border-color: var(--folio-label);
+  background: var(--folio-label);
+  color: #fff;
+}
+.titan-ledger :is(#addTitanButton, .titan-trauma > button:first-of-type):not(:disabled):hover {
+  border-color: var(--folio-action);
+  background: var(--folio-action);
+}
+.titan-add-row {
+  grid-template-columns: minmax(0, 1fr) 4.4rem max-content;
+  background: var(--folio-sheet);
+}
+.titan-add-row .titan-details { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.titan-add-row > button { grid-column: 1 / -1; justify-self: end; }
 .titan-empty, .summon-empty { border-radius: 0; background: var(--bg); }
+.summon-group-head strong { font-weight: 600; }
+
+@container (max-width: 28rem) {
+  .titan-management { grid-template-columns: minmax(0, 1fr); }
+  .titan-row .titan-details, .titan-add-row .titan-details, .titan-options { grid-template-columns: minmax(0, 1fr); }
+}
+@container (max-width: 19rem) {
+  .titan-add-row { grid-template-columns: minmax(0, 1fr) max-content; }
+  .titan-add-row > label:first-child { grid-column: 1 / -1; }
+}
+@media print {
+  .record-tabs { display: none; }
+  .titan-list-head, #titanListCount { color: var(--folio-label); }
+  .titan-list-head, #titanListCount, .titan-ledger, .titan-row, .titan-add-row, .titan-trauma { background: none; }
+  .titan-list-head strong :is(.panel-icon), .titan-list-head strong::before { color: var(--folio-label); }
+}
 .track-row, .diplomacy-row { padding: 12px 0; border-bottom: 1px solid var(--line); }
 .diplomacy-row { padding: 8px 0; }
 .track-row:last-child, .diplomacy-row:last-child { border-bottom: 0; }

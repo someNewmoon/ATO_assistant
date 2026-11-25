@@ -80,7 +80,43 @@ body.aibp-room-only > #sidebarToggle,
 body.aibp-room-only > .app > aside,
 body.aibp-room-only > .app > main > :not(#battleRoom, .room-style-dock) { display: none !important; }
 #battleRoomImage { max-width: min(95vw, 640px); max-height: 94vh; }
-#battleRoomImage img { display: block; max-width: 100%; max-height: 75vh; object-fit: contain; margin-top: 8px; }
+#battleRoomImage .room-zoom-card { position: relative; width: fit-content; max-width: 100%; margin-top: 8px; }
+#battleRoomImage .room-zoom-card > img { display: block; max-width: 100%; max-height: 75vh; object-fit: contain; }
+.room-zoom-markers { position: absolute; inset: 0; pointer-events: none; }
+.room-zoom-marker-row {
+  position: absolute;
+  right: 3%;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: end;
+  gap: .35rem;
+  max-width: 55%;
+}
+.room-zoom-marker-accuracy { top: 3%; }
+.room-zoom-marker-field { top: 50%; transform: translateY(-50%); flex-direction: column; }
+.room-zoom-marker-danger { bottom: 3%; }
+.room-zoom-marker { position: relative; width: clamp(36px, 6vw, 74px); }
+.room-zoom-marker img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: contain;
+  opacity: .8;
+  filter: drop-shadow(0 2px 3px #0009);
+}
+.room-zoom-marker span {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  padding: 2px 4px;
+  border-radius: 3px;
+  background: #221a15;
+  color: #fff5e6;
+  font-size: clamp(9px, 1.1vw, 12px);
+  line-height: 1.2;
+  text-align: center;
+}
+
 
 .battle-room-card-list li {
   display: grid;

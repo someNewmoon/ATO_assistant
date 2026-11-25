@@ -6,9 +6,9 @@ main{max-width:940px;margin:auto;padding:clamp(10px,3vw,28px)}
   align-items: center;
   flex-wrap: wrap;
   gap: .55rem .8rem;
-  border-block: 3px double var(--folio-rule, var(--line));
+  border-block: 3px double var(--folio-rule);
   padding: .8rem clamp(.7rem, 3vw, 1.25rem);
-  background: var(--folio-sheet, var(--accent-soft));
+  background: var(--folio-sheet);
 }
 .squad-head > a {
   color: var(--accent-strong);
@@ -25,8 +25,8 @@ main{max-width:940px;margin:auto;padding:clamp(10px,3vw,28px)}
 }
 h1,h2,h3,p{margin:0 0 .5rem}.squad-head h1{margin:0;flex:1;font-size:clamp(1.4rem,4vw,2rem)}
 a{color:var(--accent)}button,input,select{font:inherit;color:inherit}button,.squad-action,input,select{min-height:42px;border-radius:2px;border:1px solid var(--line);background:var(--panel);padding:.45rem .65rem}
-button,.squad-action{cursor:pointer}button:disabled{opacity:.52;cursor:default}.squad-action{display:inline-flex;align-items:center;text-decoration:none}.primary, [data-squad-primary], button[type=submit]{background:var(--accent-strong);color:#fff}
-#squadStatus{min-height:1.4rem;color:var(--muted);margin:.4rem 0}.squad-stack{display:grid;gap:.75rem}.squad-panel{background:var(--panel);border:1px solid var(--line);border-radius:2px;padding:clamp(10px,3vw,18px)}
+button,.squad-action{cursor:pointer}button:disabled{opacity:.52;cursor:default}.squad-action{display:inline-flex;align-items:center;text-decoration:none}.primary, [data-squad-primary], button[type=submit]{background:var(--folio-action);border-color:var(--folio-action);color:var(--folio-on-dark)}
+#squadStatus{min-height:1.4rem;color:var(--muted);margin:.4rem 0}.squad-stack{display:grid;gap:.75rem}.squad-panel{background:var(--folio-paper);border:1px solid var(--folio-edge);border-radius:2px;padding:clamp(10px,3vw,18px)}
 .squad-row{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center}.squad-sub{color:var(--muted);font-size:.88rem}
 .squad-hero{display:flex;align-items:center;gap:.7rem}.squad-hero img{width:56px;height:56px;object-fit:cover;object-position:top;border-radius:50%;border:1px solid var(--line)}.squad-hero h3{margin:0}
 .squad-choices{display:grid;gap:.55rem;border:0;padding:0}.squad-choice{display:grid;grid-template-columns:auto minmax(0,1fr);align-items:center;gap:.6rem;border:1px solid var(--line);border-radius:2px;padding:.55rem}.squad-choice:has(:checked){outline:2px solid var(--accent)}
@@ -40,7 +40,7 @@ button,.squad-action{cursor:pointer}button:disabled{opacity:.52;cursor:default}.
 
 .squad-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .45rem; }
 [data-story-stats] { margin-top: .9rem; }
-.squad-stats > div { border: 1px solid var(--line); border-radius: 7px; padding: .4rem; }
+.squad-stats > div { border: 1px solid var(--folio-edge); border-radius: 2px; padding: .4rem; }
 .squad-stats span, .squad-stats > div > div { display: flex; align-items: center; justify-content: center; gap: .25rem; }
 .squad-stats img { width: 24px; height: 24px; object-fit: contain; }
 .squad-stats button { min-width: 27px; padding-inline: .25rem; }
@@ -85,22 +85,22 @@ button,.squad-action{cursor:pointer}button:disabled{opacity:.52;cursor:default}.
 .squad-player-kit [type=submit] { position:sticky; bottom:.7rem; z-index:1; }
 
 .squad-head h1, .squad-stack > h2, .squad-panel > h2, .squad-roster > summary {
-  color: var(--accent-strong);
-  font-family: var(--folio-serif, "Songti SC", "Noto Serif CJK SC", SimSun, Georgia, serif);
+  color: var(--folio-label);
+  font-family: var(--folio-serif);
 }
 .squad-stack > h2 { margin: 0; }
 .squad-panel > h2 {
   margin-bottom: .65rem;
   padding-bottom: .45rem;
-  border-bottom: 1px solid var(--folio-rule, var(--line));
+  border-bottom: 1px solid var(--folio-rule);
   font-size: 1.15rem;
 }
 .squad-panel + .squad-panel { margin-top: .65rem; }
 .squad-stack > .squad-panel + .squad-panel { margin-top: 0; }
 .squad-choice:has(:checked), .squad-gear-card:has(input:checked) {
-  background: var(--accent-soft);
+  background: var(--folio-inset);
 }
-.squad-stats > div { background: var(--folio-sheet, var(--accent-soft)); }
+.squad-stats > div { background: var(--folio-sheet); }
 .squad-panel :is(button:not(:disabled):hover, .squad-action:hover) { border-color: var(--accent); }
 [data-action="disband"] { color: var(--danger); }
 .squad-choice input[type="radio"] {
@@ -109,7 +109,7 @@ button,.squad-action{cursor:pointer}button:disabled{opacity:.52;cursor:default}.
   accent-color: var(--accent);
 }
 :is(a, button, input, select, textarea, summary):focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--folio-rule);
   outline-offset: 2px;
 }
 @media (min-width: 600px) {

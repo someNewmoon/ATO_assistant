@@ -57,7 +57,7 @@ function dashboard(cycle = 'c1', positions = {}) {
     'normalizeCounterValue', 'activeStoryDoomData', 'cardTrackCard', 'cardTrackPreviewCard',
     'cardTrackStatus', 'cardTrackMeta', 'cardTrackTokenState', 'cardTokenLimitText',
     'cardTokenPlacementTargets', 'renderCardTokenPlacementTools', 'refreshCardTokenViews', 'placeCardTrackToken',
-    'getMapProgressTechReminders', 'currentTileRevealDayState', 'getStoryMapReminders', 'getDoomMapReminders', 'renderStepTrackReminders',
+    'getMapProgressTechReminders', 'currentTileRevealDayState', 'mapExplorationRewardId', 'mapExplorationRewardPending', 'settleMapExplorationReward', 'getMapHopeReminders', 'getDoomMapReminders', 'getCardTrackThresholdReminders', 'renderStepTrackReminders',
     'renderCardTrackItems', 'doomSaveFateSources', 'doomAdvanceDetails', 'applyDoomAdvance', 'inwardExchangeDetails', 'applyInwardExchange',
   ]) vm.runInContext(dashboardFunction(name), context);
   context.inwardOdysseyStoryRanges = {
@@ -136,8 +136,9 @@ function explorationDashboard(cycle = 'c1') {
 
 function mapReminderDashboard(cycle = 'c1', unlocked = ['hope logic']) {
   const app = dashboard(cycle);
+  app.getMapProgressAndHopeReminders = () => [...app.getMapHopeReminders(), ...app.getMapProgressTechReminders()];
   app.cachedArgoRecord = { fate: '2' };
-  app.state.mapSnapshot = { cycleId: cycle, currentTileId: 'tile-a', exploredIds: ['tile-a'] };
+  app.state.mapSnapshot = { cycleId: cycle, currentTileId: 'tile-a', exploredIds: [] };
   app.state.mapCurrentTileTags = ['progress', 'calamity'];
   app.currentMapTagSet = () => new Set(app.state.mapCurrentTileTags);
   app.window.ATO_STRUCTURE_TECH_RULES = require('../technology/structure-tech-rules.js');
@@ -441,16 +442,16 @@ test('a face revealed today only counts as explored from the next day', () => {
   app.state.mapSnapshot.exploredIds = [];
   app.state.mapSnapshot.exploredDays = { 'tile-a': 10 };
   app.state.mapCurrentTileIsLatestRevealed = true;
-  let reminders = app.getStoryMapReminders();
-  assert.equal(reminders.filter(reminder => reminder.title === '新探索板块放置进展').length, 1);
+  let reminders = app.getMapProgressAndHopeReminders();
+  assert.equal(reminders.filter(reminder => reminder.title === '未探索板块 · 希望 +1').length, 1);
   assert.equal(reminders.filter(reminder => reminder.title.includes('德尔菲人民支援')).length, 0);
 
   // Next day: the settle step marked it explored and cleared the latest reveal.
   app.state.day = 11;
   app.state.mapSnapshot.exploredIds = ['tile-a'];
   app.state.mapCurrentTileIsLatestRevealed = false;
-  reminders = app.getStoryMapReminders();
-  assert.equal(reminders.filter(reminder => reminder.title === '新探索板块放置进展').length, 0, 'the free placement belongs to the reveal day');
+  reminders = app.getMapProgressAndHopeReminders();
+  assert.equal(reminders.filter(reminder => reminder.title === '未探索板块 · 希望 +1').length, 0, 'the free placement belongs to the reveal day');
   assert.equal(reminders.filter(reminder => reminder.title.includes('德尔菲人民支援')).length, 1);
   const markup = app.renderStepTrackReminders(reminders);
   assert.ok(markup.includes('data-map-progress-fate="delphi peoples\' support"'));
@@ -461,17 +462,17 @@ test('legacy map saves without reveal days keep the previous reminder timing', (
   const app = mapReminderDashboard('c3', ["delphi peoples' support"]);
   app.state.day = 10;
   app.state.mapSnapshot.exploredIds = ['tile-a'];
-  const reminders = app.getStoryMapReminders();
-  assert.equal(reminders.filter(reminder => reminder.title === '新探索板块放置进展').length, 1);
+  const reminders = app.getMapProgressAndHopeReminders();
+  assert.equal(reminders.filter(reminder => reminder.title === '未探索板块 · 希望 +1').length, 0);
   assert.equal(reminders.filter(reminder => reminder.title.includes('德尔菲人民支援')).length, 1);
 });
 
 test('map progress and doom reminders retain normal quick placement', () => {
   const app = mapReminderDashboard();
   app.state.cardTracks.story.progress = 3;
-  const progress = app.renderStepTrackReminders(app.getStoryMapReminders());
+  const progress = app.renderStepTrackReminders(app.getMapProgressAndHopeReminders());
   const doom = app.renderStepTrackReminders(app.getDoomMapReminders());
-  assert.match(progress, /新探索板块放置进展/);
+  assert.match(progress, /未探索板块 · 希望 \+1/);
   assert.match(progress, /内蕴奥德赛/);
   assert.match(progress, /title="[^"]*上限/);
   assert.equal(hasPlacement(progress, 'story', 'progress', 1), true);
@@ -480,14 +481,19 @@ test('map progress and doom reminders retain normal quick placement', () => {
   assert.match(doom, /title="[^"]*上限/);
 });
 
-test('a calamity reminder belongs to the day the tile is revealed', () => {
+test('a calamity symbol also triggers on explored tiles and settles once per day and tile', () => {
   const app = mapReminderDashboard();
   app.state.mapCurrentTileTags = ['calamity'];
   app.state.mapCurrentTileIsLatestRevealed = false;
-  assert.equal(app.getDoomMapReminders().length, 0);
-  app.state.mapCurrentTileIsLatestRevealed = true;
+  app.state.mapSnapshot.exploredIds = ['tile-a'];
   assert.equal(app.getDoomMapReminders().length, 1);
   assert.equal(app.getDoomMapReminders()[0].placements[0].type, 'doom');
+  app.settleMapExplorationReward('doom', 'doom');
+  assert.equal(app.getDoomMapReminders().length, 0);
+  app.settleMapExplorationReward('doom', 'doom');
+  assert.equal(app.state.cardTracks.doom.doom, 1, 'same day and tile cannot apply twice');
+  app.state.day = 11;
+  assert.equal(app.getDoomMapReminders().length, 1);
 });
 
 test('map Doom appends the Save cost, check and effect to the tile description without blocking placement', () => {
@@ -499,7 +505,7 @@ test('map Doom appends the Save cost, check and effect to the tile description w
     const markup = app.renderStepTrackReminders(app.getDoomMapReminders());
     const hint = markup.match(/<p class="step-track-desc">([^]*?)<\/p>/);
     assert.ok(hint);
-    assert.match(hint[1], new RegExp(`带有灾祸标记。请在灾祸步骤放置 1 个灾祸指示物。 ${name}：`));
+    assert.match(hint[1], new RegExp(`带有灾祸标记。请在探索步骤放置 1 个灾祸指示物。 ${name}：`));
     assert.match(hint[1], expected);
     assert.doesNotMatch(hint[1], /X|当前灾祸卡编号/);
     assert.ok(markup.indexOf(hint[0]) < markup.indexOf('data-card-token-place='));
@@ -578,8 +584,9 @@ test('all five explored-tile technologies remind their printed cost and reward i
   ]) {
     const app = mapReminderDashboard(cycle, [key]);
     app.state.mapCurrentTileIsLatestRevealed = false;
+    app.state.mapSnapshot.exploredIds = ['tile-a'];
     const before = JSON.stringify(app.state);
-    const reminders = app.getStoryMapReminders();
+    const reminders = app.getMapProgressAndHopeReminders();
     assert.equal(reminders.length, 1);
     assert.match(reminders[0].title, new RegExp(name));
     assert.ok(reminders[0].desc.includes(`+${fate} 命运`));
@@ -602,6 +609,7 @@ test('map progress technology Fate uses the latest record and leaves progress fo
     ['c3', "delphi peoples' support", 1], ['c4', 'archeohistorians', 2], ['c5', 'pattern deciphering', 1],
   ]) {
     const app = mapReminderDashboard(cycle, [key]);
+    app.state.mapSnapshot.exploredIds = ['tile-a'];
     const alerts = [];
     app.window.alert = message => alerts.push(message);
     app.structureTechTarget = () => ({ cycleId: cycle });
@@ -644,6 +652,7 @@ test('explored-tile progress reminders exclude preview-only, untagged, stale-cyc
 
 test('explored-tile progress reminders follow unlocks, cycle scope, unimportant preferences and temporary disablement', () => {
   const app = mapReminderDashboard('c1', ['deeply embedded spies']);
+  app.state.mapSnapshot.exploredIds = ['tile-a'];
   assert.equal(app.getMapProgressTechReminders().length, 1);
   app.saveContext.technology.unlocked = [];
   assert.equal(app.getMapProgressTechReminders().length, 0);
@@ -809,12 +818,12 @@ test('a shortcut from an old exploration round cannot add tokens to the current 
   assert.equal(app.calls.save, 0);
 });
 
-test('exploration token reminders route progress to story and doom to the doom step', () => {
+test('exploration token reminders place both rewards during exploration', () => {
   const app = queuedExplorationDashboard();
   const item = placementItem({ manualPlacements: [{ type: 'progress', amount: 2 }, { type: 'doom', amount: 1 }] });
   app.testExplorationItems = [item];
-  const story = app.getExplorationStepTokenReminders('story');
-  const doom = app.getExplorationStepTokenReminders('doom');
+  const story = app.getExplorationStepTokenReminders('explore').filter(r => r.explorationToken.field === 'progress');
+  const doom = app.getExplorationStepTokenReminders('explore').filter(r => r.explorationToken.field === 'doom');
   assert.equal(story.length, 1);
   assert.equal(doom.length, 1);
   assert.equal(story[0].explorationToken.field, 'progress');
@@ -822,9 +831,10 @@ test('exploration token reminders route progress to story and doom to the doom s
   assert.match(story[0].title, /测试探索卡/);
   assert.match(story[0].title, /2/);
   assert.match(doom[0].title, /1/);
-  assert.equal(app.getExplorationStepTokenReminders('explore').length, 0);
-  assert.ok(app.getStepTrackReminders('story').some(reminder => reminder.explorationToken?.field === 'progress'));
-  assert.ok(app.getStepTrackReminders('doom').some(reminder => reminder.explorationToken?.field === 'doom'));
+  assert.equal(app.getExplorationStepTokenReminders('story').length, 0);
+  assert.equal(app.getExplorationStepTokenReminders('doom').length, 0);
+  assert.ok(app.getStepTrackReminders('explore').some(reminder => reminder.explorationToken?.field === 'progress'));
+  assert.ok(app.getStepTrackReminders('explore').some(reminder => reminder.explorationToken?.field === 'doom'));
   const storyTools = app.createExplorationTokenPlacementTools(app.entry, item, 'progress').innerHTML;
   const doomTools = app.createExplorationTokenPlacementTools(app.entry, item, 'doom').innerHTML;
   assert.equal(hasPlacement(storyTools, 'story', 'progress', 2), true);
@@ -841,15 +851,15 @@ test('ending exploration snapshots token tasks and the next draw cannot remove t
   app.endExplorationDraw();
   assert.equal(app.ensureExplorationDrawState().activePiles.flat().length, 0);
   assert.ok(app.queuedExplorationTokenTask(app.entry, item));
-  assert.equal(app.getExplorationStepTokenReminders('story').length, 1);
+  assert.equal(app.getExplorationStepTokenReminders('explore').filter(r => r.explorationToken.field === 'progress').length, 1);
   const later = { ...app.entry, drawnAt: 67890, name: '下一批探索卡' };
   app.ensureExplorationDrawState().activePiles = [[later]];
   app.testExplorationItems = [];
   app.local = { applied: {}, manual: {}, skipped: {}, tokenPlacements: {} };
-  assert.equal(app.getExplorationStepTokenReminders('story').length, 1);
+  assert.equal(app.getExplorationStepTokenReminders('explore').filter(r => r.explorationToken.field === 'progress').length, 1);
   assert.equal(app.placeExplorationCardToken(app.entry, item, 'inwardOdyssey', 'progress'), true);
   assert.equal(app.state.cardTracks.inwardOdyssey.progress, 2);
-  assert.equal(app.getExplorationStepTokenReminders('story').length, 0);
+  assert.equal(app.getExplorationStepTokenReminders('explore').filter(r => r.explorationToken.field === 'progress').length, 0);
 });
 
 test('token queue snapshots survive JSON save normalization, including settled resources', () => {
@@ -866,10 +876,10 @@ test('token queue snapshots survive JSON save normalization, including settled r
   app.local = { applied: {}, manual: {}, skipped: {}, tokenPlacements: {} };
   assert.ok(app.queuedExplorationTokenTask(app.entry, item));
   assert.equal(app.explorationTokenPlacementBlocked(app.entry, item), '');
-  assert.equal(app.getExplorationStepTokenReminders('story').length, 1);
+  assert.equal(app.getExplorationStepTokenReminders('explore').filter(r => r.explorationToken.field === 'progress').length, 1);
   assert.equal(app.placeExplorationCardToken(app.entry, item, 'story', 'progress'), true);
   assert.equal(app.state.cardTracks.story.progress, 2);
-  assert.equal(app.getExplorationStepTokenReminders('story').length, 0);
+  assert.equal(app.getExplorationStepTokenReminders('explore').filter(r => r.explorationToken.field === 'progress').length, 0);
 });
 
 test('completed queue tasks remain completed when active local marks are cleared and synced again', () => {
@@ -882,7 +892,7 @@ test('completed queue tasks remain completed when active local marks are cleared
   app.local = { applied: {}, manual: {}, skipped: {}, tokenPlacements: {} };
   app.syncExplorationTokenPlacementQueue();
   assert.equal(Object.keys(app.explorationTokenPlacementQueue()).length, 1);
-  assert.equal(app.getExplorationStepTokenReminders('story').length, 0);
+  assert.equal(app.getExplorationStepTokenReminders('explore').filter(r => r.explorationToken.field === 'progress').length, 0);
   assert.equal(app.placeExplorationCardToken(app.entry, item, 'story', 'progress'), false);
   assert.equal(app.state.cardTracks.story.progress, 2);
 });
@@ -894,10 +904,10 @@ test('a queued mixed item survives the next draw until both story and doom place
   app.endExplorationDraw();
   app.local = { applied: {}, manual: {}, skipped: {}, tokenPlacements: {} };
   assert.equal(app.placeExplorationCardToken(app.entry, item, 'story', 'progress'), true);
-  assert.equal(app.getExplorationStepTokenReminders('story').length, 0);
-  assert.equal(app.getExplorationStepTokenReminders('doom').length, 1);
+  assert.equal(app.getExplorationStepTokenReminders('explore').filter(r => r.explorationToken.field === 'progress').length, 0);
+  assert.equal(app.getExplorationStepTokenReminders('explore').filter(r => r.explorationToken.field === 'doom').length, 1);
   assert.equal(app.placeExplorationCardToken(app.entry, item, 'doom', 'doom'), true);
-  assert.equal(app.getExplorationStepTokenReminders('doom').length, 0);
+  assert.equal(app.getExplorationStepTokenReminders('explore').filter(r => r.explorationToken.field === 'doom').length, 0);
   assert.equal(app.state.cardTracks.story.progress, 2);
   assert.equal(app.state.cardTracks.doom.doom, 1);
   assert.equal(app.placeExplorationCardToken(app.entry, item, 'doom', 'doom'), false);
@@ -911,9 +921,9 @@ test('two draws of the same card keep separate queued token tasks', () => {
   app.testExplorationItems = [item];
   app.syncExplorationTokenPlacementQueue();
   assert.equal(Object.keys(app.explorationTokenPlacementQueue()).length, 2);
-  assert.equal(app.getExplorationStepTokenReminders('story').length, 2);
+  assert.equal(app.getExplorationStepTokenReminders('explore').filter(r => r.explorationToken.field === 'progress').length, 2);
   assert.equal(app.placeExplorationCardToken(app.entry, item, 'story', 'progress'), true);
-  const remaining = app.getExplorationStepTokenReminders('story');
+  const remaining = app.getExplorationStepTokenReminders('explore').filter(r => r.explorationToken.field === 'progress');
   assert.equal(remaining.length, 1);
   assert.equal(remaining[0].explorationToken.entry.drawnAt, second.drawnAt);
   assert.equal(app.placeExplorationCardToken(second, item, 'inwardOdyssey', 'progress'), true);
@@ -985,4 +995,23 @@ test('a Doom face with multiple trigger points leaves the amount manual even if 
   assert.equal(input.max, '3');
   onClose();
   assert.equal(await decision, null);
+});
+
+test('exploration map hope is recorded once and threshold reminders follow the corresponding card', () => {
+  const app = mapReminderDashboard();
+  app.state.cardTracks.story.progress = 1;
+  assert.equal(app.getCardTrackThresholdReminders('story').length, 0);
+  assert.equal(app.getMapHopeReminders().length, 1);
+  app.settleMapExplorationReward('progress', 'story');
+  assert.equal(app.getMapHopeReminders().length, 0);
+  const count = app.state.cardTracks.story.progress;
+  app.settleMapExplorationReward('progress', 'inwardOdyssey');
+  assert.equal(app.state.cardTracks.story.progress, count);
+  assert.equal(app.state.cardTracks.inwardOdyssey.progress, 0);
+  const limit = app.cardTrackTokenState('story', 'progress').limits[0];
+  app.state.cardTracks.story.progress = limit + 1;
+  assert.match(app.getCardTrackThresholdReminders('story')[0].title, new RegExp('进展已达 ' + limit));
+  const doomLimit = app.cardTrackTokenState('doom', 'doom').limits[0];
+  app.state.cardTracks.doom.doom = doomLimit;
+  assert.match(app.getCardTrackThresholdReminders('doom')[0].title, new RegExp('灾厄已达 ' + doomLimit));
 });

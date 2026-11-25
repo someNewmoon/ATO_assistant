@@ -142,6 +142,7 @@ test('科技面板的展开三角与标题同一行：summary 自己是 flex 行
 
 test('可谈判时提醒出现在发展步骤，探索步骤不显示', () => {
   const c = harness();
+  for (const name of ['getMapHopeReminders', 'getDoomMapReminders', 'getMapProgressTechReminders', 'getExplorationStepTokenReminders']) c[name] = () => [];
   c.todayTrackIcons = () => [{ label: '结构科技', className: 'structure-tech' }];
   c.getStructureTechContext = () => ({ location: 'city' });
   c.currentMapTileLabel = () => '测试城市';

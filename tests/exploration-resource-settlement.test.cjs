@@ -1028,15 +1028,15 @@ test('manual placement Progress once-only gains register their limit before stor
   assert.equal(h.ctx.explorationDashboardTracks(h.record).progress, 2);
   assert.ok(h.ctx.pendingExplorationEffects().some(text => /收益.*限制/.test(text)));
   const block = h.ctx.createExplorationSettleBlock(entry);
-  assert.match(textOf(block), /登记收益后，在故事或灾祸模块放置指示物/);
+  assert.match(textOf(block), /登记收益后，在探索步骤放置指示物/);
   await clickAndWait(buttonNamed(block, '确认收益，登记次数限制'));
   assert.deepEqual(h.alerts, []);
   assert.equal(h.ctx.explorationDashboardTracks(h.record).progress, 2);
   assert.equal(h.record.explorationDelays.queue.filter(item => item.onceKey && item.status === 'waiting').length, 1);
   assert.equal(h.ctx.pendingExplorationEffects(false).length, 0);
-  const reminders = h.ctx.getExplorationStepTokenReminders('story');
+  const reminders = h.ctx.getExplorationStepTokenReminders('explore').filter(r => r.explorationToken.field === 'progress');
   assert.equal(reminders.length, 1);
-  assert.match(reminders[0].title, /进展 \+1/);
+  assert.match(reminders[0].title, /希望 \+1/);
   const queued = reminders[0].explorationToken;
   assert.equal(queued.item.manualPlacements[0].target, 'inwardOdyssey');
   assert.equal(h.ctx.explorationTokenPlacementBlocked(queued.entry, queued.item), '');
@@ -1046,10 +1046,10 @@ test('manual placement Progress once-only gains register their limit before stor
   await h.ctx.settleExplorationCard(repeated);
   assert.equal(h.ctx.explorationDashboardTracks(h.record).progress, 2);
   assert.equal(h.ctx.pendingExplorationEffects().length, 0);
-  assert.equal(h.ctx.getExplorationStepTokenReminders('story').length, 1, 'the repeated draw must not add another once-only reward');
+  assert.equal(h.ctx.getExplorationStepTokenReminders('explore').filter(r => r.explorationToken.field === 'progress').length, 1, 'the repeated draw must not add another once-only reward');
   assert.equal(h.ctx.placeExplorationCardToken(queued.entry, queued.item, 'inwardOdyssey', 'progress'), true);
   assert.equal(h.ctx.state.cardTracks.inwardOdyssey.progress, 1);
-  assert.equal(h.ctx.getExplorationStepTokenReminders('story').length, 0);
+  assert.equal(h.ctx.getExplorationStepTokenReminders('explore').filter(r => r.explorationToken.field === 'progress').length, 0);
 });
 
 test('manual placement a chosen Doom branch records the decision but still waits for a placement location', async () => {
@@ -1665,8 +1665,8 @@ test('conditional Doom replacements show only the applicable manual placement qu
     assert.equal(h.alerts.length,0);
     assert.equal(h.ctx.state.cardTracks.doom.doom,2);
     assert.equal((h.record.explorationTrackTransactions||[]).length,0);
-    const pending=h.ctx.getExplorationStepTokenReminders('doom').map(reminder=>reminder.title).join(' ');
-    assert.match(pending,new RegExp(`灾祸 \\+${fate>=7?2:1}`));
+    const pending=h.ctx.getExplorationStepTokenReminders('explore').filter(r => r.explorationToken.field === 'doom').map(reminder=>reminder.title).join(' ');
+    assert.match(pending,new RegExp(`灾厄 \\+${fate>=7?2:1}`));
   }
 });
 
@@ -2672,9 +2672,9 @@ test('card-face audit Fast Forward Doom uses the Doom module and exposes old mis
   h.ctx.state.cardTracks = { doom: { started: true, position: 1, doom: 0 }, story: { started: true, position: 1, progress: 0 } };
   await h.ctx.settleExplorationCard(entry);
   assert.equal(h.record.cycleStats.c3.paradox, '1');
-  const reminders = h.ctx.getExplorationStepTokenReminders('doom');
+  const reminders = h.ctx.getExplorationStepTokenReminders('explore').filter(r => r.explorationToken.field === 'doom');
   assert.equal(reminders.length, 1);
-  assert.ok(!h.ctx.getExplorationStepTokenReminders('story').length);
+  assert.ok(!h.ctx.getExplorationStepTokenReminders('explore').filter(r => r.explorationToken.field === 'progress').length);
   assert.equal(h.ctx.placeExplorationCardToken(entry, reminders[0].explorationToken.item, 'doom', 'doom'), true);
   assert.equal(h.ctx.state.cardTracks.doom.doom, 1);
 
@@ -2698,7 +2698,7 @@ test('card-face audit Fast Forward Doom uses the Doom module and exposes old mis
   await old.ctx.writeExplorationRecordEffects(oldEntry, [descriptor], context, [], true);
   assert.equal(old.record.cycleStats.c3.paradox, '3');
   await old.ctx.settleExplorationCard(oldEntry);
-  assert.equal(old.ctx.getExplorationStepTokenReminders('doom').length, 1);
+  assert.equal(old.ctx.getExplorationStepTokenReminders('explore').filter(r => r.explorationToken.field === 'doom').length, 1);
   assert.deepEqual(old.alerts, []);
 });
 

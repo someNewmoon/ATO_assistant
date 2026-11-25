@@ -1766,25 +1766,12 @@
       background: var(--panel);
     }
 
-    .step-card-tracks > summary {
-      cursor: pointer;
-      padding: 10px 12px;
-      font-weight: 700;
-      overflow-wrap: anywhere;
-    }
-
-    .step-card-tracks > summary small {
-      margin-inline-start: .65em;
-      color: var(--muted);
-      font-weight: 500;
-    }
-
     .card-track-body {
       display: grid;
       grid-template-columns: minmax(0, 1fr);
       align-items: start;
       gap: 12px;
-      padding: 0 12px 12px;
+      padding: 12px;
     }
 
     .step-card-tracks[data-card-track-group="story"] .card-track-body {
@@ -2032,6 +2019,14 @@
       border: 1px solid var(--line);
       border-radius: 8px;
     }
+
+    .card-track-item .inward-end {
+      margin: 0;
+      padding: 10px 0 0;
+      border: 0;
+      border-top: 1px solid var(--line);
+    }
+    .card-track-item .inward-end p { margin: 0 0 8px; font-size: .85rem; }
 
     .today-preview summary { cursor: pointer; font-weight: 750; }
     .today-preview ul { margin: 8px 0 0; padding: 0; list-style: none; }
@@ -5421,6 +5416,7 @@
         lastSettlementByCycle: isPlainObject(value?.lastSettlementByCycle) ? value.lastSettlementByCycle : {},
         trackReceiptsByCycle: isPlainObject(value?.trackReceiptsByCycle) ? value.trackReceiptsByCycle : {},
         tokenPlacementQueueByCycle: isPlainObject(value?.tokenPlacementQueueByCycle) ? value.tokenPlacementQueueByCycle : {},
+        mapTokenReceiptsByCycle: isPlainObject(value?.mapTokenReceiptsByCycle) ? value.mapTokenReceiptsByCycle : {},
       };
     }
 
@@ -7478,7 +7474,6 @@
     async function openCardTrackRules(key, card) {
       const href = cardTrackRulesHref(key, card);
       if (!href) {
-        if (card) elements.flowList.querySelector(`[data-card-track-group="${key}"]`)?.setAttribute("open", "");
         return;
       }
       try { await leaveVoyage(href, key, "", false); }
@@ -7525,7 +7520,7 @@
             ? `<div class="card-track-face"><img loading="lazy" src="${escapeHtml(displayedCard.image)}" alt="${escapeHtml(`${displayedCard.label} ${displayedCard.name}`)}"><span class="card-track-side-badge">${escapeHtml(displayedCard.label)}</span>${badge ? `<span class="card-track-progress-badge">${badge}</span>` : ""}${previewBadge}</div>`
             : '<div class="card-track-empty">无对应卡面</div>');
         return `
-          <article class="card-track-item">
+          <article class="card-track-item" data-card-track-key="${escapeHtml(def.key)}">
             <div class="card-track-title">
               <span>${escapeHtml(def.label)}</span>
               <span class="card-track-status">${escapeHtml(cardTrackStatus(def, track, cycleData))}</span>
@@ -7542,7 +7537,7 @@
                 </div>
               ` : ""}
                 ${showProgress ? `<div class="card-track-progress">
-                  <span class="card-track-counter-label${progressState.limits.some(limit => track.progress >= limit) ? " card-token-limit-warning" : ""}" title="${escapeHtml(progressState.statusText)}">进展<br><small>${escapeHtml(progressState.limits.length ? `上限 ${progressState.limits.join(" / ")}` : "无固定上限")}</small></span>
+                  <span class="card-track-counter-label${progressState.limits.some(limit => track.progress >= limit) ? " card-token-limit-warning" : ""}" title="${escapeHtml(progressState.statusText)}">${def.fixed ? "希望" : "进展"}<br><small>${escapeHtml(progressState.limits.length ? `上限 ${progressState.limits.join(" / ")}` : "无固定上限")}</small></span>
                   <button type="button" data-card-progress="${escapeHtml(def.key)}" data-delta="-1" id="track-${def.key}-progress-minus" aria-label="${escapeHtml(def.label)}进展减一">-</button>
                   <input type="number" min="0" step="1" value="${track.progress}" id="track-${def.key}-progress" data-card-progress-input="${escapeHtml(def.key)}" aria-label="${escapeHtml(def.label)}进展">
                   <button type="button" data-card-progress="${escapeHtml(def.key)}" data-delta="1" id="track-${def.key}-progress-plus" aria-label="${escapeHtml(def.label)}进展加一">+</button>
@@ -7562,17 +7557,13 @@
     }
 
     function createStepCardTracks(groupId) {
-      const tracks = ensureCardTracks();
-      const cycleData = activeStoryDoomData();
-      const card = cycleData[groupId === "story" ? "storySteps" : "doomSteps"][tracks[groupId].position - 1];
-      const label = groupId === "story" ? "剧情卡牌与内部之旅" : "末日卡牌";
-      const count = groupId === "story" ? `知识 ${tracks.inwardOdyssey.position}` : `灾厄 ${tracks.doom.doom}`;
-      const details = document.createElement("details");
-      details.className = "step-card-tracks";
-      details.dataset.cardTrackGroup = groupId;
-      details.innerHTML = `<summary id="track-${groupId}-summary">${label} <small>${escapeHtml(card?.label || "未揭示")} · ${count}</small></summary>
-        <div class="card-track-body">${renderCardTrackItems(groupId)}</div>`;
-      return rememberConstantDetailsOpen(details, `cardTrack:${groupId}`);
+      const section = document.createElement("section");
+      section.className = "step-card-tracks";
+      section.dataset.cardTrackGroup = groupId;
+      section.setAttribute("aria-label", groupId === "story" ? "剧情卡牌与内部之旅" : "末日卡牌");
+      section.innerHTML = `<div class="card-track-body">${renderCardTrackItems(groupId)}</div>`;
+      section.querySelector('[data-card-track-key="inwardOdyssey"]')?.appendChild(createInwardOdysseyEndTools());
+      return section;
     }
 
     function syncCampaignLog() {
@@ -8182,8 +8173,6 @@
       const entry = entries[0];
       const section = document.createElement("section");
       section.className = "inward-end";
-      const title = document.createElement("strong");
-      title.textContent = "剧情步骤末尾 · 内部之旅";
       const status = document.createElement("p");
       status.textContent = entry ? `待结算 ${entries.length} 段，先读第 ${entry} 段。` : "当前没有待结算段落。";
       const actions = document.createElement("div");
@@ -8208,8 +8197,6 @@
         actions.appendChild(done);
       }
       const details = inwardExchangeDetails();
-      const balance = document.createElement("p");
-      balance.textContent = `希望 ${details.hope} 枚 · 阿尔戈号知识 ${details.knowledge}`;
       const advance = document.createElement("button");
       advance.type = "button";
       advance.className = "secondary";
@@ -8217,7 +8204,7 @@
       advance.disabled = !details.available;
       advance.addEventListener("click", () => void exchangeInwardHope());
       actions.prepend(advance);
-      section.append(title, balance, status, actions);
+      section.append(status, actions);
       return section;
     }
 
@@ -10142,7 +10129,7 @@
 
     async function completeFlowStep(stepId) {
       if (elements.appShell.inert || !ownsDashboardWriteLease() || bgmFlowStepId() !== stepId || stepId === "end"
-          || (stepId === "explore" && hasOpenExplorationRound())) return;
+          || (stepId === "explore" && (hasOpenExplorationRound() || pendingExplorationRewards()))) return;
       const context = adventureRollContext();
       const stillCurrent = () => context === adventureRollContext() && ownsDashboardWriteLease() && bgmFlowStepId() === stepId;
       elements.appShell.inert = true;
@@ -10201,11 +10188,12 @@
           hint.textContent = "请先结算本日所有遭遇战斗。";
           footer.appendChild(hint);
         }
-        if (step.id === "explore" && hasOpenExplorationRound()) {
+        if (step.id === "explore" && (hasOpenExplorationRound() || pending.some(item => item.step === "explore"))) {
           complete.disabled = true;
           const hint = document.createElement("span");
           hint.className = "flow-footer-hint";
-          hint.textContent = "当前探索牌组仍在结算，结束后才能继续。";
+          hint.textContent = hasOpenExplorationRound()
+            ? "当前探索牌组仍在结算，结束后才能继续。" : "请先处理本次探索所得的希望和灾厄。";
           footer.appendChild(hint);
         }
         if (step.id === "story") {
@@ -10364,7 +10352,6 @@
         if (step.id === "development") {
           text.append(createResearchTools(), createStructureTechActionTools());
         }
-        if (step.id === "story" || step.id === "doom") text.appendChild(createStepCardTracks(step.id));
         if (step.id === "story") {
           const constantRow = document.createElement("div");
           constantRow.className = "simple-constant-row";
@@ -10380,11 +10367,12 @@
           if (constantRow.children.length) text.appendChild(constantRow);
           const hopeTools = createStoryRewardTools("hope");
           if (hopeTools) text.appendChild(hopeTools);
-          text.appendChild(createInwardOdysseyEndTools());
+          text.appendChild(createStepCardTracks("story"));
         }
         if (step.id === "doom") {
           const doomTools = createStoryRewardTools("doom");
           if (doomTools) text.appendChild(doomTools);
+          text.appendChild(createStepCardTracks("doom"));
         }
         item.append(text, createFlowStepFooter(step, mode, pending));
         fragment.appendChild(item);
@@ -10769,7 +10757,7 @@
         if (card.key === "c4:9327" && item.id === "manual:2" && receipt?.badge !== undefined && receipt.badge !== item.badge
           && ["waiting", "ready"].includes(receipt.status)) text.textContent += " · 旧登记条件已更正为命运 ≥8，请核对或撤销此安排";
         const placements = item.once ? explorationEffectRules()?.parse(item.text, cycleId, entry.id, item.badge).effects.filter(explorationNeedsPlacement) || [] : [];
-        if (placements.length && !receipt) text.textContent += " · 登记收益后，在故事或灾祸模块放置指示物";
+        if (placements.length && !receipt) text.textContent += " · 登记收益后，在探索步骤放置指示物";
         row.appendChild(text);
         const actions = automatic ? document.createElement("div") : row;
         if (automatic) actions.className = "exploration-settle-actions";
@@ -11342,6 +11330,26 @@
           saveState(); renderFlow();
         });
         box.appendChild(confirm);
+      }
+      const active = state.exploration?.drawStateByCycle?.[currentCycleConfig().id]?.activePiles?.flat() || [];
+      if (field && queuedExplorationTokenTask(entry, item)
+          && !active.some(value => explorationRoundId(value) === explorationRoundId(entry))) {
+        const handled = document.createElement("button");
+        handled.type = "button";
+        handled.className = "secondary";
+        handled.textContent = "已按牌面手动处理";
+        handled.addEventListener("click", () => {
+          if (mutateExplorationRecord.busy || !ownsDashboardWriteLease()
+              || !window.confirm("确认本项已按牌面手动结算或无需放置？")) return;
+          const effect = remainingExplorationTokenPlacements(entry, item).find(value => value.type === field);
+          if (!effect) return;
+          const local = explorationTokenPlacementState(entry, item);
+          const placed = (local.tokenPlacements ||= {})[item.id] ||= {};
+          placed[field] = normalizeCounterValue(placed[field]) + effect.amount;
+          updateExplorationTokenTask(entry, item, local);
+          refreshCardTokenViews();
+        });
+        box.appendChild(handled);
       }
       box.addEventListener("click", async event => {
         const button = event.target.closest("[data-card-token-place]");
@@ -12158,18 +12166,25 @@
     }
 
     function getExplorationStepTokenReminders(stepId) {
-      const field = stepId === "story" ? "progress" : stepId === "doom" ? "doom" : "";
-      if (!field) return [];
-      return Object.values(syncExplorationTokenPlacementQueue()).filter(task => !task.done).flatMap(task => {
-        const effect = remainingExplorationTokenPlacements(task.entry, task.item).find(value => value.type === field);
-        if (!effect) return [];
-        const type = field === "progress" ? "进展" : "灾祸";
-        return [{ title: `探索卡 · ${task.entry.name} · ${type} +${effect.amount}`, hint: [task.item.badge, task.item.text].filter(Boolean).join(" · "),
-          tag: { label: type, className: field === "progress" ? "structure-tech advance" : "battle" },
-          desc: "", className: field === "progress" ? "tech story-progress advance" : "important calamity",
-          explorationToken: { entry: task.entry, item: task.item, field },
-        }];
-      });
+      if (stepId !== "explore") return [];
+      return Object.values(syncExplorationTokenPlacementQueue()).filter(task => !task.done).flatMap(task =>
+        remainingExplorationTokenPlacements(task.entry, task.item).map(effect => {
+          const field = effect.type;
+          const type = field === "progress" ? "希望" : "灾厄";
+          return { title: `探索卡 · ${task.entry.name} · ${type} +${effect.amount}`,
+            hint: [task.item.badge, task.item.text].filter(Boolean).join(" · "),
+            tag: { label: type, className: field === "progress" ? "structure-tech advance" : "battle" },
+            desc: "", className: field === "progress" ? "tech story-progress advance" : "important calamity",
+            explorationToken: { entry: task.entry, item: task.item, field },
+          };
+        }));
+    }
+
+    function pendingExplorationRewards() {
+      const queue = state.exploration?.tokenPlacementQueueByCycle?.[currentCycleConfig().id] || {};
+      const cardRewards = Object.values(queue).filter(task => !task.done).length;
+      if (state.completed?.explore) return cardRewards;
+      return cardRewards + getMapHopeReminders().length + getDoomMapReminders().length;
     }
 
     async function mutateExplorationRecord(mutator, logMessage) {
@@ -14399,6 +14414,8 @@
       const completed = state.completed || {};
       const items = [];
       if (hasOpenExplorationRound()) items.push({ step: "explore", label: "探索 · 当前牌组尚未结束" });
+      const rewards = pendingExplorationRewards();
+      if (rewards) items.push({ step: "explore", label: `探索 · ${rewards} 项希望或灾厄待放置` });
       if (!completed.survey) {
         for (const reminder of getSurveyMapReminders()) {
           const rest = reminder.className === "rr";
@@ -14416,9 +14433,9 @@
       if (inwardExchangeDetails().available) items.push({ step: "story", label: "剧情末尾 · 内部之旅可消耗希望推进" });
       const doom = storyRewardCount(state.storyRewards?.doom);
       if (doom) items.push({ step: "doom", label: `灾祸 · ${doom} 枚灾厄待结算` });
-      const doomCard = doomAdvanceDetails();
-      if (doomCard.limits.some(limit => doomCard.count >= limit)) {
-        items.push({ step: "doom", label: `灾祸 · ${doomCard.card.label} 已达到灾厄触发点` });
+      for (const step of ["story", "doom"]) {
+        if (completed[step]) continue;
+        for (const reminder of getCardTrackThresholdReminders(step)) items.push({ step, label: reminder.title });
       }
       return items;
     }
@@ -14981,24 +14998,59 @@
       }
     }
 
-    function getStoryMapReminders() {
-      const tags = currentMapTagSet();
-      const reminders = [];
-      // 免费进展只跟着“最新揭示”走，轮末结算时会清掉 latest。
-      if (tags.has("progress") && state.mapCurrentTileIsLatestRevealed) {
-        reminders.push({
-          title: "新探索板块放置进展",
-          tag: { label: "进展", className: "structure-tech advance" },
-          desc: `${currentMapTileLabel()} 是最新揭示的板块，且带有进展指示物标记。请在故事步骤放置 1 个进展。`,
-          placements: [{ type: "progress", amount: 1 }],
-          className: "tech story-progress advance",
-        });
+    function mapExplorationRewardId(field) {
+      const snapshot = state.mapSnapshot;
+      const cycleId = currentCycleConfig().id;
+      if (snapshot?.cycleId && snapshot.cycleId !== cycleId) return "";
+      const tileId = snapshot?.currentTileId || state.mapCurrentTileId;
+      if (!tileId || !currentMapTagSet().has(field === "progress" ? "progress" : "calamity")) return "";
+      if (field === "progress") {
+        const unexplored = Array.isArray(snapshot?.exploredIds)
+          ? !snapshot.exploredIds.includes(tileId) : state.mapCurrentTileIsLatestRevealed;
+        return unexplored ? `hope:${tileId}` : "";
       }
-      reminders.push(...getMapProgressTechReminders());
-      // Check hero mnemos nodes pending settlement
-      const mnemosPending = getMnemosPendingReminders();
-      reminders.push(...mnemosPending);
-      return reminders;
+      return `doom:${state.day}:${tileId}`;
+    }
+
+    function mapExplorationRewardPending(field) {
+      const id = mapExplorationRewardId(field);
+      const receipts = state.exploration?.mapTokenReceiptsByCycle?.[currentCycleConfig().id];
+      return Boolean(id && !receipts?.[id]);
+    }
+
+    function settleMapExplorationReward(field, key = "") {
+      if (!ownsDashboardWriteLease() || !mapExplorationRewardPending(field)) return;
+      const id = mapExplorationRewardId(field);
+      if (key && !placeCardTrackToken(key, field, 1, false)) return;
+      const receipts = ((state.exploration ||= {}).mapTokenReceiptsByCycle ||= {});
+      (receipts[currentCycleConfig().id] ||= {})[id] = true;
+      refreshCardTokenViews();
+    }
+
+    function getMapHopeReminders() {
+      if (!mapExplorationRewardPending("progress")) return [];
+      return [{
+        title: "未探索板块 · 希望 +1",
+        tag: { label: "希望", className: "structure-tech advance" },
+        desc: `${currentMapTileLabel()} 的探索符号生效。选择放置位置。`,
+        placements: [{ type: "progress", amount: 1 }],
+        mapReward: "progress",
+        className: "tech story-progress advance",
+      }];
+    }
+
+    function getCardTrackThresholdReminders(stepId) {
+      const tracks = stepId === "story" ? [["story", "progress"], ["inwardOdyssey", "progress"]]
+        : [["doom", "doom"], ["doom", "progress"]];
+      return tracks.flatMap(([key, field]) => {
+        const target = cardTrackTokenState(key, field);
+        const reached = target.limits.filter(limit => target.count >= limit);
+        if (!target.allowed || target.gainMode === "remove" || !reached.length) return [];
+        const type = field === "doom" ? "灾厄" : key === "inwardOdyssey" ? "希望" : "进展";
+        const title = `${target.label} · ${type}已达 ${reached.join(" / ")}`;
+        return [{ title, tag: { label: "触发点", className: "battle" },
+          desc: `当前 ${type} ${target.count} 枚，请按卡面核对并结算。`, className: "important calamity" }];
+      });
     }
 
     function getMnemosPendingReminders() {
@@ -15055,9 +15107,7 @@
     }
 
     function getDoomMapReminders() {
-      const tags = currentMapTagSet();
-      // 灾祸指示物在“翻开该板块”的当天放置，轮末结算时会清掉 latest。
-      if (!tags.has("calamity") || !state.mapCurrentTileIsLatestRevealed) return [];
+      if (!mapExplorationRewardPending("doom")) return [];
       const saves = typeof structureSaveReminders === "function" ? structureSaveReminders([{ type: "doom", amount: 1 }]) : [];
       const saveHint = saves.map(reminder => {
         const effect = reminder.text.replace(`${reminder.condition}：`, "")
@@ -15070,10 +15120,11 @@
         `<button type="button" class="map-progress-fate" data-doom-save-fate="${escapeHtml(source.techKey)}">命运 +1</button>`).join("");
 
       return [{
-        title: "当前板块放置灾祸指示物",
+        title: "当前板块 · 灾厄 +1",
         tag: { label: "灾祸", className: "battle" },
-        desc: `${currentMapTileLabel()} 带有灾祸标记。请在灾祸步骤放置 1 个灾祸指示物。${saveHint ? ` ${saveHint}` : ""}`,
+        desc: `${currentMapTileLabel()} 带有灾祸标记。请在探索步骤放置 1 个灾祸指示物。${saveHint ? ` ${saveHint}` : ""}`,
         placements: [{ type: "doom", amount: 1 }],
+        mapReward: "doom",
         placementHtml: saveFateButtons,
         className: "important calamity",
       }];
@@ -15106,13 +15157,12 @@
         return getSurveyMapReminders();
       }
 
-      if (stepId === "story") {
-        return [...getStoryMapReminders(), ...getExplorationStepTokenReminders(stepId)];
+      if (stepId === "explore") {
+        return [...getMapHopeReminders(), ...getDoomMapReminders(), ...getMapProgressTechReminders(), ...getExplorationStepTokenReminders(stepId)];
       }
 
-      if (stepId === "doom") {
-        return [...getDoomMapReminders(), ...getExplorationStepTokenReminders(stepId)];
-      }
+      if (stepId === "story") return [...getMnemosPendingReminders(), ...getCardTrackThresholdReminders(stepId)];
+      if (stepId === "doom") return getCardTrackThresholdReminders(stepId);
 
       if (stepId === "encounter") {
         const reminders = getNextBattleTerrainReminder();
@@ -15146,7 +15196,7 @@
       return `
         <div class="step-track-reminders">
           ${reminders.map((reminder, reminderIndex) => `
-            <${reminder.collapsible ? "details" : "div"} class="step-track-reminder ${reminder.className}">
+            <${reminder.collapsible ? "details" : "div"} class="step-track-reminder ${reminder.className}"${reminder.mapReward ? ` data-map-exploration-reward="${reminder.mapReward}"` : ""}>
               <${reminder.collapsible ? "summary" : "div"} class="step-track-title">
                 <span class="step-track-tag ${reminder.tag.className}">${escapeHtml(reminder.tag.label)}</span>
                 <span${reminder.hint ? ` title="${escapeHtml(reminder.hint)}"` : ""}>${escapeHtml(reminder.title)}</span>
@@ -15155,6 +15205,7 @@
               </${reminder.collapsible ? "summary" : "div"}>
               ${reminder.desc ? `<p class="step-track-desc"${reminder.scope ? ` data-term-scope="${reminder.scope}"` : ""}>${escapeHtml(reminder.desc)}</p>` : ""}
               ${reminder.placements?.length ? renderCardTokenPlacementTools(reminder.placements, reminder.placementHtml || "") : ""}
+              ${reminder.mapReward ? '<button type="button" class="secondary" data-map-exploration-handled>已按牌面手动处理</button>' : ""}
               ${reminder.explorationToken ? `<div data-exploration-token-reminder="${reminderIndex}"></div>` : ""}
             </${reminder.collapsible ? "details" : "div"}>
           `).join("")}
@@ -16108,6 +16159,14 @@
         return;
       }
       const placementButton = event.target.closest("[data-card-token-place]");
+      const mapReward = event.target.closest("[data-map-exploration-reward]");
+      if (mapReward) {
+        const field = mapReward.dataset.mapExplorationReward;
+        if (placementButton) settleMapExplorationReward(field, placementButton.dataset.cardTokenPlace);
+        else if (event.target.closest("[data-map-exploration-handled]")
+            && window.confirm("确认本项已按牌面手动结算或无需放置？")) settleMapExplorationReward(field);
+        return;
+      }
       if (placementButton) {
         placeCardTrackToken(placementButton.dataset.cardTokenPlace, placementButton.dataset.cardTokenField, Number(placementButton.dataset.amount));
         return;

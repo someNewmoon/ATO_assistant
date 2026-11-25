@@ -3495,6 +3495,7 @@
     // 段首的 (拇指)/(圈) 换成原书图标。必须排在 mount 之后：混排渲染器要先按原始文本
     // 做完字符定位（prepareHTML 校验的是源文字符数），改 DOM 才不会让图片挂不上。
     window.ATO_STORY_MARKS?.decorate?.(storyText);
+    window.ATO_STORY_MAIN_RECORD?.show(entry, storyText);
     annotateEntityTextNodes(storyText);
     window.ATO_STORY_RULE_HIGHLIGHTS?.decorate(storyText);
     refreshSecondScreenStoryContentToggle(Boolean(secondScreenStoryModeToggle?.checked));
@@ -5211,6 +5212,7 @@
       entryTitle.textContent = "当前版本没有此条目";
       if (pharosTitleDecodeButton) pharosTitleDecodeButton.hidden = true;
       entryBadge.textContent = "----";
+      window.ATO_STORY_MAIN_RECORD?.show(null);
       mixedMediaRuntime()?.dispose?.(storyText);
       window.ATO_MIXED_MEDIA_LOADER?.load(null);
       storyText.textContent = "该条目为官方版独有，请切换至官方版后打开。";
@@ -5515,4 +5517,4 @@
   void startStory();
 })();
 
-window.ATO_VOYAGE?.wireReturn(".story-navigation .home-link:not(.record-link), [data-story-voyage-return]", undefined, { storyReader: true });
+window.ATO_VOYAGE?.wireReturn(".story-navigation .home-link:not(.record-link), [data-story-voyage-return]", () => window.ATO_STORY_MAIN_RECORD?.flush() ?? true, { storyReader: true });

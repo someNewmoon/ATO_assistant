@@ -117,7 +117,7 @@ function consoleStoryTargets(cycle, tables) {
 
   const mainStory = tables.mainStory[cycle];
   assert.ok(mainStory, `index.html 缺少 ${cycle} 的 mainStoryConstants`);
-  for (const row of mainStory.boxes) pushTarget(targets, '主线', mainStory.chapter, row[3]?.entry || row[0]);
+  for (const row of mainStory.boxes) pushTarget(targets, '主线', row[3]?.chapter || mainStory.chapter, row[3]?.entry || row[0]);
 
   const special = tables.special[cycle];
   assert.ok(special, `index.html 缺少 ${cycle} 的 specialEventConstants`);

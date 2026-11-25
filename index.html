@@ -3954,7 +3954,7 @@
         title: "主线故事",
         chapter: "main",
         boxes: [
-          ["0014", "0014", "主线记录", { count: 8, entry: "0014" }],
+          ["0014", "0014", "主线记录", { count: 8, chapter: "hub-01-fated-conundrum", entry: "0014", key: "c1-3-19" }],
         ],
       },
       c2: {
@@ -8134,7 +8134,8 @@
         bgm: "story",
         title: row ? `${row[1]} · ${row[2]}` : "",
         href: getStoryHref({
-          chapter: data.chapter,
+          chapter: row?.[3]?.chapter || data.chapter,
+          key: row?.[3]?.key,
           entry: row?.[3]?.entry || row?.[0] || target,
         }),
       };

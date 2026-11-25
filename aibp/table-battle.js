@@ -111,6 +111,11 @@
   });
   controls.finish.after(returnToVoyage);
 
+  const returnToStory = document.createElement('a');
+  returnToStory.textContent = '返回战后剧情';
+  returnToStory.hidden = true;
+  controls.finish.after(returnToStory);
+
   async function readContext() {
     const [response, home] = await Promise.all([
       fetch('../api/campaign-state.php?section=dashboard', { cache: 'no-store', signal: AbortSignal.timeout(8000) }),
@@ -158,15 +163,22 @@
     controls.settle.textContent = stage === 'loot' ? '查看战利品' : '结束桌战';
     controls.resume.hidden = stage !== 'loot';
     controls.finish.hidden = stage === 'play';
-    controls.finish.textContent = stage === 'loot' ? '结束（不入账）' : (battle.returnTo ? '返回战后剧情' : '结束并返回');
-    returnToVoyage.hidden = !activeVoyage();
-    if (!returnToVoyage.hidden) returnToVoyage.href = voyage.returnUrl(activeVoyage());
+    const source = activeVoyage();
+    const encounter = voyage?.read(battle.voyage);
+    controls.finish.textContent = stage === 'loot' ? '结束（不入账）' : source ? '结束并返回航行'
+      : battle.returnTo ? '返回战后剧情' : '结束并返回';
+    returnToVoyage.hidden = !source || stage === 'settled';
+    if (!returnToVoyage.hidden) returnToVoyage.href = voyage.returnUrl(source);
+    returnToStory.hidden = stage !== 'settled' || !source || !battle.returnTo;
+    if (!returnToStory.hidden) returnToStory.href = voyage.carry(battle.returnTo, source);
     cards.inert = stage !== 'play';
     panel.inert = stage !== 'play';
     status.textContent = {
       play: '',
-      loot: '确认本场结果与战利品后入账，也可返回牌桌更正。',
-      settled: '本场桌战已结束。'
+      loot: '确认本场结果与战利品后入账，也可返回牌桌更正。'
+        + (encounter ? '' : ' 本场未关联遭遇。如对应今日遭遇，结束后可在主控台登记。'),
+      settled: encounter ? '本场桌战已结束，返回航行可登记本场遭遇。'
+        : '本场桌战未关联遭遇。如对应今日遭遇，请在主控台点击「登记已完成战斗」。'
     }[stage];
   }
 
@@ -300,11 +312,11 @@
     if (battle.stage === 'loot') {
       if (!window.confirm('确认结束本场桌战，本次战利品不写入记录表？')) return;
       setStage('settled', 'skip');
-      if (activeVoyage()) return voyage.navigate(voyage.returnUrl(activeVoyage()));
     }
-    const url = new URL(location.href);
-    url.searchParams.delete('tableBattle');
-    location.assign(battle.returnTo || url);
+    const source = activeVoyage();
+    if (source) return voyage.navigate(voyage.returnUrl(source));
+    if (battle.returnTo) return voyage.navigate(battle.returnTo);
+    return voyage.navigate(voyage.returnUrl(null));
   }
 
   controls.cards.addEventListener('click', () => cards.scrollIntoView({ block: 'start' }));

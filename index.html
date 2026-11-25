@@ -10128,10 +10128,10 @@
           const external = document.createElement("button");
           external.type = "button";
           external.className = "secondary";
-          external.textContent = "登记外部实桌战";
+          external.textContent = "登记已完成战斗";
           external.addEventListener("click", async () => {
             const context = voyageContext("encounter", item.key);
-            if (!ownsDashboardWriteLease() || !window.confirm("确认「" + item.label + "」已在外部实桌完成，并已处理战利品？")) return;
+            if (!ownsDashboardWriteLease() || !window.confirm("确认「" + item.label + "」已打完并处理战利品？此操作只登记遭遇状态。")) return;
             if (!sameVoyage(context) || state.voyageEncounters?.[item.key]?.result) return;
             (state.voyageEncounters ||= {})[item.key] = { ...item.saved, result: "external" };
             saveState();
@@ -10371,11 +10371,9 @@
               event.entry ? "继续阅读航标梦境" : "航标梦境 · 掷 1d10", () => rollPharosDream(id)));
           }
         }
-        const links = getStepLinks(step);
-        if (step.id === "encounter") {
-          const encounters = todayEncounters(encounter);
-          if (encounters.length) text.append(encounterControls(encounters));
-        }
+        const encounters = step.id === "encounter" ? todayEncounters(encounter) : [];
+        if (encounters.length) text.append(encounterControls(encounters));
+        const links = encounters.some(item => !item.saved?.result) ? [] : getStepLinks(step);
         links.forEach((link) => {
           const anchor = document.createElement("a");
           anchor.href = link.href;
@@ -15160,7 +15158,7 @@
 
       if (stepId === "encounter") {
         const reminders = getNextBattleTerrainReminder();
-        if (icons.some((icon) => icon.className === "battle")) {
+        if (icons.some((icon) => icon.className === "battle") && !state.voyageEncounters?.[state.day + ":timeline"]?.result) {
           reminders.unshift({
             title: "今日战斗",
             tag: { label: "战斗", className: "battle" },

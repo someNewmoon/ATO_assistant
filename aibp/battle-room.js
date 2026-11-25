@@ -163,6 +163,18 @@
     if (first && actor.role === 'host') equipmentSeat = rollSeat = personalSeat() ?? 0;
     const language = state.squad?.language || state.language;
     if (language && language !== roomLanguage) { roomLanguage = language; squadLink?.language(language); }
+    const requestedVoyage = window.ATO_VOYAGE?.current();
+    if (actor.role === 'host' && requestedVoyage?.encounter && state.squad?.voyage !== requestedVoyage.id) {
+      content.replaceChildren();
+      const link = document.createElement('a');
+      link.href = window.ATO_VOYAGE.returnUrl(requestedVoyage);
+      link.dataset.roomVoyageReturn = '';
+      link.dataset.pageRouterIgnore = 'true';
+      link.textContent = '返回航行';
+      content.append('此房间当前战斗与原遭遇不一致。 ', link);
+      return;
+    }
+    if (state.squad?.phase === 'battle') roomVoyage();
     if (state.squad && (state.closed || state.squad.phase !== 'battle')) {
       if (actor.role === 'host' && !state.closed && state.squad.phase === 'story' && state.squad.recap
           && state.squad.recap.battleNumber === state.squad.battleNumber) {
@@ -1557,18 +1569,67 @@
   window.getAibpBattleRecap = () => squadLink?.recapMarkup(state?.squad?.recap?.battleNumber === state?.squad?.battleNumber
     && state?.squad?.phase === 'story' ? state.squad.recap : null);
 
+  function roomVoyage() {
+    if (actor?.role !== 'host' || !state.squad?.voyage) return null;
+    const voyage = window.ATO_VOYAGE;
+    const entry = voyage?.read(state.squad.voyage);
+    const battle = 'online-' + id + '-' + state.squad.battleNumber;
+    return voyage?.bind(entry, battle) ? { voyage, entry, battle } : null;
+  }
+
+  window.getAibpVoyageSettlement = () => {
+    const trip = state?.squad?.phase === 'story' && roomVoyage();
+    if (!trip || state.squad.recap?.battleNumber !== state.squad.battleNumber) return null;
+    if (trip.voyage.read(trip.entry.id)?.result === 'skip') throw new Error('本场已确认跳过战利品。');
+    return { id: trip.battle, accountId: trip.entry.accountId, userId: trip.entry.profileId, activeCycle: trip.entry.cycle };
+  };
+
+  window.finishAibpVoyageLoot = () => {
+    const trip = roomVoyage();
+    if (!trip || !window.getAibpVoyageSettlement()) return;
+    trip.voyage.settle(trip.entry, trip.battle, 'loot');
+    syncVoyageRecap();
+  };
+
+  function syncVoyageRecap() {
+    const trip = roomVoyage();
+    const skip = content.querySelector('[data-voyage-skip]');
+    const link = content.querySelector('[data-voyage-return]');
+    if (!trip || !link) return;
+    link.href = trip.voyage.returnUrl(trip.entry);
+    const result = trip.voyage.read(trip.entry.id)?.result;
+    skip.hidden = Boolean(result);
+    if (result === 'skip') content.querySelector('[data-open-loot]').hidden = true;
+  }
+
   function renderRecap() {
     if (content.querySelector('.room-battle-recap')) return;
     dock.hidden = true;
       if (toolsDialog.open) toolsDialog.close();
     boardMount.hidden = true;
     summary.innerHTML = '';
+    const trip = roomVoyage();
+    const story = window.ATO_VOYAGE?.storyUrl(trip?.entry.story);
     content.innerHTML = squadLink.recapMarkup(state.squad.recap)
       + '<p><button type="button" data-open-loot>计算战利品</button> <a href="'
-      + escape(squadLink.link('/aibp/squad', id)) + '">返回联机小队</a></p>';
+      + escape(squadLink.link('/aibp/squad', id)) + '">返回联机小队</a>'
+      + (story ? ' <a href="' + escape(story) + '">返回战后剧情</a>' : '')
+      + (trip ? ' <button type="button" data-voyage-skip>跳过战利品</button> <a data-voyage-return data-page-router-ignore="true">返回航行</a>' : '')
+      + '</p>';
+    content.querySelector('[data-voyage-skip]')?.addEventListener('click', () => {
+      const trip = roomVoyage();
+      if (!trip || !window.confirm('确认结束本场，跳过战利品入账？')) return;
+      trip.voyage.settle(trip.entry, trip.battle, 'skip');
+      syncVoyageRecap();
+    });
+    content.querySelector('[data-voyage-return]')?.addEventListener('click', event => {
+      event.preventDefault();
+      void window.ATO_VOYAGE.navigate(event.currentTarget.href);
+    });
     const loot = content.querySelector('[data-open-loot]');
     loot.addEventListener('click', () => window.openAibpLoot?.());
     loot.hidden = !window.openAibpLoot;
+    syncVoyageRecap();
   }
 
   function finishSquadBattle() {
@@ -2079,7 +2140,9 @@
       !edit && '<details class="room-jump-panel"><summary>创伤牌库</summary><div data-closed-trauma></div></details>',
       showHistory && '<details class="room-battle-history"><summary>战斗记录</summary><div data-room-history></div></details>',
       overview, !edit && rollLog,
-      state.squad && '<p><a href="' + escape(squadLink.link('/aibp/squad', id)) + '">返回联机小队</a></p>',
+      state.squad && '<p><a href="' + escape(squadLink.link('/aibp/squad', id)) + '">返回联机小队</a>'
+        + (roomVoyage() ? ' <a data-room-voyage-return data-page-router-ignore="true" href="'
+          + escape(window.ATO_VOYAGE.returnUrl(roomVoyage().entry)) + '">返回航行</a>' : '') + '</p>',
     ]);
     if (edit) renderDicePanel(content.querySelector('#room-dice'), poolByDice ? poolSection : '');
     if (showHistory) renderSections(content.querySelector('[data-room-history]'), [!personal && rollLog, activity]);
@@ -2333,6 +2396,12 @@
   });
 
   root.addEventListener('click', async event => {
+    const returnToVoyage = event.target.closest('[data-room-voyage-return]');
+    if (returnToVoyage) {
+      event.preventDefault();
+      void window.ATO_VOYAGE.navigate(returnToVoyage.href);
+      return;
+    }
     const button = event.target.closest('button');
     if (!button || (!summary.contains(button) && !content.contains(button) && !toolsBody.contains(button) && !turnWindow.contains(button))) return;
     if (button.dataset.rollSeat !== undefined && actor?.role === 'host') {
@@ -2591,9 +2660,12 @@
           const board = window.getAibpBoardSetup?.();
           if (!board) throw new Error('请先选择骇物。');
           submitStatus.textContent = '正在开启战斗，等待服务器确认…';
+          const voyage = window.ATO_VOYAGE?.current();
+          if (voyage?.battle && voyage.battle !== 'online-' + squadId + '-' + (battleNumber + 1)) throw new Error('本次遭遇已关联另一场战斗。');
           submitted = true;
           const result = await squadLink.request(squadId, 'action', credential.token, {
             id: crypto.randomUUID(), type: 'squad-start', battleNumber,
+            ...(voyage?.encounter && { voyage: voyage.id }),
             board, goal: form.elements.goal.value, projection: window.getAibpRoomProjection?.(), deck: window.getAibpRoomBattleDeck?.(), tutorial: form.elements.tutorial?.checked === true,
             ...(available && { battleConfig: readConfig(form) }),
           }, { timeout: 25000 });

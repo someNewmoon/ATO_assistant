@@ -95,7 +95,8 @@ export function squadView(room, actor) {
   const squad = room.squad;
   if (!squad) return null;
   const { phase, cycle, language, battleNumber, hostSeat, checks, story, stock, gearNames } = squad;
-  const result = { phase, cycle, language, battleNumber, hostSeat, checks, recap: squad.recap, lastBattleRoll: latestBattleRoll(room) || squad.lastBattleRoll || null };
+  const result = { phase, cycle, language, battleNumber, hostSeat, checks, recap: squad.recap,
+    ...(actor.role === "host" && squad.voyage && { voyage: squad.voyage }), lastBattleRoll: latestBattleRoll(room) || squad.lastBattleRoll || null };
   if (actor.role === 'viewer' || actor.role === 'host') result.story = story;
   if (actor.role === 'host' || actor.role === 'player') {
     result.loadouts = room.heroes.map(hero => inventory.normalizeLoadout(stock.loadouts[hero.id]));
@@ -211,6 +212,8 @@ export function applySquad(room, actor, body, randomInt, savedTrauma) {
     Object.assign(room, { board, trauma, battleDeck, projection: battleDeck ? roomDeckProjection(battleDeck, projection) : projection, round: 1,
       rolls: [], lastBattleRollId: null, argoAbilities: {}, pool: Object.fromEntries(Object.keys(room.pool).map(key => [key, 0])) });
     setTurnPhase(room, 'apostle');
+    if (typeof body.voyage === 'string' && /^[0-9a-f-]{36}$/.test(body.voyage)) squad.voyage = body.voyage;
+    else delete squad.voyage;
     squad.phase = 'battle';
     squad.battleNumber++;
     return;

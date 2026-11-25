@@ -7,6 +7,7 @@
 
   const squadLink = window.ATO_SQUAD_LINK;
   const deck = window.AIBP_TABLE_DECK;
+  const voyage = window.ATO_VOYAGE;
   const start = document.getElementById('newCampaignButton');
   const resume = document.getElementById('continueCampaignBattle');
   const entryStatus = document.getElementById('campaignBattleStatus');
@@ -19,13 +20,19 @@
     .map(button => [button.dataset.tableAction, button]));
   let context, battle, busy = false;
 
-  function storyReturn() {
-    const value = route.searchParams.get('storyReturn');
-    if (!value) return '';
-    const target = new URL(value, location.href);
-    return target.origin === location.origin && /\/story\/(?:index\.html)?$/.test(target.pathname)
-      ? target.pathname + target.search : '';
+  function activeVoyage() {
+    return voyage?.read(battle?.voyage) || voyage?.current();
   }
+
+  const returnToVoyage = document.createElement('a');
+  returnToVoyage.textContent = '返回航行';
+  returnToVoyage.hidden = true;
+  returnToVoyage.dataset.pageRouterIgnore = 'true';
+  returnToVoyage.addEventListener('click', event => {
+    event.preventDefault();
+    void voyage.navigate(returnToVoyage.href);
+  });
+  controls.finish.after(returnToVoyage);
 
   async function readContext() {
     const [response, home] = await Promise.all([
@@ -45,10 +52,11 @@
     const linked = squadLink.validId(linkedId) && squadLink.read(linkedId);
     const squad = home?.squad || (squadLink.validKey(linked?.token) ? { id: linkedId, credentials: linked } : null);
     const key = 'ato-aibp-table-current:' + JSON.stringify([accountId, profileId]);
-    if (!squad) return { key, accountId, profileId, activeCycle };
+    const day = data?.state?.profiles?.[profileId]?.cycles?.[activeCycle]?.state?.day;
+    if (!squad) return { key, accountId, profileId, activeCycle, day };
     const { room, actor } = await squadLink.request(squad.id, 'state', squad.credentials.token);
     const online = !room.closed && room.squad ? { ...squad, room, actor } : null;
-    return { key, accountId, profileId, activeCycle, online };
+    return { key, accountId, profileId, activeCycle, day, online };
   }
 
   function saved(key) {
@@ -73,7 +81,9 @@
     controls.settle.textContent = stage === 'loot' ? '查看战利品' : '结束桌战';
     controls.resume.hidden = stage !== 'loot';
     controls.finish.hidden = stage === 'play';
-    controls.finish.textContent = stage === 'loot' ? '结束（不入账）' : '结束并返回';
+    controls.finish.textContent = stage === 'loot' ? '结束（不入账）' : (battle.returnTo ? '返回战后剧情' : '结束并返回');
+    returnToVoyage.hidden = !activeVoyage();
+    if (!returnToVoyage.hidden) returnToVoyage.href = voyage.returnUrl(activeVoyage());
     cards.inert = stage !== 'play';
     panel.inert = stage !== 'play';
     status.textContent = {
@@ -83,15 +93,22 @@
     }[stage];
   }
 
-  function setStage(stage) {
+  function setStage(stage, result) {
     if (saved(context.key)?.id !== battle.id) throw Error('当前桌战已在另一个页面变更，请刷新查看。');
-    const next = { ...battle, stage };
+    const next = { ...battle, stage, ...(result && { result }) };
     store(next);
     battle = next;
+    if (result && battle.voyage) voyage.settle(activeVoyage(), 'table-' + battle.id, result);
     showStage();
   }
 
   async function openTable(entry) {
+    const source = voyage?.current();
+    if (source?.encounter && source.id !== entry.voyage) throw Error('另有一场桌战，需先结束该场战斗。');
+    if (entry.voyage && !voyage.bind(voyage.read(entry.voyage), 'table-' + entry.id)) {
+      throw Error('无法确认桌战对应的遭遇。');
+    }
+    if (entry.voyage && entry.result) voyage.settle(voyage.read(entry.voyage), 'table-' + entry.id, entry.result);
     await deck.activate(entry);
     battle = entry;
     const url = new URL(location.href);
@@ -108,6 +125,10 @@
   function goOnline(online, selection) {
     squadLink.save(online.id, online.credentials);
     const active = online.room.squad.phase === 'battle';
+    const source = voyage?.current();
+    if (source?.encounter && (online.actor.role !== 'host' || (active && online.room.squad.voyage !== source.id))) {
+      throw Error('请由房主从遭遇开启对应战斗。当前小队战斗无法登记到此遭遇。');
+    }
     if (online.actor.role !== 'host') {
       location.assign(squadLink.link(active ? '/aibp/room' : '/aibp/squad', online.id));
       return;
@@ -124,7 +145,11 @@
   async function routeBattle(continueOnly = false) {
     context = await readContext();
     const current = saved(context.key);
+    const source = voyage?.current();
+    if (source && (source.accountId !== context.accountId || source.profileId !== context.profileId
+        || source.cycle !== context.activeCycle || String(context.day) !== source.day)) throw Error('来源战役已变更，请返回航行。');
     if (context.online?.room.squad.phase === 'battle') return goOnline(context.online);
+    if (current?.voyage === source?.id && source?.result && current?.stage === 'settled') return openTable(current);
     if (current && current.stage !== 'settled') return openTable(current);
     if (continueOnly) {
       resume.hidden = true;
@@ -157,9 +182,9 @@
           const existing = saved(context.key);
           if (existing && existing.stage !== 'settled') return openTable(existing);
           const entry = { ...selection, id: crypto.randomUUID().replaceAll('-', ''),
-            stage: 'play', returnTo: storyReturn() };
-          await openTable(entry);
+            stage: 'play', returnTo: voyage.storyUrl(), ...(source?.encounter && { voyage: source.id }) };
           store(entry);
+          await openTable(entry);
         };
         if (navigator.locks) await navigator.locks.request(context.key, begin);
         else await begin();
@@ -185,7 +210,8 @@
   function finish() {
     if (battle.stage === 'loot') {
       if (!window.confirm('确认结束本场桌战，本次战利品不写入记录表？')) return;
-      setStage('settled');
+      setStage('settled', 'skip');
+      if (activeVoyage()) return voyage.navigate(voyage.returnUrl(activeVoyage()));
     }
     const url = new URL(location.href);
     url.searchParams.delete('tableBattle');
@@ -235,7 +261,7 @@
         activeCycle: context.activeCycle };
     },
     settled() {
-      if (battle?.stage === 'loot' && saved(context.key)?.id === battle.id) setStage('settled');
+      if (battle?.stage === 'loot' && saved(context.key)?.id === battle.id) setStage('settled', 'loot');
     }
   };
 
@@ -246,7 +272,10 @@
     if (battle) return;
     if (route.searchParams.get('tableBattle') === current?.id && !onlineActive) return openTable(current);
     resume.hidden = !(onlineActive || (current && current.stage !== 'settled'));
-    if (route.searchParams.has('tableBattle')) entryStatus.textContent = '当前存档没有这场实体桌战。';
+    if (route.searchParams.has('tableBattle')) {
+      entryStatus.textContent = '当前存档没有这场实体桌战。';
+      if (voyage?.current()?.encounter) start.hidden = true;
+    }
   }
 
   window.addEventListener('focus', () => { if (!battle) void run(refresh); });

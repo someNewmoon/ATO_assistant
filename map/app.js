@@ -2408,7 +2408,7 @@ async function saveAndReturnToDashboard() {
   // hasOpenModule() also covers a live console tab whose background heartbeat is
   // throttled (hidden tabs update it about once a minute): focusModuleWindow()
   // probes it by name, so returning does not fall back to a full page load.
-  const dashboardWindow = !singlePageMode && window.ATO_PAGE_ROUTER?.hasOpenModule?.(dashboardModule)
+  const dashboardWindow = !window.ATO_VOYAGE?.current() && !singlePageMode && window.ATO_PAGE_ROUTER?.hasOpenModule?.(dashboardModule)
     ? window.ATO_PAGE_ROUTER.focusModuleWindow?.(dashboardModule)
     : null;
   if (!await flushCampaignMapSave()) {
@@ -2435,6 +2435,10 @@ async function saveAndReturnToDashboard() {
     return;
   }
 
+  if (window.ATO_VOYAGE?.current()) {
+    await window.ATO_VOYAGE.navigate(window.ATO_VOYAGE.returnUrl());
+    return;
+  }
   if (dashboardWindow) {
     try {
       dashboardWindow.focus?.();

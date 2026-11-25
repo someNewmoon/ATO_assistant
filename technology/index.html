@@ -1152,6 +1152,7 @@ button.gear-group-name:hover {
   </div>
 </div>
   <script src="../assets/page-focus-router.js?v=20261028-android-return1"></script>
+  <script src="../assets/voyage-return.js?v=1"></script>
   <script src="../assets/campaign-session.js?v=20260917"></script>
   <script src="../assets/campaign-notes.js?v=20261015"></script>
   <script src="../assets/cycle-symbols.js?v=20261115-module-logo"></script>
@@ -4478,7 +4479,7 @@ async function saveAndReturnMain() {
   // hasOpenModule() also covers a live console tab whose background heartbeat is
   // throttled; focusModuleWindow() probes it by name, so returning does not fall
   // back to a full page load.
-  const dashboardWindow = singleWindow || !window.ATO_PAGE_ROUTER?.hasOpenModule?.(dashboardModule)
+  const dashboardWindow = window.ATO_VOYAGE?.current() || singleWindow || !window.ATO_PAGE_ROUTER?.hasOpenModule?.(dashboardModule)
     ? null
     : window.ATO_PAGE_ROUTER?.focusModuleWindow?.(dashboardModule) || null;
   returnMain.disabled = true;
@@ -4489,6 +4490,10 @@ async function saveAndReturnMain() {
     }
     await writeSnapshotToMainArchive(unlockedTechSnapshot());
     returnMain.textContent = '已保存';
+    if (window.ATO_VOYAGE?.current()) {
+      await window.ATO_VOYAGE.navigate(window.ATO_VOYAGE.returnUrl());
+      return;
+    }
     if (dashboardWindow) {
       dashboardWindow.focus?.();
       if (dashboardSyncChannel) {

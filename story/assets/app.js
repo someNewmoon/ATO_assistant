@@ -2188,7 +2188,7 @@
       destination.searchParams.set("storyReturn", source.pathname + source.search);
       if (squadId) destination.searchParams.set("storySquad", squadId);
       destination.hash = link.apostle;
-      return `<a class="battle-aibp-button" href="${escapeHtml(destination.href)}" target="_blank" rel="noopener noreferrer">打开${escapeHtml(link.label)}</a>`;
+      return `<a class="battle-aibp-button" href="${escapeHtml(window.ATO_VOYAGE?.carry(destination.href, window.ATO_VOYAGE.current()) || destination.href)}" target="_blank" rel="noopener noreferrer">打开${escapeHtml(link.label)}</a>`;
     }).join("");
     return `<div class="battle-aibp-action">${buttons}</div>`;
   }
@@ -5291,3 +5291,5 @@
   });
   void startStory();
 })();
+
+window.ATO_VOYAGE?.wireReturn(".home-link:not(.record-link)");

@@ -2894,6 +2894,7 @@
             <summary id="todayPreviewTitle">今日待结算</summary>
             <ul id="todayPreviewItems"></ul>
           </details>
+          <p id="voyageReturnStatus" role="status" hidden></p>
           <div id="flowList" class="flow-list"></div>
         </div>
       </section>
@@ -3178,6 +3179,7 @@
   </dialog>
 
   <script src="./assets/page-focus-router.js?v=20261113-theatre"></script>
+  <script src="./assets/voyage-return.js?v=1"></script>
   <script src="./assets/story-doom-card-data.js?v=20261014-card-face-audit2"></script>
   <script src="./assets/exploration-card-tags.js?v=20261018-card-audit1"></script>
   <script src="./assets/exploration-card-rules.js?v=20261018-card-audit1"></script>
@@ -4522,6 +4524,7 @@
         campaignServerBaseline = cloneJson(latest.serverArchive || latest.archive);
         renderDashboardArchive(latest.archive);
         setCampaignSaveStatus("已取得编辑权限", "saved");
+        await restoreVoyage();
       } catch (error) {
         console.warn(error);
         setCampaignSaveStatus("已接管编辑，存档暂时离线", "offline");
@@ -7012,6 +7015,7 @@
         // Load negotiation cards for development reminders, then re-render flow.
         loadNegotiationCards().then(() => renderFlow());
         refreshCachedArgoRecord();
+        await restoreVoyage();
       } catch (error) {
         if (sessionEpoch !== campaignSessionEpoch) return;
         if (error?.code === "ACCOUNT_MISMATCH") {
@@ -9235,8 +9239,7 @@
         const { bgm, ...options } = pending.route;
         const href = getStoryHref(options);
         window.ATO_BGM?.setScene?.(bgm);
-        if (window.ATO_PAGE_ROUTER?.focusOrNavigate) await window.ATO_PAGE_ROUTER.focusOrNavigate(href);
-        else window.location.href = href;
+        await leaveVoyage(href, bgmFlowStepId(), "", false);
       } catch (error) {
         if (stillCurrent()) window.alert(error?.message || String(error));
       } finally {
@@ -10062,6 +10065,125 @@
       };
     }
 
+    function voyageContext(step, encounter = "") {
+      return { accountId: sessionUser?.id || "", profileId: archive.activeProfileId,
+        cycle: currentCycleConfig().id, day: String(state.day), step, encounter };
+    }
+
+    function sameVoyage(entry) {
+      const current = voyageContext(entry.step, entry.encounter);
+      return ["accountId", "profileId", "cycle", "day"].every(key => entry[key] === current[key]);
+    }
+
+    function todayEncounters(nemesis = todayNemesisEncounter()) {
+      const day = String(state.day);
+      const timeline = todayTrackIcons().some(icon => icon.className === "battle");
+      const encounters = [
+        ...(timeline ? [{ key: day + ":timeline", label: "定时战斗", href: getStoryHref({ module: "battle" }) }] : []),
+        ...(nemesis ? [{ key: day + ":nemesis", label: "宿敌战斗", href: nemesis.href }] : []),
+      ];
+      return encounters.map(item => ({ ...item, saved: state.voyageEncounters?.[item.key] }));
+    }
+
+    async function leaveVoyage(href, step, encounter = "", insideGesture = true) {
+      const context = voyageContext(step, encounter);
+      if (!context.accountId || !ownsDashboardWriteLease()) throw new Error("请在可编辑的战役主控台开启航行入口。");
+      const voyage = window.ATO_VOYAGE;
+      const prior = encounter && state.voyageEncounters?.[encounter];
+      const entry = voyage.create(context, prior?.id);
+      if (!sameVoyage(entry)) throw new Error("本次航行的存档或日期已变更。");
+      if (encounter && !prior) {
+        (state.voyageEncounters ||= {})[encounter] = { id: entry.id };
+        saveState();
+      }
+      if (!await flushCampaignSave()) throw new Error("当前航行进度尚未保存，请重试。");
+      if (!sameVoyage(entry)) throw new Error("本次航行的存档或日期已变更。");
+      if (encounter) renderFlow();
+      await voyage.navigate(voyage.resumeUrl(entry) || voyage.carry(href, entry), insideGesture);
+    }
+
+    function encounterControls(encounters) {
+      const list = document.createElement("ul");
+      list.className = "step-actions";
+      for (const item of encounters) {
+        const row = document.createElement("li");
+        const label = document.createElement("strong");
+        label.textContent = item.label + (item.saved?.result ? " · 已结算" : " · 待结算");
+        row.append(label);
+        if (!item.saved?.result) {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.textContent = item.saved?.id ? "继续战斗" : "开启遭遇";
+          button.disabled = !item.href;
+          button.addEventListener("click", async () => {
+            button.disabled = true;
+            try {
+              await leaveVoyage(item.href, "encounter", item.key);
+            } catch (error) {
+              window.alert(error.message);
+            } finally {
+              button.disabled = false;
+            }
+          });
+          const external = document.createElement("button");
+          external.type = "button";
+          external.className = "secondary";
+          external.textContent = "登记外部实桌战";
+          external.addEventListener("click", async () => {
+            const context = voyageContext("encounter", item.key);
+            if (!ownsDashboardWriteLease() || !window.confirm("确认「" + item.label + "」已在外部实桌完成，并已处理战利品？")) return;
+            if (!sameVoyage(context) || state.voyageEncounters?.[item.key]?.result) return;
+            (state.voyageEncounters ||= {})[item.key] = { ...item.saved, result: "external" };
+            saveState();
+            if (!await flushCampaignSave()) window.alert("实桌战登记待同步，请保持页面打开。");
+            renderFlow();
+          });
+          row.append(button, external);
+        }
+        list.append(row);
+      }
+      return list;
+    }
+
+    async function restoreVoyage() {
+      const url = new URL(location.href);
+      const id = url.searchParams.get("returnVoyage");
+      if (!id) return;
+      const entry = window.ATO_VOYAGE.read(id);
+      const status = document.getElementById("voyageReturnStatus");
+      status.hidden = false;
+      const same = entry && sameVoyage(entry);
+      status.textContent = same ? "已返回航行。" : "来源存档、循环或日期已变化，已显示当前航行。";
+      const step = same ? entry.step : bgmFlowStepId();
+      if (same && entry.encounter) {
+        const saved = state.voyageEncounters?.[entry.encounter];
+        if (saved?.id === entry.id && !saved.result && entry.result && entry.battle) {
+          if (!ownsDashboardWriteLease()) {
+            status.textContent = "战斗已结算，需在可编辑的主控台重新打开此返回链接。";
+            focusFlowStep(step);
+            return;
+          }
+          state.voyageEncounters[entry.encounter] = { id: entry.id, battle: entry.battle, result: entry.result };
+          saveState();
+          if (!await flushCampaignSave()) {
+            status.textContent = "战斗已结算，遭遇记录待同步。";
+            focusFlowStep(step);
+            return;
+          }
+          status.textContent = "本场遭遇已结算。";
+        } else if (!saved?.result) {
+          status.textContent = "本场战斗仍待结算。";
+        }
+      }
+      if (same && flowSteps.slice(0, activeFlowStepIndex()).some(item => item.id === step)) {
+        reviewedFlowStep = { id: step, context: adventureRollContext() };
+      }
+      url.searchParams.delete("returnVoyage");
+      history.replaceState(null, "", url);
+      renderFlow();
+      focusFlowStep(step);
+    }
+
     function appendNemesisEncounterTag(heading, encounter) {
       if (!encounter) return;
       const tag = document.createElement("span");
@@ -10102,8 +10224,11 @@
       elements.appShell.inert = true;
       let completed = false;
       try {
-        if (stepId === "encounter" && todayTrackIcons().some(icon => icon.className === "battle")
-          && !await completeTimelineBattle()) return;
+        if (stepId === "encounter") {
+          const encounters = todayEncounters();
+          if (encounters.some(item => !item.saved?.result)) return;
+          if (encounters.some(item => item.key.endsWith(":timeline")) && !await completeTimelineBattle()) return;
+        }
         if (stepId === "development" && cachedArgoRecord?.explorationDelays
           && !await processExplorationDelays("development")) return;
         if (!stillCurrent()) return;
@@ -10141,6 +10266,13 @@
         const complete = document.createElement("button");
         complete.type = "button";
         complete.textContent = "完成并继续";
+        if (step.id === "encounter" && todayEncounters().some(item => !item.saved?.result)) {
+          complete.disabled = true;
+          const hint = document.createElement("span");
+          hint.className = "flow-footer-hint";
+          hint.textContent = "请先结算本日所有遭遇战斗。";
+          footer.appendChild(hint);
+        }
         if (step.id === "explore" && hasOpenExplorationRound()) {
           complete.disabled = true;
           const hint = document.createElement("span");
@@ -10163,6 +10295,7 @@
     }
 
     function renderFlow() {
+      const focusedStep = document.activeElement?.id?.startsWith("flow-step-") ? document.activeElement.id : "";
       renderTheatreLink();
       elements.flowList.innerHTML = "";
       const fragment = document.createDocumentFragment();
@@ -10239,7 +10372,10 @@
           }
         }
         const links = getStepLinks(step);
-        if (encounter?.href) links.push({ label: "打开宿敌战斗", href: encounter.href, bgm: "encounter" });
+        if (step.id === "encounter") {
+          const encounters = todayEncounters(encounter);
+          if (encounters.length) text.append(encounterControls(encounters));
+        }
         links.forEach((link) => {
           const anchor = document.createElement("a");
           anchor.href = link.href;
@@ -10261,6 +10397,11 @@
               if (api && typeof api.setScene === "function") api.setScene(link.bgm);
             });
           }
+          anchor.addEventListener("click", event => {
+            if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+            event.preventDefault();
+            void leaveVoyage(anchor.href, step.id).catch(error => window.alert(error.message));
+          });
           actions.appendChild(anchor);
         });
         // 宿敌控制按钮排在 Map 按钮右边，两者同处标题行的操作区。
@@ -10340,6 +10481,7 @@
         fragment.appendChild(finished);
       }
       elements.flowList.appendChild(fragment);
+      if (focusedStep) document.getElementById(focusedStep)?.focus({ preventScroll: true });
       renderTodayPreview(pending);
       renderStructureTechDue();
       renderProgress();
@@ -14257,7 +14399,10 @@
 
     function getStepLinks(step) {
       if (step.id === "move" || step.id === "explore" || step.id === "end") {
-        return currentCycleConfig().map ? [{ label: "地图", href: getMapHref() }] : [];
+        return [
+          ...(currentCycleConfig().map ? [{ label: "地图", href: getMapHref() }] : []),
+          ...(step.id === "explore" ? [{ label: "阿尔戈号", href: getRecordHref() }] : []),
+        ];
       }
       if (step.id === "survey") {
         if (currentCycleConfig().storyBook) return [
@@ -14272,6 +14417,8 @@
           getPharosDreamStoryLink(),
           getMainStoryLink(),
           getSpecialEventLink(),
+          { label: "英雄", href: getHeroHref() },
+          { label: "阿尔戈号", href: getRecordHref() },
         ] : [];
       }
       if (step.id === "doom") {
@@ -14297,8 +14444,10 @@
           items.push({ step: "survey", label: rest ? "勘察 · 确认休整冒险" : "勘察 · 确认冒险中枢" });
         }
       }
-      if (!completed.encounter && todayTrackIcons().some(icon => icon.className === "battle")) {
-        items.push({ step: "encounter", label: "遭遇 · 确认时间线战斗" });
+      if (!completed.encounter) {
+        for (const item of todayEncounters().filter(item => !item.saved?.result)) {
+          items.push({ step: "encounter", label: "遭遇 · " + item.label + "待结算" });
+        }
       }
       const tech = structureTechEvents().filter(event => event.kind !== "cooldown" && event.status !== "completed" && event.due);
       if (tech.length) items.push({ step: "development", label: `发展 · ${tech.length} 项科技时间线事项到期` });

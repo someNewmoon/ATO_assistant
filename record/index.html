@@ -1897,6 +1897,7 @@
   </dialog>
 
   <script src="../assets/page-focus-router.js?v=20261028-android-return1"></script>
+  <script src="../assets/voyage-return.js?v=1"></script>
   <script src="./mark-notes.js"></script>
   <script src="./item-icons.js?v=apk-ui-a72da92bdf63"></script>
   <script src="./matrix-data.js?v=20261106-c123-fixes2"></script>
@@ -3179,6 +3180,13 @@
         if (serverSavePending) saveStateToServer();
       }
     }
+
+    window.ATO_VOYAGE?.wireReturn(".back-to-console", async () => {
+      clearTimeout(serverSaveTimer);
+      while (serverSaveInFlight) await new Promise(resolve => setTimeout(resolve, 40));
+      if (!jsonEqual(state, serverStateBaseline)) await saveStateToServer();
+      return jsonEqual(state, serverStateBaseline) && !serverSaveNeedsRetry;
+    });
 
     function flushPendingServerSave() {
       if (!serverSaveNeedsRetry) return;

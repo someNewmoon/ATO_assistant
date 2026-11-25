@@ -2028,12 +2028,14 @@ Add these script tags after the main viewer script:
           button.textContent = "写入中...";
           try {
             const tableOperation = window.AIBP_TABLE_BATTLE?.settlement();
-            if (tableOperation) result.recordOperation = tableOperation;
+            const onlineOperation = window.getAibpVoyageSettlement?.();
+            if (tableOperation || onlineOperation) result.recordOperation = tableOperation || onlineOperation;
             const { added, skipped, cycle } = await addLootResultToRecord(result);
             if (tableOperation) {
               window.AIBP_TABLE_BATTLE.settled();
               lootDialog.close();
             }
+            if (onlineOperation) window.finishAibpVoyageLoot?.();
             button.textContent = `已同步到 NAS (${cycle})`;
             window.alert([
               "已添加到阿尔戈号记录表：",

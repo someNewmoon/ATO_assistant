@@ -5,15 +5,16 @@ import inventory from '../../technology/gear-inventory.js';
 import cardState from '../../aibp/room-card-state.js';
 import aiGuide from '../../aibp/ai-turn-guide.js';
 import roomDice from '../../aibp/room-dice.js';
+import gearRolls from '../../aibp/gear-roll-profiles.js';
 import { roomProjection } from './room-projection.js';
 import { discardRoomAi, prepareRoomDeck, revealRoomAi, revealRoomBp, roomDeckProjection, settleRoomBp } from './room-deck.js';
-import { applyTurn, claimTurn, finishAiMovement, setTurnPhase, captureTurnUndo, canUndoTurn, undoTurn } from './room-turn.js';
+import { applyTurn, attackInProgress, claimTurn, finishAiMovement, setTurnPhase, captureTurnUndo, canUndoTurn, undoTurn } from './room-turn.js';
 import { battleRecap, battleStats, countReaction, setRollWounds } from './room-recap.js';
 import battleConfig from '../../technology/battle-config.js';
 import techDictionary from '../../technology/tech_card_dictionary.min.json';
 import gearProduction from '../../technology/ato_gear_production.json';
 import { ApiError, activeCycle, errorResponse, object, response } from './campaign.js';
-import { applyRoomBoard, priorityTarget, setupRoomBoard } from './board.js';
+import { applyRoomBoard, priorityTarget, setupRoomBoard, titanAttackTarget } from './board.js';
 
 import { applyTrauma, createTrauma, savedTraumaConfig, traumaView } from './room-trauma.js';
 import { applySquad, createSquad, syncCampaignStock, latestBattleRoll, roomGearCategory, squadSkills, squadStats, squadView } from './room-squad.js';
@@ -160,6 +161,8 @@ function publicSquadLoadouts(room) {
 }
 
 const activityLabels = {
+  'attack-declare': '宣告攻击', 'attack-check': '确认攻击命中结果', 'attack-first': '完成第一能力时段',
+  'attack-clear': '清空克拉托斯池', 'attack-finish': '结束本次作战', 'turn-spend': '以行动结算能力',
   'turn-undo': '撤回上一步轮次行动', 'turn-phase': '切换轮次', 'turn-take': '开始英雄回合', 'turn-finish': '结束英雄回合',
   'board-move': '移动泰坦', 'board-undo-move': '撤回上一步', 'board-apostle-move': '移动骇物',
   'board-ai-route': '执行推荐移动', 'board-ai-trample-confirm': '确认冲撞',
@@ -306,6 +309,14 @@ function patchForSocket(update, attachment) {
   if (!hostDeck || attachment.role !== 'host') return data;
   const roomPatch = data.roomPatch;
   return { roomPatch: { ...roomPatch, room: { ...roomPatch.room, hostBattleDeck: hostDeck } } };
+}
+
+function changeRage(room, hero, seat, delta) {
+  const target = priorityTarget(room);
+  hero.stats.rage = counter(hero.stats.rage, delta, 30);
+  room.priorityTarget = delta > 0 && hero.condition !== 'dead' && !target.locked
+    && (target.seat === null || hero.stats.rage > room.heroes[target.seat].stats.rage)
+    ? { seat, locked: false } : target;
 }
 
 export class BattleRoom extends DurableObject {
@@ -697,6 +708,11 @@ export class BattleRoom extends DurableObject {
       if (reveal && !inTurn && !roll) reject('请在自己的泰坦回合揭示 BP，或先投掷威力骰。', 409);
       const deck = room.battleDeck;
       if (!deck) reject('请由房主打开本场 AIBP，先同步牌堆。', 409);
+      const attack = !preview && turn?.seat === seat ? turn.actions?.attack : null;
+      if (reveal && !preview && ((turn?.seat === seat && turn.actions && attack?.stage !== 'bp' && !roll?.extraAttack)
+          || (room.board && turn?.phase === 'titans' && turn.seat === null && !roll))) {
+        reject('请先结算第一能力时段，再揭示部位牌。', 409);
+      }
       const allowHandoff = roomDice.canUseBodyPart(room, seat, deck.bpSeat);
       if (reveal) {
         if (!revealRoomBp(deck, seat, randomInt, allowHandoff)) return;
@@ -713,6 +729,7 @@ export class BattleRoom extends DurableObject {
           const stats = battleStats(room)[seat];
           stats.damage = (stats.damage ?? 0) + wounds;
         }
+        if (attack?.stage === 'power' && roll?.id === attack.powerRoll) attack.stage = 'cleanup';
         room.secondAbility = { id: body.id, roll: roll?.id ?? null, seat, round: room.round };
         if (body.value === 2 && wounds > 0) {
           const stats = battleStats(room)[seat];
@@ -840,18 +857,17 @@ export class BattleRoom extends DurableObject {
     const seat = body.seat;
     const hero = Number.isInteger(seat) ? room.heroes[seat] : null;
     if (!hero || (actor.role === 'player' && actor.seat !== seat)) reject('只能操作自己的英雄。', 403);
+    if ((typeof body.type === 'string' && body.type.startsWith('attack-')) || body.type === 'turn-spend') {
+      return this.applyTitanAction(room, hero, seat, body);
+    }
     switch (body.type) {
       case 'stat':
         if (!stats.includes(body.key)) reject('未知英雄数值。');
         if (room.trauma && body.key === 'danger' && body.delta === 1) {
           return applyTrauma(room, actor, { ...body, type: 'trauma-draw', mode: 'gain', amount: 1, deck: 'auto' }, randomInt);
         }
-        const target = priorityTarget(room);
-        hero.stats[body.key] = counter(hero.stats[body.key], body.delta, 30);
-        if (body.key === 'rage' && body.delta > 0 && hero.condition !== 'dead' && !target.locked
-            && (target.seat === null || hero.stats.rage > room.heroes[target.seat].stats.rage)) {
-          room.priorityTarget = { seat, locked: false };
-        } else if (body.key === 'rage') room.priorityTarget = target;
+        if (body.key === 'rage') changeRage(room, hero, seat, body.delta);
+        else hero.stats[body.key] = counter(hero.stats[body.key], body.delta, 30);
         break;
       case 'titan-marker': {
         if (!Object.hasOwn(titanMarkerNames, body.key)) reject('未知泰坦标记。');
@@ -864,8 +880,12 @@ export class BattleRoom extends DurableObject {
         if (!conditions.includes(body.value)) reject('未知英雄状态。');
         hero.condition = body.value;
         if (hero.condition === 'dead') {
-          if (room.turn?.seat === seat) room.turn.seat = null;
+          if (room.turn?.seat === seat) {
+            room.turn.seat = null;
+            delete room.turn.actions;
+          }
           if (room.board?.titanMoves) delete room.board.titanMoves[seat];
+          if (room.board?.abilityTitanMoves) delete room.board.abilityTitanMoves[seat];
           if (room.board?.forcedTitanMoves) delete room.board.forcedTitanMoves[seat];
           if (room.board?.lastTitanMove?.seat === seat) delete room.board.lastTitanMove;
         }
@@ -935,6 +955,70 @@ export class BattleRoom extends DurableObject {
     }
   }
 
+  applyTitanAction(room, hero, seat, body) {
+    const turn = room.turn;
+    if (!room.board || turn?.phase !== 'titans' || hero.condition === 'dead'
+        || !roomDice.canAttackNormally(turn, seat) || turn.aiSignatureId) {
+      reject('请在该泰坦可行动的回合操作，先完成招牌技。', 409);
+    }
+    const { type } = body;
+    const attack = turn.actions?.attack;
+    if (type === 'attack-declare') {
+      if (attack || room.board.titanMoves?.[seat] || room.board.abilityTitanMoves?.[seat] || room.board.forcedTitanMoves?.[seat]) {
+        reject('请先结束移动，或本回合的作战行动已使用。', 409);
+      }
+      if (!turn.actions && turn.seat === seat && room.rolls.some(roll =>
+        roll.seat === seat && roll.round === room.round && roll.mode === 'attack' && !roll.extraAttack)) {
+        reject('此回合已有旧版攻击，按原流程结算。', 409);
+      }
+      const item = hero.gear.find(item => item.id === body.weapon);
+      if (!item || roomGearCategory(item.id)?.split('_')[0] !== 'arm'
+          || !Array.from({ length: item.count }, (_, slot) => cardState.gearState(item, slot)).includes('ready')) {
+        reject('请选择未横置且未弃除的已装备武器。', 409);
+      }
+      const range = gearRolls.range(item.id) ?? gearRolls.manualRange(body.range);
+      if (!range) reject('请按武器牌面确认有效射程。', 409);
+      if (!titanAttackTarget(room.board, seat, range)?.legal) reject('从当前站位无法同时满足有效射程和视线。', 409);
+      claimTurn(room, seat);
+      (turn.actions ||= {}).attack = { stage: 'declared', weapon: item.id, range };
+      if (hero.stats.rage < 30) changeRage(room, hero, seat, 1);
+      return;
+    }
+    if (type === 'turn-spend') {
+      if (!['movement', 'attack'].includes(body.value) || attackInProgress(turn)
+          || room.board.titanMoves?.[seat] || room.board.abilityTitanMoves?.[seat]
+          || turn.actions?.[body.value === 'movement' ? 'movementUsed' : 'attack']) {
+        reject('该行动已使用，或请先结束当前行动。', 409);
+      }
+      claimTurn(room, seat);
+      const actions = turn.actions ||= {};
+      if (body.value === 'movement') actions.movementUsed = true;
+      else actions.attack = { stage: 'done', spent: true };
+      return;
+    }
+    if (turn.seat !== seat || !attack) reject('当前没有待结算的作战。', 409);
+    if (type === 'attack-check' && attack.stage === 'rolled' && body.roll === attack.roll) {
+      if (body.value === 'hit') attack.stage = 'first';
+      else if (body.value === 'miss') {
+        for (const key of poolKeys) room.pool[key] = 0;
+        attack.stage = 'miss';
+      } else reject('请选择命中或完全失手。');
+      return;
+    }
+    if (type === 'attack-first' && attack.stage === 'first') { attack.stage = 'bp'; return; }
+    if (type === 'attack-clear' && attack.stage === 'cleanup') {
+      for (const key of poolKeys) room.pool[key] = 0;
+      attack.stage = 'second';
+      return;
+    }
+    if (type === 'attack-finish' && ['miss', 'second'].includes(attack.stage)) {
+      attack.stage = 'done';
+      if (room.secondAbility?.seat === seat) delete room.secondAbility;
+      return;
+    }
+    reject('作战步骤已经变化，请核对后继续。', 409);
+  }
+
   roll(room, hero, seat, body, actor) {
     const { counts, mode, parentRoll, weapon, extraAttack, defenseCount = 0 } = body;
     const { limits, modes } = roomDice;
@@ -957,6 +1041,18 @@ export class BattleRoom extends DurableObject {
     if (activeAttack && (hero.condition === 'dead' || (!extra && !roomDice.canAttackNormally(room.turn, seat)))) {
       reject('普通攻击和威力须在该泰坦可行动的回合结算。', 409);
     }
+    const turn = room.turn;
+    const normal = activeAttack && !extra && room.board && turn?.phase === 'titans'
+      && (turn.seat === null || turn.actions);
+    const attack = normal ? turn.actions?.attack : null;
+    if (activeAttack && (turn?.aiSignatureId || (extra && attackInProgress(turn)))) {
+      reject('请先结束当前作战或招牌技，再结算下一次攻击。', 409);
+    }
+    if (normal && (mode === 'attack'
+      ? attack?.stage !== 'declared' || attack.weapon !== weapon
+      : attack?.stage !== 'bp' || attack.roll !== parent?.id || !room.projection?.bpPending || room.battleDeck?.bpSeat !== seat)) {
+      reject(mode === 'attack' ? '请先宣告本次攻击。' : '请先揭示本次攻击的部位牌，再投掷威力。', 409);
+    }
     const dice = [];
     for (const [kind, count] of Object.entries(counts)) {
       if (!Number.isInteger(count) || count < 0 || count > limits[kind]) reject('骰子数量无效。');
@@ -976,6 +1072,10 @@ export class BattleRoom extends DurableObject {
       if (mode === 'defense') parent.defenseRoll = roll.id;
     }
     if (defenseCount) roll.defenseCount = defenseCount;
+    if (attack) {
+      if (mode === 'attack') Object.assign(attack, { stage: 'rolled', roll: roll.id });
+      else Object.assign(attack, { stage: 'power', powerRoll: roll.id });
+    }
     if (activeAttack && !extra) claimTurn(room, seat);
     battleStats(room)[seat].rolls++;
     room.lastBattleRollId = roll.id;
@@ -983,7 +1083,9 @@ export class BattleRoom extends DurableObject {
     if (room.rolls.length > 30) {
       const keep = new Set(roomDice.latestByHero(room.rolls, room.lastBattleRollId));
       const linkedDodges = new Set([...keep].flatMap(entry => entry.mode === 'defense' && entry.parentRoll ? [entry.parentRoll] : []));
-      const oldest = room.rolls.findLastIndex(entry => !keep.has(entry) && !linkedDodges.has(entry.id));
+      const activeRolls = room.turn?.actions?.attack;
+      const oldest = room.rolls.findLastIndex(entry => !keep.has(entry) && !linkedDodges.has(entry.id)
+        && entry.id !== activeRolls?.roll && entry.id !== activeRolls?.powerRoll);
       room.rolls.splice(oldest, 1);
     }
   }
@@ -1000,6 +1102,11 @@ export class BattleRoom extends DurableObject {
     const roll = room.rolls.find(entry => entry.id && entry.id === body.roll && entry.seat === seat);
     if (!roll) reject('找不到该英雄的这次投掷。', 409);
     if (!roomDice.canAdjustRoll(roll, room.turn, room.round)) reject('当前无法调整这次攻击或威力投掷。', 409);
+    const attack = room.turn?.actions?.attack;
+    if (attack && ((roll.id === attack.roll && attack.stage !== 'rolled')
+      || (roll.id === attack.powerRoll && attack.stage !== 'power'))) {
+      reject('该次投掷的结果已经确认。', 409);
+    }
     if (body.type === 'reroll') {
       if (roll.mode === 'defense') reject('护甲投掷不能重掷。');
       if (!Array.isArray(body.ids) || !body.ids.length || body.ids.length > roll.dice.length) reject('请先选齐要重掷的骰子。');

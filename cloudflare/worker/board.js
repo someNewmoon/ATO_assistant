@@ -3,7 +3,7 @@ import terrain from '../../ss/terrain-data.js';
 import los from '../../aibp/battle_los.js';
 import guide from '../../aibp/ai-turn-guide.js';
 import { ApiError, object } from './campaign.js';
-import { claimTurn, forcedTitanMove } from './room-turn.js';
+import { attackInProgress, canClaimTurn, claimTurn, forcedTitanMove } from './room-turn.js';
 
 const H = 14;
 const W = 20;
@@ -50,7 +50,7 @@ function cleanOverlay(value, seats) {
     ? state.selectedTitan : 0;
   const titanSpeeds = Array.from({ length: seats }, (_, index) => {
     const speed = state.titanSpeeds?.[index];
-    return Number.isInteger(speed) && speed >= 0 && speed <= 20 ? speed : 5;
+    return Number.isInteger(speed) && speed >= 0 && speed <= 20 ? speed : null;
   });
   return {
     active, mode: active ? state.mode : '',
@@ -111,6 +111,12 @@ function applyAiMovement(room, body) {
     crossedSeats: route.crossedSeats, endSeats: route.endSeats, pending: route.collisions > 0, stopReason: route.stopReason };
 }
 
+export function titanAttackTarget(board, seat, range) {
+  if (!board?.map) return null;
+  return los.buildLosOverlay(board.map, { active: true, mode: 'titan-attack', selectedTitan: seat, weapon: range },
+    terrain, board.apostle, { level: board.level, autoElevated: true }).weaponTarget || null;
+}
+
 export function applyRoomBoard(room, actor, body) {
   const seats = room.heroes.length;
   const board = room.board;
@@ -129,11 +135,20 @@ export function applyRoomBoard(room, actor, body) {
     if (room.heroes[seat].condition === 'dead') fail('死亡的泰坦无法移动。', 409);
     const deadSeats = room.heroes.flatMap((hero, index) => hero.condition === 'dead' ? [index] : []);
     const forced = forcedTitanMove(room, body);
-    const movesKey = forced ? 'forcedTitanMoves' : 'titanMoves';
+    const ability = body.ability === true && !forced;
+    const normal = !forced && !ability && room.turn?.phase === 'titans';
+    if (normal && (room.turn.seat !== seat && !canClaimTurn(room, seat))) {
+      fail('普通移动须在该泰坦可行动的回合执行。', 409);
+    }
+    if (normal && (room.turn.actions?.movementUsed || attackInProgress(room.turn) || room.turn.aiSignatureId)) {
+      fail('普通移动已用完，或正在结算作战、招牌技。', 409);
+    }
+    const movesKey = forced ? 'forcedTitanMoves' : ability ? 'abilityTitanMoves' : 'titanMoves';
     const move = board?.[movesKey]?.[seat];
     if (body.type === 'board-end-move') {
       if (!move || move.id !== body.move) fail('本次移动已更新，请重试。', 409);
       delete board[movesKey][seat];
+      if (normal && room.turn.actions) room.turn.actions.movementUsed = true;
       return;
     }
     if (body.type === 'board-undo-move') {
@@ -175,7 +190,7 @@ export function applyRoomBoard(room, actor, body) {
     if (!route) fail('这一格当前不可达。', 409);
     const next = los.appendTitanMove(active, { id: body.id, seat, speed: active?.speed ?? speed, route });
     (board[movesKey] ||= {})[seat] = next;
-    if (!forced) claimTurn(room, seat);
+    if (!forced && !ability) claimTurn(room, seat);
     board.lastTitanMove = next;
     board.map.pieces.titans[seat] = { column: point.column, row: point.row };
     return;
@@ -256,6 +271,7 @@ export function applyRoomBoard(room, actor, body) {
     delete board.apostleMovement;
     delete board.titanMoves;
     delete board.forcedTitanMoves;
+    delete board.abilityTitanMoves;
     if (!body.keepTitans) delete board.lastTitanMove;
     board.layoutRevision++;
     return;

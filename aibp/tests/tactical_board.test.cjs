@@ -27,7 +27,7 @@ test("a selected Titan sees a Primordial outside weapon range; switching Titans 
   assert.equal(distant.weaponTarget.inRange, false);
   const near = build(map, { mode: "titan-attack", selectedTitan: 1, weapon });
   assert.deepEqual(near.source, [{ c: 10, r: 8 }]);
-  assert.deepEqual(near.weaponTarget, { distance: 3, inRange: true, visible: true });
+  assert.deepEqual(near.weaponTarget, { distance: 3, inRange: true, visible: true, legal: true });
 });
 
 test("a multi-square target uses the closest occupied square for ranged weapons", () => {

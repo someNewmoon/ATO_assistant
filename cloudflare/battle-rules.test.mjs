@@ -423,9 +423,14 @@ test('Worker 独立揭示、结算部位牌并激化，完整牌堆只对房主�
       assert.equal(r.turn.seat, null);
       assert.equal(r.battleDeck.bpSeat, undefined);
     } else if (outcome === 2) {
-      reducer.apply(r, host, { type: 'bp-request', id: 'preview', round: 1, seat: 1 });
-      assert.equal(r.battleDeck.bpSeat, 1);
+      assert.throws(() => reducer.apply(r, host, { type: 'bp-request', id: 'preview-seat', round: 1, seat: 1 }),
+        /第一能力时段/);
+      reducer.apply(r, host, { type: 'bp-request', id: 'preview', round: 1 });
+      assert.equal(r.battleDeck.bpSeat, undefined);
     }
+    // Keep a real in-flight legacy round recoverable even if it was saved
+    // before the browser started recording independent actions.
+    r.turn.seat = 0;
     reducer.apply(r, player, { type: 'bp-request', id: 'reveal', round: 1 });
     assert.equal(r.battleDeck.bpSeat, 0);
     assert.equal(r.projection.bp.src, current._room.face.src);
@@ -1123,4 +1128,56 @@ test('轮次上一步恢复目标、位置和牌堆，其他行动或旧版本�
   assert.equal(room.projection.aiPending, true);
   room.revision++;
   assert.equal(canUndoTurn(room), false);
+});
+
+test('线上普通移动与作战各用一次，可任选先后，宣告只增加一次怒气', () => {
+  for (const movesFirst of [false, true]) {
+    const r = room();
+    r.board = api.setupRoomBoard({ apostle: 'HEKATON', level: 1 }, 2);
+    r.board.map.terrain = [];
+    r.board.map.pieces = { apostle: { column: 8.5, row: 7.5, facing: 0 },
+      titans: [{ column: 7, row: 7 }, { column: 5, row: 5 }] };
+    r.heroes[0].gear = [{ id: 'AJ0185', count: 1, used: 0 }];
+    r.turn = { phase: 'titans', seat: null, finished: [] };
+    const act = (type, data = {}, who = player) => reducer.apply(r, who,
+      { type, seat: 0, id: type, phase: 'titans', round: 1, ...data });
+    const move = () => {
+      const from = r.board.map.pieces.titans[0];
+      act('board-move', { point: { ...from, row: 8 }, from, speed: 5, move: null });
+      assert.throws(() => act('attack-declare', { weapon: 'AJ0185' }), /结束移动|已使用/);
+      act('board-end-move', { move: 'board-move' });
+      assert.throws(() => act('board-move', { point: from, from: r.board.map.pieces.titans[0], speed: 5 }), /普通移动已用完/);
+    };
+    act('turn-take');
+    const origin = r.board.map.pieces.titans[0];
+    r.board.map.pieces.titans[0] = { column: 3, row: 2 };
+    assert.throws(() => act('attack-declare', {
+      weapon: 'AJ0185', range: { kind: 'ranged', min: 2, max: 20 },
+    }), /有效射程和视线/);
+    assert.equal(r.heroes[0].stats.rage, 0);
+    r.board.map.pieces.titans[0] = origin;
+    if (movesFirst) move();
+    assert.throws(() => act('roll', { mode: 'attack', counts: { d10: 2 }, weapon: 'AJ0185' }), /先宣告/);
+    act('gear-card', { key: 'AJ0185', slot: 0, value: 'exhausted' });
+    assert.throws(() => act('attack-declare', { weapon: 'AJ0185' }), /未横置/);
+    act('gear-card', { key: 'AJ0185', slot: 0, value: 'ready' });
+    act('attack-declare', { weapon: 'AJ0185' });
+    assert.throws(() => act('attack-declare', { weapon: 'AJ0185' }), /已使用/);
+    assert.equal(r.heroes[0].stats.rage, 1);
+    assert.deepEqual(r.priorityTarget, { seat: 0, locked: false });
+    assert.throws(() => act('turn-finish'), /正在结算/);
+    const from = r.board.map.pieces.titans[0];
+    assert.throws(() => act('board-move', { point: { ...from, column: 6 }, from, speed: 5 }), /正在结算作战/);
+    act('roll', { id: 'attack-roll', mode: 'attack', counts: { d10: 2 }, weapon: 'AJ0185' });
+    r.pool.opening = 3;
+    act('attack-check', { roll: 'attack-roll', value: 'miss' });
+    assert.equal(r.pool.opening, 0);
+    r.battleDeck = {};
+    assert.throws(() => act('bp-request'), /第一能力时段/);
+    assert.throws(() => act('roll', { mode: 'power', parentRoll: 'attack-roll', counts: { red: 1 } }), /揭示/);
+    act('attack-finish');
+    if (!movesFirst) move();
+    act('turn-finish');
+    assert.deepEqual(r.turn, { phase: 'titans', seat: null, finished: [0] });
+  }
 });

@@ -6,6 +6,7 @@ export function setTurnPhase(room, phase) {
   if (room.board) {
     delete room.board.titanMoves;
     delete room.board.forcedTitanMoves;
+    delete room.board.abilityTitanMoves;
     delete room.board.apostleMovement;
   }
 }
@@ -21,7 +22,10 @@ export function canClaimTurn(room, seat) {
 }
 
 export function claimTurn(room, seat) {
-  if (canClaimTurn(room, seat)) room.turn.seat = seat;
+  if (!canClaimTurn(room, seat)) return;
+  room.turn.seat = seat;
+  if (room.board) room.turn.actions = {};
+  delete room.secondAbility;
 }
 
 export function finishAiMovement(room) {
@@ -29,6 +33,11 @@ export function finishAiMovement(room) {
   delete room.turn.aiMovement;
   delete room.turn.aiManualMovementEnded;
   if (room.board) delete room.board.apostleMovement;
+}
+
+export function attackInProgress(turn) {
+  const stage = turn?.actions?.attack?.stage;
+  return Boolean(stage && stage !== 'done');
 }
 
 function validAiTarget(room, target) {
@@ -40,6 +49,7 @@ function confirmInsertedSignature(room, action) {
   const { value, target, signatureId } = action;
   if (turn?.phase !== 'titans') throw new ApiError(409, '请在泰坦回合结算临时招牌技。');
   if (value === 'signature-begin' && !turn.aiSignatureId) {
+    if (attackInProgress(turn) || (turn.actions && room.board?.titanMoves?.[turn.seat])) throw new ApiError(409, '请先结束正在结算的移动或作战，再执行招牌技。');
     if (!room.board || !room.projection?.signature) throw new ApiError(409, '本场招牌技尚未同步。');
     finishAiMovement(room);
     turn.aiSignatureId = action.id;
@@ -140,8 +150,12 @@ export function applyTurn(room, actor, action) {
     return;
   }
   if (type === 'turn-finish' && turn?.phase === 'titans' && turn.seat === seat) {
+    if (attackInProgress(turn) || (turn.actions && (room.board?.titanMoves?.[seat] || room.board?.abilityTitanMoves?.[seat])) || turn.aiSignatureId) {
+      throw new ApiError(409, '请先结束正在结算的移动、作战或招牌技。');
+    }
     turn.finished.push(seat);
     turn.seat = null;
+    delete turn.actions;
     if (room.board?.titanMoves) delete room.board.titanMoves[seat];
     return;
   }
@@ -158,6 +172,7 @@ export function captureTurnUndo(room, actor, action) {
   if (action.type === 'ai-request' && !room.turn?.aiGuide) return null;
   const fields = ['turn', 'board'];
   if (action.type === 'ai-request' || action.type === 'ai-guide-discard') fields.push('battleDeck', 'projection');
+  if (action.type === 'turn-take') fields.push('secondAbility');
   return { revision: room.revision + 1, fields: structuredClone(Object.fromEntries(fields.map(key => [key, room[key]]))) };
 }
 

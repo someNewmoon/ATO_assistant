@@ -277,7 +277,30 @@
     return totals;
   }
 
-  const api = { weapons, defenseKeywords, power };
+  // Ranges verified against the Chinese card faces. Unlisted cards use a
+  // range supplied by the player from the active face.
+  const melee = new Set(["AJ0156", "AJ0163", "AJ0167", "AJ0169", "AJ0171", "AJ0173", "AJ0175",
+    "AJ0177", "AJ0179", "AJ0181", "AJ0183", "AJ0185", "AJ0187", "AJ0211", "AJ0213", "AJ0222"]);
+  const reach = { AJ0193: 2, AJ0195: 2, AJ0197: 2, AJ0253: 2, AJ0256: 2, BJ0873: 2, BJ0901: 2, BJ0968: 3 };
+  const ranged = { AJ0189: [4, 6], AJ0191: [2, 4], AJ0249: [2, 4], AJ0251: [3, 5], AJ0279: [2, 4],
+    BJ0903: [4, 7], BJ0930: [2, 3], BJ0964: [2, 3] };
+  function range(id) {
+    if (melee.has(id)) return { kind: "melee", min: 1, max: 1 };
+    if (Object.hasOwn(reach, id)) return { kind: "reach", min: 1, max: reach[id] };
+    if (Object.hasOwn(ranged, id)) return { kind: "ranged", min: ranged[id][0], max: ranged[id][1] };
+    return null;
+  }
+
+  function manualRange(value) {
+    if (!value || !["melee", "reach", "ranged"].includes(value.kind)
+        || !Number.isInteger(value.min) || !Number.isInteger(value.max) || value.max > 32) return null;
+    const { kind, min, max } = value;
+    const valid = kind === "melee" ? min === 1 && max === 1
+      : kind === "reach" ? min === 1 && max >= 1 : min >= 2 && max >= min;
+    return valid ? { kind, min, max } : null;
+  }
+
+  const api = { weapons, defenseKeywords, power, range, manualRange };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else window.ATO_GEAR_ROLL_PROFILES = api;
 })();

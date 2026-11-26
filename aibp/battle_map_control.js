@@ -131,8 +131,11 @@
       moveTarget: null,
       mode: "",
       selectedTitan: 0,
-      titanSpeeds: [5, 5, 5, 5],
+      titanSpeeds: options.normalSpeed ? [] : [5, 5, 5, 5],
       forced: false,
+      abilityMove: false,
+      previewDestination: false,
+      previewPoint: null,
       weapon: { kind: "melee", min: 2, max: 4, reach: 2 },
     };
 
@@ -387,6 +390,7 @@
     // and uses it to tell the player when the chosen source sits on high ground.
     let lastOcc = null;
     let lastOverlay = null;
+    let lastWeaponPreview = null;
     // 上一次判定「泰坦是否站在高地格上」的结果，用来做边沿触发：只有从「不在」变「在」
     // （或反过来）的那一刻才自动改复选框，平时不动，这样玩家的手动选择能保留。
     let lastOnHigh = false;
@@ -419,7 +423,8 @@
       if (!losLayer || !window.BattleLOS) return;
       // 移速已经算在 profile 里，这里连同当前等级一起交给引擎，避免它自己再按地图初始
       // 等级算一遍。
-      const engineOptions = { level: options.getLevel?.(), speed: losProfile(map)?.speed, deadSeats: options.deadSeats?.() };
+      const engineOptions = { level: options.getLevel?.(), speed: losProfile(map)?.speed, deadSeats: options.deadSeats?.(),
+        autoElevated: Boolean(options.boardWeapon && losState.mode === "titan-attack") };
       // 先建一次拿到 occ，据此判断是否跨越高地边界；若自动改了 elevated，重建一次再画。
       const state = currentTacticalState(map);
       let overlay = window.BattleLOS.buildLosOverlay(
@@ -432,7 +437,11 @@
         lastOcc = overlay.occ;
       }
       lastOverlay = overlay;
-      window.BattleLOS.renderLosOverlay(losLayer, overlay);
+      const previewPoint = state.mode === "titan-move" && losState.previewDestination && losState.previewPoint;
+      lastWeaponPreview = previewPoint && !state.noWeapon ? window.BattleLOS.buildLosOverlay(map,
+        { ...state, mode: "titan-attack", previewPoint }, window.BattleTerrain, options.getApostle(),
+        { ...engineOptions, autoElevated: true }) : null;
+      window.BattleLOS.renderLosOverlay(losLayer, lastWeaponPreview || overlay);
       window.BattleLOS.renderTerrainEdges(terrainLayer, map, window.BattleTerrain, state.mode);
     }
 
@@ -683,11 +692,12 @@
     }
 
     function titanSpeed(seat) {
-      return forcedMove() ? forcedSpeeds[seat] : losState.titanSpeeds[seat];
+      if (forcedMove() || losState.abilityMove) return forcedSpeeds[seat];
+      return losState.titanSpeeds[seat] ?? options.normalSpeed?.(seat) ?? 5;
     }
 
     function titanMovement(seat, map = currentMap()) {
-      if (options.getTitanMovement) return options.getTitanMovement(seat, forcedMove());
+      if (options.getTitanMovement) return options.getTitanMovement(seat, forcedMove(), losState.abilityMove);
       const stored = nativeTitanMoves.get(seat);
       if (!stored) return null;
       const pieces = window.BattleTerrain.getBoardPieces(map, options.getApostle(), options.getLevel());
@@ -717,15 +727,18 @@
     function currentTacticalState(map) {
       if (!losState.mode) return losState;
       const { weapon, selectedTitan } = losState;
+      const equipped = options.boardWeapon?.(selectedTitan);
       const bossMovement = losState.mode === "apostle-move" ? apostleMovement(map) : null;
       const titanMove = losState.mode === "titan-move" ? titanMovement(selectedTitan, map) : null;
       return {
         ...losState, source: losState.mode.startsWith("apostle-") ? "apostle" : "titan",
-        moveSpeed: titanMove?.remaining ?? titanSpeed(selectedTitan),
+        moveSpeed: options.canExecuteMove?.(selectedTitan, forcedMove(), losState.abilityMove) === false
+          ? 0 : titanMove?.remaining ?? titanSpeed(selectedTitan),
         forced: forcedMove(),
         visited: titanMove?.route,
         ...(losState.mode === "apostle-move" && { apostleMoveRemaining: bossMovement ? bossMovement.remaining : apostleSpeed(map) }),
-        weapon: window.BattleLOS.normalizeWeapon(weapon.kind === "reach" ? { kind: "reach", max: weapon.reach } : weapon),
+        weapon: equipped?.range || window.BattleLOS.normalizeWeapon(weapon.kind === "reach" ? { kind: "reach", max: weapon.reach } : weapon),
+        noWeapon: Boolean(options.boardWeapon && !equipped?.range), previewPoint: null,
       };
     }
 
@@ -738,13 +751,15 @@
       const bossMove = mode === "apostle-move";
       const names = options.titanNames?.() || [];
       const pieces = window.BattleTerrain.getBoardPieces(map, options.getApostle(), options.getLevel());
+      const managed = Boolean(options.boardWeapon);
+      const equipment = options.boardWeapon?.(losState.selectedTitan);
       const control = key => tactics.querySelector(`[data-board-${key}]`);
       for (const item of ["", ...tacticModes]) {
         control(`mode="${item}"`).setAttribute("aria-pressed", String(item === mode));
       }
       for (const [name, visible] of [
-        ["titan", moving || attacking], ["speed", moving], ["forced", moving && Boolean(options.forcedByPhase)], ["apostle-speed", bossMove && editBoard()], ["weapon", attacking],
-        ["min", attacking && losState.weapon.kind === "ranged"], ["max", attacking && losState.weapon.kind !== "melee"],
+        ["titan", moving || attacking], ["speed", moving], ["forced", moving && Boolean(options.forcedByPhase)], ["apostle-speed", bossMove && editBoard()], ["weapon", attacking && !managed],
+        ["min", attacking && !managed && losState.weapon.kind === "ranged"], ["max", attacking && !managed && losState.weapon.kind !== "melee"],
         ["facing", editBoard()],
       ]) control(`${name}-field`).hidden = !visible;
       const seats = control("titan");
@@ -770,12 +785,27 @@
       if (oldSeat != null && !buttons[oldSeat]?.disabled) buttons[oldSeat]?.focus({ preventScroll: true });
       const movement = moving ? titanMovement(losState.selectedTitan, map) : null;
       const speed = movement?.speed ?? titanSpeed(losState.selectedTitan);
-      const remaining = movement?.remaining ?? speed;
+      const moveBlocked = options.canExecuteMove?.(losState.selectedTitan, forcedMove(), losState.abilityMove) === false;
+      const remaining = moveBlocked ? 0 : movement?.remaining ?? speed;
+      const ability = control("ability-move");
+      if (ability) {
+        ability.closest("label").hidden = !moving || forcedMove() || options.forcedByPhase?.();
+        ability.checked = losState.abilityMove;
+        ability.disabled = Boolean(movement);
+      }
+      const preview = control("preview-destination");
+      if (preview) {
+        preview.hidden = !moving || !equipment?.range || forcedMove() || losState.abilityMove;
+        preview.setAttribute("aria-pressed", String(losState.previewDestination));
+        preview.textContent = losState.previewDestination ? "结束落点预览" : "预览落点的射程与视线";
+      }
       const speedInput = control("speed");
       if (movement || speedInput !== document.activeElement) speedInput.value = speed;
       const forced = control("forced");
       forced.checked = forcedMove();
-      forced.disabled = options.forcedByPhase?.() === true;
+      forced.disabled = options.forcedByPhase?.() === true || Boolean(movement);
+      if (managed) control('mode="titan-attack"').disabled =
+        Boolean(options.getTitanMovement?.(losState.selectedTitan, false, false));
       speedInput.disabled = Boolean(movement);
       const bossMovement = bossMove ? apostleMovement(map) : null;
       const bossSpeed = bossMovement ? bossMovement.speed : apostleSpeed(map);
@@ -798,11 +828,19 @@
       control("place-boss").hidden = !editBoard();
       control("place-boss").textContent = bossMove ? "骇物移动中" : "移动骇物";
       const target = lastOverlay?.weaponTarget;
+      const previewPoint = moving && losState.previewDestination && losState.previewPoint;
+      const previewTarget = lastWeaponPreview?.weaponTarget;
+      const rangeText = (result, previewing = false) => result
+        ? `距骇物 ${result.distance} 格 · ${result.inRange ? "射程内" : "射程外"} · ${result.visible ? "有视线" : "视线受阻"}${result.legal ? (previewing ? " · 可从此格攻击" : " · 可宣告") : ""}` : "";
+
       control("tactics-info").textContent = moving ? '剩余步数 ' + remaining + ' / ' + speed
           + (forcedMove() ? ' · 非主动移动，按卡牌填写格数并手动结算冲撞、移位等效果。'
-            : remaining ? ' · 绿格数字为所需步数。本次走过的格子可用撤回回到。' : ' · 可以撤回上一步或结束本次移动。')
-        : attacking ? "金框显示武器射程。"
-          + (target ? `距骇物 ${target.distance} 格 · ${target.inRange ? "射程内" : "射程外"}` : "")
+            : losState.abilityMove ? ' · 按牌面执行主动移动。'
+            : moveBlocked ? ' · 普通移动当前不可用。'
+              : losState.previewDestination ? (previewTarget ? ` · 预览 ${coordinateLabel(previewPoint.row, previewPoint.column)} · ${rangeText(previewTarget, true)}` : ' · 点一个可达格预览。')
+              : remaining ? ' · 绿格数字为所需步数。本次走过的格子可用撤回回到。' : ' · 可以撤回上一步或结束本次移动。')
+        : attacking ? (managed && !equipment?.range ? "选择武器并核对有效射程。" : "金框显示武器射程。")
+          + (target ? rangeText(target) : "")
           : bossMove ? (bossRemaining === null ? "步数不限" : '剩余步数 ' + bossRemaining + ' / ' + bossSpeed)
             + " · 点目的地的左上占格，沿正交路线移动。"
             : bossSight ? "紫底表示骇物视线，斜纹表示盲区。" : "选择模式开始操作棋子。";
@@ -810,6 +848,9 @@
 
     function setTacticalMode(mode) {
       losState.mode = hasTactics(mode) ? mode : "";
+      losState.previewPoint = null;
+      losState.previewDestination = false;
+      if (mode !== "titan-move") losState.abilityMove = false;
       losState.active = Boolean(losState.mode);
       selectedId = "";
       renderLosAndNotify();
@@ -819,10 +860,11 @@
       const seat = losState.selectedTitan;
       const move = options.canMoveTitan?.(seat) !== false && titanMovement(seat);
       const forced = forcedMove();
+      const ability = losState.abilityMove;
       if (move && !options.onTitanEndMove) nativeTitanMoves.delete(seat);
       losState.forced = false;
       setTacticalMode("");
-      if (move) options.onTitanEndMove?.(seat, move, forced);
+      if (move) options.onTitanEndMove?.(seat, move, forced, ability);
     }
 
     function endApostleMovement() {
@@ -840,7 +882,7 @@
       const move = boss ? apostleMovement(map) : titanMovement(seat, map);
       if (!move) return;
       if (boss && options.onApostleUndoMove) return options.onApostleUndoMove(move);
-      if (!boss && options.onTitanUndoMove) return options.onTitanUndoMove(seat, move, forcedMove());
+      if (!boss && options.onTitanUndoMove) return options.onTitanUndoMove(seat, move, forcedMove(), losState.abilityMove);
       const { origin, previous } = window.BattleLOS.rewindTitanMove(move);
       const pieces = window.BattleTerrain.getBoardPieces(map, options.getApostle(), options.getLevel());
       const next = { ...map, pieces };
@@ -864,11 +906,18 @@
       for (const mode of ["", ...tacticModes]) {
         tactics.querySelector(`[data-board-mode="${mode}"]`).addEventListener("click", () => {
           if (losState.mode === mode && mode === "titan-move") return endTitanMovement();
+          if (mode === "titan-attack" && options.getTitanMovement?.(losState.selectedTitan, false, false)) return;
           if (losState.mode === mode && mode === "apostle-move") return endApostleMovement();
           setTacticalMode(losState.mode === mode ? "" : mode);
         });
       }
       tactics.addEventListener("click", event => {
+        if (event.target.closest("[data-board-preview-destination]")) {
+          losState.previewDestination = !losState.previewDestination;
+          losState.previewPoint = null;
+          renderMap();
+          return;
+        }
         const seat = event.target.closest("[data-board-titan-seat]");
         if (seat && !seat.disabled) return selectTitan(Number(seat.dataset.boardTitanSeat));
         const button = event.target.closest("[data-board-face]");
@@ -888,9 +937,19 @@
       tactics.addEventListener("change", event => {
         const field = event.target;
         const numeric = Number(field.value);
-        if (field.matches("[data-board-forced]")) losState.forced = field.checked;
+        if (field.matches("[data-board-forced]")) {
+          losState.forced = field.checked;
+          losState.abilityMove = false;
+          losState.previewDestination = false;
+          losState.previewPoint = null;
+        }
+        if (field.matches("[data-board-ability-move]")) {
+          losState.abilityMove = field.checked;
+          losState.previewDestination = false;
+          losState.previewPoint = null;
+        }
         if (field.matches("[data-board-speed]") && !titanMovement(losState.selectedTitan)) {
-          const speeds = forcedMove() ? forcedSpeeds : losState.titanSpeeds;
+          const speeds = forcedMove() || losState.abilityMove ? forcedSpeeds : losState.titanSpeeds;
           speeds[losState.selectedTitan] = Math.min(20, Math.max(0, Math.round(numeric)));
         }
         if (field.matches("[data-board-apostle-speed]") && !apostleMovement(currentMap())) {
@@ -920,7 +979,13 @@
         const point = window.BattleTerrain.boardCell({ column, row });
         const route = window.BattleLOS.titanMoveRoute(lastOverlay, point);
         if (!route) return;
-        if (options.onTitanMove) options.onTitanMove(seat, point, titanSpeed(seat), titanMovement(seat, map), forcedMove());
+        if (losState.previewDestination) {
+          losState.previewPoint = point;
+          renderMap();
+          return;
+        }
+        if (options.canExecuteMove?.(seat, forcedMove(), losState.abilityMove) === false) return;
+        if (options.onTitanMove) options.onTitanMove(seat, point, titanSpeed(seat), titanMovement(seat, map), forcedMove(), losState.abilityMove);
         else {
           pieces.titans[seat] = point;
           const next = { ...map, pieces };
@@ -1265,9 +1330,22 @@
 
     return {
       render() { renderMap(); },
-      openTitanMovement(seat) {
+      weaponTarget(seat, range) {
+        return window.BattleLOS.buildLosOverlay(currentMap(),
+          { active: true, mode: "titan-attack", selectedTitan: seat, weapon: range }, window.BattleTerrain,
+          options.getApostle(), { level: options.getLevel(), deadSeats: options.deadSeats?.(), autoElevated: true }).weaponTarget;
+      },
+      openTitanAttack(seat) {
+        if (!tactics || options.allowTacticalControls === false || options.getTitanMovement?.(seat, false, false)) return false;
+        losState.selectedTitan = seat;
+        setTacticalMode("titan-attack");
+        return true;
+      },
+      openTitanMovement(seat, ability = false) {
         if (!tactics || options.allowTacticalControls === false || options.canMoveTitan?.(seat) === false) return false;
         losState.selectedTitan = seat;
+        losState.forced = false;
+        losState.abilityMove = ability;
         setTacticalMode("titan-move");
         return true;
       },
@@ -1284,6 +1362,7 @@
         if (Number.isInteger(snapshot.selectedTitan)) losState.selectedTitan = snapshot.selectedTitan;
         if (snapshot.titanSpeeds) losState.titanSpeeds = snapshot.titanSpeeds.slice();
         losState.forced = snapshot.forced === true;
+        if (losState.mode !== "titan-move") losState.abilityMove = false;
         if (snapshot.weaponControls) losState.weapon = { ...losState.weapon, ...snapshot.weaponControls };
         renderMap();
       },
@@ -1304,7 +1383,8 @@
             active: true, mode: state.mode, source: state.source, selectedTitan: state.selectedTitan,
             anchor: state.source === "apostle" ? pieces.apostle : pieces.titans[state.selectedTitan],
             facing: state.source === "apostle" ? pieces.apostle.facing : null,
-            weapon: state.weapon, weaponControls: { ...losState.weapon },
+            weapon: state.weapon, weaponControls: state.mode === "titan-attack" && options.boardWeapon && !state.noWeapon
+              ? { ...state.weapon, reach: state.weapon.max } : { ...losState.weapon },
             moveSpeed: state.moveSpeed, visited: state.visited, forced: losState.forced, apostleMoveRemaining: state.apostleMoveRemaining, titanSpeeds: state.titanSpeeds.slice(),
             bossTrail,
             titanTrail,

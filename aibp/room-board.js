@@ -1,6 +1,12 @@
 (function () {
-  function create(mount, send) {
+  function create(mount, send, actions) {
     let room, actor, control, panel, settings, map, stamp = "", overlayStamp = "";
+    const actionPanel = document.createElement("section");
+    actionPanel.className = "room-titan-actions";
+    actionPanel.setAttribute("aria-label", "泰坦行动");
+    actionPanel.hidden = true;
+    const { escape } = window.ATO_HERO_CATALOG;
+    let actionMarkup = "";
     const reference = document.getElementById("battleMapControl")
       || document.getElementById("battleRoomBoardTemplate")?.content.querySelector("#battleMapControl");
     const open = document.createElement("button");
@@ -34,6 +40,102 @@
 
     const canEdit = () => actor?.role === "host" && !room.closed;
     const canMove = seat => !room.closed && room.heroes[seat]?.condition !== "dead" && (canEdit() || (actor.role === "player" && actor.seat === seat));
+    const activeAttack = () => actions.inProgress(room.turn);
+    const canMoveNormally = seat => room.turn?.phase === "titans" && (room.turn.seat === seat || room.turn.seat === null)
+      && !room.turn.finished.includes(seat) && !room.turn.actions?.movementUsed && !activeAttack() && !room.turn.aiSignatureId;
+
+    function renderActions() {
+      const seat = room.turn?.seat;
+      actionPanel.hidden = !room.board || room.turn?.phase !== "titans" || !Number.isInteger(seat) || !canMove(seat);
+      if (actionPanel.hidden) return;
+      const turn = room.turn;
+      const activeMove = room.board.titanMoves?.[seat];
+      const weapon = actions.weapon(seat);
+      const attack = turn.actions?.attack;
+      const canMoveHere = !turn.actions?.movementUsed && !activeAttack() && !turn.aiSignatureId;
+      const legacy = !actions.tracked(seat);
+      const canUseAttack = !legacy && !attack && !activeMove && !turn.aiSignatureId;
+      const lockedWeapon = Boolean(attack);
+      const weapons = actions.weapons(seat).map(item => '<option value="' + escape(item.id) + '"'
+        + (item.id === weapon?.id ? ' selected' : '') + '>' + escape(item.name) + (item.ready ? '' : '（未回正）') + '</option>').join('');
+      const range = weapon?.range;
+      const fixedRange = range && !weapon.manual ? actions.rangeLabel(range) : '';
+      const manual = weapon?.manual && !lockedWeapon ? '<div class="room-turn-range"><label>牌面射程 <select data-action-range>'
+        + '<option value="">选择牌面射程…</option>'
+        + ['melee', 'reach', 'ranged'].map(kind => '<option value="' + kind + '"' + (range?.kind === kind ? ' selected' : '') + '>'
+          + ({ melee: '近战', reach: '远触', ranged: '远程' })[kind] + '</option>').join('')
+        + '</select></label><label' + (range?.kind === 'ranged' ? '' : ' hidden') + '>最小 <input data-action-min type="number" min="2" max="32" value="' + (range?.min > 1 ? range.min : 2) + '"></label>'
+        + '<label' + (range?.kind && range.kind !== 'melee' ? '' : ' hidden') + '>最大 <input data-action-max type="number" min="1" max="32" value="' + (range?.max > 1 ? range.max : 4) + '"></label>'
+        + '<button type="button" data-action-range-confirm' + (range ? '' : ' disabled') + '>使用牌面射程</button></div>' : '';
+      const legal = range && control?.weaponTarget(seat, range);
+      const position = legal ? '距骇物 ' + legal.distance + ' 格 · ' + (legal.inRange ? '射程内' : '射程外')
+        + ' · ' + (legal.visible ? '有视线' : '视线受阻') : '';
+      const next = '<div class="room-titan-action"><strong>移动</strong><small>'
+        + (turn.actions?.movementUsed ? '已使用' : activeMove ? '剩余 ' + activeMove.remaining + ' / ' + activeMove.speed + ' 格' : '可用 1 次')
+        + '</small><button type="button" data-action-entry="move"' + (canMoveHere ? '' : ' disabled') + '>'
+        + (activeMove ? '继续移动' : '开始移动') + '</button></div>'
+        + '<div class="room-titan-action"><strong>作战</strong><small>'
+        + (legacy ? '按原流程结算' : attack?.stage === 'done' ? '已使用' : attack ? actions.stageLabel(attack.stage) : '可用 1 次')
+        + '</small><button type="button" data-action-entry="attack"' + (canUseAttack || activeAttack() || legacy ? '' : ' disabled') + '>'
+        + (attack ? '继续作战' : '查看作战') + '</button></div>'
+        + '<div class="room-titan-action-weapon"><label>武器 <select data-action-weapon' + (lockedWeapon ? ' disabled' : '') + '>'
+        + '<option value="">选择已装备武器…</option>' + weapons + '</select></label>'
+        + (fixedRange ? '<small>' + fixedRange + '</small>' : '') + manual
+        + (weapon && !lockedWeapon ? '<small>牌面费用与条件请手动核对。</small>' : '')
+        + (position ? '<small>' + position + '</small>' : '')
+        + (canUseAttack ? '<button type="button" data-action-entry="declare"' + (legal?.legal && weapon.ready ? '' : ' disabled') + '>宣告攻击</button>' : '')
+        + '</div><details class="room-titan-action-options"><summary>牌面行动</summary>'
+        + '<button type="button" data-action-entry="ability">牌面主动移动</button>'
+        + '<button type="button" data-action-entry="spend-movement"' + (canMoveHere && !activeMove ? '' : ' disabled') + '>花费移动行动</button>'
+        + '<button type="button" data-action-entry="spend-attack"' + (canUseAttack ? '' : ' disabled') + '>花费作战行动</button></details>';
+      if (actionMarkup === next) return;
+      const detailsOpen = actionPanel.querySelector("details")?.open;
+      actionPanel.innerHTML = next;
+      actionPanel.querySelector("details").open = Boolean(detailsOpen);
+      actionMarkup = next;
+    }
+
+    actionPanel.addEventListener("change", event => {
+      const field = event.target;
+      const seat = room.turn?.seat;
+      if (actionPanel.hidden) return;
+      if (field.matches("[data-action-weapon]")) {
+        actions.select(seat, field.value);
+        return;
+      }
+      if (field.matches("[data-action-range]")) {
+        const kind = field.value;
+        actionPanel.querySelector("[data-action-min]").closest("label").hidden = kind !== "ranged";
+        actionPanel.querySelector("[data-action-max]").closest("label").hidden = !["reach", "ranged"].includes(kind);
+        actionPanel.querySelector("[data-action-range-confirm]").disabled = !kind;
+      }
+    });
+    actionPanel.addEventListener("click", event => {
+      const button = event.target.closest("button");
+      if (!button || button.disabled || actionPanel.hidden) return;
+      const seat = room.turn.seat;
+      if (button.hasAttribute("data-action-range-confirm")) {
+        const kind = actionPanel.querySelector("[data-action-range]").value;
+        const range = { kind, min: kind === "ranged" ? Number(actionPanel.querySelector("[data-action-min]").value) : 1,
+          max: kind === "melee" ? 1 : Number(actionPanel.querySelector("[data-action-max]").value) };
+        actions.selectRange(seat, range);
+        return;
+      }
+      const entry = button.dataset.actionEntry;
+      if (entry === "move" || entry === "ability") {
+        control.openTitanMovement(seat, entry === "ability");
+        const destination = window.matchMedia("(max-width: 640px)").matches ? grid : panel.querySelector("[data-board-tactics-info]");
+        destination?.scrollIntoView({ block: "nearest" });
+      } else if (entry === "attack") {
+        control.openTitanAttack(seat);
+        if (window.matchMedia("(max-width: 640px)").matches || activeAttack() || !actions.tracked(seat)) actions.openDice(seat);
+      } else if (entry === "declare") {
+        actions.declare(seat);
+      } else if (entry?.startsWith("spend-") && window.confirm("确认按牌面花费这项行动？")) {
+        send({ type: "turn-spend", seat, value: entry.slice(6) });
+      }
+    });
+
     const overlayConfig = ({ active, mode, selectedTitan, weaponControls, titanSpeeds, forced, elevated }) => ({
       active, mode, selectedTitan, weaponControls, titanSpeeds, forced, elevated,
     });
@@ -137,7 +239,17 @@
           settings.open = false;
         }
       });
-      panel.querySelector(".battle-movement-actions").append(finishTurn);
+      const tactics = panel.querySelector("[data-board-tactics]");
+      const movementActions = panel.querySelector(".battle-movement-actions");
+      const preview = document.createElement("button");
+      preview.type = "button"; preview.dataset.boardPreviewDestination = ""; preview.hidden = true;
+      const ability = document.createElement("label");
+      ability.hidden = true;
+      ability.innerHTML = '<input data-board-ability-move type="checkbox">牌面主动移动';
+      const forced = tactics.querySelector("[data-board-forced-field]");
+      forced.after(ability, preview);
+      movementActions.append(finishTurn);
+      tactics.before(actionPanel);
       grid = panel.querySelector("[data-battle-map-board]");
       panel.querySelector(".battle-map-head").append(pingBar);
       grid.append(pingMarker);
@@ -158,12 +270,16 @@
         getLevel: () => room.board.level,
         getTitanTrail: () => room.board.lastTitanMove,
         forcedByPhase: () => room.turn?.phase === "apostle",
-        getTitanMovement: (seat, forced) => (forced ? room.board.forcedTitanMoves : room.board.titanMoves)?.[seat],
-        onTitanEndMove(seat, move, forced) {
-          send({ type: "board-end-move", seat, move: move.id, forced });
+        normalSpeed: actions.speed,
+        boardWeapon: seat => actor.role === "viewer" ? { range: room.board.los?.weapon } : actions.weapon(seat),
+        canExecuteMove: (seat, forced, ability) => forced || ability || canMoveNormally(seat),
+        getTitanMovement: (seat, forced, ability) =>
+          (forced ? room.board.forcedTitanMoves : ability ? room.board.abilityTitanMoves : room.board.titanMoves)?.[seat],
+        onTitanEndMove(seat, move, forced, ability) {
+          send({ type: "board-end-move", seat, move: move.id, forced, ability });
         },
-        onTitanUndoMove(seat, move, forced) {
-          send({ type: "board-undo-move", seat, move: move.id, forced });
+        onTitanUndoMove(seat, move, forced, ability) {
+          send({ type: "board-undo-move", seat, move: move.id, forced, ability });
         },
         getApostleTrail: () => room.board.lastApostleMove,
         getApostleMovement: () => room.board.apostleMovement,
@@ -207,9 +323,9 @@
         onApostleFace(facing) {
           send({ type: "board-face", facing });
         },
-        onTitanMove(seat, point, speed, move, forced) {
+        onTitanMove(seat, point, speed, move, forced, ability) {
           send({ type: "board-move", seat, point, from: room.board.map.pieces.titans[seat],
-            speed, move: move?.id ?? null, forced });
+            speed, move: move?.id ?? null, forced, ability });
         },
         onLosChange() {
           if (!canEdit()) return;
@@ -243,9 +359,12 @@
         if (!room.board) { toolbar.hidden = true; stamp = null; return; }
         const seat = room.turn?.seat;
         finishTurn.hidden = room.turn?.phase !== "titans" || !Number.isInteger(seat) || !canMove(seat);
+        finishTurn.disabled = Boolean(activeAttack() || room.board.titanMoves?.[seat]
+          || room.board.abilityTitanMoves?.[seat] || room.turn?.aiSignatureId);
         const livingRoster = room.heroes.map(hero => hero.condition === 'dead' ? null : hero.name);
         const nextBoardStamp = room.board === previous ? boardStamp : JSON.stringify(room.board);
-        const stateKey = JSON.stringify([actor.role, room.closed, room.turn?.phase, room.priorityTarget, room.turn?.aiTarget, room.turn?.aiMovement, livingRoster]);
+        const stateKey = JSON.stringify([actor.role, room.closed, room.turn, room.priorityTarget, livingRoster,
+          Number.isInteger(seat) ? room.heroes[seat]?.gear : null]);
         if (nextBoardStamp === boardStamp && stateKey === stamp) return;
         boardStamp = nextBoardStamp;
         stamp = stateKey;
@@ -292,6 +411,10 @@
           control.applyTacticalSnapshot(snapshot);
           overlayStamp = JSON.stringify(overlayConfig(control.getLosSnapshot({ keepTactics: true })));
         }
+        if (Number.isInteger(seat) && canMove(seat) && room.board.titanMoves?.[seat] && (!previous?.titanMoves?.[seat] || !existing)) {
+          control.openTitanMovement(seat);
+        }
+        renderActions();
         if (existing && Number.isInteger(previousSeat) && room.turn?.finished.includes(previousSeat)) {
           control.closeFinishedMovement(previousSeat);
         }
@@ -315,7 +438,7 @@
         return true;
       },
       render() {
-        if (control) control.render();
+        if (control) { control.render(); renderActions(); }
       },
     };
   }

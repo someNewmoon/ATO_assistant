@@ -839,3 +839,35 @@ body.aibp-active-online-battle #heroBattleRoster { display: none; }
   color: #513a2b;
   font-size: .9rem;
 }
+
+.room-titan-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-block-end: 12px;
+  padding: 10px;
+  border: 1px solid var(--folio-edge, #bda88d);
+  background: var(--folio-sheet, #fbf7ef);
+}
+.room-titan-actions[hidden] { display: none; }
+.room-titan-action,
+.room-titan-action-weapon {
+  display: grid;
+  gap: 5px;
+  align-content: start;
+  min-width: 0;
+}
+.room-titan-action-weapon,
+.room-titan-action-options { grid-column: 1 / -1; }
+.room-titan-action-weapon label { display: grid; gap: 4px; }
+.room-titan-action-weapon select { width: 100%; min-width: 0; }
+.room-turn-range,
+.room-attack-progress { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.room-turn-range input { width: 4rem; }
+.room-titan-action-options button { margin: 5px 3px 0 0; }
+.room-attack-progress {
+  border: 1px solid var(--folio-edge, #bda88d);
+  padding: 8px;
+}
+.room-attack-progress small { flex-basis: 100%; }
+.room-titan-action-weapon label[hidden] { display: none; }

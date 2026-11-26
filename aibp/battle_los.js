@@ -1151,7 +1151,8 @@
     const selected = Number.isInteger(state.selectedTitan) && state.selectedTitan >= 0 && state.selectedTitan < (pieceState?.titans.length || 4)
       ? state.selectedTitan : 0;
     const bossMode = mode === "apostle-sight" || mode === "apostle-move";
-    const sourceAnchor = tactical && !bossMode && settings.deadSeats?.includes(selected) ? null : tactical ? (bossMode ? pieceState.apostle : pieceState.titans[selected]) : state.anchor;
+    const sourceAnchor = tactical && !bossMode && settings.deadSeats?.includes(selected) ? null
+      : tactical ? (bossMode ? pieceState.apostle : state.previewPoint || pieceState.titans[selected]) : state.anchor;
     const profile = (tactical ? bossMode : state.source === "apostle")
       ? (terrainApi.getApostleProfile(apostle, settings.level ?? map.startLevel) || null)
       : null;
@@ -1174,7 +1175,7 @@
     // 引擎只如实读取。「泰坦踩上高地自动勾选、移下自动取消」由控制层做边沿触发
     // (battle_map_control.js 的 syncAutoElevated)，改的也是这个 state.elevated，
     // 所以第二屏拿到快照里的 elevated 后画出来与主屏一致，无需在引擎里按位置重算。
-    const elevated = settings.targetCell
+    const elevated = settings.targetCell || settings.autoElevated
       ? source.some(({ c, r }) => occ.elevated?.has(cellKey(c, r)))
       : !!state.elevated;
 
@@ -1245,7 +1246,7 @@
     // 移速 ∞ 时全图都在射程内，铺满一层反而盖住视线结果，所以不画射程框。
     const reach = Number.isFinite(Number(state.reach)) ? Number(state.reach) : 1;
     const targets = mode === "titan-attack" ? losSourceCells(pieceState.apostle, bossSize) : [];
-    const weapon = mode === "titan-attack" ? computeTitanWeapon(source, targets, state.weapon, occ) : null;
+    const weapon = mode === "titan-attack" && !state.noWeapon ? computeTitanWeapon(source, targets, state.weapon, occ) : null;
     const range = !tactical && profileWithSpeed && state.showRange && Number.isFinite(profileWithSpeed.speed)
       ? computeRangeMap(source, profileWithSpeed.speed, reach)
       : null;
@@ -1278,6 +1279,10 @@
       : null;
     const weaponTarget = weapon?.target ? {
       ...weapon.target, visible: targets.some(({ c, r }) => grid[cellKey(c, r)]),
+      legal: weapon.target.inRange && targets.some(({ c, r }) => {
+        const key = cellKey(c, r);
+        return weapon.grid[key] && grid[key];
+      }),
     } : null;
     return { ...base, facing, blindspots, visible, blocked, inRange, distance, range, movement, weaponTarget };
   }

@@ -57,6 +57,20 @@ test("printed weapon ranges cover melee, reach and ranged on both ends of the pr
   assert.equal(los.computeTitanWeapon(source, [...adjacent, { c: 10, r: 9 }], gear.range("BJ0864"), wall).target.inRange, false);
 });
 
+test("legacy Reach labels are imported as reach, including Nail Spear", () => {
+  const reach = { kind: "reach", min: 1, max: 2 };
+  for (const id of ["AJ0273", "BJ0859", "BJ0939", "BJ0945", "BJ0971"]) {
+    assert.deepEqual(gear.range(id), reach);
+  }
+
+  const map = pursuitBoard();
+  const weapon = gear.range("AJ0273");
+  const state = { mode: "titan-attack", selectedTitan: 1, weapon };
+  assert.equal(build(map, state).weaponTarget.inRange, false);
+  map.pieces.titans[1].column += 1;
+  assert.deepEqual(build(map, state).weaponTarget, { distance: 2, inRange: true, visible: true, legal: true });
+});
+
 test("range entry accepts printed conditional changes and unverified faces", () => {
   const extended = { kind: "ranged", min: 2, max: 6 };
   assert.deepEqual(gear.range("CJ1399", extended), extended);

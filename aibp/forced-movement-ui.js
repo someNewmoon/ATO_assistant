@@ -2,7 +2,7 @@
   const directionLabel = { 0: "上", 90: "右", 180: "下", 270: "左" };
   const cellLabel = point => point.column + " 列 " + point.row + " 行";
 
-  function create(mount, send, getState, triggerButton, receipt, showPreview) {
+  function create(mount, send, getState, triggerButton, receipt, showPreview, returnToDice) {
     const rules = window.ATO_FORCED_MOVEMENT;
     const { escape } = window.ATO_HERO_CATALOG;
     const editor = document.createElement("section");
@@ -186,6 +186,7 @@
       const button = opener?.isConnected ? opener : opener?.dataset.forcedContext && mount.closest("#battleRoom")
         ?.querySelector('[data-forced-context="' + opener.dataset.forcedContext + '"]');
       if (button) {
+        if (button.closest("#room-dice")) returnToDice?.();
         if (button !== triggerButton) button.scrollIntoView({ block: "nearest" });
         button.focus({ preventScroll: true });
       }

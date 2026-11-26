@@ -691,6 +691,11 @@
       return Boolean(options.forcedByPhase?.() || losState.forced);
     }
 
+    function hasTitanMovement(seat) {
+      return options.getTitanMovement?.(seat, false, false) || options.getTitanMovement?.(seat, false, true)
+        || options.getTitanMovement?.(seat, true, false);
+    }
+
     function titanSpeed(seat) {
       if (forcedMove() || losState.abilityMove) return forcedSpeeds[seat];
       return losState.titanSpeeds[seat] ?? options.normalSpeed?.(seat) ?? 5;
@@ -906,7 +911,7 @@
       for (const mode of ["", ...tacticModes]) {
         tactics.querySelector(`[data-board-mode="${mode}"]`).addEventListener("click", () => {
           if (losState.mode === mode && mode === "titan-move") return endTitanMovement();
-          if (mode === "titan-attack" && options.getTitanMovement?.(losState.selectedTitan, false, false)) return;
+          if (mode === "titan-attack" && hasTitanMovement(losState.selectedTitan)) return;
           if (losState.mode === mode && mode === "apostle-move") return endApostleMovement();
           setTacticalMode(losState.mode === mode ? "" : mode);
         });
@@ -1336,15 +1341,15 @@
           options.getApostle(), { level: options.getLevel(), deadSeats: options.deadSeats?.(), autoElevated: true }).weaponTarget;
       },
       openTitanAttack(seat) {
-        if (!tactics || options.allowTacticalControls === false || options.getTitanMovement?.(seat, false, false)) return false;
+        if (!tactics || options.allowTacticalControls === false || hasTitanMovement(seat)) return false;
         losState.selectedTitan = seat;
         setTacticalMode("titan-attack");
         return true;
       },
-      openTitanMovement(seat, ability = false) {
+      openTitanMovement(seat, ability = false, forced = false) {
         if (!tactics || options.allowTacticalControls === false || options.canMoveTitan?.(seat) === false) return false;
         losState.selectedTitan = seat;
-        losState.forced = false;
+        losState.forced = forced;
         losState.abilityMove = ability;
         setTacticalMode("titan-move");
         return true;

@@ -444,3 +444,25 @@ body:has(.room-style-preview:not([hidden])) .title-actions .return-main-link { m
   .room-pilot-status dl { gap: .3rem; }
   .room-pilot-stat img { display: none; }
 }
+
+
+.room-combat-tabs {
+  display: inline-flex;
+  align-items: center;
+  gap: .15rem;
+  padding: .12rem;
+  border: 1px solid #e7c99155;
+  background: #17150f55;
+}
+.room-combat-tabs[hidden],
+.battle-room[data-combat-view="dice"] #room-movement,
+.battle-room[data-combat-view="board"] #room-dice { display: none; }
+.room-tool-dock.room-style-dock .room-combat-tabs button[aria-selected="true"] {
+  border-color: var(--folio-rule);
+  color: var(--folio-on-dark);
+  background: #a9834748;
+}
+.room-combat-start {
+  scroll-margin-top: max(4.5rem, calc(var(--round-nav-height, 0px) + .75rem));
+}
+.battle-room[data-combat-view] .room-dice-panel { margin-top: .6rem; }

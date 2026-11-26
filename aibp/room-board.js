@@ -55,7 +55,7 @@
         renderPingStatus();
       }
       control?.render();
-    });
+    }, actions.returnToDice);
     let attackDeclarationError = "";
 
 
@@ -65,6 +65,15 @@
     const canMoveNormally = seat => room.turn?.phase === "titans" && (room.turn.seat === seat || room.turn.seat === null)
       && !room.turn.finished.includes(seat) && !room.turn.actions?.movementUsed && !activeAttack() && !room.turn.aiSignatureId;
 
+    function currentMovement(seat) {
+      const board = room.board;
+      const ability = board.abilityTitanMoves?.[seat];
+      const forced = board.forcedTitanMoves?.[seat];
+      return ability ? { move: ability, ability: true, label: "牌面主动移动" }
+        : forced ? { move: forced, forced: true, label: "非主动移动" }
+        : board.titanMoves?.[seat] ? { move: board.titanMoves[seat], label: "普通移动" } : null;
+    }
+
     function renderActions() {
       const turn = room.turn;
       const bonus = turn?.bonusAttack;
@@ -73,7 +82,8 @@
       actionPanel.hidden = !room.board || (bonus ? !ownsBonus
         : turn?.phase !== "titans" || !Number.isInteger(seat) || !canMove(seat));
       if (actionPanel.hidden) return;
-      const activeMove = room.board.titanMoves?.[seat];
+      const moving = currentMovement(seat);
+      const activeMove = moving?.move;
       const weapon = actions.weapon(seat);
       const attack = bonus || turn.actions?.attack;
       const canMoveHere = !turn.actions?.movementUsed && !activeAttack() && !turn.aiSignatureId;
@@ -103,8 +113,10 @@
         + ' · ' + (legal.visible ? '有视线' : '视线受阻') : '';
       const turnActions = '<div class="room-titan-action"><strong>移动</strong><small>'
         + (turn.actions?.movementUsed ? '已使用' : activeMove ? '剩余 ' + activeMove.remaining + ' / ' + activeMove.speed + ' 格' : '可用 1 次')
-        + '</small><button type="button" data-action-entry="move"' + (canMoveHere ? '' : ' disabled') + '>'
-        + (activeMove ? '继续移动' : '开始移动') + '</button></div>'
+        + '</small><button type="button" data-action-entry="move"' + (canMoveHere || activeMove ? '' : ' disabled') + '>'
+        + (activeMove ? '继续' + moving.label : '开始移动') + '</button>'
+        + (activeMove ? '<button type="button" data-action-entry="end-move">结束' + moving.label + '</button>' : '')
+        + '</div>'
         + '<div class="room-titan-action"><strong>作战</strong><small>'
         + (legacy ? '按原流程结算' : attack?.stage === 'done' ? '已使用' : attack ? actions.stageLabel(attack.stage) : '可用 1 次')
         + '</small><button type="button" data-action-entry="attack"' + (canUseAttack || activeAttack() || legacy ? '' : ' disabled') + '>'
@@ -126,7 +138,7 @@
         + '</div>'
         + (bonus ? '' : '<details class="room-titan-action-options"><summary>牌面行动</summary>'
         + '<button type="button" data-action-entry="bonus-start"' + (actions.canStartBonus(seat) ? '' : ' disabled') + '>结算奖励攻击</button>'
-        + '<button type="button" data-action-entry="ability">牌面主动移动</button>'
+        + '<button type="button" data-action-entry="ability"' + (activeMove ? ' disabled' : '') + '>牌面主动移动</button>'
         + '<button type="button" data-action-entry="spend-movement"' + (canMoveHere && !activeMove ? '' : ' disabled') + '>花费移动行动</button>'
         + '<button type="button" data-action-entry="spend-attack"' + (canUseAttack ? '' : ' disabled') + '>花费作战行动</button></details>');
       if (actionMarkup === next) return;
@@ -174,8 +186,11 @@
         return;
       }
       const entry = button.dataset.actionEntry;
-      if (entry === "move" || entry === "ability") {
-        control.openTitanMovement(seat, entry === "ability");
+      const movement = currentMovement(seat);
+      if (entry === "end-move" && movement) {
+        send({ type: "board-end-move", seat, move: movement.move.id, ability: Boolean(movement.ability), forced: Boolean(movement.forced) });
+      } else if (entry === "move" || entry === "ability") {
+        control.openTitanMovement(seat, entry === "ability" || movement?.ability, movement?.forced);
         const destination = window.matchMedia("(max-width: 640px)").matches ? grid : panel.querySelector("[data-board-tactics-info]");
         destination?.scrollIntoView({ block: "nearest" });
       } else if (entry === "attack") {
@@ -485,8 +500,14 @@
           control.applyTacticalSnapshot(snapshot);
           overlayStamp = JSON.stringify(overlayConfig(control.getLosSnapshot({ keepTactics: true })));
         }
-        if (Number.isInteger(seat) && canMove(seat) && room.board.titanMoves?.[seat] && (!previous?.titanMoves?.[seat] || !existing)) {
-          control.openTitanMovement(seat);
+        if (Number.isInteger(seat) && canMove(seat)) {
+          const moving = currentMovement(seat);
+          if (moving && (!existing || previous?.abilityTitanMoves?.[seat]?.id !== room.board.abilityTitanMoves?.[seat]?.id
+              || !previous?.titanMoves?.[seat] && room.board.titanMoves?.[seat])) {
+            control.openTitanMovement(seat, moving.ability, moving.forced);
+          } else if (!moving && (previous?.titanMoves?.[seat] || previous?.abilityTitanMoves?.[seat])) {
+            control.closeFinishedMovement(seat);
+          }
         }
         renderActions();
         if (existing && Number.isInteger(previousSeat) && room.turn?.finished.includes(previousSeat)) {

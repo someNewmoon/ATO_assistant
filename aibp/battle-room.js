@@ -94,6 +94,7 @@
         || window.ATO_BATTLE_ASSETS?.gearSrc(id, roomLanguage),
       select: chooseWeapon, selectRange: chooseWeaponRange, openDice: openAttackDice, declare: declareAttack,
       declaring: () => Boolean(pendingAttackDeclaration),
+      returnToDice: () => switchCombatView('dice', false),
       startBonus: startBonusAttack, canStartBonus: canStartBonusAttack,
       speed: seat => window.ATO_TITAN_PANEL_REFERENCE?.forTitan(state.heroes[seat]?.titan, window.ATO_GEAR_INVENTORY)?.movement,
     });
@@ -232,6 +233,7 @@
     if (ownsBonus && bonusChanged && openedBonus === bonus.id) {
       openedBonus = null;
       turnWindow.open = false;
+      switchCombatView('board', false);
       roomBoard?.openBonusAttack(bonus.seat);
     }
     if (!first && prior && actor.role !== 'viewer') animateLatestRoll(prior);
@@ -243,7 +245,8 @@
       && (actor.role === 'player' ? actor.seat === second.seat : actor.role === 'host' && rollSeat === second.seat);
     if (mySecond && !first && !activeAttackFor(second.seat)) {
       const target = content.querySelector('#room-kratos-pool');
-      target?.scrollIntoView({ block: 'start' });
+      if (!combatTabs.hidden) switchCombatView('dice');
+      else target?.scrollIntoView({ block: 'start' });
       target?.focus({ preventScroll: true });
     }
     lastSecondAbility = second?.id;
@@ -497,6 +500,69 @@
   quick.innerHTML = '<a href="#room-movement">移动</a><a href="#room-dice">掷骰</a><a href="#room-status">状态</a><a href="#room-equipment">装备</a>';
   quick.append(bossJump);
   const movementShortcut = quick.querySelector('a[href="#room-movement"]');
+  const diceShortcut = quick.querySelector('a[href="#room-dice"]');
+  const combatTabs = document.createElement('div');
+  combatTabs.className = 'room-combat-tabs';
+  combatTabs.setAttribute('role', 'tablist');
+  combatTabs.setAttribute('aria-label', '战斗视图');
+  combatTabs.hidden = true;
+  combatTabs.innerHTML = '<button type="button" id="room-board-tab" role="tab" aria-controls="room-movement" data-combat-tab="board">版图</button>'
+    + '<button type="button" id="room-dice-tab" role="tab" aria-controls="room-dice" data-combat-tab="dice">掷骰</button>';
+  movementShortcut.before(combatTabs);
+  const combatStart = document.createElement('div');
+  combatStart.className = 'room-combat-start';
+  boardMount.before(combatStart);
+  let combatView = location.hash === '#room-dice' ? 'dice' : 'board';
+
+  function renderCombatTabs(personal) {
+    combatTabs.hidden = !personal;
+    diceShortcut.hidden = personal;
+    if (personal) root.dataset.combatView = combatView;
+    else delete root.dataset.combatView;
+    for (const tab of combatTabs.children) {
+      const selected = tab.dataset.combatTab === combatView;
+      tab.setAttribute('aria-selected', String(selected));
+      tab.tabIndex = selected ? 0 : -1;
+      const panel = document.getElementById(tab.getAttribute('aria-controls'));
+      if (!panel) continue;
+      if (personal) {
+        panel.setAttribute('role', 'tabpanel');
+        panel.setAttribute('aria-labelledby', tab.id);
+        panel.tabIndex = 0;
+      } else {
+        panel.removeAttribute('role');
+        panel.removeAttribute('aria-labelledby');
+        panel.removeAttribute('tabindex');
+      }
+    }
+  }
+
+  function switchCombatView(view, position = true) {
+    const target = view === 'dice' ? content.querySelector('#room-dice') : boardMount;
+    if (combatTabs.hidden) {
+      if (position) target?.scrollIntoView({ block: 'start' });
+      return;
+    }
+    combatView = view;
+    renderCombatTabs(true);
+    if (position && combatStart.getBoundingClientRect().top < dock.getBoundingClientRect().bottom) {
+      combatStart.scrollIntoView({ block: 'start' });
+    }
+  }
+
+  combatTabs.addEventListener('click', event => {
+    const tab = event.target.closest('[data-combat-tab]');
+    if (tab) switchCombatView(tab.dataset.combatTab);
+  });
+  combatTabs.addEventListener('keydown', event => {
+    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+    event.preventDefault();
+    const view = event.key === 'Home' ? 'board' : event.key === 'End' ? 'dice'
+      : combatView === 'board' ? 'dice' : 'board';
+    switchCombatView(view);
+    combatTabs.querySelector('[aria-selected="true"]').focus({ preventScroll: true });
+  });
+
   function forcedMovementSeat() {
     const seat = personalSeat();
     return state.turn?.phase === 'apostle' && !state.closed && Number.isInteger(seat)
@@ -654,7 +720,10 @@
     if (type === 'bonus-attack-start') { startBonusAttack(Number(seat)); return; }
     if (type === 'bonus-attack-open') {
       turnWindow.open = false;
-      if (state.turn.bonusAttack.stage === 'select') roomBoard?.openBonusAttack(Number(seat));
+      if (state.turn.bonusAttack.stage === 'select') {
+        switchCombatView('board', false);
+        roomBoard?.openBonusAttack(Number(seat));
+      }
       else openAttackDice(Number(seat));
       return;
     }
@@ -672,7 +741,7 @@
       turnWindow.open = false;
       render();
       const panel = content.querySelector('#room-dice');
-      panel?.scrollIntoView({ block: 'start' });
+      switchCombatView('dice');
       panel?.querySelector('form[data-roll] input:not([type="hidden"])')?.focus({ preventScroll: true });
       return;
     }
@@ -990,7 +1059,7 @@
           if (!mode) return;
           turnWindow.open = false;
           mode.click();
-          dice.scrollIntoView({ block: 'start' });
+          switchCombatView('dice');
         });
         checklist.append(hint, defense);
       }
@@ -1028,7 +1097,7 @@
     root.classList.toggle('battle-room-personal', personal);
     dock.hidden = !personal;
     if (!personal) closeTools();
-    movementShortcut.hidden = !state.board;
+    movementShortcut.hidden = !state.board || !combatTabs.hidden;
     bossShortcut.hidden = !state.board;
     const canJumpToBoss = actor.role === 'host' && !hostPersonalView && fullBossPanel;
     bossJump.hidden = !state.board || !canJumpToBoss;
@@ -1685,7 +1754,7 @@
     rollMode = ['bp', 'power', 'cleanup', 'second'].includes(attack?.stage) ? 'power' : 'attack';
     parentRoll = attack?.roll || '';
     render();
-    content.querySelector('#room-dice')?.scrollIntoView({ block: 'start' });
+    switchCombatView('dice');
   }
 
   function declareAttack(seat) {
@@ -1974,6 +2043,8 @@
     dock.hidden = true;
     closeTools();
     boardMount.hidden = true;
+    renderCombatTabs(false);
+    renderTitanLink(null);
     summary.innerHTML = '';
     const trip = roomVoyage();
     const story = window.ATO_VOYAGE?.storyUrl(trip?.entry.story);
@@ -2527,6 +2598,7 @@
           + escape(window.ATO_VOYAGE.returnUrl(roomVoyage().entry)) + '">返回航行</a>' : '') + '</p>',
     ]);
     if (edit) renderDicePanel(content.querySelector('#room-dice'), poolByDice ? poolSection : '');
+    renderCombatTabs(personal);
     if (showHistory) renderSections(content.querySelector('[data-room-history]'), [!personal && rollLog, activity]);
     if (!edit) {
       const bossPanel = content.querySelector('[data-closed-apostle]');
@@ -2646,7 +2718,7 @@
         if (action.type === 'board-forced-effect') roomBoard?.resolveForcedEffect(action.id);
         if (action.id === pendingAttackDeclaration) {
           pendingAttackDeclaration = null;
-          if (window.matchMedia('(max-width: 640px)').matches && activeAttackFor(action.seat)?.stage === 'declared') {
+          if ((!combatTabs.hidden || window.matchMedia('(max-width: 640px)').matches) && activeAttackFor(action.seat)?.stage === 'declared') {
             openAttackDice(action.seat);
           }
           roomBoard?.render();
@@ -2792,8 +2864,15 @@
   });
 
   root.addEventListener('click', async event => {
+    const boardLink = event.target.closest('a[href="#room-movement"]');
+    if (boardLink && !combatTabs.hidden) {
+      event.preventDefault();
+      switchCombatView('board');
+      return;
+    }
     const forced = event.target.closest('button[data-forced-context]');
     if (forced) {
+      switchCombatView('board', false);
       const seat = forced.dataset.forcedSeat;
       roomBoard?.openForcedEffect({ trigger: forced.dataset.forcedContext,
         seat: seat === undefined ? undefined : Number(seat), range: aiRange }, forced);
@@ -2829,7 +2908,7 @@
       const attack = activeAttackFor(seat);
       if (!attack || actions.some(action => action.type === type)) return;
       send({ id: crypto.randomUUID(), type, seat, value: button.dataset.value, roll: attack.roll, ...bonusContext(seat) });
-      if (type === 'attack-finish') boardMount.scrollIntoView({ block: 'start' });
+      if (type === 'attack-finish') switchCombatView('board');
       return;
     }
     if (button.hasAttribute('data-fill-weapon-power')) {

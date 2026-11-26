@@ -1,0 +1,90 @@
+{
+  "cycles": {
+    "c1": {
+      "hub-01-fated-conundrum": {
+        "title": "宿命的谜题",
+        "openingEntryKey": "c1-3-0",
+        "image": "c1/hub-01.jpg",
+        "width": 1920,
+        "height": 1080,
+        "anchor": "50% 32%",
+        "source": "generated",
+        "sourceNote": "该组开场原书扫描为正文与选项，未选取插图。",
+        "summary": "沿岸侦察一无所获，归途却有人问起迷宫的真理。",
+        "artDirection": "岩岸、朝圣队列与脸上带几何纹饰的陌生人。"
+      },
+      "hub-02-plight-of-the-people": {
+        "title": "人民的困境",
+        "openingEntryKey": "c1-4-0",
+        "image": "c1/hub-02.jpg",
+        "width": 1920,
+        "height": 1080,
+        "anchor": "50% 52%",
+        "source": "generated",
+        "sourceNote": "该组开场原书扫描为正文与选项，未选取插图。",
+        "summary": "偏僻渔村寂静无声，只剩村中空地上的渔具和石阵。",
+        "artDirection": "空码头、湿渔网，以及石头与渔具摆出的不自然旋涡。"
+      },
+      "hub-03-hidden-in-plain-sight": {
+        "title": "隐匿于众目睽睽之下",
+        "openingEntryKey": "c1-5-0",
+        "image": "c1/hub-03.jpg",
+        "width": 1920,
+        "height": 1080,
+        "anchor": "50% 52%",
+        "source": "generated",
+        "sourceNote": "该组开场原书扫描为正文与选项，未选取插图。",
+        "summary": "沿岸的传闻反复提到忒修斯，调查也穿过一座荒置的农场。",
+        "artDirection": "晚光落在无人照料的蜂箱上，旧事隐在日常景物里。"
+      },
+      "hub-04-man-of-purpose": {
+        "title": "目标明确的人",
+        "openingEntryKey": "c1-6-0",
+        "image": "c1/hub-04.jpg",
+        "width": 1920,
+        "height": 1080,
+        "anchor": "50% 52%",
+        "source": "generated",
+        "sourceNote": "该组开场原书扫描为正文与选项，未选取插图。",
+        "summary": "追查线索抵达一个失去海水的渔村，泥中还留着几艘小船。",
+        "artDirection": "干涸码头、陷在泥里的木船和石化树桩。"
+      },
+      "hub-05-uneasy-rests-the-head": {
+        "title": "不安的头颅",
+        "openingEntryKey": "c1-7-0",
+        "image": "c1/hub-05.jpg",
+        "width": 1920,
+        "height": 1080,
+        "anchor": "50% 52%",
+        "source": "generated",
+        "sourceNote": "该组开场原书扫描为正文与选项，未选取插图。",
+        "summary": "阿尔戈号抵达卡利菲托斯。码头忙碌，人们却刻意压低声息。",
+        "artDirection": "阴天港口仍有人劳作，石门前的远影和烟火暗示紧张。"
+      },
+      "hub-06-tears-of-a-minotaur": {
+        "title": "米诺陶洛斯之泪",
+        "openingEntryKey": "c1-8-0",
+        "image": "c1/hub-06.jpg",
+        "width": 1920,
+        "height": 1080,
+        "anchor": "50% 52%",
+        "source": "generated",
+        "sourceNote": "该组开场原书扫描为正文与选项，未选取插图。",
+        "summary": "山谷里散落着许多公牛雕像，有些受损，有些仍被照料。",
+        "artDirection": "低角度阳光照出磨损的金箔与修补痕迹。"
+      },
+      "hub-07-dreams-laid-bare": {
+        "title": "暴露的梦境",
+        "openingEntryKey": "c1-9-0",
+        "image": "c1/hub-07.jpg",
+        "width": 1920,
+        "height": 1080,
+        "anchor": "50% 52%",
+        "source": "generated",
+        "sourceNote": "该组开场原书扫描为正文与选项，未选取插图。",
+        "summary": "迷阵逼近海岸和城镇，熟悉的地形开始显出不自然的几何。",
+        "artDirection": "海雾后露出笔直的高墙，压迫感先于具体事件到来。"
+      }
+    }
+  }
+}

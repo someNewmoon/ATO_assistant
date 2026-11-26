@@ -1094,21 +1094,6 @@
       width: min(100%, 392px);
     }
 
-    .exploration-active-grid .exploration-drawn-face.is-landscape {
-      position: relative;
-      aspect-ratio: 740 / 470;
-    }
-
-    .exploration-active-grid .exploration-drawn-image.is-rotated {
-      position: absolute;
-      left: 50%;
-      top: 50%;
-      width: calc(100% * 470 / 740);
-      height: calc(100% * 740 / 470);
-      transform: translate(-50%, -50%) rotate(90deg);
-      background-repeat: no-repeat;
-    }
-
     .exploration-drawn-card {
       display: grid;
       gap: 5px;
@@ -6185,12 +6170,18 @@
       renderFlow();
     }
 
+    function isLandscapeExplorationCard(cardId, cycleId = currentCycleConfig().id) {
+      return ({ c1: ["13400"], c2: ["13640"], c3: ["13537"],
+        c4: ["9328", "9331"], c5: ["10309"] }[cycleId] || []).includes(cardId);
+    }
+
     function getExplorationCardImageStyle(cardId) {
       const cycleId = currentCycleConfig().id;
       return [
         `background-image: url("./assets/exploration-cards/${cycleId}/${cardId}.png")`,
         "background-size: contain",
         "background-position: center",
+        ...(isLandscapeExplorationCard(cardId, cycleId) ? ["aspect-ratio: 740 / 470"] : []),
       ].join(";");
     }
 
@@ -13802,21 +13793,9 @@
         drawnFace.setAttribute("aria-label", `${entry.name} #${entry.id}`);
         drawnFace.setAttribute("role", "img");
         drawnFace.style.cssText = getExplorationCardImageStyle(entry.id);
-        if (options.interactive) {
-          const cycleId = currentCycleConfig().id;
-          const rotate = { c1: "13400", c2: "13640", c3: "13537" }[cycleId] === entry.id;
-          const landscape = rotate || ({ c4: ["9328", "9331"], c5: ["10309"] }[cycleId] || []).includes(entry.id);
-          if (landscape) {
-            drawnCard.className += " is-landscape";
-            drawnFace.className += " is-landscape";
-            if (rotate) {
-              const image = document.createElement("div");
-              image.className = "exploration-drawn-image is-rotated";
-              image.style.cssText = drawnFace.style.cssText;
-              drawnFace.style.cssText = "";
-              drawnFace.appendChild(image);
-            }
-          }
+        if (isLandscapeExplorationCard(entry.id)) {
+          drawnCard.className += " is-landscape";
+          drawnFace.className += " is-landscape";
         }
         drawnCard.append(drawnFace);
         if (options.interactive) {

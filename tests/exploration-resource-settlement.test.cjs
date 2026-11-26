@@ -716,7 +716,6 @@ function settleHarness(options = {}) {
     todayTrackIcons: () => [],
     // 探索步骤整体渲染：卡面/标签/特殊规则与折叠菜单都用最简桩，够跑通结构断言。
     getExplorationCornerNumber: () => '',
-    getExplorationCardImageStyle: () => '',
     getExplorationCardTag: () => ({ removal: 'keep', draw: 'single' }),
     getExplorationSpecialRule: () => null,
     getDestructionPileIds: () => [],
@@ -844,6 +843,8 @@ function settleHarness(options = {}) {
     fn('getExplorationCard'),
     fn('createExplorationDestructionTools'),
     fn('createHiddenExplorationMenu'),
+    fn('isLandscapeExplorationCard'),
+    fn('getExplorationCardImageStyle'),
     fn('createExplorationTools'),
     fn('formatSignedNumber'),
     fn('currentMapFactions'),

@@ -6,7 +6,7 @@
     actionPanel.setAttribute("aria-label", "泰坦行动");
     actionPanel.hidden = true;
     const { escape } = window.ATO_HERO_CATALOG;
-    let actionMarkup = "";
+    let actionMarkup = "", bonusRage = "";
     const reference = document.getElementById("battleMapControl")
       || document.getElementById("battleRoomBoardTemplate")?.content.querySelector("#battleMapControl");
     const open = document.createElement("button");
@@ -45,17 +45,20 @@
       && !room.turn.finished.includes(seat) && !room.turn.actions?.movementUsed && !activeAttack() && !room.turn.aiSignatureId;
 
     function renderActions() {
-      const seat = room.turn?.seat;
-      actionPanel.hidden = !room.board || room.turn?.phase !== "titans" || !Number.isInteger(seat) || !canMove(seat);
-      if (actionPanel.hidden) return;
       const turn = room.turn;
+      const bonus = turn?.bonusAttack;
+      const seat = bonus?.seat ?? turn?.seat;
+      const ownsBonus = bonus && !room.closed && (actor.role === "host" || actor.role === "player" && actor.seat === seat);
+      actionPanel.hidden = !room.board || (bonus ? !ownsBonus
+        : turn?.phase !== "titans" || !Number.isInteger(seat) || !canMove(seat));
+      if (actionPanel.hidden) return;
       const activeMove = room.board.titanMoves?.[seat];
       const weapon = actions.weapon(seat);
-      const attack = turn.actions?.attack;
+      const attack = bonus || turn.actions?.attack;
       const canMoveHere = !turn.actions?.movementUsed && !activeAttack() && !turn.aiSignatureId;
       const legacy = !actions.tracked(seat);
       const canUseAttack = !legacy && !attack && !activeMove && !turn.aiSignatureId;
-      const lockedWeapon = Boolean(attack);
+      const lockedWeapon = Boolean(attack && attack.stage !== "select");
       const weapons = actions.weapons(seat).map(item => {
         const src = actions.weaponArt(item.id);
         return '<button type="button" class="room-board-weapon" data-action-weapon="' + escape(item.id)
@@ -75,30 +78,41 @@
       const legal = range && control?.weaponTarget(seat, range);
       const position = legal ? '距骇物 ' + legal.distance + ' 格 · ' + (legal.inRange ? '射程内' : '射程外')
         + ' · ' + (legal.visible ? '有视线' : '视线受阻') : '';
-      const next = '<div class="room-titan-action"><strong>移动</strong><small>'
+      const turnActions = '<div class="room-titan-action"><strong>移动</strong><small>'
         + (turn.actions?.movementUsed ? '已使用' : activeMove ? '剩余 ' + activeMove.remaining + ' / ' + activeMove.speed + ' 格' : '可用 1 次')
         + '</small><button type="button" data-action-entry="move"' + (canMoveHere ? '' : ' disabled') + '>'
         + (activeMove ? '继续移动' : '开始移动') + '</button></div>'
         + '<div class="room-titan-action"><strong>作战</strong><small>'
         + (legacy ? '按原流程结算' : attack?.stage === 'done' ? '已使用' : attack ? actions.stageLabel(attack.stage) : '可用 1 次')
         + '</small><button type="button" data-action-entry="attack"' + (canUseAttack || activeAttack() || legacy ? '' : ' disabled') + '>'
-        + (attack ? '继续作战' : '查看作战') + '</button></div>'
-        + '<div class="room-titan-action-weapon"><strong>武器</strong>'
+        + (attack ? '继续作战' : '查看作战') + '</button></div>';
+      const bonusActions = bonus && '<div class="room-titan-action-weapon"><strong>奖励攻击 · ' + escape(room.heroes[seat].name)
+        + '</strong><small>' + (lockedWeapon ? actions.stageLabel(attack.stage) : '按牌面触发，保留普通移动和作战行动。') + '</small>'
+        + (lockedWeapon ? '<button type="button" data-action-entry="attack">继续奖励攻击</button>'
+          : '<button type="button" class="secondary" data-action-entry="bonus-cancel">取消奖励攻击</button>') + '</div>';
+      const rageChoice = bonus && !lockedWeapon ? '<label>本次怒气 <select data-bonus-rage><option value="">按牌面选择…</option>'
+        + '<option value="yes"' + (bonusRage === 'yes' ? ' selected' : '') + '>增加 1</option>'
+        + '<option value="no"' + (bonusRage === 'no' ? ' selected' : '') + '>不增加</option></select></label>' : '';
+      const next = (bonusActions || turnActions) + '<div class="room-titan-action-weapon"><strong>武器</strong>'
         + (weapons ? '<div class="room-board-weapon-list" role="group" aria-label="选择已装备武器">' + weapons + '</div>'
           : '<small>该英雄未装备武器。</small>')
         + (fixedRange ? '<small>' + fixedRange + '</small>' : '') + manual
         + (weapon && !lockedWeapon ? '<small>牌面费用与条件请手动核对。</small>' : '')
-        + (position ? '<small>' + position + '</small>' : '')
-        + (canUseAttack ? '<button type="button" data-action-entry="declare"' + (legal?.legal && weapon.ready ? '' : ' disabled') + '>宣告攻击</button>' : '')
-        + '</div><details class="room-titan-action-options"><summary>牌面行动</summary>'
+        + (position ? '<small>' + position + '</small>' : '') + rageChoice
+        + ((bonus ? !lockedWeapon : canUseAttack) ? '<button type="button" data-action-entry="declare"'
+          + (legal?.legal && weapon.ready && (!bonus || bonusRage) ? '' : ' disabled') + '>'
+          + (bonus ? '宣告奖励攻击' : '宣告攻击') + '</button>' : '') + '</div>'
+        + (bonus ? '' : '<details class="room-titan-action-options"><summary>牌面行动</summary>'
+        + '<button type="button" data-action-entry="bonus-start"' + (actions.canStartBonus(seat) ? '' : ' disabled') + '>结算奖励攻击</button>'
         + '<button type="button" data-action-entry="ability">牌面主动移动</button>'
         + '<button type="button" data-action-entry="spend-movement"' + (canMoveHere && !activeMove ? '' : ' disabled') + '>花费移动行动</button>'
-        + '<button type="button" data-action-entry="spend-attack"' + (canUseAttack ? '' : ' disabled') + '>花费作战行动</button></details>';
+        + '<button type="button" data-action-entry="spend-attack"' + (canUseAttack ? '' : ' disabled') + '>花费作战行动</button></details>');
       if (actionMarkup === next) return;
       const detailsOpen = actionPanel.querySelector("details")?.open;
       const focused = actionPanel.contains(document.activeElement) && document.activeElement.dataset.actionWeapon;
       actionPanel.innerHTML = next;
-      actionPanel.querySelector("details").open = Boolean(detailsOpen);
+      const details = actionPanel.querySelector("details");
+      if (details) details.open = Boolean(detailsOpen);
       if (focused) actionPanel.querySelector(`[data-action-weapon="${CSS.escape(focused)}"]`)?.focus({ preventScroll: true });
       actionMarkup = next;
     }
@@ -110,6 +124,13 @@
     actionPanel.addEventListener("change", event => {
       const field = event.target;
       if (actionPanel.hidden) return;
+      if (field.matches("[data-bonus-rage]")) {
+        bonusRage = field.value;
+        const declare = actionPanel.querySelector('[data-action-entry="declare"]');
+        const weapon = actions.weapon(room.turn.bonusAttack.seat);
+        declare.disabled = !(bonusRage && weapon?.ready && weapon.range && control.weaponTarget(room.turn.bonusAttack.seat, weapon.range)?.legal);
+        return;
+      }
       if (field.matches("[data-action-range]")) {
         const kind = field.value;
         actionPanel.querySelector("[data-action-min]").closest("label").hidden = kind !== "ranged";
@@ -120,7 +141,8 @@
     actionPanel.addEventListener("click", event => {
       const button = event.target.closest("button");
       if (!button || button.disabled || actionPanel.hidden) return;
-      const seat = room.turn.seat;
+      const bonus = room.turn.bonusAttack;
+      const seat = bonus?.seat ?? room.turn.seat;
       if (button.hasAttribute("data-action-weapon")) {
         actions.select(seat, button.dataset.actionWeapon);
         return;
@@ -141,7 +163,11 @@
         control.openTitanAttack(seat);
         if (window.matchMedia("(max-width: 640px)").matches || activeAttack() || !actions.tracked(seat)) actions.openDice(seat);
       } else if (entry === "declare") {
-        actions.declare(seat);
+        actions.declare(seat, bonus ? bonusRage === "yes" : undefined);
+      } else if (entry === "bonus-start") {
+        actions.startBonus(seat);
+      } else if (entry === "bonus-cancel") {
+        send({ type: "bonus-attack-cancel", seat, bonusId: bonus.id });
       } else if (entry?.startsWith("spend-") && window.confirm("确认按牌面花费这项行动？")) {
         send({ type: "turn-spend", seat, value: entry.slice(6) });
       }
@@ -355,7 +381,9 @@
         const previous = room?.board;
         const previousBattle = room?.squad?.battleNumber;
         const previousSeat = room?.turn?.seat;
+        const previousBonus = room?.turn?.bonusAttack?.id;
         room = nextRoom;
+        if (previousBonus !== room.turn?.bonusAttack?.id) bonusRage = "";
         actor = nextActor;
         mount.hidden = !room.board && !canEdit();
         mount.classList.toggle("room-tactical-read-only", actor.role === "viewer" || room.closed);
@@ -374,8 +402,9 @@
           || room.board.abilityTitanMoves?.[seat] || room.turn?.aiSignatureId);
         const livingRoster = room.heroes.map(hero => hero.condition === 'dead' ? null : hero.name);
         const nextBoardStamp = room.board === previous ? boardStamp : JSON.stringify(room.board);
+        const actingSeat = room.turn?.bonusAttack?.seat ?? seat;
         const stateKey = JSON.stringify([actor.role, room.closed, room.turn, room.priorityTarget, livingRoster,
-          Number.isInteger(seat) ? room.heroes[seat]?.gear : null]);
+          Number.isInteger(actingSeat) ? room.heroes[actingSeat]?.gear : null, room.deckRevision, room.projection?.bpPending]);
         if (nextBoardStamp === boardStamp && stateKey === stamp) return;
         boardStamp = nextBoardStamp;
         stamp = stateKey;
@@ -436,6 +465,12 @@
         aiRouteStamp = next;
         aiRoute = route;
         control?.render();
+      },
+      openBonusAttack(seat) {
+        if (!control || actionPanel.hidden || room.turn?.bonusAttack?.seat !== seat) return false;
+        control.openTitanAttack(seat);
+        actionPanel.scrollIntoView({ block: "nearest" });
+        return true;
       },
       openForcedMovement(seat) {
         if (!control || room.turn?.phase !== "apostle" || !canMove(seat) || !control.openTitanMovement(seat)) return false;

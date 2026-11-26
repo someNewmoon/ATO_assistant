@@ -161,6 +161,7 @@ function publicSquadLoadouts(room) {
 }
 
 const activityLabels = {
+  'bonus-attack-start': '准备奖励攻击', 'bonus-attack-cancel': '取消奖励攻击',
   'attack-declare': '宣告攻击', 'attack-check': '确认攻击命中结果', 'attack-first': '完成第一能力时段',
   'attack-clear': '清空克拉托斯池', 'attack-finish': '结束本次作战', 'turn-spend': '以行动结算能力',
   'turn-undo': '撤回上一步轮次行动', 'turn-phase': '切换轮次', 'turn-take': '开始英雄回合', 'turn-finish': '结束英雄回合',
@@ -230,6 +231,7 @@ function recordBattleActivity(room, actor, body, previousProjection) {
     const movement = room.turn.aiMovement;
     detail = movement.steps + ' 格' + (movement.pending ? ' · 待结算冲撞 ' + movement.crossedSeats.length + ' 位泰坦' : '');
   }
+  if (body.type === 'attack-declare' && body.bonusId) label = '宣告奖励攻击';
   if (body.type === 'board-face') detail = { 0: '朝上', 90: '朝右', 180: '朝下', 270: '朝左' }[body.facing];
   if (body.type === 'priority-target') detail = body.locked ? '锁定' : '未锁定';
   if (body.type === 'condition') detail = { standing: '站立', down: '倒地', rising: '起身', dead: '死亡' }[hero.condition];
@@ -662,6 +664,9 @@ export class BattleRoom extends DurableObject {
     if (['turn-phase', 'turn-take', 'turn-finish', 'ai-guide'].includes(body.type)) return applyTurn(room, actor, body);
     if (typeof body.type === 'string' && body.type.startsWith('trauma-')) return applyTrauma(room, actor, body, randomInt);
     if (typeof body.type === "string" && body.type.startsWith("board-")) return applyRoomBoard(room, actor, body);
+    if (room.turn?.bonusAttack && ['ai-guide-discard', 'ai-request', 'round'].includes(body.type)) {
+      reject('请先结束当前奖励攻击。', 409);
+    }
     if (body.type === 'ai-guide-discard') {
       if (actor.role !== 'host') reject('指令技由房主确认弃置。', 403);
       const deck = room.battleDeck;
@@ -702,23 +707,28 @@ export class BattleRoom extends DurableObject {
       }
       if (body.round !== room.round) reject('轮次已更新，请重新操作。', 409);
       const turn = room.turn;
+      const bonus = turn?.bonusAttack;
+      if ((bonus?.id || body.bonusId) && (bonus?.id !== body.bonusId || bonus?.seat !== seat)) {
+        reject('部位牌须由当前攻击者结算。', 409);
+      }
       const inTurn = turn?.phase !== 'apostle' && (preview || ((turn?.seat == null || turn.seat === seat)
         && !turn?.finished?.includes(seat)));
       const roll = roomDice.pendingPowerRoll(room, seat);
-      if (reveal && !inTurn && !roll) reject('请在自己的泰坦回合揭示 BP，或先投掷威力骰。', 409);
+      if (reveal && !bonus && !inTurn && !roll) reject('请在自己的泰坦回合揭示 BP，或先投掷威力骰。', 409);
       const deck = room.battleDeck;
       if (!deck) reject('请由房主打开本场 AIBP，先同步牌堆。', 409);
-      const attack = !preview && turn?.seat === seat ? turn.actions?.attack : null;
-      if (reveal && !preview && ((turn?.seat === seat && turn.actions && attack?.stage !== 'bp' && !roll?.extraAttack)
+      const attack = bonus || (!preview && turn?.seat === seat ? turn.actions?.attack : null);
+      if (reveal && !preview && (bonus ? bonus.stage !== 'bp' : (turn?.seat === seat && turn.actions && attack?.stage !== 'bp' && !roll?.extraAttack)
           || (room.board && turn?.phase === 'titans' && turn.seat === null && !roll))) {
         reject('请先结算第一能力时段，再揭示部位牌。', 409);
       }
       const allowHandoff = roomDice.canUseBodyPart(room, seat, deck.bpSeat);
       if (reveal) {
         if (!revealRoomBp(deck, seat, randomInt, allowHandoff)) return;
-        if (!preview && inTurn) claimTurn(room, seat);
+        if (!bonus && !preview && inTurn) claimTurn(room, seat);
       } else {
-        const manual = actor.role === 'host' && body.roll === undefined && !roll;
+        if (bonus && (bonus.stage !== 'power' || bonus.powerRoll !== body.roll)) reject('请先投掷本次奖励攻击的威力。', 409);
+        const manual = !bonus && actor.role === 'host' && body.roll === undefined && !roll;
         if (!manual && (!roll || roll.id !== body.roll)) reject('只能结算这次攻击最新的威力投掷。', 409);
         if (![0, 1, 2].includes(body.value)) reject('请选择有效的部位牌结算结果。');
         const wounds = settleRoomBp(deck, { seat, card: body.card, value: body.value, allowHandoff }, randomInt);
@@ -857,7 +867,8 @@ export class BattleRoom extends DurableObject {
     const seat = body.seat;
     const hero = Number.isInteger(seat) ? room.heroes[seat] : null;
     if (!hero || (actor.role === 'player' && actor.seat !== seat)) reject('只能操作自己的英雄。', 403);
-    if ((typeof body.type === 'string' && body.type.startsWith('attack-')) || body.type === 'turn-spend') {
+    if ((typeof body.type === 'string' && body.type.startsWith('attack-'))
+        || ['turn-spend', 'bonus-attack-start', 'bonus-attack-cancel'].includes(body.type)) {
       return this.applyTitanAction(room, hero, seat, body);
     }
     switch (body.type) {
@@ -957,17 +968,35 @@ export class BattleRoom extends DurableObject {
 
   applyTitanAction(room, hero, seat, body) {
     const turn = room.turn;
-    if (!room.board || turn?.phase !== 'titans' || hero.condition === 'dead'
-        || !roomDice.canAttackNormally(turn, seat) || turn.aiSignatureId) {
+    const { type, bonusId } = body;
+    if (!room.board || !turn || turn.aiSignatureId) reject('当前无法结算泰坦的攻击，请先结束招牌技。', 409);
+    const bonus = turn.bonusAttack;
+    const moving = index => room.board.titanMoves?.[index] || room.board.abilityTitanMoves?.[index]
+      || room.board.forcedTitanMoves?.[index];
+    if (type === 'bonus-attack-start') {
+      if (!room.battleDeck || hero.condition === 'dead' || attackInProgress(turn) || moving(turn.seat) || moving(seat)
+          || room.projection?.bpPending || (room.projection?.sharedDeck && room.projection.aiPending) || room.turn.aiMovement?.pending) {
+        reject('请在牌面允许的时点开始，先处理当前移动、攻击或冲撞。', 409);
+      }
+      turn.bonusAttack = { id: body.id, seat, stage: 'select' };
+      return;
+    }
+    if ((bonus || bonusId) && (!bonus || bonus.id !== bonusId || bonus.seat !== seat)) {
+      reject('奖励攻击状态已更新，请核对当前攻击者。', 409);
+    }
+    if (bonus && type === 'bonus-attack-cancel' && bonus.stage === 'select') {
+      delete turn.bonusAttack;
+      return;
+    }
+    if (!bonus && (turn.phase !== 'titans' || hero.condition === 'dead' || !roomDice.canAttackNormally(turn, seat))) {
       reject('请在该泰坦可行动的回合操作，先完成招牌技。', 409);
     }
-    const { type } = body;
-    const attack = turn.actions?.attack;
+    const attack = bonus || turn.actions?.attack;
     if (type === 'attack-declare') {
-      if (attack || room.board.titanMoves?.[seat] || room.board.abilityTitanMoves?.[seat] || room.board.forcedTitanMoves?.[seat]) {
+      if (hero.condition === 'dead' || (bonus ? attack.stage !== 'select' : Boolean(attack)) || moving(seat)) {
         reject('请先结束移动，或本回合的作战行动已使用。', 409);
       }
-      if (!turn.actions && turn.seat === seat && room.rolls.some(roll =>
+      if (!bonus && !turn.actions && turn.seat === seat && room.rolls.some(roll =>
         roll.seat === seat && roll.round === room.round && roll.mode === 'attack' && !roll.extraAttack)) {
         reject('此回合已有旧版攻击，按原流程结算。', 409);
       }
@@ -979,9 +1008,14 @@ export class BattleRoom extends DurableObject {
       const range = gearRolls.range(item.id) ?? gearRolls.manualRange(body.range);
       if (!range) reject('请按武器牌面确认有效射程。', 409);
       if (!titanAttackTarget(room.board, seat, range)?.legal) reject('从当前站位无法同时满足有效射程和视线。', 409);
-      claimTurn(room, seat);
-      (turn.actions ||= {}).attack = { stage: 'declared', weapon: item.id, range };
-      if (hero.stats.rage < 30) changeRage(room, hero, seat, 1);
+      if (bonus && typeof body.addRage !== 'boolean') reject('请确认牌面是否增加怒气。');
+      const declared = { stage: 'declared', weapon: item.id, range };
+      if (bonus) Object.assign(bonus, declared, { addRage: body.addRage });
+      else {
+        claimTurn(room, seat);
+        (turn.actions ||= {}).attack = declared;
+      }
+      if ((!bonus || body.addRage) && hero.stats.rage < 30) changeRage(room, hero, seat, 1);
       return;
     }
     if (type === 'turn-spend') {
@@ -996,7 +1030,7 @@ export class BattleRoom extends DurableObject {
       else actions.attack = { stage: 'done', spent: true };
       return;
     }
-    if (turn.seat !== seat || !attack) reject('当前没有待结算的作战。', 409);
+    if ((!bonus && turn.seat !== seat) || !attack) reject('当前没有待结算的作战。', 409);
     if (type === 'attack-check' && attack.stage === 'rolled' && body.roll === attack.roll) {
       if (body.value === 'hit') attack.stage = 'first';
       else if (body.value === 'miss') {
@@ -1012,7 +1046,8 @@ export class BattleRoom extends DurableObject {
       return;
     }
     if (type === 'attack-finish' && ['miss', 'second'].includes(attack.stage)) {
-      attack.stage = 'done';
+      if (bonus) delete turn.bonusAttack;
+      else attack.stage = 'done';
       if (room.secondAbility?.seat === seat) delete room.secondAbility;
       return;
     }
@@ -1036,19 +1071,24 @@ export class BattleRoom extends DurableObject {
         || (mode === 'power' && parent.round !== room.round) || (mode === 'defense' && parent.defenseRoll))) {
       reject('关联投掷已结算或不存在。', 409);
     }
-    const extra = extraAttack === true || (mode === 'power' && parent?.extraAttack === true);
+    const turn = room.turn;
     const activeAttack = mode === 'attack' || mode === 'power';
+    const bonus = activeAttack && turn?.bonusAttack;
+    if (activeAttack && (bonus || body.bonusId || parent?.bonusId)
+        && (!bonus || bonus.id !== body.bonusId || bonus.seat !== seat)) {
+      reject('请按当前奖励攻击的步骤投掷。', 409);
+    }
+    const extra = Boolean(bonus || extraAttack === true || (mode === 'power' && parent?.extraAttack === true));
     if (activeAttack && (hero.condition === 'dead' || (!extra && !roomDice.canAttackNormally(room.turn, seat)))) {
       reject('普通攻击和威力须在该泰坦可行动的回合结算。', 409);
     }
-    const turn = room.turn;
     const normal = activeAttack && !extra && room.board && turn?.phase === 'titans'
       && (turn.seat === null || turn.actions);
-    const attack = normal ? turn.actions?.attack : null;
-    if (activeAttack && (turn?.aiSignatureId || (extra && attackInProgress(turn)))) {
+    const attack = bonus || (normal ? turn.actions?.attack : null);
+    if (activeAttack && (turn?.aiSignatureId || (extra && !bonus && attackInProgress(turn)))) {
       reject('请先结束当前作战或招牌技，再结算下一次攻击。', 409);
     }
-    if (normal && (mode === 'attack'
+    if ((normal || bonus) && (mode === 'attack'
       ? attack?.stage !== 'declared' || attack.weapon !== weapon
       : attack?.stage !== 'bp' || attack.roll !== parent?.id || !room.projection?.bpPending || room.battleDeck?.bpSeat !== seat)) {
       reject(mode === 'attack' ? '请先宣告本次攻击。' : '请先揭示本次攻击的部位牌，再投掷威力。', 409);
@@ -1067,6 +1107,7 @@ export class BattleRoom extends DurableObject {
       by: actor.role === 'host' ? 'host' : 'seat:' + seat };
     if (weapon) roll.weapon = weapon;
     if (extra) roll.extraAttack = true;
+    if (bonus) roll.bonusId = bonus.id;
     if (parent) {
       roll.parentRoll = parent.id;
       if (mode === 'defense') parent.defenseRoll = roll.id;
@@ -1083,7 +1124,7 @@ export class BattleRoom extends DurableObject {
     if (room.rolls.length > 30) {
       const keep = new Set(roomDice.latestByHero(room.rolls, room.lastBattleRollId));
       const linkedDodges = new Set([...keep].flatMap(entry => entry.mode === 'defense' && entry.parentRoll ? [entry.parentRoll] : []));
-      const activeRolls = room.turn?.actions?.attack;
+      const activeRolls = turn?.bonusAttack || turn?.actions?.attack;
       const oldest = room.rolls.findLastIndex(entry => !keep.has(entry) && !linkedDodges.has(entry.id)
         && entry.id !== activeRolls?.roll && entry.id !== activeRolls?.powerRoll);
       room.rolls.splice(oldest, 1);
@@ -1102,7 +1143,12 @@ export class BattleRoom extends DurableObject {
     const roll = room.rolls.find(entry => entry.id && entry.id === body.roll && entry.seat === seat);
     if (!roll) reject('找不到该英雄的这次投掷。', 409);
     if (!roomDice.canAdjustRoll(roll, room.turn, room.round)) reject('当前无法调整这次攻击或威力投掷。', 409);
-    const attack = room.turn?.actions?.attack;
+    const bonus = room.turn?.bonusAttack;
+    if (roll.bonusId && bonus?.id !== roll.bonusId) reject('该次奖励攻击已经结束。', 409);
+    if (bonus && ['attack', 'power'].includes(roll.mode) && roll.bonusId !== bonus.id) {
+      reject('请先结束当前奖励攻击。', 409);
+    }
+    const attack = bonus || room.turn?.actions?.attack;
     if (attack && ((roll.id === attack.roll && attack.stage !== 'rolled')
       || (roll.id === attack.powerRoll && attack.stage !== 'power'))) {
       reject('该次投掷的结果已经确认。', 409);

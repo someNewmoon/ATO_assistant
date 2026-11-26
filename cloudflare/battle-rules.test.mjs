@@ -1181,3 +1181,63 @@ test('线上普通移动与作战各用一次，可任选先后，宣告只增�
     assert.deepEqual(r.turn, { phase: 'titans', seat: null, finished: [0] });
   }
 });
+
+test('奖励攻击独立于回合行动，支持骇物轮次、取消、触发方归属和威力结算', () => {
+  for (const phase of ['titans', 'apostle']) {
+    const r = room(), attacker = { role: 'player', seat: 1 };
+    r.board = api.setupRoomBoard({ apostle: 'HEKATON', level: 1 }, 2);
+    r.board.map.terrain = [];
+    r.board.map.pieces = { apostle: { column: 8.5, row: 7.5, facing: 0 },
+      titans: [{ column: 7, row: 7 }, { column: 7, row: 8 }] };
+    r.heroes[1].gear = [{ id: 'AJ0185', count: 1, used: 0 }];
+    r.turn = phase === 'titans' ? { phase, seat: 0, finished: [1], actions: { movementUsed: true, attack: { stage: 'done' } } }
+      : { phase, seat: null, finished: [], aiGuide: 'resolve', aiTarget: 1 };
+    const originalTurn = structuredClone(r.turn);
+    const face = type => ({ type, level: 'I', index: 1, _room: {
+      face: { src: `ps/HEKATON/HEKATON_${type}_I_001.jpg`, label: type },
+      back: { src: `ps/HEKATON/HEKATON_${type}_I_001_BACK.jpg` }, tier: 'I',
+    } });
+    const pile = type => ({ deck: [face(type)], discard: [], removed: [], supply: { II: [], III: [] } });
+    const deck = { apostle: 'HEKATON', lastRevealed: {}, tokens: [], AI: pile('AI'), BP: { ...pile('BP'), damage: [] } };
+    r.battleDeck = api.prepareRoomDeck(deck, 'HEKATON');
+    r.projection = api.roomDeckProjection(r.battleDeck, {});
+    const act = (type, data = {}, who = attacker) => reducer.apply(r, who,
+      { type, id: type, seat: 1, round: 1, phase, ...data });
+    if (phase === 'apostle') {
+      r.projection.aiPending = true;
+    }
+    act('bonus-attack-start', { id: 'cancelled' });
+    act('bonus-attack-cancel', { bonusId: 'cancelled' });
+    assert.deepEqual(r.turn, originalTurn);
+    assert.equal(r.heroes[1].stats.rage, 0);
+
+    act('bonus-attack-start', { id: 'bonus' });
+    const action = (type, data = {}) => act(type, { bonusId: 'bonus', ...data });
+    assert.throws(() => act('attack-declare', { weapon: 'AJ0185' }), /奖励攻击状态/);
+    assert.throws(() => action('attack-declare', { weapon: 'AJ0185' }), /是否增加怒气/);
+    assert.throws(() => action('bp-request'), /第一能力时段/);
+    action('attack-declare', { weapon: 'AJ0185', addRage: phase === 'titans' });
+    assert.equal(r.heroes[1].stats.rage, phase === 'titans' ? 1 : 0);
+    assert.throws(() => action('attack-declare', { weapon: 'AJ0185', addRage: true }), /已使用/);
+    assert.throws(() => action('bonus-attack-cancel'), /步骤已经变化/);
+    assert.throws(() => act('turn-phase', { value: 'titans' }, host), /结束当前奖励攻击/);
+    assert.throws(() => act('roll', { bonusId: 'bonus', seat: 0, mode: 'attack', counts: { d10: 1 } }, host), /当前奖励攻击/);
+    action('roll', { id: 'attack', mode: 'attack', weapon: 'AJ0185', counts: { d10: 2 } });
+    action('attack-check', { roll: 'attack', value: 'hit' });
+    action('attack-first');
+    action('bp-request');
+    assert.equal(r.battleDeck.bpSeat, 1);
+    action('roll', { id: 'power', mode: 'power', parentRoll: 'attack', counts: { red: 1 } });
+    action('bp-settle', { id: 'bp-result', roll: 'power', value: 1, card: face('BP')._room.face.src });
+    assert.equal(r.battleStats[1].damage, 1);
+    assert.equal(r.battleStats[0]?.damage ?? 0, 0);
+    r.pool.opening = 2;
+    action('attack-clear');
+    assert.equal(r.pool.opening, 0);
+    action('attack-finish');
+    assert.deepEqual(r.turn, originalTurn);
+    assert.equal(r.rolls[0].bonusId, 'bonus');
+    assert.equal(r.rolls[0].bpOutcome, 1);
+    assert.throws(() => action('roll', { mode: 'power', parentRoll: 'attack', counts: { red: 1 } }), /当前奖励攻击/);
+  }
+});

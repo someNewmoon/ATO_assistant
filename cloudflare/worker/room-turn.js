@@ -17,7 +17,7 @@ export function forcedTitanMove(room, body) {
 
 export function canClaimTurn(room, seat) {
   const turn = room.turn;
-  return turn?.phase === 'titans' && turn.seat === null && room.heroes[seat]
+  return turn?.phase === 'titans' && turn.seat === null && !turn.bonusAttack && room.heroes[seat]
     && room.heroes[seat].condition !== 'dead' && !turn.finished.includes(seat);
 }
 
@@ -37,7 +37,7 @@ export function finishAiMovement(room) {
 
 export function attackInProgress(turn) {
   const stage = turn?.actions?.attack?.stage;
-  return Boolean(stage && stage !== 'done');
+  return Boolean(turn?.bonusAttack || (stage && stage !== 'done'));
 }
 
 function validAiTarget(room, target) {
@@ -128,6 +128,7 @@ export function applyTurn(room, actor, action) {
   const { turn, round } = room;
   const { seat, type, value } = action;
   if (action.round !== round || action.phase !== (turn?.phase ?? null)) throw new ApiError(409, '轮次已更新，请重试。');
+  if (turn?.bonusAttack) throw new ApiError(409, '请先结束当前奖励攻击。');
   if (type === 'ai-guide') return confirmAiStep(room, actor, action);
   if (type === 'turn-phase') {
     if (actor.role !== 'host') throw new ApiError(403, '轮次由房主切换。');

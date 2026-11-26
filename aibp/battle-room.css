@@ -897,3 +897,14 @@ body.aibp-active-online-battle #heroBattleRoster { display: none; }
   background: var(--folio-inset, #efe4d2);
   box-shadow: inset 0 0 0 1px var(--folio-rule, #936538);
 }
+
+.room-turn-bonus {
+  min-width: 0;
+}
+.room-turn-bonus > summary {
+  cursor: pointer;
+}
+.room-turn-bonus > small {
+  display: block;
+  margin-block: 4px;
+}

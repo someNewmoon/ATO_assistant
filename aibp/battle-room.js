@@ -55,6 +55,9 @@
   let rollSeat = 0;
   let equipmentSeat = 0;
   let lastSecondAbility;
+  let bonusReturn;
+  let openedBonus;
+
 
   let parentRoll = '';
   let armedCard = '';
@@ -89,6 +92,7 @@
       weaponArt: id => window.ATO_BATTLE_ASSETS?.gearThumbSrc(id, roomLanguage)
         || window.ATO_BATTLE_ASSETS?.gearSrc(id, roomLanguage),
       select: chooseWeapon, selectRange: chooseWeaponRange, openDice: openAttackDice, declare: declareAttack,
+      startBonus: startBonusAttack, canStartBonus: canStartBonusAttack,
       speed: seat => window.ATO_TITAN_PANEL_REFERENCE?.forTitan(state.heroes[seat]?.titan, window.ATO_GEAR_INVENTORY)?.movement,
     });
 
@@ -200,16 +204,34 @@
     }
     document.body.classList.toggle('aibp-room-only', actor.role !== 'host');
     if (actor.role === 'host' && state.board) window.setAibpRoomBattleLevel?.(state.board.apostle, state.board.level);
-    const attack = activeAttackFor(state.turn?.seat);
+    const bonus = state.turn?.bonusAttack;
+    const priorBonus = prior?.turn?.bonusAttack;
+    const bonusChanged = bonus?.id !== priorBonus?.id;
+    const ownsBonus = bonus && (actor.role === 'host' || actor.role === 'player' && actor.seat === bonus.seat);
+    if (ownsBonus && bonusChanged) {
+      bonusReturn = { seat: rollSeat, mode: rollMode, parent: parentRoll };
+      if (actor.role === 'host') rollSeat = bonus.seat;
+      rollMode = 'attack';
+    } else if (!bonus && priorBonus && bonusReturn) {
+      ({ seat: rollSeat, mode: rollMode, parent: parentRoll } = bonusReturn);
+      bonusReturn = null;
+    }
+    const actingSeat = bonus?.seat ?? state.turn?.seat;
+    const attack = activeAttackFor(actingSeat);
     const localSeat = actor.role === 'host' ? rollSeat : actor.seat;
-    const follows = attack && localSeat === state.turn.seat;
-    if (follows && (!prior || prior.turn?.actions?.attack?.stage !== attack.stage)
+    const follows = attack && localSeat === actingSeat;
+    if (follows && (bonusChanged || !prior || (priorBonus || prior.turn?.actions?.attack)?.stage !== attack.stage)
         && (first || ['attack', 'power'].includes(rollMode))) {
       rollMode = ['bp', 'power', 'cleanup', 'second'].includes(attack.stage) ? 'power' : 'attack';
       parentRoll = attack.roll || '';
     }
     roomBoard?.sync(state, actor);
     render();
+    if (ownsBonus && bonusChanged && openedBonus === bonus.id) {
+      openedBonus = null;
+      turnWindow.open = false;
+      roomBoard?.openBonusAttack(bonus.seat);
+    }
     if (!first && prior && actor.role !== 'viewer') animateLatestRoll(prior);
     const second = state.secondAbility;
     if (!first && second?.criticalWounds > 0 && prior?.secondAbility?.id !== second.id) {
@@ -534,6 +556,13 @@
       return;
     }
     const { turnAction: type, seat, value } = button.dataset;
+    if (type === 'bonus-attack-start') { startBonusAttack(Number(seat)); return; }
+    if (type === 'bonus-attack-open') {
+      turnWindow.open = false;
+      if (state.turn.bonusAttack.stage === 'select') roomBoard?.openBonusAttack(Number(seat));
+      else openAttackDice(Number(seat));
+      return;
+    }
     if (type === 'turn-undo') {
       if (!state.canUndoTurn || actions.some(entry => entry.type === type)) return;
       send({ id: crypto.randomUUID(), type, revision: state.revision });
@@ -640,6 +669,7 @@
     const host = actor.role === 'host';
     const aiRound = (state.squad?.battleNumber || 0) + ':' + state.round;
     const signatureActive = titans && aiGuide.isInsertedSignature(turn.aiGuide);
+    const bonus = turn?.bonusAttack;
     const guideAvailable = signatureActive || (turn?.phase === 'apostle' && aiGuide.bosses.includes(state.board?.apostle));
     const step = guideAvailable && aiGuide.stepFor(turn.aiGuide);
     const shouldDrawAi = host && turn?.phase === 'apostle' && !state.projection?.aiPending
@@ -653,7 +683,8 @@
       : activeSeat !== null ? '泰坦轮次 · ' + state.heroes[activeSeat].name
         : everyoneFinished ? '泰坦轮次 · 全员已结束' : '泰坦轮次 · 等待认领';
     const heading = '第 ' + state.round + ' 轮 · ' + label
-      + (signatureActive ? ' · 招牌技结算中' : '') + (turn?.aiMovement?.pending ? ' · 待结算冲撞' : '');
+      + (signatureActive ? ' · 招牌技结算中' : '') + (turn?.aiMovement?.pending ? ' · 待结算冲撞' : '')
+      + (bonus ? ' · 奖励攻击 · ' + state.heroes[bonus.seat].name : '');
     if (turnHeading !== heading) {
       turnHeading = heading;
       turnWindow.querySelector('summary').textContent = heading;
@@ -666,7 +697,7 @@
       const editable = host || (actor.role === 'player' && actor.seat === seat);
       const actions = titans && editable && !dead && !acted ? current
         ? action('turn-finish', '结束回合', ' data-seat="' + seat + '"' + (canFinishTitanTurn(seat) ? '' : ' disabled'))
-        : activeSeat === null ? action('turn-take', '认领回合', ' data-seat="' + seat + '"') : '' : '';
+        : activeSeat === null && !bonus ? action('turn-take', '认领回合', ' data-seat="' + seat + '"') : '' : '';
       return '<li' + (current ? ' aria-current="true"' : '') + '>' + rollAvatar(seat)
         + '<span>' + escape(hero.name) + '<small>' + (dead ? '死亡' : current ? '行动中' : acted ? '已结束' : '待行动')
         + '</small></span>' + actions + '</li>';
@@ -776,14 +807,27 @@
         : activeSeat === null ? '<p>认领后可任选先移动或先作战。</p>' : '';
     const back = host && turn ? action('turn-undo', '上一步', state.canUndoTurn ? ''
       : ' disabled title="仅可撤回刚才的轮次操作；其他战斗操作已发生时无法撤回。"') : '';
-    const actions = controls || back ? '<div class="room-turn-controls">' + back + controls + '</div>' : '';
+    const bonusSeatAttr = seat => ' data-seat="' + seat + '"';
+    const ownsBonus = bonus && (host || actor.role === 'player' && actor.seat === bonus.seat);
+    const bonusChoices = host ? state.heroes.map((hero, seat) => canStartBonusAttack(seat)
+      ? action('bonus-attack-start', rollAvatar(seat) + escape(hero.name), bonusSeatAttr(seat)) : '').join('') : '';
+    const bonusControls = ownsBonus ? action('bonus-attack-open', '继续奖励攻击', bonusSeatAttr(bonus.seat))
+      : bonus ? '' : bonusChoices ? '<details class="room-turn-bonus"><summary>结算奖励攻击</summary><small>按牌面触发，选择攻击者。</small>'
+        + '<div class="room-ai-targets">' + bonusChoices + '</div></details>'
+        : actor.role === 'player' && canStartBonusAttack(actor.seat)
+          ? action('bonus-attack-start', '结算奖励攻击', bonusSeatAttr(actor.seat)) : '';
+    const actions = bonus ? (bonusControls ? '<div class="room-turn-controls">' + bonusControls + '</div>' : '')
+      : controls || back || bonusControls ? '<div class="room-turn-controls">' + back + controls + bonusControls + '</div>' : '';
     roomBoard?.setAiRoute(route);
-    const next = guidance + actions + (step && !signatureActive ? '' : '<ul>' + roster + '</ul>') + hint;
+    const next = (bonus ? '' : guidance) + actions + (step && !signatureActive ? '' : '<ul>' + roster + '</ul>') + hint;
     if (turnMarkup !== next) {
       turnMarkup = next;
       const body = turnWindow.querySelector('[data-turn-body]');
+      const bonusPickerOpen = body.querySelector('.room-turn-bonus')?.open;
       body.innerHTML = next;
-      renderApostleFlow(body, step, guideAvailable);
+      const bonusPicker = body.querySelector('.room-turn-bonus');
+      if (bonusPicker) bonusPicker.open = Boolean(bonusPickerOpen);
+      if (!bonus) renderApostleFlow(body, step, guideAvailable);
     }
   }
 
@@ -1243,7 +1287,9 @@
     const attrs = ' data-roll-id="' + escape(roll.id) + '" data-seat="' + roll.seat + '"';
     const mode = dice.modes[roll.mode]?.name;
     const attack = activeAttackFor(roll.seat);
+    const bonus = state.turn?.bonusAttack;
     const canAdjust = editable && dice.canAdjustRoll(roll, state.turn, state.round)
+      && (!['attack', 'power'].includes(roll.mode) || (!roll.bonusId && !bonus) || Boolean(roll.bonusId && bonus?.id === roll.bonusId))
       && (!attack || (roll.id !== attack.roll || attack.stage === 'rolled')
         && (roll.id !== attack.powerRoll || attack.stage === 'power'));
     const rerollable = canAdjust && roll.mode !== 'defense';
@@ -1283,9 +1329,10 @@
           + ' aria-pressed="' + (roll.wounds === value) + '">' + label + '</button>').join('') + '</div>' : '')
       + '</div>' : '';
     const feedback = readOnly ? '' : reactions(roll, latest);
-    const attackFollowup = roll.mode === 'attack' && roll.round === state.round && !attack
+    const attackFollowup = roll.mode === 'attack' && roll.round === state.round && !attack && !roll.bonusId
       && (roll.extraAttack || dice.canAttackNormally(state.turn, roll.seat));
-    const rollLabel = roll.extraAttack ? (roll.mode === 'attack' ? '额外攻击' : '额外攻击威力') : mode;
+    const rollLabel = roll.bonusId ? (roll.mode === 'attack' ? '奖励攻击' : '奖励攻击威力')
+      : roll.extraAttack ? (roll.mode === 'attack' ? '额外攻击' : '额外攻击威力') : mode;
     const heading = '<h4>' + rollAvatar(roll.seat) + escape(roll.hero) + (rollLabel ? ' · ' + rollLabel : '')
       + ' <small>第 ' + roll.round + ' 轮</small></h4>';
     const rerollControls = rerollable && roll.dice.some(dice.canReroll) ? '<div class="room-reroll-controls" data-dice-reveal><button type="button" data-action="reroll"' + attrs
@@ -1319,6 +1366,8 @@
 
   function canRequestBp(seat) {
     const turn = state.turn;
+    if (turn?.bonusAttack) return turn.bonusAttack.seat === seat && turn.bonusAttack.stage === 'bp'
+      && state.heroes[seat].condition !== 'dead' && dice.canUseBodyPart(state, seat, state.bpSeat);
     const inTurn = turn?.phase !== 'apostle'
       && (turn?.seat == null || turn.seat === seat) && !turn?.finished?.includes(seat);
     const tracked = usesTitanActions(seat) && !dice.pendingPowerRoll(state, seat)?.extraAttack;
@@ -1329,7 +1378,9 @@
   }
 
   function canSettleBp(seat) {
-    return Boolean(state.projection?.bpPending && state.projection.bp?.src && state.heroes[seat])
+    const bonus = state.turn?.bonusAttack;
+    return (!bonus || bonus.seat === seat && bonus.stage === 'power')
+      && Boolean(state.projection?.bpPending && state.projection.bp?.src && state.heroes[seat])
       && (actor.role === 'host' || state.heroes[seat].condition !== 'dead')
       && dice.canUseBodyPart(state, seat, state.bpSeat);
   }
@@ -1424,18 +1475,40 @@
 
   function attackInProgress(turn) {
     const stage = turn?.actions?.attack?.stage;
-    return Boolean(stage && stage !== 'done');
+    return Boolean(turn?.bonusAttack || (stage && stage !== 'done'));
   }
 
   function activeAttackFor(seat) {
-    return state.turn?.seat === seat ? state.turn.actions?.attack : null;
+    const turn = state.turn;
+    if (turn?.bonusAttack) return turn.bonusAttack.seat === seat ? turn.bonusAttack : null;
+    return turn && turn.seat === seat ? turn.actions?.attack : null;
+  }
+
+  function bonusContext(seat) {
+    const bonus = state.turn?.bonusAttack;
+    return bonus && bonus.seat === seat ? { bonusId: bonus.id } : {};
+  }
+
+  function canStartBonusAttack(seat) {
+    const turn = state.turn;
+    const moving = index => state.board?.titanMoves?.[index] || state.board?.abilityTitanMoves?.[index] || state.board?.forcedTitanMoves?.[index];
+    return Boolean(turn && state.board && state.deckRevision && !state.closed && state.heroes[seat]
+      && state.heroes[seat].condition !== 'dead' && !attackInProgress(turn) && !turn.aiSignatureId
+      && !turn.aiMovement?.pending && !state.projection?.bpPending && !(state.projection?.sharedDeck && state.projection.aiPending)
+      && !moving(turn.seat) && !moving(seat));
+  }
+
+  function startBonusAttack(seat) {
+    if (!canStartBonusAttack(seat) || actions.some(action => action.type === 'bonus-attack-start')) return;
+    openedBonus = crypto.randomUUID();
+    send({ id: openedBonus, type: 'bonus-attack-start', seat });
   }
 
   function usesTitanActions(seat) {
     const turn = state.turn;
     const legacy = turn?.seat === seat && !turn.actions && state.rolls.some(roll =>
       roll.seat === seat && roll.round === state.round && roll.mode === 'attack' && !roll.extraAttack);
-    return Boolean(state.board && turn?.phase === 'titans' && !legacy);
+    return Boolean(state.board && (turn?.bonusAttack?.seat === seat || turn?.phase === 'titans' && !legacy));
   }
 
   function canFinishTitanTurn(seat) {
@@ -1475,7 +1548,8 @@
   }
 
   function chooseWeapon(seat, id) {
-    if (activeAttackFor(seat)) return;
+    const attack = activeAttackFor(seat);
+    if (attack && attack.stage !== 'select') return;
     const item = availableWeapons(seat).find(weapon => weapon.id === id);
     const draft = readDiceDraft(seat, 'attack');
     const validRange = draft.weapon === id ? draft.range : null;
@@ -1500,19 +1574,21 @@
     content.querySelector('#room-dice')?.scrollIntoView({ block: 'start' });
   }
 
-  function declareAttack(seat) {
+  function declareAttack(seat, addRage) {
     const weapon = chosenBoardWeapon(seat);
     if (!weapon?.ready || !weapon.range || actions.some(action => action.type === 'attack-declare')) return;
     if (actor.role === 'host') rollSeat = seat;
     rollMode = 'attack';
     if (weapon.id !== readDiceDraft(seat, 'attack').weapon) chooseWeapon(seat, weapon.id);
-    send({ id: crypto.randomUUID(), type: 'attack-declare', seat, weapon: weapon.id, range: weapon.range });
+    send({ id: crypto.randomUUID(), type: 'attack-declare', seat, weapon: weapon.id, range: weapon.range,
+      ...bonusContext(seat), ...(typeof addRage === 'boolean' && { addRage }) });
   }
 
   function attackForPower(seat) {
     const relevant = state.rolls.find(roll => roll.id === parentRoll && roll.mode === 'attack' && roll.seat === seat)
       || state.rolls.find(roll => roll.mode === 'attack' && roll.round === state.round && roll.seat === seat);
-    if (parentRoll && relevant?.extraAttack && relevant.id === parentRoll) return relevant;
+    if (state.turn?.bonusAttack?.seat === seat) return state.rolls.find(roll => roll.id === state.turn.bonusAttack.roll) || null;
+    if (parentRoll && relevant?.extraAttack && !relevant.bonusId && relevant.id === parentRoll) return relevant;
     return state.rolls.find(roll => roll.id === activeAttackFor(seat)?.roll) || relevant || null;
   }
 
@@ -1525,7 +1601,13 @@
   function canSubmitAttack(seat) {
     if (rollMode !== 'attack' && rollMode !== 'power') return true;
     if (state.heroes[seat]?.condition === 'dead' || state.turn?.aiSignatureId) return false;
-    if (rollMode === 'power' && powerRollParent(seat)?.extraAttack && !attackInProgress(state.turn)) return true;
+    if (state.turn?.bonusAttack) {
+      const attack = activeAttackFor(seat);
+      return rollMode === 'attack' ? attack?.stage === 'declared'
+        : attack?.stage === 'bp' && state.projection?.bpPending && state.bpSeat === seat;
+    }
+    const source = rollMode === 'power' && powerRollParent(seat);
+    if (source?.extraAttack && !source.bonusId && !attackInProgress(state.turn)) return true;
     if (!dice.canAttackNormally(state.turn, seat)) return false;
     if (!usesTitanActions(seat)) return true;
     const attack = activeAttackFor(seat);
@@ -1568,13 +1650,13 @@
         const profile = gearProfile(item);
         const range = gearRolls.range(item.id);
         return '<li><button type="button" data-attack-weapon="' + escape(item.id) + '" aria-pressed="' + (weapon?.id === item.id)
-          + '"' + (attack || !item.ready && tracked ? ' disabled' : '') + '>' + escape(item.name) + '<small>'
+          + '"' + (attack && attack.stage !== 'select' || !item.ready && tracked ? ' disabled' : '') + '>' + escape(item.name) + '<small>'
           + (profile ? '攻击骰 ' + profile[0] : '骰数按牌面') + (range ? ' · ' + weaponRangeLabel(range) : '') + '</small></button>'
           + gearCardReference(item) + '</li>';
       }).join('');
       const rage = hero.stats.rage;
       return '<section class="room-roll-reference"><h4>武器</h4><div>'
-        + (tracked ? (!attack && '<a href="#room-movement">返回版图核对射程并宣告</a>') || ''
+        + (tracked ? ((!attack || attack.stage === 'select') && '<a href="#room-movement">返回版图核对射程并宣告</a>') || ''
           : '<button type="button" data-action="stat" data-key="rage" data-delta="1" data-seat="' + seat
             + '"' + (rage >= 30 || hero.condition === 'dead' ? ' disabled' : '') + '>怒气 +1</button>')
         + '<span>当前怒气 ' + rage + '</span></div>'
@@ -1633,6 +1715,8 @@
   function titanAttackControls(seat) {
     const attack = activeAttackFor(seat);
     if (!attack || attack.stage === 'done') return '';
+    const bonus = state.turn?.bonusAttack?.seat === seat;
+    const finishLabel = bonus ? '结束奖励攻击' : '结束作战';
     const control = (type, label, value = '') => '<button type="button" data-titan-attack="' + type
       + '" data-seat="' + seat + '" data-value="' + value + '">' + label + '</button>';
     const controls = {
@@ -1642,10 +1726,12 @@
       power: '<small>核对威力、潜力与永世力场，按牌面处理当前攻击的骇物响应，再确认部位牌结果。需要开启新一次攻击的招牌技在本次作战结束后执行。</small>',
       cleanup: '<small>处理伤口及激化后清空克拉托斯池。需保留的牌面标记可在清池后手动补回。</small>'
         + control('attack-clear', '清池并进入第二能力时段'),
-      second: '<small>在下方放置本次标记，再结束作战。</small>' + control('attack-finish', '第二能力时段完成 · 结束作战'),
-      miss: '<small>克拉托斯池已清空。按牌面处理完全失手效果后结束作战。</small>' + control('attack-finish', '结束作战'),
+      second: '<small>在下方放置本次标记，再结束作战。</small>' + control('attack-finish', '第二能力时段完成 · ' + finishLabel),
+      miss: '<small>克拉托斯池已清空。按牌面处理完全失手效果后结束本次攻击。</small>' + control('attack-finish', finishLabel),
+      select: '<a href="#room-movement">回版图选择武器并宣告</a>',
     };
-    return '<section class="room-attack-progress"><strong>' + attackStageLabel(attack.stage) + '</strong>'
+    return '<section class="room-attack-progress"><strong>' + (bonus ? '奖励攻击 · ' : '')
+      + (attack.stage === 'select' ? '待宣告' : attackStageLabel(attack.stage)) + '</strong>'
       + (controls[attack.stage] || '') + '</section>';
   }
 
@@ -1847,22 +1933,22 @@
 
   window.submitAibpRoomBp = mode => {
     if (actor?.role !== 'host' || !state.deckRevision || state.closed || state.squad?.phase !== 'battle') return false;
-    const seat = state.bpSeat ?? state.turn?.seat ?? rollSeat;
+    const seat = state.bpSeat ?? state.turn?.bonusAttack?.seat ?? state.turn?.seat ?? rollSeat;
     if (!mode) {
-      const activeSeat = state.turn?.seat;
+      const activeSeat = state.turn?.bonusAttack?.seat ?? state.turn?.seat;
       const drawSeat = state.bpSeat ?? activeSeat ?? (dice.pendingPowerRoll(state, rollSeat) ? rollSeat : undefined);
       if (drawSeat !== undefined && !canRequestBp(drawSeat)) { say('请在对应的泰坦回合揭示部位牌。'); return true; }
-      send({ id: crypto.randomUUID(), type: 'bp-request', seat: drawSeat, round: state.round });
+      send({ id: crypto.randomUUID(), type: 'bp-request', seat: drawSeat, round: state.round, ...bonusContext(drawSeat) });
       return true;
     }
     const value = ['discard', 'defeat', 'critical'].indexOf(mode);
-    if (value < 0 || (state.projection?.sharedDeck && state.projection.aiPending)) return false;
+    if (value < 0 || (!state.turn?.bonusAttack && state.projection?.sharedDeck && state.projection.aiPending)) return false;
     if (!canSettleBp(seat)) {
       say('请先揭示并核对当前部位牌。');
       return true;
     }
     const roll = dice.pendingPowerRoll(state, seat);
-    send({ id: crypto.randomUUID(), type: 'bp-settle', seat, round: state.round,
+    send({ id: crypto.randomUUID(), type: 'bp-settle', seat, round: state.round, ...bonusContext(seat),
       ...(roll && { roll: roll.id }), value, card: state.projection.bp.src });
     return true;
   };
@@ -2604,7 +2690,7 @@
       const type = button.dataset.titanAttack;
       const attack = activeAttackFor(seat);
       if (!attack || actions.some(action => action.type === type)) return;
-      send({ id: crypto.randomUUID(), type, seat, value: button.dataset.value, roll: attack.roll });
+      send({ id: crypto.randomUUID(), type, seat, value: button.dataset.value, roll: attack.roll, ...bonusContext(seat) });
       if (type === 'attack-finish') boardMount.scrollIntoView({ block: 'start' });
       return;
     }
@@ -2623,12 +2709,14 @@
     }
     if (button.dataset.bpRequest !== undefined) {
       if (button.disabled || !state || state.closed) return;
-      send({ id: crypto.randomUUID(), type: 'bp-request', seat: Number(button.dataset.bpRequest), round: state.round });
+      const seat = Number(button.dataset.bpRequest);
+      send({ id: crypto.randomUUID(), type: 'bp-request', seat, round: state.round, ...bonusContext(seat) });
       return;
     }
     if (button.dataset.bpSettle !== undefined) {
       if (actions.some(action => action.type === 'bp-settle')) return;
-      send({ id: crypto.randomUUID(), type: 'bp-settle', seat: Number(button.dataset.seat),
+      const seat = Number(button.dataset.seat);
+      send({ id: crypto.randomUUID(), type: 'bp-settle', seat, ...bonusContext(seat),
         round: state.round, roll: button.dataset.rollId, value: Number(button.dataset.bpSettle), card: state.projection?.bp?.src });
       return;
     }
@@ -2739,6 +2827,7 @@
       const weapon = rollMode === 'attack' && fields.get('weapon');
       const linked = rollMode === 'power' ? powerRollParent(seat)?.id : parentRoll;
       send({ id: crypto.randomUUID(), type: 'roll', mode: rollMode, seat, counts,
+        ...(['attack', 'power'].includes(rollMode) && bonusContext(seat)),
         ...(weapon && { weapon }), ...(linked && { parentRoll: linked }) });
       parentRoll = '';
 

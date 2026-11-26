@@ -422,6 +422,7 @@ function renderMixedStoryBody(story, text) {
   // 段首 (拇指)/(圈) 换原书图标；与故事页同一套显示层处理，源文本不动。
   window.ATO_STORY_MARKS?.decorate?.(elements.storyBody);
   window.ATO_STORY_RULE_HIGHLIGHTS?.decorate(elements.storyBody);
+  window.ATO_STORY_CHAPTER_COVERS?.hideRepeatedTitle(elements.storyBody, story.title);
   elements.storyBody.scrollTop = 0;
   elements.storyBody.scrollLeft = 0;
 }
@@ -476,7 +477,8 @@ function openStory(screen, forceRender = false) {
   }
   storyRendered = true;
   elements.storyBookTitle.textContent = story.bookTitle || "ATO 故事书";
-  elements.storySection.textContent = story.section || "";
+  if (covers) covers.renderSection(elements.storySection, story.section || "");
+  else elements.storySection.textContent = story.section || "";
   elements.storyTitle.textContent = story.title || "当前故事文本";
   elements.storyEntryId.textContent = story.id || "";
   elements.storyEntryId.toggleAttribute?.("data-cover-hide-id", covers ? !covers.showEntryId(story.title || "", story.id) : false);

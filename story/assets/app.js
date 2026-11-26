@@ -3498,6 +3498,7 @@
     window.ATO_STORY_MAIN_RECORD?.show(entry, storyText);
     annotateEntityTextNodes(storyText);
     window.ATO_STORY_RULE_HIGHLIGHTS?.decorate(storyText);
+    window.ATO_STORY_CHAPTER_COVERS?.hideRepeatedTitle(storyText, storyTitleText(entry, displayEntry));
     refreshSecondScreenStoryContentToggle(Boolean(secondScreenStoryModeToggle?.checked));
   }
 
@@ -4286,7 +4287,9 @@
     copyParagraphButton.disabled = false;
     syncSelectorsToEntry(entry);
 
-    sectionLabel.textContent = entry.encounter ? `${entryChapterLabel(entry)} / ${entry.encounter}` : entryChapterLabel(entry);
+    const section = entry.encounter ? `${entryChapterLabel(entry)} / ${entry.encounter}` : entryChapterLabel(entry);
+    if (window.ATO_STORY_CHAPTER_COVERS) window.ATO_STORY_CHAPTER_COVERS.renderSection(sectionLabel, section);
+    else sectionLabel.textContent = section;
     renderEntryTitle(entry);
     entryBadge.textContent = entry.id;
 

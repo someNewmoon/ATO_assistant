@@ -49,5 +49,40 @@
     return !prefix.startsWith(id) || !/^(?:$|[\s｜|：:·（）()—–-])/.test(prefix.slice(id.length));
   }
 
-  window.ATO_STORY_CHAPTER_COVERS = { apply, showEntryId };
+  function renderSection(target, text) {
+    const delimiter = text.indexOf(" / ");
+    if (delimiter < 0) {
+      target.textContent = text;
+      return;
+    }
+    const details = document.createElement("span");
+    details.dataset.coverSectionDetails = "";
+    details.textContent = text.slice(delimiter);
+    target.replaceChildren(text.slice(0, delimiter), details);
+  }
+
+  function hideRepeatedTitle(root, title) {
+    const normalized = value => value.trim().replace(/\s+/g, " ");
+    if (!title || !root) return;
+    const container = root.firstElementChild?.classList.contains("story-html") ? root.firstElementChild : root;
+    const first = [...container.childNodes].find(node =>
+      node.nodeType === Node.ELEMENT_NODE || node.nodeType === Node.TEXT_NODE && node.textContent.trim());
+    if (!first) return;
+    if (first.nodeType === Node.ELEMENT_NODE) {
+      if (!first.matches("p, div, h1, h2, h3, h4, h5, h6")
+          || first.querySelector("p, div, br, img, a, button, table, figure")
+          || normalized(first.textContent) !== normalized(title)) return;
+      first.dataset.coverRepeatedTitle = "";
+      return;
+    }
+    const prefix = /^\s*[^\r\n]+\r?\n[ \t]*\r?\n/.exec(first.data)?.[0];
+    if (!prefix || normalized(prefix) !== normalized(title)) return;
+    first.splitText(prefix.length);
+    const heading = document.createElement("span");
+    heading.dataset.coverRepeatedTitle = "";
+    first.before(heading);
+    heading.append(first);
+  }
+
+  window.ATO_STORY_CHAPTER_COVERS = { apply, showEntryId, renderSection, hideRepeatedTitle };
 })();

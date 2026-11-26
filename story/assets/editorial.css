@@ -117,4 +117,6 @@ button { font-weight: 600; }
   color: #fff8ed;
   font-size: 1rem;
 }
-.has-chapter-cover .entry-badge[data-cover-hide-id] { display: none; }
+.has-chapter-cover .entry-badge[data-cover-hide-id],
+.reader-head.has-chapter-cover [data-cover-section-details],
+.reader-head.has-chapter-cover ~ .story-text [data-cover-repeated-title] { display: none; }

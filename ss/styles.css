@@ -1196,10 +1196,18 @@ h1 {
   text-shadow: 0 1px 3px #132d46;
 }
 
-.story-view.has-chapter-cover:not(.images-only) {
-  background-image: linear-gradient(180deg, color-mix(in srgb, var(--bg) 84%, transparent),
-    color-mix(in srgb, var(--bg) 96%, transparent) 42%, var(--bg) 95%), var(--chapter-cover-image);
+.story-view.has-chapter-cover:not(.images-only) .story-card-head {
+  min-height: clamp(6.5rem, 15vh, 9rem);
+  padding: .6rem .8rem 1rem;
+  background-color: var(--bg);
+  background-image: linear-gradient(90deg, var(--bg) 26%, color-mix(in srgb, var(--bg) 88%, transparent) 55%,
+    color-mix(in srgb, var(--bg) 25%, transparent) 100%), var(--chapter-cover-image);
   background-position: center, var(--chapter-cover-anchor);
   background-size: cover;
 }
-.story-view.has-chapter-cover .story-entry-id[data-cover-hide-id] { display: none; }
+.story-view.has-chapter-cover :is(.story-entry-id[data-cover-hide-id], [data-cover-section-details], [data-cover-repeated-title]) {
+  display: none;
+}
+.story-view.has-chapter-cover .story-entry-id:not([data-cover-hide-id]) {
+  background: var(--bg);
+}

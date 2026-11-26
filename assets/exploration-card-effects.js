@@ -174,6 +174,16 @@
     const other = OTHER_ICONS[cycleId]?.[key];
     return other && (!other.badge || other.badge === badge) ? { ...other } : null;
   }
+  function isMnemosAward(text) {
+    return /^Chosen Argonaut gains 1 Mnemos node\.?$/i.test(String(text || "").trim());
+  }
+
+  function playerEffectLabel(text) {
+    if (isMnemosAward(text)) return "选择 1 名阿尔戈英雄，获得 1 个旧忆节点";
+    return String(text || "").replace(/^Chosen Argonaut gains \+?([0-9]+)\s*([ΩΨΛ])\.?$/i,
+      (_, amount, icon) => `选择 1 名阿尔戈英雄，${({ Ω: "怒气", Ψ: "命运", Λ: "凶险" })[icon.toUpperCase()]} +${amount}`);
+  }
+
   function displayIcons(text, cycleId, cardId = "", badge = "") {
     const original = String(text || "");
     const key = `${cycleId}:${String(cardId).split(":").pop()}`;
@@ -580,5 +590,5 @@
     return next;
   }
 
-  return { parse, describe, combineManualReminders, statBounds, apply, revert, iconType, iconIdentity, displayIcons, basicDreamwalkers, setBasicDreamwalkerCount, dreamwalkerLosses, automaticTitanLosses, version: 2 };
+  return { parse, describe, combineManualReminders, statBounds, apply, revert, iconType, iconIdentity, displayIcons, isMnemosAward, playerEffectLabel, basicDreamwalkers, setBasicDreamwalkerCount, dreamwalkerLosses, automaticTitanLosses, version: 2 };
 });

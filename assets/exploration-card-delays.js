@@ -76,9 +76,9 @@
       if (/^At the end of (?:this Exploration Step|the current step), (?:resolve (?:an?|the)|go to the) .+? Battle\b/i.test(text)) {
         descriptor = { kind: "end-step-battle", trigger: "explore-end", battle, label: `探索结束后进入 ${battle}` };
       } else if (/^At the start of the next Timeline Battle, Escalate (\d+)\.$/i.test(text)) {
-        descriptor = { kind: "battle-modifier", trigger: "timeline-battle-start", modifier: "escalate", amount: Number(text.match(/Escalate (\d+)/i)[1]), label: text };
+        descriptor = { kind: "battle-modifier", trigger: "timeline-battle-start", modifier: "escalate", amount: Number(text.match(/Escalate (\d+)/i)[1]) };
       } else if (/^At the start of this battle, Escalate (\d+)\.$/i.test(text) && battle) {
-        descriptor = { kind: "battle-modifier", trigger: "card-battle-start", battle, modifier: "escalate", amount: Number(text.match(/Escalate (\d+)/i)[1]), label: text };
+        descriptor = { kind: "battle-modifier", trigger: "card-battle-start", battle, modifier: "escalate", amount: Number(text.match(/Escalate (\d+)/i)[1]) };
       } else if (/^Add a random Cursed Trait to the next Timeline Battle\.$/i.test(text)) {
         descriptor = { kind: "battle-modifier", trigger: "timeline-battle-start", modifier: "cursed-trait", label: "下次定时战斗增加一个随机诅咒特性" };
       } else if (/^Discard .+ token after the next Timeline Battle\.$/i.test(text) || /^下一次定时战斗后弃置此 .+ 指示物。$/.test(text)) {
@@ -90,10 +90,33 @@
       }
       if (descriptor) {
         const forcedUnknown = /^If\b/i.test(text);
-        result.push({ ...base, ...descriptor, conditionState: conditionState(item, base.id, context, forcedUnknown) });
+        result.push({ ...base, ...descriptor, label: effectLabel({ ...base, ...descriptor }), conditionState: conditionState(item, base.id, context, forcedUnknown) });
       }
     });
     return result;
+  }
+
+  const battleNames = {
+    "Ambush Battle": "伏击战",
+    "Temenos Battle": "卫域之战",
+    "Cruel Lesson Battle": "残酷一课",
+    "Pandora Horizon Battle": "潘多拉视界之战",
+  };
+
+  function effectLabel(item) {
+    if (item.modifier === "escalate") {
+      return `${item.trigger === "timeline-battle-start" ? "下次定时战斗" : "本场战斗"}开始时，激化 ${item.amount}`;
+    }
+    if (item.kind === "end-step-battle" && battleNames[item.battle]) return `探索结束后进入${battleNames[item.battle]}`;
+    return item.label || item.text;
+  }
+
+  function timelineEscalation(record, cycleId, day, eventId) {
+    const started = stateOf(record).processedBattles[cycleId]?.[`timeline-battle-start:${eventId}`];
+    return getQueue(record, cycleId, ["waiting", "ready"]).filter(item => item.modifier === "escalate"
+      && item.trigger === "timeline-battle-start" && item.scheduledDay <= day
+      && (item.status === "waiting" ? !started : item.timelineEventId === eventId))
+      .reduce((amount, item) => amount + (Number.isSafeInteger(item.amount) && item.amount > 0 ? item.amount : 0), 0);
   }
 
   function getQueue(record, cycleId = "", statuses = null) {
@@ -185,7 +208,7 @@
       changed = true;
     });
     if (changed) next.explorationDelays = state;
-    return { record: next, receipts, changed, summary: receipts.map((item) => `${item.duplicate ? "已安排：" : ""}${item.label || item.text}`).join("；") || "没有适用的延迟效果" };
+    return { record: next, receipts, changed, summary: receipts.map((item) => `${item.duplicate ? "已安排：" : ""}${effectLabel(item)}`).join("；") || "没有适用的延迟效果" };
   }
 
   function releaseLock(state, receipt) {
@@ -249,7 +272,7 @@
       if (item.kind === "end-step-battle") return [{ type: "open-battle", receiptId: item.receiptId, battle: item.battle, cycleId }];
       return [];
     });
-    return { record: next, receipts, reminders, actions, changed, summary: receipts.map((item) => item.label || item.text).join("；") || "没有新到期的延迟效果" };
+    return { record: next, receipts, reminders, actions, changed, summary: receipts.map((item) => effectLabel(item)).join("；") || "没有新到期的延迟效果" };
   }
 
   function complete(record, receiptId) {
@@ -259,7 +282,7 @@
     if (!receipt || receipt.status !== "ready") throw new Error("此延迟效果尚未到期或已经处理。");
     receipt.status = "done";
     next.explorationDelays = state;
-    return { record: next, receipt: clone(receipt), changed: true, summary: `${receipt.label || receipt.text}：已处理` };
+    return { record: next, receipt: clone(receipt), changed: true, summary: `${effectLabel(receipt)}：已处理` };
   }
   function cancel(record, receiptId) {
     const next = clone(object(record) ? record : {});
@@ -269,8 +292,8 @@
     if (receipt.kind === "tech-disable") releaseLock(state, receipt);
     receipt.status = "cancelled";
     next.explorationDelays = state;
-    return { record: next, receipt: clone(receipt), changed: true, summary: `${receipt.label || receipt.text}：已撤销安排` };
+    return { record: next, receipt: clone(receipt), changed: true, summary: `${effectLabel(receipt)}：已撤销安排` };
   }
 
-  return { delayed, schedule, process, complete, cancel, getQueue, getTechLock, isTechDisabled };
+  return { delayed, schedule, process, complete, cancel, getQueue, getTechLock, isTechDisabled, effectLabel, timelineEscalation };
 });

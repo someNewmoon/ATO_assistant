@@ -2690,16 +2690,18 @@
         let submitted = false;
         try {
           await Promise.all([window.refreshAibpRecordLevels?.(), window.AibpCardBacks?.ready().catch(() => {})]);
+          const voyage = window.ATO_VOYAGE?.current();
+          if (voyage?.battle && voyage.battle !== 'online-' + squadId + '-' + (battleNumber + 1)) throw new Error('本次遭遇已关联另一场战斗。');
+          const startEscalation = await window.getAibpTimelineEscalation?.(voyage) || 0;
           const board = window.getAibpBoardSetup?.();
           if (!board) throw new Error('请先选择骇物。');
           submitStatus.textContent = '正在开启战斗，等待服务器确认…';
-          const voyage = window.ATO_VOYAGE?.current();
-          if (voyage?.battle && voyage.battle !== 'online-' + squadId + '-' + (battleNumber + 1)) throw new Error('本次遭遇已关联另一场战斗。');
+          const deck = window.getAibpRoomBattleDeck?.(startEscalation);
           submitted = true;
           const result = await squadLink.request(squadId, 'action', credential.token, {
             id: crypto.randomUUID(), type: 'squad-start', battleNumber,
             ...(voyage?.encounter && { voyage: voyage.id }),
-            board, goal: form.elements.goal.value, projection: window.getAibpRoomProjection?.(), deck: window.getAibpRoomBattleDeck?.(), tutorial: form.elements.tutorial?.checked === true,
+            board, goal: form.elements.goal.value, projection: window.getAibpRoomProjection?.(), deck, tutorial: form.elements.tutorial?.checked === true,
             ...(available && { battleConfig: readConfig(form) }),
           }, { timeout: 25000 });
           submitStatus.textContent = '战斗已开启，正在打开战斗室…';

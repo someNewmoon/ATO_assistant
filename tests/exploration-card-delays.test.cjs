@@ -232,6 +232,12 @@ test("named diplomacy controls next-Timeline escalation, without using another f
   assert.equal(result.reminders[0].modifier, "escalate");
   assert.equal(result.reminders[0].amount, 1);
   assert.equal(result.reminders[0].status, "ready");
+  assert.equal(descriptor.label, "下次定时战斗开始时，激化 1");
+  assert.equal(rules.timelineEscalation(scheduled.record, "c1", 11, "c1:D11"), 0);
+  assert.equal(rules.timelineEscalation(scheduled.record, "c1", 13, "c1:D13"), 1);
+  assert.equal(rules.timelineEscalation(result.record, "c1", 13, "c1:D13"), 1);
+  assert.equal(rules.timelineEscalation(result.record, "c1", 14, "c1:D14"), 0);
+  assert.equal(rules.timelineEscalation(rules.complete(result.record, result.reminders[0].receiptId).record, "c1", 19, "c1:D19"), 0);
 });
 
 test("a current-card battle modifier requires the matching battle destination", () => {

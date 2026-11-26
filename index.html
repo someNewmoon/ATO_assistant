@@ -1220,6 +1220,21 @@
     }
 
     .exploration-settle-manual > li { margin-top: 6px; }
+    .exploration-settle-manual > li.exploration-token-effect {
+      border-inline-start: 3px solid var(--folio-rule, #946137);
+      background: var(--folio-inset, #efe4d2);
+      padding: .45rem .55rem;
+    }
+    .exploration-settle-manual > li.exploration-token-effect.doom {
+      border-inline-start-color: #a33c34;
+      background: color-mix(in srgb, #a33c34 10%, var(--folio-paper, #fbf7ee));
+    }
+    #explorationReviewDialog { width: min(44rem, calc(100% - 2rem)); max-height: 85vh; }
+    #explorationReviewDialog h2 { margin-top: 0; }
+    #explorationReviewDialog h3 { margin-bottom: .35rem; }
+    #explorationReviewDialog ul { margin-top: 0; overflow-wrap: anywhere; }
+    #explorationReviewDialog footer { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .5rem; }
+
     .exploration-effect-controls {
       display: flex;
       flex-wrap: wrap;
@@ -3096,6 +3111,17 @@
     </form>
   </dialog>
 
+  <dialog id="explorationReviewDialog" aria-labelledby="explorationReviewTitle">
+    <form method="dialog">
+      <h2 id="explorationReviewTitle">探索结算清单</h2>
+      <div data-exploration-review></div>
+      <footer>
+        <button type="submit" value="cancel" class="secondary" autofocus>返回继续处理</button>
+        <button type="submit" value="confirm" data-exploration-review-confirm></button>
+      </footer>
+    </form>
+  </dialog>
+
   <dialog id="mnemosChoiceDialog" class="card-track-dialog" aria-labelledby="mnemosChoiceTitle" aria-describedby="mnemosChoiceInstructions">
     <form method="dialog">
       <h2 id="mnemosChoiceTitle">选择回忆卡</h2>
@@ -3115,13 +3141,14 @@
   <script src="./assets/exploration-card-tags.js?v=20261018-card-audit1"></script>
   <script src="./assets/exploration-card-rules.js?v=20261018-card-audit1"></script>
   <script src="./assets/exploration-card-resource-rules.js?v=20261013-automation5"></script>
-  <script src="./assets/exploration-card-effects.js?v=20261120-ledger"></script>
+  <script src="./assets/exploration-card-effects.js?v=20261126-settlement-review"></script>
   <script src="./assets/dice-motion.js?v=7" defer></script>
   <script src="./assets/campaign-session.js?v=20260917"></script>
   <script src="./assets/exploration-card-conditions.js?v=20261125-story-references"></script>
   <script src="./assets/exploration-card-options.js?v=20261117-resource-types1"></script>
   <script src="./assets/exploration-card-choices.js?v=20261013-next-choices12"></script>
-  <script src="./assets/exploration-card-delays.js?v=20261013-automation5"></script>
+  <script src="./assets/exploration-card-delays.js?v=20261126-settlement-review"></script>
+  <script src="./hero/hero-catalog.js?v=20261126-exploration"></script>
   <script src="./assets/exploration-card-resources.js?v=20261018-card-audit1"></script>
   <script src="./technology/negotiation-rules.js?v=20261117-resource-types1"></script>
   <script src="./technology/voyage-action-rules.js?v=20261110-chronosail"></script>
@@ -7800,7 +7827,7 @@
       };
     }
 
-    function chooseMnemosProgress(source, rows) {
+    function chooseMnemosProgress(source, rows, instructions = "请由对应玩家为每位同进度的英雄选一张卡增加 1 个回忆节点。") {
       const dialog = document.getElementById("mnemosChoiceDialog");
       if (typeof dialog?.showModal !== "function") {
         window.alert("当前浏览器不支持 dialog 弹窗。请使用新版 Chrome / Edge。");
@@ -7810,6 +7837,7 @@
       const rowList = document.getElementById("mnemosChoiceRows");
       const submit = document.getElementById("mnemosChoiceConfirm");
       document.getElementById("mnemosChoiceSource").textContent = source;
+      document.getElementById("mnemosChoiceInstructions").textContent = instructions;
       rowList.replaceChildren();
 
       rows.forEach(({ name, cards }, index) => {
@@ -7828,7 +7856,7 @@
           const radio = document.createElement("input");
           radio.type = "radio";
           radio.name = `mnemos-${index}`;
-          radio.value = change.cardId;
+          radio.value = change.choiceKey || change.cardId;
           radio.required = true;
           option.append(radio, label);
           group.append(option);
@@ -7836,8 +7864,9 @@
         rowList.append(group);
       });
 
-      submit.disabled = true;
-      form.onchange = () => { submit.disabled = !form.matches(":valid"); };
+      const updateSubmit = () => { submit.disabled = !form.matches(":valid"); };
+      form.onchange = updateSubmit;
+      updateSubmit();
       dialog.returnValue = "cancel";
       return new Promise((resolve) => {
         dialog.addEventListener("close", () => {
@@ -7845,7 +7874,7 @@
           const selected = new FormData(form);
           const changes = rows.map(({ cards }, index) => cards.length === 1
             ? cards[0].change
-            : cards.find(({ change }) => change.cardId === selected.get(`mnemos-${index}`))?.change);
+            : cards.find(({ change }) => (change.choiceKey || change.cardId) === selected.get(`mnemos-${index}`))?.change);
           resolve(changes.every(Boolean) ? changes : null);
         }, { once: true });
         dialog.showModal();
@@ -10679,6 +10708,7 @@
           if (timelineEnd && options.completeReady === true) {
             for (const receipt of rules.getQueue(result.record, cycleId, ["ready"])) {
               if (["tech-disable", "return-exploration-card"].includes(receipt.kind)) continue;
+              if (receipt.trigger === "timeline-battle-start" && receipt.timelineEventId !== options.eventId) continue;
               result.record = rules.complete(result.record, receipt.receiptId).record;
               result.changed = true;
             }
@@ -10781,7 +10811,7 @@
         }
         text.textContent = automatic
           ? `${receipt && !["cancelled", "expired"].includes(receipt.status) ? receipt.status === "done" ? "已处理：" : "已登记：" : ""}${effectText}`
-          : `${item.badge ? `[${item.badge}] ` : ""}${effectText}${receipt && receipt.status !== "cancelled" ? ` · 已登记：${technologyReferenceText(receipt.techKey, receipt.label || item.label)}` : ""}`;
+          : `${item.badge ? `[${item.badge}] ` : ""}${effectText}${receipt && receipt.status !== "cancelled" ? ` · 已登记：${technologyReferenceText(receipt.techKey, rules.effectLabel(receipt))}` : ""}`;
         if (card.key === "c4:9327" && item.id === "manual:2" && receipt?.badge !== undefined && receipt.badge !== item.badge
           && ["waiting", "ready"].includes(receipt.status)) text.textContent += " · 旧登记条件已更正为命运 ≥8，请核对或撤销此安排";
         const placements = item.once ? explorationEffectRules()?.parse(item.text, cycleId, entry.id, item.badge).effects.filter(explorationNeedsPlacement) || [] : [];
@@ -10882,7 +10912,7 @@
         title.append(tag, name);
         const text = document.createElement("p");
         text.className = "step-track-desc";
-        text.textContent = `${technologyReferenceText(item.techKey, item.label || item.text)}${item.status === "ready" ? " · 到期待处理" : ""}`;
+        text.textContent = `${technologyReferenceText(item.techKey, rules.effectLabel(item))}${item.status === "ready" ? " · 到期待处理" : ""}`;
         row.append(title, text);
         const destination = explorationBattleReference(item);
         const link = destination && createExplorationStoryLink(destination, stepId);
@@ -11324,7 +11354,7 @@
       return true;
     }
 
-    function createExplorationTokenPlacementTools(entry, item, field = "") {
+    function createExplorationTokenPlacementTools(entry, item, field = "", { includeSaveTools = true } = {}) {
       const remaining = remainingExplorationTokenPlacements(entry, item).filter(effect => !field || effect.type === field);
       const box = document.createElement("div");
       box.className = "exploration-token-placement-tools";
@@ -11335,7 +11365,7 @@
       }
       const blocked = explorationTokenPlacementBlocked(entry, item);
       box.innerHTML = renderCardTokenPlacementTools(remaining);
-      if (typeof createStructureSaveTools === "function") {
+      if (includeSaveTools && typeof createStructureSaveTools === "function") {
         const saveTools = createStructureSaveTools(entry, item, true);
         if (saveTools) box.appendChild(saveTools);
       }
@@ -11677,7 +11707,7 @@
     // Evaluate the automatic effects before deciding whether pursuit can share
     // their write. Keep the preview isolated: failed saves and manual choices
     // must not leave local receipts or card removals that never committed.
-    function previewExplorationSettlement(record, entries) {
+    function previewExplorationSettlement(record, entries, includeTokenPlacements = false) {
       const previousRecord = cachedArgoRecord;
       const previousExploration = state.exploration;
       const previousCardTracks = state.cardTracks;
@@ -11692,7 +11722,7 @@
           draftEntries.filter(entry => originals.has(explorationRoundId(entry))));
         cachedArgoRecord = result.record;
         result.updates.forEach(({ entry, receipt }) => syncExplorationBatchReceipt(entry, receipt));
-        return { ...result, pending: pendingExplorationEffects(false),
+        return { ...result, pending: pendingExplorationEffects(includeTokenPlacements),
           exploration: state.exploration, cardTracks: state.cardTracks,
           updates: result.updates.map(({ entry, receipt }) => ({ entry: originals.get(explorationRoundId(entry)), receipt })) };
       } finally {
@@ -11868,7 +11898,80 @@
       }
     }
 
-    async function settleExplorationDraw() {
+    async function confirmExplorationReview(finishing) {
+      const entries = ensureExplorationDrawState().activePiles.flat();
+      const target = structureTechTarget();
+      const round = entries.map(explorationRoundId).join("|");
+      const dialog = document.getElementById("explorationReviewDialog");
+      const body = dialog.querySelector("[data-exploration-review]");
+      const button = dialog.querySelector("[data-exploration-review-confirm]");
+      const addList = (title, rows) => {
+        if (!rows.length) return;
+        const heading = document.createElement("h3");
+        heading.textContent = title;
+        const list = document.createElement("ul");
+        for (const row of [...new Set(rows)]) {
+          const item = document.createElement("li");
+          item.textContent = row;
+          list.appendChild(item);
+        }
+        body.append(heading, list);
+      };
+      try {
+        assertStructureTechTarget(target);
+        body.replaceChildren();
+        const preview = finishing ? null : previewExplorationSettlement(cachedArgoRecord, entries, true);
+        const pending = preview ? preview.pending : pendingExplorationEffects();
+        const completed = [];
+        const delayRules = explorationDelayRules();
+        const delays = delayRules?.getQueue(cachedArgoRecord, target.cycleId, ["waiting", "ready", "done"]) || [];
+        for (const entry of entries) {
+          const card = explorationCardResources(entry.id);
+          const name = card?.titleZh || entry.name;
+          const local = explorationEffectState(entry);
+          const resource = getExplorationSettlement(entry);
+          if (resource?.summary) completed.push(`${name}：${resource.summary}`);
+          Object.values(local.applied).filter(item => item.summary).forEach(item => completed.push(`${name}：${item.summary}`));
+          for (const id of Object.values(local.delays || {})) {
+            const receipt = delays.find(item => item.receiptId === id);
+            if (receipt) completed.push(`${name}：${receipt.status === "done" ? "已处理" : "已登记"} · ${delayRules.effectLabel(receipt)}`);
+          }
+          Object.values(local.mnemosAwards || {}).forEach(item => completed.push(`${name}：${item.hero} · ${item.card} · 旧忆节点 +1`));
+          for (const placed of Object.values(local.tokenPlacements || {})) {
+            for (const [type, amount] of Object.entries(placed)) completed.push(`${name}：${type === "doom" ? "灾厄" : "希望"}已处理 ${amount}`);
+          }
+        }
+        const showCardNames = rows => rows.map(line => {
+          const entry = entries.find(item => line.startsWith(`${item.name}：`));
+          const title = entry && explorationCardResources(entry.id)?.titleZh;
+          return title ? title + line.slice(entry.name.length) : line;
+        });
+        addList("已结算", showCardNames(completed));
+        addList("将自动结算", showCardNames(preview?.completed || []));
+        addList(finishing ? "仍待确认" : "仍需玩家处理", showCardNames(pending));
+        const pursuit = createExplorationPursuitTools()?.querySelector("span")?.textContent;
+        if (pursuit) addList("追踪标记", [pursuit]);
+        if (!body.childElementCount) addList("结算结果", ["本轮无额外效果。"]);
+        button.textContent = finishing ? (pending.length ? "确认已处理并结束本轮" : "确认结束本轮")
+          : pending.length ? "确认自动结算" : "确认结算并结束本轮";
+        dialog.returnValue = "cancel";
+        const confirmed = await new Promise(resolve => {
+          dialog.addEventListener("close", () => resolve(dialog.returnValue === "confirm"), { once: true });
+          dialog.showModal();
+        });
+        if (!confirmed) return false;
+        assertStructureTechTarget(target);
+        if (ensureExplorationDrawState().activePiles.flat().map(explorationRoundId).join("|") !== round) {
+          throw new Error("探索牌组已变化，请重新核对清单。");
+        }
+        return true;
+      } catch (error) {
+        window.alert(error.message || "无法生成探索结算清单。");
+        return false;
+      }
+    }
+
+    async function settleExplorationDraw({ review = false } = {}) {
       if (settleExplorationDraw.busy || mutateExplorationRecord.busy) {
         window.alert("正在结算探索效果，请稍候。");
         return;
@@ -11905,15 +12008,8 @@
         const previous = state.exploration.lastSettlementByCycle[cycleId]?.completed || [];
         state.exploration.lastSettlementByCycle[cycleId] = { at: Date.now(), completed: [...previous, ...result.completed], pending };
         saveState();
-        if (!pending.length) {
-          endExplorationDraw({ render: false });
-        } else {
-          // 还有手工活：不弹窗打断（待办就列在下面的结算明细里），只把按钮改成
-
-          // 「结算完毕」，让玩家自己决定什么时候点它结束本轮探索。
-
-          markExplorationSettlePrepared(true, { render: false });
-        }
+        if (!pending.length && (!review || !pendingExplorationEffects().length)) endExplorationDraw({ render: false });
+        else markExplorationSettlePrepared(true, { render: false });
       } catch (error) {
         if (error?.code !== "SPAWN_CANCELLED") window.alert(`一键结算失败，当前牌组已保留：${error?.message || error}`);
       } finally {
@@ -12077,7 +12173,11 @@
       return combined.map((item) => ({ ...item,
         badge: context.conditionRules?.conditionFromBadge(item.badge, context.cycleId)?.label || item.badge,
         automatic: item.onceBlocked || (card.key === "c4:9326" && item.text === "Do not gain any resources or Titans from this stack."),
-      })).map(item => explorationManualPlacement(item, context.appliedEffects?.[item.id])).filter((item) => (item.conditionState !== false || context.appliedEffects?.[item.id]) && !wish
+      })).map(item => {
+        const displayText = effects?.playerEffectLabel(item.displayText || item.text);
+        return explorationManualPlacement(displayText && displayText !== (item.displayText || item.text)
+          ? { ...item, displayText } : item, context.appliedEffects?.[item.id]);
+      }).filter((item) => (item.conditionState !== false || context.appliedEffects?.[item.id]) && !wish
         && !(card.diplomacyMenu && !item.badge && /(?:外交关系结算一项效果|Resolve an effect based on your Diplomacy)/i.test(item.text)));
     }
 
@@ -12669,6 +12769,61 @@
       return reference;
     }
 
+    async function awardExplorationMnemos(entry, item) {
+      if (awardExplorationMnemos.busy || mutateExplorationRecord.busy || settleExplorationDraw.busy) return;
+      awardExplorationMnemos.busy = true;
+      const target = structureTechTarget();
+      const catalog = window.ATO_HERO_CATALOG;
+      const roundId = explorationRoundId(entry);
+      const store = explorationSettlementStore(entry);
+      const activeEffect = draft => draft?.exploration?.effectStateByCycle?.[target.cycleId]?.[store.key];
+      try {
+        await beforeStructureTechSubmit(target);
+        const campaign = await loadFullCampaign();
+        assertStructureTechTarget(target);
+        const dashboard = campaign?.sections?.dashboard;
+        const step = dashboard?.profiles?.[target.profileId]?.cycles?.[target.cycleId]?.state;
+        const heroes = catalog.activeHeroes(campaign, target.profileId);
+        const cards = heroes.flatMap(hero => catalog.mnemosCards(hero)
+          .filter(card => !card.fated && Number(card.progress) < card.limit)
+          .map(card => ({
+            label: `${catalog.heroDisplayName(hero)} · ${card.zh} · ${card.progress} → ${Number(card.progress) + 1}/${card.limit}`,
+            change: { type: "mnemos", heroId: hero.id, cardId: card.id, max: card.limit,
+              choiceKey: `${hero.id}:${card.id}`, hero: catalog.heroDisplayName(hero), card: card.zh },
+          })));
+        if (!step || dashboard.activeProfileId !== target.profileId || String(step.day) !== String(target.day)
+            || !step.exploration?.drawStateByCycle?.[target.cycleId]?.activePiles?.flat().some(value => explorationRoundId(value) === roundId)
+            || activeEffect(step)?.manual?.[item.id]) throw new Error("这项探索效果已变更，请刷新后重试。");
+        if (!cards.length) throw new Error("当前没有可增加节点的旧忆卡。");
+        const selected = await chooseMnemosProgress(explorationCardResources(entry.id)?.titleZh || entry.name,
+          [{ name: "选择英雄和旧忆", cards }], "选择一位英雄的一张旧忆卡，增加 1 个旧忆节点。");
+        if (!selected) return;
+        assertStructureTechTarget(target);
+        if (campaignHasUnsavedChanges()) throw new Error("战役进度已变化，请重新核对。");
+        const [change] = selected;
+        const heroSection = campaign.sections.heroes;
+        const buckets = heroSection.users || heroSection.accounts;
+        const nextHeroState = applyHeroProgressChanges(buckets ? buckets[target.profileId] : heroSection, selected);
+        const nextHeroes = buckets ? explorationRecordSection(heroSection, target.profileId, nextHeroState) : nextHeroState;
+        const effectStore = (step.exploration.effectStateByCycle ||= {})[target.cycleId] ||= {};
+        const local = effectStore[store.key] ||= { manual: {}, skipped: {}, applied: {} };
+        (local.manual ||= {})[item.id] = true;
+        (local.mnemosAwards ||= {})[item.id] = { hero: change.hero, card: change.card };
+        const revisions = campaign.sectionRevisions;
+        const result = await importCampaignSections({ dashboard, heroes: nextHeroes },
+          { dashboard: revisions.dashboard, heroes: revisions.heroes, record: revisions.record });
+        campaign.sections.heroes = nextHeroes;
+        campaign.sectionRevisions = { ...revisions, ...result.sections };
+        await applyStructureTechCommit({ campaign }, target, { saveMessage: "旧忆节点已存档" });
+        campaignSyncChannel?.postMessage({ revision: result.sections.dashboard });
+        heroMnemosSyncChannel?.postMessage({ type: "hero-state-updated" });
+      } catch (error) {
+        window.alert(error.code === "SAVE_CONFLICT" ? "战役或英雄记录已更新，请刷新后重试。" : error.message);
+      } finally {
+        awardExplorationMnemos.busy = false;
+      }
+    }
+
     function createExplorationEffectList(entry, card, context) {
       const items = explorationEffectDescriptors(entry, card, context);
       if (!items.length) return null;
@@ -12767,7 +12922,7 @@
       }
       items.filter(item => !automaticItem(item) || item.remainder).forEach((item) => {
         const row = document.createElement("li");
-        row.textContent = `${item.badge ? `[${item.badge}] ` : ""}${automaticItem(item) ? item.remainder : item.displayText || item.text}`;
+        row.textContent = `${item.badge ? `[${item.badge}] ` : ""}${automaticItem(item) ? (explorationEffectRules()?.playerEffectLabel(item.remainder) || item.remainder) : item.displayText || item.text}`;
         const controls = document.createElement("div");
         controls.className = "exploration-effect-controls";
         const status = document.createElement("span");
@@ -12785,6 +12940,15 @@
         else if (item.blocked && !item.effects.length) status.textContent = "本堆禁止该项收益";
         else status.textContent = item.requiresResource && !getExplorationSettlement(entry) ? "选择资源时一并结算" : item.conditionState === null ? "条件需确认" : "待处理";
         controls.appendChild(status);
+        const placements = item.manualPlacements || [];
+        if (placements.length) {
+          row.className = placements.some(effect => effect.type === "doom") ? "exploration-token-effect doom" : "exploration-token-effect";
+          if (!effectState.manual[item.id] && !effectState.skipped[item.id]) {
+            controls.appendChild(createExplorationTokenPlacementTools(entry, item, "", { includeSaveTools: false }));
+          }
+        }
+        const award = effectState.mnemosAwards?.[item.id];
+        if (award) status.textContent = `${award.hero} · ${award.card} · 旧忆节点 +1`;
         const reference = explorationStoryReference(card, item);
         const handled = Boolean(effectState.manual[item.id]);
         const storyPending = reference && !handled && !effectState.skipped[item.id] && !item.receiptMismatch;
@@ -12808,6 +12972,10 @@
           controls.appendChild(button);
         };
         const heroCounter = /(?:英雄[^。；]*(?:获得|失去)[^。；]*(?:绝望|凶险|命运|怒气)|(?:argonauts?|heroes?)\s+(?:gains?|loses?)\s+[+-]?\d+\s+(?:despair|danger|fate|fury))/i;
+        if (!handled && !effectState.skipped[item.id] && item.conditionState === true && explorationEffectRules()?.isMnemosAward(item.remainder)
+            && !item.requiresResource && !item.requiresEffect && !item.requiresManual) {
+          addButton("选择英雄与旧忆", () => void awardExplorationMnemos(entry, item));
+        }
         if (!handled && !effectState.skipped[item.id] && item.remainder
             && heroCounter.test(item.displayText || item.remainder)) {
           addButton("调整英雄状态", () => document.querySelector('.campaign-toolbox [data-tool="heroes"]')?.click());
@@ -12863,7 +13031,7 @@
               remainder.textContent = `其余效果：${item.remainder}`;
               controls.appendChild(remainder);
             }
-            addButton(handled ? "恢复手动待办" : item.dynamic ? (applied ? "已处理其余效果" : "已手动处理完整效果") : "已手动处理", () => mark("manual", item.id, !handled));
+            if (!award && !(handled && placements.length && !remainingExplorationTokenPlacements(entry, item).length)) addButton(handled ? "恢复手动待办" : item.dynamic ? (applied ? "已处理其余效果" : "已手动处理完整效果") : "已手动处理", () => mark("manual", item.id, !handled));
           }
           if (manualDynamic && !item.remainder && !effectState.choices.saveManual?.[item.id]) addButton("恢复手动待办", () => mark("manual", item.id, false));
           if (item.conditionState === null && !applied && !effectState.manual[item.id]) {
@@ -13439,9 +13607,6 @@
 
       const buttons = document.createElement("div");
       buttons.className = "exploration-buttons";
-      // 有牌在结算时：先点一次「一键结算」跑自动部分；如果还剩需要手动处理的项，按钮文本
-      // 立刻变成「结算完毕」（不弹窗，待办就列在下面的结算明细里），再点一次才真的结束本轮。
-
       const settleButtonText = hasActiveExplorationDraw
         ? (explorationSettlePrepared ? "结算完毕" : "一键结算")
         : "抽探索卡";
@@ -13458,6 +13623,8 @@
         }
         if (settleExplorationDraw.busy || mutateExplorationRecord.busy) return;
         const finishing = explorationSettlePrepared;
+        if (!await confirmExplorationReview(finishing)) return;
+        if (settleExplorationDraw.busy || mutateExplorationRecord.busy || !ownsDashboardWriteLease()) return;
         drawButton.disabled = true;
         drawButton.textContent = finishing ? "正在结束…" : "正在结算…";
         drawButton.setAttribute("aria-busy", "true");
@@ -13465,7 +13632,7 @@
         // finish later without the button looking dead.
         await yieldToPaint();
         if (finishing) void completeExplorationDraw();
-        else void settleExplorationDraw();
+        else void settleExplorationDraw({ review: true });
       });
 
       const returnButton = document.createElement("button");

@@ -215,7 +215,7 @@
     cards.inert = stage !== 'play';
     panel.inert = stage !== 'play';
     status.textContent = {
-      play: '',
+      play: battle.timelineEscalation ? '已应用探索效果 · 开战激化 ' + battle.timelineEscalation : '',
       loot: '确认本场结果与战利品后入账，也可返回牌桌更正。'
         + (encounter ? '' : ' 本场未关联遭遇。如对应今日遭遇，结束后可在主控台登记。'),
       settled: encounter ? '本场桌战已结束，返回航行可登记本场遭遇。'
@@ -324,8 +324,10 @@
             showEntryButtons(existing);
             throw Error('已有进行中的桌战，请先继续并结算该场。');
           }
+          const timelineEscalation = await window.getAibpTimelineEscalation(source);
           const entry = { ...selection, id: crypto.randomUUID().replaceAll('-', ''),
-            stage: 'play', returnTo: voyage.storyUrl(), ...(source?.encounter && { voyage: source.id }) };
+            stage: 'play', returnTo: voyage.storyUrl(), ...(source?.encounter && { voyage: source.id }),
+            ...(timelineEscalation > 0 && { timelineEscalation }) };
           store(entry);
           await openTable(entry);
         };

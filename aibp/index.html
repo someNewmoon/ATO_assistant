@@ -3032,7 +3032,7 @@
   <script src="kratos-tables.js?v=20261124-ability-icons" defer></script>
   <script src="ai-turn-guide.js?v=20261124-inserted-signature" defer></script>
   <script src="../technology/loadout-image.js?v=20261124" defer></script>
-  <script src="battle-room.js?v=20261125-encounter" defer></script>
+  <script src="battle-room.js?v=20261126-timeline-escalation" defer></script>
   <script src="../technology/gear-inventory.js?v=20261124-trauma-preview"></script>
   <script src="../assets/campaign-notes.js?v=20261015-aibp-summary1"></script>
   <script src="../assets/cycle-symbols.js?v=20261115-module-logo"></script>
@@ -3938,7 +3938,7 @@
       };
     };
 
-    window.getAibpRoomBattleDeck = () => {
+    function roomBattleDeckSnapshot() {
       const state = piles[currentApostle];
       if (!state?.AI || !state.BP) return null;
       function withArt(card) {
@@ -3969,6 +3969,47 @@
           ...(["HEKATON", "CYCLONUS", "HYPERTIME_ORACLE"].includes(currentApostle) && currentApostleLevel() >= 2
             && { criticalMass: { file: criticalMassTokenFile, ...position } }) },
       };
+    }
+
+    function applyBattleStartEscalation(amount) {
+      if (piles[currentApostle].AI.pending || piles[currentApostle].BP.pending || activeScry) {
+        throw new Error("请先处理当前牌面或观星，再应用定时战斗的激化。");
+      }
+      for (let index = 0; index < amount; index++) {
+        if (!performLinkedPromotion()) throw new Error("牌堆无法完成开战激化，请按牌面核对初始牌堆。");
+      }
+    }
+
+    window.getAibpRoomBattleDeck = (startEscalation = 0) => {
+      if (!startEscalation) return roomBattleDeckSnapshot();
+      const original = piles[currentApostle];
+      piles[currentApostle] = clonePileState(original);
+      try {
+        applyBattleStartEscalation(startEscalation);
+        return roomBattleDeckSnapshot();
+      } finally {
+        piles[currentApostle] = original;
+      }
+    };
+
+    window.getAibpTimelineEscalation = async source => {
+      if (!source || source.encounter !== `${source.day}:timeline`) return 0;
+      const response = await fetch("../api/campaign-state.php", { cache: "no-store", signal: AbortSignal.timeout(8000) });
+      const payload = await response.json();
+      const campaign = payload.campaign;
+      const dashboard = campaign?.sections?.dashboard;
+      const profile = dashboard?.profiles?.[source.profileId];
+      const state = profile?.cycles?.[source.cycle]?.state;
+      if (!response.ok || !payload.ok || payload.user?.id !== source.accountId
+          || dashboard?.activeProfileId !== source.profileId || profile?.activeCycleId !== source.cycle
+          || !state || String(state.day) !== source.day) {
+        throw new Error("无法核对定时战斗的探索效果，请从当前航行重新开启。");
+      }
+      const record = campaign.sections.record;
+      const buckets = record?.users || record?.accounts;
+      const day = Number(source.day) || 0;
+      return window.ATO_EXPLORATION_DELAY_RULES.timelineEscalation(buckets ? buckets[source.profileId] : record,
+        source.cycle, day, `${source.cycle}:D${day}:timeline`);
     };
 
     window.setAibpRoomBattleDeck = data => {
@@ -10018,6 +10059,19 @@
         currentBpView = "损伤";
         loadSavedPiles();
         renderApostle(battle.boss);
+        const original = piles[battle.boss];
+        if (battle.timelineEscalation && !original.timelineEscalationApplied) {
+          piles[battle.boss] = clonePileState(original);
+          try {
+            applyBattleStartEscalation(battle.timelineEscalation);
+            piles[battle.boss].timelineEscalationApplied = battle.timelineEscalation;
+          } catch (error) {
+            piles[battle.boss] = original;
+            throw error;
+          }
+          savePiles();
+          renderAibpCards();
+        }
         restoreScrySession();
       },
       setBpAttacker(hero) {
@@ -10286,7 +10340,8 @@
   <script src="ps/other/resouce/bp_resource_map_c4_c5.js?v=20261018a" defer></script>
   <script src="c45_specials.js?v=room-bp-20261118-battle-recap" defer></script>
   <script src="bp_loot_calculator_addon.js?v=20261125-damage-recap-terms" defer></script>
-  <script src="table-battle.js?v=20261125-special-bp" defer></script>
+  <script src="../assets/exploration-card-delays.js?v=20261126-settlement-review" defer></script>
+  <script src="table-battle.js?v=20261126-timeline-escalation" defer></script>
   <script src="../story/data/english-source-data.js?v=20261011-english4" defer></script>
   <script src="../assets/ato-terms.js?v=20261110-loop-terms" defer></script>
   <script src="../assets/english-terms.js?v=20261011-english4" defer></script>

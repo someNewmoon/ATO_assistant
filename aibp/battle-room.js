@@ -65,6 +65,7 @@
   let pending = false;
   let writing = false;
   let failedAction = null;
+  let pendingAttackDeclaration;
   let actionRetry;
   let actionRetryDelay = 1500;
   const actions = [];
@@ -92,6 +93,7 @@
       weaponArt: id => window.ATO_BATTLE_ASSETS?.gearThumbSrc(id, roomLanguage)
         || window.ATO_BATTLE_ASSETS?.gearSrc(id, roomLanguage),
       select: chooseWeapon, selectRange: chooseWeaponRange, openDice: openAttackDice, declare: declareAttack,
+      declaring: () => Boolean(pendingAttackDeclaration),
       startBonus: startBonusAttack, canStartBonus: canStartBonusAttack,
       speed: seat => window.ATO_TITAN_PANEL_REFERENCE?.forTitan(state.heroes[seat]?.titan, window.ATO_GEAR_INVENTORY)?.movement,
     });
@@ -670,6 +672,9 @@
       + (move.endSeats.includes(seat) ? ' · 骇物落点重叠，另结算绝对击退' : '') + '</span></li>').join('');
     return result + '<section class="room-ai-collisions"><strong>待结算冲撞</strong><ul>' + heroes + '</ul>'
       + '<p>每位受冲撞的泰坦获得 1 凶险并被击倒。按牌面核对例外后确认。</p>'
+      + move.endSeats.filter(seat => state.heroes[seat]?.condition !== 'dead' && (host || actor.seat === seat)).map(seat =>
+        '<button type="button" data-forced-context="collision" data-forced-seat="' + seat + '">结算 '
+          + escape(state.heroes[seat].name) + ' 的绝对击退</button>').join('')
       + (host ? action('board-ai-trample-confirm', '确认冲撞已结算', ' data-value="' + escape(move.id) + '"') : '') + '</section>';
   }
 
@@ -723,9 +728,9 @@
       const acted = turn?.finished.includes(seat);
       const current = activeSeat === seat;
       const editable = host || (actor.role === 'player' && actor.seat === seat);
-      const actions = titans && editable && !dead && !acted ? current
+      const actions = titans && editable && !acted ? current
         ? action('turn-finish', '结束回合', ' data-seat="' + seat + '"' + (canFinishTitanTurn(seat) ? '' : ' disabled'))
-        : activeSeat === null && !bonus ? action('turn-take', '认领回合', ' data-seat="' + seat + '"') : '' : '';
+        : !dead && activeSeat === null && !bonus ? action('turn-take', '认领回合', ' data-seat="' + seat + '"') : '' : '';
       return '<li' + (current ? ' aria-current="true"' : '') + '>' + rollAvatar(seat)
         + '<span>' + escape(hero.name) + '<small>' + (dead ? '死亡' : current ? '行动中' : acted ? '已结束' : '待行动')
         + '</small></span>' + actions + '</li>';
@@ -756,6 +761,11 @@
           + ((targeting || resolving) && current?.src ? cardImage('/aibp/' + current.src, current.label || '当前 AI') : '')
           + '<div class="room-ai-step"><strong>' + title + '</strong><p>' + detail + '</p>';
         if (targeting && host) guidance += renderAiTargetChoice(step);
+        if (resolving && state.board) {
+          guidance += '<button type="button" data-forced-context="ai"'
+            + (Number.isInteger(turn.aiTarget) ? ' data-forced-seat="' + turn.aiTarget + '"' : '')
+            + '>结算击退／推斥／拖拽</button>';
+        }
         if (resolving && Number.isInteger(turn.aiTarget)) {
           guidance += '<p>本次目标：<b>' + escape(state.heroes[turn.aiTarget]?.name || '') + '</b></p>';
           if (turn.aiMovement) {
@@ -844,6 +854,11 @@
         + '<div class="room-ai-targets">' + bonusChoices + '</div></details>'
         : actor.role === 'player' && canStartBonusAttack(actor.seat)
           ? action('bonus-attack-start', '结算奖励攻击', bonusSeatAttr(actor.seat)) : '';
+    if (!guidance && !bonus && state.board && (state.projection?.aiPending || signatureActive)) {
+      controls += '<button type="button" data-forced-context="ai"'
+        + (Number.isInteger(turn?.aiTarget) ? ' data-forced-seat="' + turn.aiTarget + '"' : '')
+        + '>结算击退／推斥／拖拽</button>';
+    }
     const actions = bonus ? (bonusControls ? '<div class="room-turn-controls">' + bonusControls + '</div>' : '')
       : controls || back || bonusControls ? '<div class="room-turn-controls">' + back + controls + bonusControls + '</div>' : '';
     roomBoard?.setAiRoute(route);
@@ -1409,7 +1424,6 @@
     const bonus = state.turn?.bonusAttack;
     return (!bonus || bonus.seat === seat && bonus.stage === 'power')
       && Boolean(state.projection?.bpPending && state.projection.bp?.src && state.heroes[seat])
-      && (actor.role === 'host' || state.heroes[seat].condition !== 'dead')
       && dice.canUseBodyPart(state, seat, state.bpSeat);
   }
 
@@ -1441,7 +1455,9 @@
       + (bp?.src ? cardImage('/aibp/' + bp.src, bp.label || '部位牌')
         : (back?.src ? cardImage('/aibp/' + back.src, back.label || '部位牌牌背') : '')
           + '<small>' + (projection ? '等待揭示本次部位牌' : '等待房主同步') + '</small>')
-      + control + outcome + '</aside>';
+      + control + (bp && state.board && (actor.role === 'host' || actor.seat === seat)
+        ? '<button type="button" data-forced-context="bp" data-forced-seat="' + seat + '">结算非主动移动</button>' : '')
+      + outcome + '</aside>';
   }
 
   function kratosReminder(hero) {
@@ -1609,11 +1625,13 @@
 
   function declareAttack(seat) {
     const weapon = chosenBoardWeapon(seat);
-    if (!weapon?.ready || !weapon.range || actions.some(action => action.type === 'attack-declare')) return;
+    if (!weapon?.ready || !weapon.range || pendingAttackDeclaration) return;
     if (actor.role === 'host') rollSeat = seat;
     rollMode = 'attack';
     if (weapon.id !== readDiceDraft(seat, 'attack').weapon) chooseWeapon(seat, weapon.id);
-    send({ id: crypto.randomUUID(), type: 'attack-declare', seat, weapon: weapon.id, range: weapon.range,
+    pendingAttackDeclaration = crypto.randomUUID();
+    roomBoard?.render();
+    send({ id: pendingAttackDeclaration, type: 'attack-declare', seat, weapon: weapon.id, range: weapon.range,
       ...bonusContext(seat) });
   }
 
@@ -2559,6 +2577,14 @@
         const result = await submitAction(action, timing);
         const confirmedAt = timing ? performance.now() : 0;
         acceptUpdate(result);
+        if (action.type === 'board-forced-effect') roomBoard?.resolveForcedEffect(action.id);
+        if (action.id === pendingAttackDeclaration) {
+          pendingAttackDeclaration = null;
+          if (window.matchMedia('(max-width: 640px)').matches && activeAttackFor(action.seat)?.stage === 'declared') {
+            openAttackDice(action.seat);
+          }
+          roomBoard?.render();
+        }
         if (action.id === turnAiAction) {
           turnAiAction = null;
           renderTurn();
@@ -2590,7 +2616,13 @@
           }
         } else if (error instanceof RejectedAction) {
           if (action.id === turnAiAction) turnAiAction = null;
-          if (error.status === 409 && ['ai-request', 'ai-guide', 'ai-guide-discard', 'turn-undo', 'bp-request', 'bp-settle'].includes(action.type)) await refreshRoomState();
+          if (error.status === 409 && ['ai-request', 'ai-guide', 'ai-guide-discard', 'turn-undo', 'bp-request', 'bp-settle',
+            'board-forced-effect', 'attack-declare'].includes(action.type)) await refreshRoomState();
+          if (action.type === 'board-forced-effect') roomBoard?.resolveForcedEffect(action.id, error.message);
+          if (action.id === pendingAttackDeclaration) {
+            pendingAttackDeclaration = null;
+            roomBoard?.attackDeclarationFailed(error.message);
+          }
           if (error.status === 401 && lostSeat()) break;
           if (!state.squad || state.squad.phase === 'battle') render();
         } else {
@@ -2694,6 +2726,13 @@
   });
 
   root.addEventListener('click', async event => {
+    const forced = event.target.closest('button[data-forced-context]');
+    if (forced) {
+      const seat = forced.dataset.forcedSeat;
+      roomBoard?.openForcedEffect({ trigger: forced.dataset.forcedContext,
+        seat: seat === undefined ? undefined : Number(seat), range: aiRange }, forced);
+      return;
+    }
     const returnToVoyage = event.target.closest('[data-room-voyage-return]');
     if (returnToVoyage) {
       event.preventDefault();

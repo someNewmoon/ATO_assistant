@@ -2,6 +2,7 @@ import '../../aibp/boss-levels-data.js';
 import terrain from '../../ss/terrain-data.js';
 import los from '../../aibp/battle_los.js';
 import guide from '../../aibp/ai-turn-guide.js';
+import forcedMovement from '../../aibp/forced-movement.js';
 import { ApiError, object } from './campaign.js';
 import { attackInProgress, canClaimTurn, claimTurn, forcedTitanMove } from './room-turn.js';
 
@@ -117,9 +118,71 @@ export function titanAttackTarget(board, seat, range) {
     terrain, board.apostle, { level: board.level, autoElevated: true }).weaponTarget || null;
 }
 
+function applyForcedEffect(room, actor, body) {
+  const { board, turn } = room;
+  const input = body.effect;
+  if (!board || !object(input) || !forcedMovement.validActor(actor, input)) {
+    fail('队员只能结算自己参与的非主动移动。', 403);
+  }
+  if (forcedMovement.stamp(room, input) !== body.stamp) fail('版图或结算步骤已更新，请重新核对路线。', 409);
+  if (input.trigger === 'ai' && !room.projection?.aiPending && !guide.usesSignature(turn?.aiGuide)) {
+    fail('当前没有待结算的指令技或招牌技。', 409);
+  }
+  if (input.trigger === 'bp' && (!room.projection?.bpPending
+      || Number.isInteger(room.battleDeck?.bpSeat) && ![input.source, input.target].includes(room.battleDeck.bpSeat))) {
+    fail('请对当前部位牌的攻击者结算响应。', 409);
+  }
+  const result = forcedMovement.plan(room, input, terrain, los);
+  if (result.error || result.pending) fail(result.error || '请完成路线选择。', 409);
+  const movedSeats = [input.source, input.target, ...result.displaced.map(entry => entry.model)]
+    .filter(seat => Number.isInteger(seat)
+      && (board.map.pieces.titans[seat].column !== result.positions.titans[seat].column
+        || board.map.pieces.titans[seat].row !== result.positions.titans[seat].row));
+  const removed = new Set(result.destroyed);
+  const flipped = new Set(result.flipped);
+  const bossMoved = result.sourcePath.length > 1 && input.source === 'apostle'
+    || result.targetPath.length > 1 && input.target === 'apostle';
+
+  board.map.pieces = result.positions;
+  board.map.terrain = board.map.terrain.flatMap((tile, index) => removed.has(index) ? []
+    : flipped.has(index) ? [{ ...tile, flipped: !tile.flipped }] : [tile]);
+  board.layoutRevision++;
+  for (const seat of new Set([...movedSeats, ...result.deaths])) {
+    for (const key of ['titanMoves', 'abilityTitanMoves', 'forcedTitanMoves']) {
+      const movement = board[key]?.[seat];
+      if (!movement) continue;
+      if (result.deaths.includes(seat)) delete board[key][seat];
+      else board[key][seat] = { ...movement, resumeId: movement.id, route: [result.positions.titans[seat]], clicks: [] };
+    }
+    if (board.lastTitanMove?.seat === seat) delete board.lastTitanMove;
+  }
+  if (bossMoved) {
+    delete board.apostleMovement;
+    delete board.lastApostleMove;
+  }
+  for (const seat of result.deaths) {
+    room.heroes[seat].condition = 'dead';
+    // An already revealed BP still has an outcome to record before closing the attack.
+    const attack = turn?.bonusAttack?.seat === seat ? turn.bonusAttack
+      : turn?.seat === seat ? turn.actions?.attack : null;
+    if (attack && !['power', 'cleanup', 'second', 'miss', 'done'].includes(attack.stage)) {
+      if (turn.bonusAttack?.seat === seat) delete turn.bonusAttack;
+      else attack.stage = 'done';
+      for (const key of Object.keys(room.pool || {})) room.pool[key] = 0;
+    }
+  }
+  room.priorityTarget = priorityTarget(room);
+  board.lastForcedEffect = {
+    id: body.id, kind: input.kind, source: input.source, target: input.target, amount: input.amount,
+    used: result.used, sourcePath: result.sourcePath, targetPath: result.targetPath, collisions: result.collisions,
+    deaths: result.deaths, displaced: result.displaced, events: result.events, endSeats: result.endSeats,
+  };
+}
+
 export function applyRoomBoard(room, actor, body) {
   const seats = room.heroes.length;
   const board = room.board;
+  if (body.type === 'board-forced-effect') return applyForcedEffect(room, actor, body);
   if (body.type === 'board-ping') {
     if (!['host', 'player'].includes(actor.role)) fail('投屏只能查看点位。', 403);
     if (!board || !isCell(body.point)) fail('请选择有效的版图点位。');
@@ -153,7 +216,7 @@ export function applyRoomBoard(room, actor, body) {
     }
     if (body.type === 'board-undo-move') {
       const pieces = board?.map.pieces;
-      if (!move || move.id !== body.move || !pieces) fail('没有可撤回的移动。', 409);
+      if (!move || move.id !== body.move || !pieces || move.resumeId && !move.clicks.length) fail('没有可撤回的移动。', 409);
       const { origin, previous } = los.rewindTitanMove(move);
       const destination = move.route.at(-1);
       const current = pieces.titans[seat];

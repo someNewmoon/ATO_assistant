@@ -12,6 +12,7 @@ import titanInventory from '../technology/gear-inventory.js';
 import guide from '../aibp/ai-turn-guide.js';
 import los from '../aibp/battle_los.js';
 import terrain from '../ss/terrain-data.js';
+import forced from '../aibp/forced-movement.js';
 
 // Exercise the real Worker reducers; only the Cloudflare base class is replaced.
 // Run: cd cloudflare && node --test battle-rules.test.mjs
@@ -820,6 +821,32 @@ test('骇物轮次的非主动移动可经过其他泰坦，单独记步且不�
     point: { column: 2, row: 3 }, speed: 2 });
   assert.equal(r.turn.seat, 0);
   assert.equal(r.board.titanMoves[0].remaining, 1);
+});
+
+test('合并提交非主动移动和地形，普通移动从新位置保留剩余格数', () => {
+  const r = room();
+  r.board = api.setupRoomBoard({ apostle: 'HERMESIAN_PURSUER', level: 1 }, 2);
+  r.board.map.pieces = {
+    apostle: { column: 4.5, row: 7.5, facing: 0 },
+    titans: [{ column: 6, row: 6 }, { column: 10, row: 10 }],
+  };
+  r.board.map.terrain = [{ id: 'column', name: 'Column', column: 7, row: 7, rotation: 0 }];
+  reducer.apply(r, host, { type: 'turn-phase', phase: null, round: 1, value: 'titans' });
+  const step = (id, from, point, move) => reducer.apply(r, player, { type: 'board-move', id, seat: 0, from, point, speed: 4, move });
+  step('ordinary', { column: 6, row: 6 }, { column: 6, row: 7 }, null);
+  const effect = { kind: 'knockback', source: 'apostle', target: 0, amount: 2 };
+  const command = { type: 'board-forced-effect', id: 'forced', effect, stamp: forced.stamp(r, effect) };
+  reducer.apply(r, host, command);
+  assert.deepEqual(r.board.map.pieces.titans[0], { column: 7, row: 7 });
+  assert.deepEqual(r.board.map.terrain, []);
+  assert.equal(r.board.titanMoves[0].remaining, 3);
+  assert.equal(r.turn.actions?.movementUsed, undefined);
+  assert.throws(() => reducer.apply(r, host, command), /已更新/);
+  assert.throws(() => reducer.apply(r, player, { type: 'board-undo-move', seat: 0, move: 'ordinary' }), /没有可撤回/);
+  step('continued', { column: 7, row: 7 }, { column: 8, row: 7 }, 'ordinary');
+  reducer.apply(r, player, { type: 'board-undo-move', seat: 0, move: 'continued' });
+  assert.equal(r.board.titanMoves[0].remaining, 3);
+  assert.deepEqual(r.board.map.pieces.titans[0], { column: 7, row: 7 });
 });
 
 test('推荐移动执行所选逐格路线，冲撞待确认时保留标记并阻止推进', () => {

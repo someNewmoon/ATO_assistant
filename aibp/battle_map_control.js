@@ -816,7 +816,7 @@
       bossInput.disabled = Boolean(bossMovement);
       const canUndo = (moving && movement && options.canMoveTitan?.(losState.selectedTitan) !== false)
         || (bossMove && bossMovement && editBoard());
-      control("undo-move").hidden = !canUndo;
+      control("undo-move").hidden = !canUndo || moving && Boolean(movement?.resumeId && !movement.clicks.length);
       control("end-move").hidden = !canUndo;
       control("weapon").value = losState.weapon.kind;
       control("min").value = losState.weapon.min;

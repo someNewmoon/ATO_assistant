@@ -166,7 +166,7 @@ const activityLabels = {
   'attack-clear': '清空克拉托斯池', 'attack-finish': '结束本次作战', 'turn-spend': '以行动结算能力',
   'turn-undo': '撤回上一步轮次行动', 'turn-phase': '切换轮次', 'turn-take': '开始英雄回合', 'turn-finish': '结束英雄回合',
   'board-move': '移动泰坦', 'board-undo-move': '撤回上一步', 'board-apostle-move': '移动骇物',
-  'board-ai-route': '执行推荐移动', 'board-ai-trample-confirm': '确认冲撞',
+  'board-forced-effect': '结算非主动移动', 'board-ai-route': '执行推荐移动', 'board-ai-trample-confirm': '确认冲撞',
   'board-apostle-undo': '撤回骇物移动', 'board-face': '调整骇物朝向', 'priority-target': '调整首要目标', round: '开启新一轮',
   stat: '调整三曲盘', 'titan-marker': '调整泰坦标记', condition: '调整泰坦状态', gear: '使用装备', 'gear-card': '调整装备卡', 'gear-ready-all': '回正所有横置卡牌',
   'mnemos-card': '调整旧忆卡', 'pattern-card': '调整样式卡牌', 'argo-use': '使用阿尔戈能力', 'argo-undo': '撤回阿尔戈能力',
@@ -226,6 +226,11 @@ function recordBattleActivity(room, actor, body, previousProjection) {
   if (body.type === 'board-move' || body.type === 'board-apostle-move') {
     const { row, column } = body.point;
     detail = Number.isInteger(row) ? String.fromCharCode(64 + row) + column : '落点（列 ' + column + ' · 行 ' + row + '）';
+  }
+  if (body.type === 'board-forced-effect') {
+    const move = room.board.lastForcedEffect;
+    detail = ({ knockback: '击退', absolute: '绝对击退', push: '推斥', pull: '拖拽' })[move.kind]
+      + ' · ' + move.used + ' 格';
   }
   if (body.type === 'board-ai-route') {
     const movement = room.turn.aiMovement;
@@ -702,7 +707,7 @@ export class BattleRoom extends DurableObject {
       // The moderator may preview a card before a Titan has started its attack.
       const preview = reveal && actor.role === 'host' && seat === undefined;
       if (actor.role === 'viewer' || (!preview && (!Number.isInteger(seat) || !room.heroes[seat]
-          || ((reveal || actor.role !== 'host') && room.heroes[seat].condition === 'dead')))) {
+          || (reveal && room.heroes[seat].condition === 'dead')))) {
         reject('请选择正在攻击的泰坦。', 403);
       }
       if (body.round !== room.round) reject('轮次已更新，请重新操作。', 409);
@@ -988,7 +993,8 @@ export class BattleRoom extends DurableObject {
       delete turn.bonusAttack;
       return;
     }
-    if (!bonus && (turn.phase !== 'titans' || hero.condition === 'dead' || !roomDice.canAttackNormally(turn, seat))) {
+    const completingAttack = turn.seat === seat && ['attack-clear', 'attack-finish'].includes(type);
+    if (!bonus && (turn.phase !== 'titans' || (hero.condition === 'dead' && !completingAttack) || !roomDice.canAttackNormally(turn, seat))) {
       reject('请在该泰坦可行动的回合操作，先完成招牌技。', 409);
     }
     const attack = bonus || turn.actions?.attack;

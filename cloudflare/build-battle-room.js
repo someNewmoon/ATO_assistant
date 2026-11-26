@@ -9,7 +9,7 @@ const scripts = [
   'aibp/boss-levels-data.js', 'ss/terrain-data.js', 'aibp/battle_los.js',
   'aibp/tactical-sprites.js', 'aibp/battle_board_pieces.js', 'aibp/battle_map_control.js',
   'aibp/room-assets.js', 'aibp/room-card-state.js', 'aibp/room-dice.js', 'aibp/gear-roll-profiles.js', 'assets/dice-motion.js',
-  'assets/titan-panel-reference.js', 'aibp/room-board.js', 'assets/voyage-return.js', 'aibp/squad-link.js', 'aibp/kratos-tables.js', 'aibp/ai-turn-guide.js', 'aibp/battle-room.js',
+  'assets/titan-panel-reference.js', 'aibp/forced-movement.js', 'aibp/forced-movement-ui.js', 'aibp/room-board.js', 'assets/voyage-return.js', 'aibp/squad-link.js', 'aibp/kratos-tables.js', 'aibp/ai-turn-guide.js', 'aibp/battle-room.js',
   'assets/ato-terms.js', 'assets/term-language.js',
 ];
 const styles = [

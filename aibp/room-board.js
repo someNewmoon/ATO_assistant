@@ -37,6 +37,17 @@
     });
     toolbar.append(targetLabel, targets, lock);
     mount.prepend(toolbar);
+    const forcedButton = document.createElement("button");
+    forcedButton.type = "button";
+    forcedButton.dataset.forcedContext = "manual";
+    forcedButton.textContent = "击退／推斥／拖拽";
+    forcedButton.hidden = true;
+    const receipt = document.createElement("section");
+    receipt.className = "room-forced-receipt";
+    receipt.hidden = true;
+    const forcedEffect = window.ATO_FORCED_MOVEMENT_UI?.create(mount, send, () => ({ room, actor }), forcedButton, receipt);
+    let attackDeclarationError = "";
+
 
     const canEdit = () => actor?.role === "host" && !room.closed;
     const canMove = seat => !room.closed && room.heroes[seat]?.condition !== "dead" && (canEdit() || (actor.role === "player" && actor.seat === seat));
@@ -99,8 +110,10 @@
         + (weapon && !lockedWeapon ? '<small>牌面费用与条件请手动核对。</small>' : '')
         + (position ? '<small>' + position + '</small>' : '')
         + ((bonus ? !lockedWeapon : canUseAttack) ? '<button type="button" data-action-entry="declare"'
-          + (legal?.legal && weapon.ready ? '' : ' disabled') + '>'
-          + (bonus ? '宣告奖励攻击' : '宣告攻击') + '</button>' : '') + '</div>'
+          + (legal?.legal && weapon.ready && !actions.declaring() ? '' : ' disabled') + '>'
+          + (bonus ? '宣告奖励攻击' : '宣告攻击') + '</button>' : '')
+        + (attackDeclarationError ? '<small class="room-attack-declaration-error" role="status">' + escape(attackDeclarationError) + '</small>' : '')
+        + '</div>'
         + (bonus ? '' : '<details class="room-titan-action-options"><summary>牌面行动</summary>'
         + '<button type="button" data-action-entry="bonus-start"' + (actions.canStartBonus(seat) ? '' : ' disabled') + '>结算奖励攻击</button>'
         + '<button type="button" data-action-entry="ability">牌面主动移动</button>'
@@ -139,6 +152,7 @@
       const bonus = room.turn.bonusAttack;
       const seat = bonus?.seat ?? room.turn.seat;
       if (button.hasAttribute("data-action-weapon")) {
+        attackDeclarationError = "";
         actions.select(seat, button.dataset.actionWeapon);
         return;
       }
@@ -156,8 +170,10 @@
         destination?.scrollIntoView({ block: "nearest" });
       } else if (entry === "attack") {
         control.openTitanAttack(seat);
-        if (window.matchMedia("(max-width: 640px)").matches || activeAttack() || !actions.tracked(seat)) actions.openDice(seat);
+        if (activeAttack() || !actions.tracked(seat)) actions.openDice(seat);
+        else (actionPanel.querySelector(".room-board-weapon-list") || actionPanel).scrollIntoView({ block: "nearest" });
       } else if (entry === "declare") {
+        attackDeclarationError = "";
         actions.declare(seat);
       } else if (entry === "bonus-start") {
         actions.startBonus(seat);
@@ -245,6 +261,7 @@
     function setup() {
       panel = reference.cloneNode(true);
       panel.id = "roomBattleMapControl";
+      panel.append(receipt);
       panel.querySelector("[data-battle-map-los-control]").hidden = true;
       settings = document.createElement("details");
       settings.className = "room-board-settings";
@@ -283,7 +300,13 @@
       movementActions.append(finishTurn);
       tactics.before(actionPanel);
       grid = panel.querySelector("[data-battle-map-board]");
-      panel.querySelector(".battle-map-head").append(pingBar);
+      const head = panel.querySelector(".battle-map-head");
+      const title = head.querySelector("h3");
+      const heading = document.createElement("div");
+      heading.className = "room-board-heading";
+      title.before(heading);
+      heading.append(title, forcedButton);
+      head.append(pingBar);
       grid.append(pingMarker);
       mount.append(panel);
       const cards = panel.querySelector(".battle-map-cards");
@@ -388,6 +411,7 @@
         }
         pingButton.hidden = !canPing();
         showPing(room.board && !room.closed ? room.boardPing : null);
+        forcedEffect?.render();
         if (!room.board) { toolbar.hidden = true; stamp = null; return; }
         const seat = room.turn?.seat;
         finishTurn.hidden = room.turn?.phase !== "titans" || !Number.isInteger(seat) || !canMove(seat);
@@ -458,6 +482,14 @@
         aiRouteStamp = next;
         aiRoute = route;
         control?.render();
+      },
+      openForcedEffect(context, button) {
+        return forcedEffect?.open(context, button);
+      },
+      resolveForcedEffect(id, error) { forcedEffect?.resolve(id, error); },
+      attackDeclarationFailed(error) {
+        attackDeclarationError = error;
+        renderActions();
       },
       openBonusAttack(seat) {
         if (!control || actionPanel.hidden || room.turn?.bonusAttack?.seat !== seat) return false;

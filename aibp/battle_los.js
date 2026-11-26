@@ -868,6 +868,7 @@
       remaining: speed === null ? null : (active?.remaining ?? speed) - steps,
       route: active ? [...active.route, ...route.slice(1)] : route,
       clicks: [...(active?.clicks || []), { id, steps }],
+      ...(active?.resumeId && { resumeId: active.resumeId }),
     };
   }
 
@@ -878,7 +879,10 @@
     const clicks = move.clicks.slice(0, -1);
     return {
       origin: route.at(-1),
-      previous: clicks.length ? { ...move, id: clicks.at(-1).id, clicks, route, remaining: move.speed === null ? null : move.remaining + steps } : null,
+      previous: clicks.length || move.resumeId ? {
+        ...move, id: clicks.at(-1)?.id || move.resumeId, clicks, route,
+        remaining: move.speed === null ? null : move.remaining + steps,
+      } : null,
     };
   }
 
@@ -1489,6 +1493,8 @@
     losSourceCells,
     losSourceCenter,
     occupiedCells,
+    footprintCells,
+    edgeBetween,
     footprintSize,
     localPointToLattice,
     hasLOS,

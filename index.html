@@ -1218,8 +1218,13 @@
     }
     #explorationReviewDialog { width: min(44rem, calc(100% - 2rem)); max-height: 85vh; }
     #explorationReviewDialog h2 { margin-top: 0; }
-    #explorationReviewDialog h3 { margin-bottom: .35rem; }
-    #explorationReviewDialog ul { margin-top: 0; overflow-wrap: anywhere; }
+    .exploration-review-section + .exploration-review-section {
+      margin-top: 1rem; padding-top: .75rem; border-top: 1px solid var(--line);
+    }
+    .exploration-review-section h3 { margin: 0 0 .4rem; }
+    .exploration-review-group h4 { margin: .55rem 0 .2rem; color: var(--accent-strong); }
+    .exploration-review-group ul { margin: 0; padding-inline-start: 1.3rem; overflow-wrap: anywhere; }
+    .exploration-review-group li + li { margin-top: .2rem; }
     .exploration-review-icon {
       display: inline-block; width: 1.2em; height: 1.2em; object-fit: contain;
       margin-inline-end: .28em; vertical-align: -.23em;
@@ -1228,7 +1233,10 @@
       width: 1.7em; height: 1.7em; object-fit: cover; border-radius: 50%;
       margin-inline: .3em; vertical-align: middle;
     }
-    #explorationReviewDialog footer { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .5rem; }
+    .exploration-review-icon.hero-stat {
+      box-sizing: border-box; padding: .18em; border-radius: 50%; background: var(--hero-stat-color, #2f3135);
+    }
+    #explorationReviewDialog footer { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .5rem; margin-top: 1rem; }
 
     .exploration-effect-controls {
       display: flex;
@@ -11927,33 +11935,42 @@
 
     function explorationReviewIcons(cycleId) {
       const glyph = (name, cycle = cycleId) => `./story/assets/mixed-media/images/${cycle}/icon-${cycle === "c2" ? "c2-" : ""}${name}.svg`;
-      const paths = new Map();
-      const add = (src, ...labels) => labels.filter(Boolean).forEach(label => paths.set(label, src));
+      const terms = new Map();
+      const add = (group, src, labels, { label: displayLabel, color } = {}) => {
+        for (const label of labels.filter(Boolean)) {
+          terms.set(label, { group, src, label: displayLabel || label, color });
+        }
+      };
       const dataset = explorationResourceDataset();
       for (const [key, resource] of Object.entries(dataset?.cycles?.[cycleId]?.resources || {})) {
-        add(`./record/assets/resource-icons/${key}.png`, explorationResourceRules().resourceLabel(dataset, cycleId, key),
-          resource.zh, resource.en);
+        const bilingual = resource.zh && resource.en
+          ? [`${resource.zh}（${resource.en}）`, `${resource.zh} (${resource.en})`, `${resource.zh}（ ${resource.en} ）`] : [];
+        add("资源", `./record/assets/resource-icons/${key}.png`, [...bilingual, resource.zh, resource.en],
+          { label: resource.zh });
       }
-      add("./record/assets/resource-icons/rare.png", "稀有资源");
-      add(glyph("progress"), "希望", "进度标记", "进展", "Progress Token");
-      add(glyph("doom"), "灾厄", "灾祸", "末日", "Doom Token");
-      add(glyph("escalation", "c2"), "激化");
-      add("./assets/icons/argo-fate.svg", "阿尔戈号命运", "阿尔戈命运");
-      add("./assets/icons/argo-knowledge.svg", "阿尔戈号知识");
-      add("./assets/icons/strangers.svg", "陌路人", "陌生人");
-      add("./assets/icons/titans.svg", "梦行者", "泰坦");
-      add("./assets/icons/hull.svg", "船体");
-      add("./assets/icons/crew.svg", "船员");
-      add("./assets/icons/story.svg", "旧忆节点", "回忆节点");
-      add("./hero/assets/tri_rage.png", "怒气");
-      add("./hero/assets/tri_fate.png", "命运");
-      add("./hero/assets/tri_danger.png", "凶险");
-      const labels = [...paths.keys()].sort((a, b) => b.length - a.length)
+      add("资源", "./record/assets/resource-icons/rare.png", ["稀有资源"]);
+      add("资源", "", ["商人奖励资源", "交易方案", "资源分支", "资源未结算"]);
+      add("剧情与灾厄", glyph("progress"), ["希望", "进度标记", "进展", "Progress Token"], { label: "希望" });
+      add("剧情与灾厄", glyph("doom"), ["灾厄", "灾祸", "末日", "Doom Token"], { label: "灾厄" });
+      add("战斗效果", glyph("escalation", "c2"), ["激化"]);
+      add("阿尔戈号状态", "./assets/icons/argo-fate.svg", ["阿尔戈号命运", "阿尔戈命运"]);
+      add("阿尔戈号状态", "./assets/icons/argo-knowledge.svg", ["阿尔戈号知识"]);
+      add("阿尔戈号状态", "./assets/icons/strangers.svg", ["陌路人", "陌生人"], { label: "陌路人" });
+      add("阿尔戈号状态", "./assets/icons/titans.svg", ["梦行者", "泰坦"]);
+      add("阿尔戈号状态", "./assets/icons/hull.svg", ["船体"]);
+      add("阿尔戈号状态", "./assets/icons/crew.svg", ["船员"]);
+      add("阿尔戈号状态", "", ["人性", "变节者", "悖论", "凝固时光", "巴比伦债务", "猜忌", "祭司", "难民", "宁芙召唤充能", "轮回长度", "外交关系"]);
+      add("英雄状态", "./assets/icons/story.svg", ["旧忆节点", "回忆节点"], { label: "旧忆节点" });
+      add("英雄状态", "./hero/assets/tri_rage.png", ["怒气"], { color: "#9b3829" });
+      add("英雄状态", "./hero/assets/tri_fate.png", ["命运"], { color: "#33658a" });
+      add("英雄状态", "./hero/assets/tri_danger.png", ["凶险"], { color: "#865515" });
+      add("英雄状态", "", ["绝望标记", "绝望指示物", "选择英雄"]);
+      const labels = [...terms.keys()].sort((a, b) => b.length - a.length)
         .map(label => {
           const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
           return /^[a-z]/i.test(label) ? `\\b${escaped}\\b` : escaped;
         });
-      return { paths, pattern: new RegExp(labels.join("|"), "g") };
+      return { terms, pattern: new RegExp(labels.join("|"), "g") };
     }
 
     async function confirmExplorationReview(finishing) {
@@ -11963,43 +11980,70 @@
       const dialog = document.getElementById("explorationReviewDialog");
       const body = dialog.querySelector("[data-exploration-review]");
       const button = dialog.querySelector("[data-exploration-review-confirm]");
-      const { paths, pattern } = explorationReviewIcons(target.cycleId);
-      const icon = src => {
+      const { terms, pattern } = explorationReviewIcons(target.cycleId);
+      const icon = (src, color) => {
         const img = document.createElement("img");
         img.className = "exploration-review-icon";
+        if (color) {
+          img.classList.add("hero-stat");
+          img.style.setProperty("--hero-stat-color", color);
+        }
         img.alt = "";
         img.src = src;
         img.addEventListener("error", () => img.remove(), { once: true });
         return img;
       };
-      const addList = (title, rows, leadingIcon = "") => {
+      const addSection = (title, rows, groupByEffect = true, leadingIcon = "") => {
         if (!rows.length) return;
+        const section = document.createElement("section");
+        section.className = "exploration-review-section";
         const heading = document.createElement("h3");
         heading.textContent = title;
-        const list = document.createElement("ul");
-        for (const row of [...new Set(rows)]) {
+        section.appendChild(heading);
+        const groups = new Map();
+        for (const row of rows) {
+          const { text, group: explicitGroup } = typeof row === "string" ? { text: row } : row;
           const item = document.createElement("li");
           if (leadingIcon) item.append(icon(leadingIcon));
-          // Only annotate effect text. The card title may itself mention a resource.
-          const start = row.indexOf("：") + 1;
-          const description = row.slice(start);
+          // A card title can contain a resource or a stat name of its own.
+          const start = groupByEffect ? text.indexOf("：") + 1 : 0;
+          const description = text.slice(start);
           let end = 0;
           const shown = new Set();
-          item.append(row.slice(0, start));
+          const matchedGroups = new Set();
+          item.append(text.slice(0, start));
           for (const match of description.matchAll(pattern)) {
-            const src = paths.get(match[0]);
+            const { src, label, group, color } = terms.get(match[0]);
+            matchedGroups.add(group);
             item.append(description.slice(end, match.index));
-            if (!shown.has(src)) {
-              item.append(icon(src));
+            if (src && !shown.has(src)) {
+              item.append(icon(src, color));
               shown.add(src);
             }
-            item.append(match[0]);
+            item.append(label);
             end = match.index + match[0].length;
           }
           item.append(description.slice(end));
-          list.appendChild(item);
+          const group = explicitGroup || (matchedGroups.size === 1 ? [...matchedGroups][0]
+            : matchedGroups.size > 1 ? "综合效果" : "其他效果");
+          if (!groups.has(group)) groups.set(group, []);
+          groups.get(group).push(item);
         }
-        body.append(heading, list);
+        for (const group of ["资源", "英雄状态", "阿尔戈号状态", "剧情与灾厄", "战斗效果", "综合效果", "其他效果"]) {
+          if (!groups.has(group)) continue;
+          const block = document.createElement("div");
+          block.className = "exploration-review-group";
+          if (groupByEffect) {
+            const subheading = document.createElement("h4");
+            subheading.textContent = group;
+            block.appendChild(subheading);
+          }
+          const list = document.createElement("ul");
+          list.append(...groups.get(group));
+          block.appendChild(list);
+          section.appendChild(block);
+        }
+        body.appendChild(section);
       };
       try {
         assertStructureTechTarget(target);
@@ -12014,14 +12058,31 @@
           const name = card?.titleZh || entry.name;
           const local = explorationEffectState(entry);
           const resource = getExplorationSettlement(entry);
-          if (resource?.summary) completed.push(`${name}：${resource.summary}`);
-          Object.values(local.applied).filter(item => item.summary).forEach(item => completed.push(`${name}：${item.summary}`));
+          const add = (description, group) => completed.push({ text: `${name}：${description}`, group });
+          if (resource?.summary) add(resource.summary, "资源");
+          for (const item of Object.values(local.applied)) {
+            if (item.summary) add(item.summary, item.kind === "merchant-reward" ? "资源" : undefined);
+          }
+          if (local.wishReceipt?.summary) add(local.wishReceipt.summary);
+          for (const trade of local.trades || []) {
+            const summary = explorationResourceRules().describeChanges(trade.changes);
+            if (summary) add(`商人交易 · ${summary}`, "资源");
+          }
+          if (card && Object.values(local.manual).some(Boolean)) {
+            const context = explorationCardContext(entry, card);
+            for (const item of explorationEffectDescriptors(entry, card, context)) {
+              if (!local.manual[item.id] || local.skipped[item.id] || local.mnemosAwards?.[item.id]
+                  || local.heroStatAwards?.[item.id] || local.tokenPlacements?.[item.id]) continue;
+              const description = local.applied[item.id] ? item.remainder : item.displayText || item.text;
+              if (description) add(`已手动处理 · ${explorationEffectRules()?.playerEffectLabel(description) || description}`);
+            }
+          }
           for (const id of Object.values(local.delays || {})) {
             const receipt = delays.find(item => item.receiptId === id);
             if (receipt) completed.push(`${name}：${receipt.status === "done" ? "已处理" : "已登记"} · ${delayRules.effectLabel(receipt)}`);
           }
-          Object.values(local.mnemosAwards || {}).forEach(item => completed.push(`${name}：${item.hero} · ${item.card} · 旧忆节点 +1`));
-          Object.values(local.heroStatAwards || {}).forEach(item => completed.push(`${name}：${item.hero} · ${item.result}`));
+          Object.values(local.mnemosAwards || {}).forEach(item => add(`${item.hero} · ${item.card} · 旧忆节点 +1`, "英雄状态"));
+          Object.values(local.heroStatAwards || {}).forEach(item => add(`${item.hero} · ${item.result}`, "英雄状态"));
           for (const placed of Object.values(local.tokenPlacements || {})) {
             for (const [type, amount] of Object.entries(placed)) completed.push(`${name}：${type === "doom" ? "灾厄" : "希望"}已处理 ${amount}`);
           }
@@ -12031,12 +12092,12 @@
           const title = entry && explorationCardResources(entry.id)?.titleZh;
           return title ? title + line.slice(entry.name.length) : line;
         });
-        addList("已结算", showCardNames(completed));
-        addList("将自动结算", showCardNames(preview?.completed || []));
-        addList(finishing ? "仍待确认" : "仍需玩家处理", showCardNames(pending));
+        addSection("已结算", completed);
+        addSection("将自动结算", showCardNames(preview?.completed || []));
+        addSection(finishing ? "仍待确认" : "仍需玩家处理", showCardNames(pending));
         const pursuit = createExplorationPursuitTools()?.querySelector("span")?.textContent;
-        if (pursuit) addList("追踪标记", [pursuit], "./map/tokens/adversary.png");
-        if (!body.childElementCount) addList("结算结果", ["本轮无额外效果。"]);
+        if (pursuit) addSection("追踪标记", [pursuit], false, "./map/tokens/adversary.png");
+        if (!body.childElementCount) addSection("结算结果", ["本轮无额外效果。"], false);
         button.textContent = finishing ? (pending.length ? "确认已处理并结束本轮" : "确认结束本轮")
           : pending.length ? "确认自动结算" : "确认结算并结束本轮";
         dialog.returnValue = "cancel";

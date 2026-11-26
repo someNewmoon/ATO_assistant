@@ -112,6 +112,7 @@ export function squadView(room, actor) {
 function cleanStory(raw) {
   if (!raw || typeof raw !== 'object') fail('没有可投屏的剧情。');
   const story = Object.fromEntries(['id', 'title', 'bookTitle', 'bookId', 'entryKey', 'section'].map(key => [key, text(raw[key], 240)]));
+  if (typeof raw.chapterKey === 'string' && /^[a-z0-9-]{1,100}$/.test(raw.chapterKey)) story.chapterKey = raw.chapterKey;
   story.text = text(raw.text, 24000);
   story.fallbackText = text(raw.fallbackText, 24000);
   story.images = Array.isArray(raw.images) ? raw.images.filter(src => typeof src === 'string' && (

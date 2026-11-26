@@ -444,7 +444,7 @@ function openStory(screen, forceRender = false) {
   const hasText = Boolean(text?.trim()) && !text.trimStart().startsWith("【官方版暂无正文】");
   // Polls which only refresh revision/time must not close an open image.
   const renderKey = JSON.stringify([story.id, story.title, story.bookTitle, story.section,
-    story.text, story.fallbackText, story.mixedMedia, prefersScans, scans]);
+    story.text, story.fallbackText, story.mixedMedia, story.bookId, story.chapterKey, prefersScans, scans]);
   if (!hasStorySnapshot(story) && storyRendered) return;
   latestStoryScreen = screen;
   if (renderKey === storyRenderKey && previousMode === "story" && !forceRender) return;
@@ -457,11 +457,14 @@ function openStory(screen, forceRender = false) {
   }
   const mixedGeneration = ++mixedStoryGeneration;
   mixedMediaRuntime()?.dispose?.(elements.storyBody);
+  const covers = window.ATO_STORY_CHAPTER_COVERS;
+  const showCover = () => void covers?.apply(elements.storyView, story.bookId, story.chapterKey);
   if (!hasStorySnapshot(story)) {
     // 第二屏是跟随显示：快照迟到或没写进来时保留上一屏内容，不要用阅读器视角的
     // 「请先在故事书中选择一个段落。」把已经显示的正文顶掉。真的一份都没有时才提示。
     if (storyRendered) return;
     elements.storyView.classList.toggle("images-only", false);
+    void covers?.apply(elements.storyView);
     elements.storyBookTitle.textContent = "";
     elements.storySection.textContent = "";
     elements.storyTitle.textContent = "等待故事文本";
@@ -476,8 +479,11 @@ function openStory(screen, forceRender = false) {
   elements.storySection.textContent = story.section || "";
   elements.storyTitle.textContent = story.title || "当前故事文本";
   elements.storyEntryId.textContent = story.id || "";
+  elements.storyEntryId.toggleAttribute?.("data-cover-hide-id", covers ? !covers.showEntryId(story.title || "", story.id) : false);
   elements.storyView.classList.toggle("images-only", imagesOnly);
+  if (!imagesOnly) showCover();
   if (imagesOnly) {
+    void covers?.apply(elements.storyView);
     elements.storyBody.replaceChildren();
     // 图仍然可能取不到：老快照里的 APK 内部路径、或者 APK 里根本没有这张图。
     // 一张都加载不出来时不能把屏幕留空——退回快照另存的正文。
@@ -486,6 +492,7 @@ function openStory(screen, forceRender = false) {
     const failImage = () => {
       if (!isCurrent() || ++failedImages < scans.length) return;
       elements.storyView.classList.toggle("images-only", false);
+      showCover();
       if (elements.storyScanToggle) elements.storyScanToggle.hidden = true;
       elements.storyBody.replaceChildren();
       renderMixedStoryBody(story, text || "官方扫描图加载失败，请回到故事页重新选择该条目。");

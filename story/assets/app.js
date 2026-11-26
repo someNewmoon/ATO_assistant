@@ -3779,6 +3779,7 @@
       bookTitle: currentBook()?.title || "故事书",
       bookId: currentBook()?.id || "",
       entryKey: activeEntry.key || "",
+      chapterKey: activeEntry.chapterKey || "",
       section: sectionLabel.textContent || activeEntry.chapter || "",
       id: activeEntry.id || "",
       title: storyTitleText(activeEntry, displayEntry),
@@ -4259,7 +4260,11 @@
   }
 
   function renderEntryTitle(entry) {
-    entryTitle.textContent = storyTitleText(entry);
+    const title = storyTitleText(entry);
+    entryTitle.textContent = title;
+    const covers = window.ATO_STORY_CHAPTER_COVERS;
+    entryBadge.toggleAttribute("data-cover-hide-id", covers ? !covers.showEntryId(title, entry.id) : false);
+    void covers?.apply(entryTitle.closest(".reader-head"), currentBook()?.id, entry.chapterKey);
     if (pharosTitleDecodeButton) {
       pharosTitleDecodeButton.hidden = !pharosTitleAnswer(entry) || decodedPharosTitleKeys.has(entry.key);
     }
@@ -5210,6 +5215,7 @@
       activeEntry = null;
       copyParagraphButton.disabled = true;
       entryTitle.textContent = "当前版本没有此条目";
+      void window.ATO_STORY_CHAPTER_COVERS?.apply(entryTitle.closest(".reader-head"));
       if (pharosTitleDecodeButton) pharosTitleDecodeButton.hidden = true;
       entryBadge.textContent = "----";
       window.ATO_STORY_MAIN_RECORD?.show(null);

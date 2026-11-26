@@ -106,6 +106,7 @@ function technologyHarness(options = {}) {
     },
     dashboardSyncChannel: syncChannel,
     returnMain,
+    technologyReturnStatus: { textContent: '' },
     saveAccounts: () => calls.push('save-accounts'),
     alert: (message) => calls.push('alert:' + message),
     flushCampaignTechnologySave: async () => {
@@ -183,7 +184,7 @@ test('technology save-and-return notifies the live console instead of reloading 
   const failing = technologyHarness({ saveFails: true });
   await failing.context.saveAndReturnMain();
   assert.ok(!failing.calls.some((call) => call.startsWith('navigate:')), 'a failed save must stay on the technology page');
-  assert.ok(failing.calls.some((call) => call.startsWith('alert:保存科技列表失败')));
+  assert.match(failing.context.technologyReturnStatus.textContent, /^科技存档失败：/);
 });
 
 test('the page router exposes a focus-only helper that never loads a URL into the tab', () => {

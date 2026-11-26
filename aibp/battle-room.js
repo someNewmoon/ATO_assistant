@@ -1574,14 +1574,14 @@
     content.querySelector('#room-dice')?.scrollIntoView({ block: 'start' });
   }
 
-  function declareAttack(seat, addRage) {
+  function declareAttack(seat) {
     const weapon = chosenBoardWeapon(seat);
     if (!weapon?.ready || !weapon.range || actions.some(action => action.type === 'attack-declare')) return;
     if (actor.role === 'host') rollSeat = seat;
     rollMode = 'attack';
     if (weapon.id !== readDiceDraft(seat, 'attack').weapon) chooseWeapon(seat, weapon.id);
     send({ id: crypto.randomUUID(), type: 'attack-declare', seat, weapon: weapon.id, range: weapon.range,
-      ...bonusContext(seat), ...(typeof addRage === 'boolean' && { addRage }) });
+      ...bonusContext(seat) });
   }
 
   function attackForPower(seat) {

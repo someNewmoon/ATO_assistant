@@ -6,7 +6,7 @@
     actionPanel.setAttribute("aria-label", "泰坦行动");
     actionPanel.hidden = true;
     const { escape } = window.ATO_HERO_CATALOG;
-    let actionMarkup = "", bonusRage = "";
+    let actionMarkup = "";
     const reference = document.getElementById("battleMapControl")
       || document.getElementById("battleRoomBoardTemplate")?.content.querySelector("#battleMapControl");
     const open = document.createElement("button");
@@ -90,17 +90,14 @@
         + '</strong><small>' + (lockedWeapon ? actions.stageLabel(attack.stage) : '按牌面触发，保留普通移动和作战行动。') + '</small>'
         + (lockedWeapon ? '<button type="button" data-action-entry="attack">继续奖励攻击</button>'
           : '<button type="button" class="secondary" data-action-entry="bonus-cancel">取消奖励攻击</button>') + '</div>';
-      const rageChoice = bonus && !lockedWeapon ? '<label>本次怒气 <select data-bonus-rage><option value="">按牌面选择…</option>'
-        + '<option value="yes"' + (bonusRage === 'yes' ? ' selected' : '') + '>增加 1</option>'
-        + '<option value="no"' + (bonusRage === 'no' ? ' selected' : '') + '>不增加</option></select></label>' : '';
       const next = (bonusActions || turnActions) + '<div class="room-titan-action-weapon"><strong>武器</strong>'
         + (weapons ? '<div class="room-board-weapon-list" role="group" aria-label="选择已装备武器">' + weapons + '</div>'
           : '<small>该英雄未装备武器。</small>')
         + (fixedRange ? '<small>' + fixedRange + '</small>' : '') + manual
         + (weapon && !lockedWeapon ? '<small>牌面费用与条件请手动核对。</small>' : '')
-        + (position ? '<small>' + position + '</small>' : '') + rageChoice
+        + (position ? '<small>' + position + '</small>' : '')
         + ((bonus ? !lockedWeapon : canUseAttack) ? '<button type="button" data-action-entry="declare"'
-          + (legal?.legal && weapon.ready && (!bonus || bonusRage) ? '' : ' disabled') + '>'
+          + (legal?.legal && weapon.ready ? '' : ' disabled') + '>'
           + (bonus ? '宣告奖励攻击' : '宣告攻击') + '</button>' : '') + '</div>'
         + (bonus ? '' : '<details class="room-titan-action-options"><summary>牌面行动</summary>'
         + '<button type="button" data-action-entry="bonus-start"' + (actions.canStartBonus(seat) ? '' : ' disabled') + '>结算奖励攻击</button>'
@@ -124,13 +121,6 @@
     actionPanel.addEventListener("change", event => {
       const field = event.target;
       if (actionPanel.hidden) return;
-      if (field.matches("[data-bonus-rage]")) {
-        bonusRage = field.value;
-        const declare = actionPanel.querySelector('[data-action-entry="declare"]');
-        const weapon = actions.weapon(room.turn.bonusAttack.seat);
-        declare.disabled = !(bonusRage && weapon?.ready && weapon.range && control.weaponTarget(room.turn.bonusAttack.seat, weapon.range)?.legal);
-        return;
-      }
       if (field.matches("[data-action-range]")) {
         const kind = field.value;
         actionPanel.querySelector("[data-action-min]").closest("label").hidden = kind !== "ranged";
@@ -163,7 +153,7 @@
         control.openTitanAttack(seat);
         if (window.matchMedia("(max-width: 640px)").matches || activeAttack() || !actions.tracked(seat)) actions.openDice(seat);
       } else if (entry === "declare") {
-        actions.declare(seat, bonus ? bonusRage === "yes" : undefined);
+        actions.declare(seat);
       } else if (entry === "bonus-start") {
         actions.startBonus(seat);
       } else if (entry === "bonus-cancel") {
@@ -381,9 +371,7 @@
         const previous = room?.board;
         const previousBattle = room?.squad?.battleNumber;
         const previousSeat = room?.turn?.seat;
-        const previousBonus = room?.turn?.bonusAttack?.id;
         room = nextRoom;
-        if (previousBonus !== room.turn?.bonusAttack?.id) bonusRage = "";
         actor = nextActor;
         mount.hidden = !room.board && !canEdit();
         mount.classList.toggle("room-tactical-read-only", actor.role === "viewer" || room.closed);

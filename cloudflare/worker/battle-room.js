@@ -1008,14 +1008,13 @@ export class BattleRoom extends DurableObject {
       const range = gearRolls.range(item.id) ?? gearRolls.manualRange(body.range);
       if (!range) reject('请按武器牌面确认有效射程。', 409);
       if (!titanAttackTarget(room.board, seat, range)?.legal) reject('从当前站位无法同时满足有效射程和视线。', 409);
-      if (bonus && typeof body.addRage !== 'boolean') reject('请确认牌面是否增加怒气。');
       const declared = { stage: 'declared', weapon: item.id, range };
-      if (bonus) Object.assign(bonus, declared, { addRage: body.addRage });
+      if (bonus) Object.assign(bonus, declared);
       else {
         claimTurn(room, seat);
         (turn.actions ||= {}).attack = declared;
       }
-      if ((!bonus || body.addRage) && hero.stats.rage < 30) changeRage(room, hero, seat, 1);
+      if (hero.stats.rage < 30) changeRage(room, hero, seat, 1);
       return;
     }
     if (type === 'turn-spend') {

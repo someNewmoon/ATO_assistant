@@ -1214,11 +1214,13 @@ test('奖励攻击独立于回合行动，支持骇物轮次、取消、触发�
     act('bonus-attack-start', { id: 'bonus' });
     const action = (type, data = {}) => act(type, { bonusId: 'bonus', ...data });
     assert.throws(() => act('attack-declare', { weapon: 'AJ0185' }), /奖励攻击状态/);
-    assert.throws(() => action('attack-declare', { weapon: 'AJ0185' }), /是否增加怒气/);
     assert.throws(() => action('bp-request'), /第一能力时段/);
-    action('attack-declare', { weapon: 'AJ0185', addRage: phase === 'titans' });
-    assert.equal(r.heroes[1].stats.rage, phase === 'titans' ? 1 : 0);
-    assert.throws(() => action('attack-declare', { weapon: 'AJ0185', addRage: true }), /已使用/);
+    // Cached clients may still send the removed choice. Both payloads add Rage.
+    action('attack-declare', { weapon: 'AJ0185', ...(phase === 'apostle' && { addRage: false }) });
+    assert.equal(r.heroes[1].stats.rage, 1);
+    assert.deepEqual(r.priorityTarget, { seat: 1, locked: false });
+    assert.throws(() => action('attack-declare', { weapon: 'AJ0185' }), /已使用/);
+    assert.equal(r.heroes[1].stats.rage, 1);
     assert.throws(() => action('bonus-attack-cancel'), /步骤已经变化/);
     assert.throws(() => act('turn-phase', { value: 'titans' }, host), /结束当前奖励攻击/);
     assert.throws(() => act('roll', { bonusId: 'bonus', seat: 0, mode: 'attack', counts: { d10: 1 } }, host), /当前奖励攻击/);

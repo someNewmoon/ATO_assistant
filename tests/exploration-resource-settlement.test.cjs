@@ -1284,6 +1284,33 @@ test('next exploration map event snapshots gate later rewards without inventing 
   assert.equal(h.record.cycleStats.c4.babelianDebt, '4');
 });
 
+test('a waived Maze Pilgrim checks actual Strangers before the later Fate bonus', async () => {
+  for (const initial of [2, 3]) {
+    const entry = drawnEntry('6437', 'Maze Pilgrim');
+    const h = settleHarness({ factions: ['labyrinthians'], activePiles: [[entry], []],
+      fullRecord: nextRecord('c1', { strangers: String(initial), fate: '5' }) });
+    const local = h.ctx.explorationEffectState(entry);
+    const base = 'conditional:maze-pilgrim';
+    const followup = 'conditional:maze-pilgrim-waived-story';
+    local.choices.saveManual = { [base]: true };
+    local.manual[base] = local.skipped[base] = true;
+    const links = () => h.ctx.createExplorationSettleBlock(entry).descendants()
+      .filter(node => node.className === 'exploration-story-link');
+    assert.equal(links().length, initial >= 3 ? 1 : 0);
+    await h.ctx.settleExplorationCard(entry);
+    assert.deepEqual(h.alerts, []);
+    if (initial >= 3) {
+      assert.equal(h.record.cycleStats.c1.strangers, '3', 'both the waived base and the later gain remain out of the record');
+      assert.match(links()[0].href, /key=c1-3-19$/);
+      await clickAndWait(buttonNamed(h.ctx.createExplorationSettleBlock(entry), '已手动处理'));
+      assert.ok(h.ctx.explorationEffectState(entry).manual[followup]);
+      await h.ctx.settleExplorationCard(entry);
+    }
+    assert.equal(h.record.cycleStats.c1.strangers, String(initial + 1), 'only the later Fate gain is applied');
+    assert.equal(links().length, 0, 'the later gain never creates a new 0014 event');
+  }
+});
+
 test('next exploration Tomorrow waits for its event and restores the original removal through cascade undo', async () => {
   for (const fate of ['0', '7']) {
     const entry = drawnEntry('13541', 'Tomorrow’s Edge');

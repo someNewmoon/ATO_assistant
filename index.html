@@ -1233,6 +1233,14 @@
     #explorationReviewDialog h2 { margin-top: 0; }
     #explorationReviewDialog h3 { margin-bottom: .35rem; }
     #explorationReviewDialog ul { margin-top: 0; overflow-wrap: anywhere; }
+    .exploration-review-icon {
+      display: inline-block; width: 1.2em; height: 1.2em; object-fit: contain;
+      margin-inline-end: .28em; vertical-align: -.23em;
+    }
+    .exploration-choice-portrait {
+      width: 1.7em; height: 1.7em; object-fit: cover; border-radius: 50%;
+      margin-inline: .3em; vertical-align: middle;
+    }
     #explorationReviewDialog footer { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .5rem; }
 
     .exploration-effect-controls {
@@ -3141,7 +3149,7 @@
   <script src="./assets/exploration-card-tags.js?v=20261018-card-audit1"></script>
   <script src="./assets/exploration-card-rules.js?v=20261018-card-audit1"></script>
   <script src="./assets/exploration-card-resource-rules.js?v=20261013-automation5"></script>
-  <script src="./assets/exploration-card-effects.js?v=20261126-settlement-review"></script>
+  <script src="./assets/exploration-card-effects.js?v=20261126-hero-choice"></script>
   <script src="./assets/dice-motion.js?v=7" defer></script>
   <script src="./assets/campaign-session.js?v=20260917"></script>
   <script src="./assets/exploration-card-conditions.js?v=20261125-story-references"></script>
@@ -7827,7 +7835,7 @@
       };
     }
 
-    function chooseMnemosProgress(source, rows, instructions = "请由对应玩家为每位同进度的英雄选一张卡增加 1 个回忆节点。") {
+    function chooseMnemosProgress(source, rows, instructions = "请由对应玩家为每位同进度的英雄选一张卡增加 1 个回忆节点。", title = "选择旧忆卡") {
       const dialog = document.getElementById("mnemosChoiceDialog");
       if (typeof dialog?.showModal !== "function") {
         window.alert("当前浏览器不支持 dialog 弹窗。请使用新版 Chrome / Edge。");
@@ -7836,14 +7844,26 @@
       const form = dialog.querySelector("form");
       const rowList = document.getElementById("mnemosChoiceRows");
       const submit = document.getElementById("mnemosChoiceConfirm");
+      document.getElementById("mnemosChoiceTitle").textContent = title;
       document.getElementById("mnemosChoiceSource").textContent = source;
       document.getElementById("mnemosChoiceInstructions").textContent = instructions;
       rowList.replaceChildren();
 
+      const appendChoiceLabel = (element, choice) => {
+        if (choice.portrait) {
+          const image = document.createElement("img");
+          image.src = "./hero/assets/" + choice.portrait;
+          image.className = "exploration-choice-portrait";
+          image.alt = "";
+          element.appendChild(image);
+        }
+        element.append(choice.label);
+      };
       rows.forEach(({ name, cards }, index) => {
         if (cards.length === 1) {
           const line = document.createElement("p");
-          line.textContent = `${name} · ${cards[0].label}`;
+          line.textContent = cards[0].portrait ? "" : `${name} · `;
+          appendChoiceLabel(line, cards[0]);
           rowList.append(line);
           return;
         }
@@ -7851,14 +7871,16 @@
         const legend = document.createElement("legend");
         legend.textContent = name;
         group.append(legend);
-        cards.forEach(({ label, change }) => {
+        cards.forEach(choice => {
+          const { change } = choice;
           const option = document.createElement("label");
           const radio = document.createElement("input");
           radio.type = "radio";
           radio.name = `mnemos-${index}`;
           radio.value = change.choiceKey || change.cardId;
           radio.required = true;
-          option.append(radio, label);
+          option.append(radio);
+          appendChoiceLabel(option, choice);
           group.append(option);
         });
         rowList.append(group);
@@ -11148,8 +11170,12 @@
         actions.appendChild(button);
       };
       const manual = Boolean(local.choices.saveManual?.[item.id]);
+      const mazeBase = item.id === "conditional:maze-pilgrim";
+      const mazeFollowup = "conditional:maze-pilgrim-waived-story";
       if (manual) {
-        add("恢复本项待办", () => {
+        const mazeContinued = mazeBase && (local.manual[mazeFollowup] || local.applied["manual:2"] || local.manual["manual:2"]);
+        if (!mazeContinued) add("恢复本项待办", () => {
+          if (mazeBase) delete local.choices.mazePilgrimStrangers;
           for (const id of [item.id, ...(item.groupedManualIds || [])]) {
             delete local.choices.saveManual[id]; delete local.manual[id]; delete local.skipped[id];
             delete local.choices.saveReviewed?.[id];
@@ -11157,6 +11183,10 @@
         });
       } else {
         add("豁免", () => {
+          if (mazeBase) {
+            const strangers = window.ATO_EXPLORATION_CONDITIONS?.contextForRecord(cachedArgoRecord, "c1").stats.strangers;
+            if (Number.isSafeInteger(strangers)) local.choices.mazePilgrimStrangers = strangers;
+          }
           for (const id of [item.id, ...(item.groupedManualIds || [])]) {
             (local.choices.saveManual ||= {})[id] = true;
             local.manual[id] = true; local.skipped[id] = true;
@@ -11164,8 +11194,8 @@
         });
       }
       const note = document.createElement("div");
-      note.textContent = manual ? "本项已手动处理，不再自动应用。"
-        : "默认不豁免";
+      note.textContent = manual ? (mazeBase ? "基础陌路人已按豁免处理，仍按实际人数检查 0014。" : "本项已手动处理，不再自动应用。")
+        : mazeBase ? "默认不豁免。使用修辞学时，按卡面记录命运和实际陌路人数，再点「豁免」。" : "默认不豁免";
       box.append(actions, note);
       return box;
     }
@@ -11898,6 +11928,37 @@
       }
     }
 
+    function explorationReviewIcons(cycleId) {
+      const glyph = (name, cycle = cycleId) => `./story/assets/mixed-media/images/${cycle}/icon-${cycle === "c2" ? "c2-" : ""}${name}.svg`;
+      const paths = new Map();
+      const add = (src, ...labels) => labels.filter(Boolean).forEach(label => paths.set(label, src));
+      const dataset = explorationResourceDataset();
+      for (const [key, resource] of Object.entries(dataset?.cycles?.[cycleId]?.resources || {})) {
+        add(`./record/assets/resource-icons/${key}.png`, explorationResourceRules().resourceLabel(dataset, cycleId, key),
+          resource.zh, resource.en);
+      }
+      add("./record/assets/resource-icons/rare.png", "稀有资源");
+      add(glyph("progress"), "希望", "进度标记", "进展", "Progress Token");
+      add(glyph("doom"), "灾厄", "灾祸", "末日", "Doom Token");
+      add(glyph("escalation", "c2"), "激化");
+      add("./assets/icons/argo-fate.svg", "阿尔戈号命运", "阿尔戈命运");
+      add("./assets/icons/argo-knowledge.svg", "阿尔戈号知识");
+      add("./assets/icons/strangers.svg", "陌路人", "陌生人");
+      add("./assets/icons/titans.svg", "梦行者", "泰坦");
+      add("./assets/icons/hull.svg", "船体");
+      add("./assets/icons/crew.svg", "船员");
+      add("./assets/icons/story.svg", "旧忆节点", "回忆节点");
+      add("./hero/assets/tri_rage.png", "怒气");
+      add("./hero/assets/tri_fate.png", "命运");
+      add("./hero/assets/tri_danger.png", "凶险");
+      const labels = [...paths.keys()].sort((a, b) => b.length - a.length)
+        .map(label => {
+          const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+          return /^[a-z]/i.test(label) ? `\\b${escaped}\\b` : escaped;
+        });
+      return { paths, pattern: new RegExp(labels.join("|"), "g") };
+    }
+
     async function confirmExplorationReview(finishing) {
       const entries = ensureExplorationDrawState().activePiles.flat();
       const target = structureTechTarget();
@@ -11905,14 +11966,40 @@
       const dialog = document.getElementById("explorationReviewDialog");
       const body = dialog.querySelector("[data-exploration-review]");
       const button = dialog.querySelector("[data-exploration-review-confirm]");
-      const addList = (title, rows) => {
+      const { paths, pattern } = explorationReviewIcons(target.cycleId);
+      const icon = src => {
+        const img = document.createElement("img");
+        img.className = "exploration-review-icon";
+        img.alt = "";
+        img.src = src;
+        img.addEventListener("error", () => img.remove(), { once: true });
+        return img;
+      };
+      const addList = (title, rows, leadingIcon = "") => {
         if (!rows.length) return;
         const heading = document.createElement("h3");
         heading.textContent = title;
         const list = document.createElement("ul");
         for (const row of [...new Set(rows)]) {
           const item = document.createElement("li");
-          item.textContent = row;
+          if (leadingIcon) item.append(icon(leadingIcon));
+          // Only annotate effect text. The card title may itself mention a resource.
+          const start = row.indexOf("：") + 1;
+          const description = row.slice(start);
+          let end = 0;
+          const shown = new Set();
+          item.append(row.slice(0, start));
+          for (const match of description.matchAll(pattern)) {
+            const src = paths.get(match[0]);
+            item.append(description.slice(end, match.index));
+            if (!shown.has(src)) {
+              item.append(icon(src));
+              shown.add(src);
+            }
+            item.append(match[0]);
+            end = match.index + match[0].length;
+          }
+          item.append(description.slice(end));
           list.appendChild(item);
         }
         body.append(heading, list);
@@ -11937,6 +12024,7 @@
             if (receipt) completed.push(`${name}：${receipt.status === "done" ? "已处理" : "已登记"} · ${delayRules.effectLabel(receipt)}`);
           }
           Object.values(local.mnemosAwards || {}).forEach(item => completed.push(`${name}：${item.hero} · ${item.card} · 旧忆节点 +1`));
+          Object.values(local.heroStatAwards || {}).forEach(item => completed.push(`${name}：${item.hero} · ${item.result}`));
           for (const placed of Object.values(local.tokenPlacements || {})) {
             for (const [type, amount] of Object.entries(placed)) completed.push(`${name}：${type === "doom" ? "灾厄" : "希望"}已处理 ${amount}`);
           }
@@ -11950,7 +12038,7 @@
         addList("将自动结算", showCardNames(preview?.completed || []));
         addList(finishing ? "仍待确认" : "仍需玩家处理", showCardNames(pending));
         const pursuit = createExplorationPursuitTools()?.querySelector("span")?.textContent;
-        if (pursuit) addList("追踪标记", [pursuit]);
+        if (pursuit) addList("追踪标记", [pursuit], "./map/tokens/adversary.png");
         if (!body.childElementCount) addList("结算结果", ["本轮无额外效果。"]);
         button.textContent = finishing ? (pending.length ? "确认已处理并结束本轮" : "确认结束本轮")
           : pending.length ? "确认自动结算" : "确认结算并结束本轮";
@@ -12135,9 +12223,36 @@
           }
         }
       }
+      const local = explorationEffectState(entry);
+      const mazeBase = conditional.find(item => item.id === "conditional:maze-pilgrim");
+      const waivedMaze = mazeBase && local.choices.saveManual?.[mazeBase.id];
+      const waivedStoryId = "conditional:maze-pilgrim-waived-story";
+      let waivedStory;
+      if (waivedMaze) {
+        mazeBase.remainder = "";
+        mazeBase.text = "迷阵朝圣者：基础陌路人已按豁免处理";
+        mazeBase.summary = "";
+        const current = context.stats?.strangers;
+        const laterGain = local.applied["manual:2"]?.changes?.find(change => change.type === "strangers")?.amount || 0;
+        if (!Number.isSafeInteger(local.choices.mazePilgrimStrangers) && Number.isSafeInteger(current)) {
+          local.choices.mazePilgrimStrangers = Math.max(0, current - laterGain);
+        }
+        const strangers = local.choices.mazePilgrimStrangers;
+        if (!Number.isSafeInteger(strangers) || strangers >= 3) {
+          const message = Number.isSafeInteger(strangers)
+            ? `豁免后有 ${strangers} 名陌路人，请处理「宿命的迷境」0014。`
+            : "豁免后请补录陌路人数，再核对是否达到 3 名。";
+          waivedStory = { id: waivedStoryId, manualIndexes: [], effects: [], text: message, remainder: message,
+            conditionState: Number.isSafeInteger(strangers) ? true : null };
+          conditional.push(waivedStory);
+        }
+      }
       for (const group of conditional) for (const index of group.blockedManualIndexes || []) {
         const following = descriptors.find(item => item.id === `manual:${index}`);
-        if (following) {
+        if (!following) continue;
+        if (group === mazeBase && waivedMaze) {
+          if (waivedStory) following.requiresManual = waivedStoryId;
+        } else {
           following.requiresEffect = group.id;
           if (group.remainder) following.requiresManual = group.id;
         }
@@ -12162,8 +12277,7 @@
       }));
       const visible = [...descriptors.filter((item) => !customIndexes.has(Number(item.id.split(":")[1]))), ...partialDogDays,
         ...conditional.filter(item => !context.appliedEffects?.[item.id]?.choiceId).map((item) => ({ ...item,
-          text: context.appliedEffects?.[item.id]?.descriptor ? item.text : `${item.text}：${item.summary || ""}`, badge: "", remainder: item.remainder || "" }))];
-      const local = explorationEffectState(entry);
+          text: context.appliedEffects?.[item.id]?.descriptor ? item.text : [item.text, item.summary].filter(Boolean).join("："), badge: "", remainder: item.remainder || "" }))];
       const combined = effects?.combineManualReminders?.(card, visible, { ...context, excludedIndexes: [...customIndexes],
         manualEffects: local.manual, skippedEffects: local.skipped }) || visible;
       for (const item of combined) {
@@ -12763,15 +12877,17 @@
         "c5:10314": { effect: "conditional:drown-in-fear", trigger: /Fractures/i, key: "c5-supplement-裂痕-fractures", label: "打开特殊事件 · 裂痕" },
       };
       const reference = references[card.key];
-      const matchesEffect = reference?.effect === item.id || (card.key === "c2:13634" && item.id === "manual:4");
+      const matchesEffect = reference?.effect === item.id
+        || (card.key === "c1:6437" && item.id === "conditional:maze-pilgrim-waived-story")
+        || (card.key === "c2:13634" && item.id === "manual:4");
       if (!reference || !matchesEffect || !item.remainder
           || (reference.trigger && !reference.trigger.test(item.remainder))) return null;
       return reference;
     }
 
-    async function awardExplorationMnemos(entry, item) {
-      if (awardExplorationMnemos.busy || mutateExplorationRecord.busy || settleExplorationDraw.busy) return;
-      awardExplorationMnemos.busy = true;
+    async function awardExplorationHeroEffect(entry, item, stat = null) {
+      if (awardExplorationHeroEffect.busy || mutateExplorationRecord.busy || settleExplorationDraw.busy) return;
+      awardExplorationHeroEffect.busy = true;
       const target = structureTechTarget();
       const catalog = window.ATO_HERO_CATALOG;
       const roundId = explorationRoundId(entry);
@@ -12784,7 +12900,12 @@
         const dashboard = campaign?.sections?.dashboard;
         const step = dashboard?.profiles?.[target.profileId]?.cycles?.[target.cycleId]?.state;
         const heroes = catalog.activeHeroes(campaign, target.profileId);
-        const cards = heroes.flatMap(hero => catalog.mnemosCards(hero)
+        const statValue = hero => Math.max(0, Number.parseInt(hero.triskelion?.[stat.key], 10) || 0);
+        const cards = stat ? heroes.map(hero => ({
+          label: `${catalog.heroDisplayName(hero)} · ${stat.label} ${statValue(hero)} → ${statValue(hero) + stat.amount}`,
+          portrait: catalog.heroPortrait(hero),
+          change: { heroId: hero.id, choiceKey: hero.id, hero: catalog.heroDisplayName(hero) },
+        })) : heroes.flatMap(hero => catalog.mnemosCards(hero)
           .filter(card => !card.fated && Number(card.progress) < card.limit)
           .map(card => ({
             label: `${catalog.heroDisplayName(hero)} · ${card.zh} · ${card.progress} → ${Number(card.progress) + 1}/${card.limit}`,
@@ -12794,33 +12915,44 @@
         if (!step || dashboard.activeProfileId !== target.profileId || String(step.day) !== String(target.day)
             || !step.exploration?.drawStateByCycle?.[target.cycleId]?.activePiles?.flat().some(value => explorationRoundId(value) === roundId)
             || activeEffect(step)?.manual?.[item.id]) throw new Error("这项探索效果已变更，请刷新后重试。");
-        if (!cards.length) throw new Error("当前没有可增加节点的旧忆卡。");
+        if (!cards.length) throw new Error(stat ? "当前存档没有可选英雄。" : "当前没有可增加节点的旧忆卡。");
+        const resultLabel = stat ? `${stat.label} +${stat.amount}` : "旧忆节点 +1";
         const selected = await chooseMnemosProgress(explorationCardResources(entry.id)?.titleZh || entry.name,
-          [{ name: "选择英雄和旧忆", cards }], "选择一位英雄的一张旧忆卡，增加 1 个旧忆节点。");
+          [{ name: stat ? "选择英雄" : "选择英雄和旧忆", cards }],
+          stat ? `选择一位英雄，结算${resultLabel}。` : "选择一位英雄的一张旧忆卡，增加 1 个旧忆节点。",
+          stat ? "选择结算英雄" : "选择旧忆卡");
         if (!selected) return;
         assertStructureTechTarget(target);
         if (campaignHasUnsavedChanges()) throw new Error("战役进度已变化，请重新核对。");
         const [change] = selected;
         const heroSection = campaign.sections.heroes;
         const buckets = heroSection.users || heroSection.accounts;
-        const nextHeroState = applyHeroProgressChanges(buckets ? buckets[target.profileId] : heroSection, selected);
+        const heroState = buckets ? buckets[target.profileId] : heroSection;
+        const nextHeroState = stat ? cloneJson(heroState) : applyHeroProgressChanges(heroState, selected);
+        if (stat) {
+          const hero = nextHeroState.heroes.find(candidate => candidate.id === change.heroId);
+          const value = hero && statValue(hero) + stat.amount;
+          if (!Number.isSafeInteger(value)) throw new Error("英雄状态已变更，请重新选择。");
+          (hero.triskelion ||= {})[stat.key] = value;
+        }
         const nextHeroes = buckets ? explorationRecordSection(heroSection, target.profileId, nextHeroState) : nextHeroState;
         const effectStore = (step.exploration.effectStateByCycle ||= {})[target.cycleId] ||= {};
         const local = effectStore[store.key] ||= { manual: {}, skipped: {}, applied: {} };
         (local.manual ||= {})[item.id] = true;
-        (local.mnemosAwards ||= {})[item.id] = { hero: change.hero, card: change.card };
+        if (stat) (local.heroStatAwards ||= {})[item.id] = { hero: change.hero, result: resultLabel };
+        else (local.mnemosAwards ||= {})[item.id] = { hero: change.hero, card: change.card };
         const revisions = campaign.sectionRevisions;
         const result = await importCampaignSections({ dashboard, heroes: nextHeroes },
           { dashboard: revisions.dashboard, heroes: revisions.heroes, record: revisions.record });
         campaign.sections.heroes = nextHeroes;
         campaign.sectionRevisions = { ...revisions, ...result.sections };
-        await applyStructureTechCommit({ campaign }, target, { saveMessage: "旧忆节点已存档" });
+        await applyStructureTechCommit({ campaign }, target, { saveMessage: `${resultLabel} 已存档` });
         campaignSyncChannel?.postMessage({ revision: result.sections.dashboard });
         heroMnemosSyncChannel?.postMessage({ type: "hero-state-updated" });
       } catch (error) {
         window.alert(error.code === "SAVE_CONFLICT" ? "战役或英雄记录已更新，请刷新后重试。" : error.message);
       } finally {
-        awardExplorationMnemos.busy = false;
+        awardExplorationHeroEffect.busy = false;
       }
     }
 
@@ -12947,8 +13079,10 @@
             controls.appendChild(createExplorationTokenPlacementTools(entry, item, "", { includeSaveTools: false }));
           }
         }
-        const award = effectState.mnemosAwards?.[item.id];
-        if (award) status.textContent = `${award.hero} · ${award.card} · 旧忆节点 +1`;
+        const mnemosAward = effectState.mnemosAwards?.[item.id];
+        const statAward = effectState.heroStatAwards?.[item.id];
+        if (mnemosAward) status.textContent = `${mnemosAward.hero} · ${mnemosAward.card} · 旧忆节点 +1`;
+        if (statAward) status.textContent = `${statAward.hero} · ${statAward.result}`;
         const reference = explorationStoryReference(card, item);
         const handled = Boolean(effectState.manual[item.id]);
         const storyPending = reference && !handled && !effectState.skipped[item.id] && !item.receiptMismatch;
@@ -12972,11 +13106,14 @@
           controls.appendChild(button);
         };
         const heroCounter = /(?:英雄[^。；]*(?:获得|失去)[^。；]*(?:绝望|凶险|命运|怒气)|(?:argonauts?|heroes?)\s+(?:gains?|loses?)\s+[+-]?\d+\s+(?:despair|danger|fate|fury))/i;
-        if (!handled && !effectState.skipped[item.id] && item.conditionState === true && explorationEffectRules()?.isMnemosAward(item.remainder)
+        const effectRules = explorationEffectRules();
+        const heroStat = effectRules?.chosenHeroStat(item.remainder);
+        if (!handled && !effectState.skipped[item.id] && item.conditionState === true
             && !item.requiresResource && !item.requiresEffect && !item.requiresManual) {
-          addButton("选择英雄与旧忆", () => void awardExplorationMnemos(entry, item));
+          if (heroStat) addButton(`选择英雄 · ${heroStat.label} +${heroStat.amount}`, () => void awardExplorationHeroEffect(entry, item, heroStat));
+          else if (effectRules?.isMnemosAward(item.remainder)) addButton("选择英雄与旧忆", () => void awardExplorationHeroEffect(entry, item));
         }
-        if (!handled && !effectState.skipped[item.id] && item.remainder
+        if (!heroStat && !handled && !effectState.skipped[item.id] && item.remainder
             && heroCounter.test(item.displayText || item.remainder)) {
           addButton("调整英雄状态", () => document.querySelector('.campaign-toolbox [data-tool="heroes"]')?.click());
         }
@@ -13025,16 +13162,18 @@
               void run([item], selectors.map((select) => ({ id: select.value, count: 1 })));
             });
           }
-          if (item.remainder && !effectState.choices.saveManual?.[item.id]) {
+          if (item.remainder && !effectState.choices.saveManual?.[item.id]
+              && !(item.id === "conditional:maze-pilgrim-waived-story" && item.conditionState === null)) {
             if (applied && !automaticItem(item)) {
               const remainder = document.createElement("span");
               remainder.textContent = `其余效果：${item.remainder}`;
               controls.appendChild(remainder);
             }
-            if (!award && !(handled && placements.length && !remainingExplorationTokenPlacements(entry, item).length)) addButton(handled ? "恢复手动待办" : item.dynamic ? (applied ? "已处理其余效果" : "已手动处理完整效果") : "已手动处理", () => mark("manual", item.id, !handled));
+            if (!mnemosAward && !statAward && !(handled && placements.length && !remainingExplorationTokenPlacements(entry, item).length)) addButton(handled ? "恢复手动待办" : item.dynamic ? (applied ? "已处理其余效果" : "已手动处理完整效果") : "已手动处理", () => mark("manual", item.id, !handled));
           }
           if (manualDynamic && !item.remainder && !effectState.choices.saveManual?.[item.id]) addButton("恢复手动待办", () => mark("manual", item.id, false));
-          if (item.conditionState === null && !applied && !effectState.manual[item.id]) {
+          if (item.conditionState === null && !applied && !effectState.manual[item.id]
+              && item.id !== "conditional:maze-pilgrim-waived-story") {
             addButton("不适用", () => mark("skipped", item.id, true));
           }
         }

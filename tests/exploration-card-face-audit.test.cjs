@@ -97,3 +97,17 @@ test('card-face audit manual Curse replacement and Abyss sequence produce one co
   assert.equal(sequence.length, 1);
   assert.match(sequence[0].text, /Gain \+1 Ω.*Gain as many Λ/);
 });
+
+test('chosen hero Danger accepts the Latin A printed in the card transcription', () => {
+  const expected = { key: 'danger', label: '凶险', amount: 1 };
+  for (const id of ['6402', '6406', '6407', '6408', '6422', '6423', '6424']) {
+    const card = cards[`c1:${id}`];
+    const row = card.manual.find(item => item.text === 'Chosen Argonaut gains +1 A.');
+    assert.ok(row, id);
+    assert.deepEqual(effects.chosenHeroStat(row.text), expected, id);
+    assert.equal(effects.playerEffectLabel(row.text), '选择 1 名阿尔戈英雄，凶险 +1', id);
+    assert.deepEqual(effects.parse(row.text, 'c1', id, row.badge).effects, [], id);
+  }
+  assert.deepEqual(effects.chosenHeroStat('Chosen Argonaut gains +1 Λ.'), expected);
+  assert.equal(effects.chosenHeroStat('All Argonauts gain +1 A.'), null);
+});

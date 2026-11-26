@@ -1806,7 +1806,8 @@ test('a card with extra effects settles only the resources and lists the rest', 
   assert.equal(harness.written[0].resources['c1-trireme'], 2);
   const manual = block.descendants().find((node) => node.className === 'exploration-settle-manual');
   assert.ok(manual, 'Denounced 时要把额外效果列出来');
-  assert.match(textOf(manual), /Chosen Argonaut/);
+  assert.match(textOf(manual), /选择 1 名阿尔戈英雄，凶险 \+1/);
+  assert.ok(buttonNamed(block, "选择英雄 · 凶险 +1"));
 });
 
 test('a card without resource effects still lists its manual effects', () => {

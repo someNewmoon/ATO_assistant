@@ -179,11 +179,13 @@
   }
 
   function chosenHeroStat(text) {
-    const match = /^Chosen Argonaut gains \+?(\d+)\s*([ΩΨΛ])\.?$/i.exec(String(text || "").trim());
+    const match = /^Chosen Argonaut gains \+?(\d+)\s*([ΩΨΛA])\.?$/i.exec(String(text || "").trim());
     if (!match) return null;
     const amount = Number(match[1]);
     if (!Number.isSafeInteger(amount) || amount < 1) return null;
-    const [key, label] = { Ω: ["fury", "怒气"], Ψ: ["fate", "命运"], Λ: ["danger", "凶险"] }[match[2].toUpperCase()];
+    // The English card transcription uses Latin A for the printed Danger glyph.
+    const symbol = match[2].toUpperCase().replace("A", "Λ");
+    const [key, label] = { Ω: ["fury", "怒气"], Ψ: ["fate", "命运"], Λ: ["danger", "凶险"] }[symbol];
     return { key, label, amount };
   }
 

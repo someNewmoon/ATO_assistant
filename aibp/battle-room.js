@@ -633,10 +633,16 @@
   const pilotFallback = 'pilot-default-hands.jpg';
   let titanLinkManifest;
   let pilotArtwork;
+  pilotImage.addEventListener('load', () => {
+    titanLink.style.setProperty('--room-titan-art', 'url("' + pilotImage.src + '")');
+  });
   pilotImage.addEventListener('error', () => {
     if (pilotImage.getAttribute('src') !== titanLinkAssets + pilotFallback) {
       pilotImage.src = titanLinkAssets + pilotFallback;
-    } else pilotImage.hidden = true;
+    } else {
+      pilotImage.hidden = true;
+      titanLink.style.removeProperty('--room-titan-art');
+    }
   });
 
   const pilotStatus = document.createElement('section');

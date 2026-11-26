@@ -385,36 +385,37 @@ body:has(.room-style-preview:not([hidden])) .title-actions .return-main-link { m
   position: relative;
   isolation: isolate;
   display: grid;
-  align-items: end;
-  min-height: clamp(7rem, 17vw, 12rem);
-  overflow: hidden;
+  min-height: clamp(9rem, 19vw, 15rem);
   margin-block: .7rem;
   border: 1px solid var(--folio-rule);
-  background: #202823;
+  background: linear-gradient(112deg, #171c1deb, #242727c9), var(--room-titan-art, none) center 42% / cover, #171c1d;
   color: #fff5e3;
 }
 .room-titan-link[hidden], .room-pilot-status[hidden] { display: none; }
 .room-titan-link > .room-titan-link-art {
-  position: absolute;
-  inset: 0;
-  z-index: -2;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  object-position: center 57%;
-}
-.room-titan-link::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  background: linear-gradient(8deg, #151a18f2 2%, #17201a88 32%, #17201a10 72%);
+  grid-area: 1 / 1;
+  justify-self: end;
+  align-self: center;
+  width: min(52%, 26.667rem);
+  aspect-ratio: 16 / 9;
+  object-fit: contain;
 }
 .room-titan-link-identity {
+  position: relative;
+  grid-area: 1 / 1;
+  align-self: end;
   display: flex;
   align-items: center;
   gap: .65rem;
-  padding: clamp(.65rem, 2vw, 1.35rem);
+  padding: 1.45rem clamp(.65rem, 2vw, 1.35rem) clamp(.65rem, 2vw, 1.1rem);
+  background: linear-gradient(0deg, #111615b8, #11161578 60%, #11161500);
+}
+.room-titan-link-identity strong { text-shadow: 0 1px 3px #111615; }
+
+@media (max-width: 600px) {
+  .room-titan-link { min-height: 7rem; }
+  .room-titan-link > .room-titan-link-art { width: 100%; }
+  .room-titan-link-identity { padding-top: 1.15rem; }
 }
 .room-titan-link-identity > div { display: grid; gap: .15rem; }
 .room-titan-link-avatar {

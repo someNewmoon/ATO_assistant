@@ -395,13 +395,17 @@ body.aibp-room-only > .app > main > :not(#battleRoom, .room-style-dock) { displa
 .battle-room .room-tool-actions button:hover { background: #fffdf7; }
 .room-tool-dock[hidden], .battle-room .room-tool-dock [hidden], .room-tool-sheet:not([open]) { display: none; }
 .room-tool-sheet {
-  position: fixed; inset: auto max(.55rem, env(safe-area-inset-right, 0px)) calc(.55rem + env(safe-area-inset-bottom, 0px)) auto;
-  margin: 0; box-sizing: border-box; width: min(35rem, calc(100% - 1.1rem)); max-height: min(76dvh, 46rem);
+  position: fixed;
+  z-index: 34;
+  inset: calc(var(--room-tools-top, 3.2rem) + .4rem) var(--room-tools-right, .75rem) auto auto;
+  margin: 0;
+  box-sizing: border-box;
+  width: min(30rem, calc(100vw - var(--room-tools-right, .75rem) - .5rem));
+  max-height: min(50dvh, calc(100dvh - var(--room-tools-top, 3.2rem) - .9rem));
   overflow: auto; overscroll-behavior: contain; padding: .75rem 1rem;
   border: 1px solid var(--room-border); border-radius: 14px; background: var(--room-surface); color: var(--room-text);
   box-shadow: 0 8px 32px #0007;
 }
-.room-tool-sheet::backdrop { background: #101e2355; }
 .room-tool-sheet > header { display: flex; align-items: center; justify-content: space-between; gap: .65rem; }
 .room-tool-sheet > header h3 { display: flex; align-items: center; }
 .room-tool-sheet :is(.room-argo-abilities header h3, .room-trauma-summary h3), .room-tool-sheet [data-tools-status]:empty { display: none; }

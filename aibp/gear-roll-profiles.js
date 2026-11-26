@@ -277,18 +277,65 @@
     return totals;
   }
 
-  // Ranges verified against the Chinese card faces. Unlisted cards use a
-  // range supplied by the player from the active face.
-  const melee = new Set(["AJ0156", "AJ0163", "AJ0167", "AJ0169", "AJ0171", "AJ0173", "AJ0175",
-    "AJ0177", "AJ0179", "AJ0181", "AJ0183", "AJ0185", "AJ0187", "AJ0211", "AJ0213", "AJ0222"]);
-  const reach = { AJ0193: 2, AJ0195: 2, AJ0197: 2, AJ0253: 2, AJ0256: 2, BJ0873: 2, BJ0901: 2, BJ0968: 3 };
-  const ranged = { AJ0189: [4, 6], AJ0191: [2, 4], AJ0249: [2, 4], AJ0251: [3, 5], AJ0279: [2, 4],
-    BJ0903: [4, 7], BJ0930: [2, 3], BJ0964: [2, 3] };
-  function range(id) {
+  // Printed base ranges, transcribed from the available card faces. Gear IDs
+  // without a verified face (including separate ascended IDs) stay player-entered.
+  const melee = new Set([
+    "AJ0156", "AJ0163", "AJ0167", "AJ0169", "AJ0171", "AJ0173", "AJ0175", "AJ0177", "AJ0179",
+    "AJ0181", "AJ0183", "AJ0185", "AJ0187", "AJ0211", "AJ0213", "AJ0222", "AJ0224", "AJ0226",
+    "AJ0228", "AJ0230", "AJ0245", "AJ0255", "AJ0257", "AJ0258", "AJ0259", "AJ0268", "AJ0270",
+    "AJ0273", "BJ0829", "BJ0835", "BJ0837", "BJ0839", "BJ0858", "BJ0859", "BJ0860", "BJ0862",
+    "BJ0871", "BJ0875", "BJ0879", "BJ0881", "BJ0883", "BJ0900", "BJ0902", "BJ0904", "BJ0905",
+    "BJ0907", "BJ0910", "BJ0913", "BJ0915", "BJ0921", "BJ0925", "BJ0927", "BJ0932", "BJ0934",
+    "BJ0936", "BJ0937", "BJ0938", "BJ0939", "BJ0940", "BJ0941", "BJ0942", "BJ0945", "BJ0946",
+    "BJ0957", "BJ0958", "BJ0959", "BJ0960", "BJ0961", "BJ0963", "BJ0970", "BJ0971", "CJ1389",
+    "CJ1391", "CJ1393", "CJ1395", "CJ1407", "CJ1421", "CJ1423", "CJ1429", "CJ1431", "CJ1435",
+    "CJ1468", "CJ1472", "CJ1474", "CJ1481", "CJ1486", "CJ1487", "CJ1491", "CJ1494", "CJ1498",
+    "CJ1500", "CJ1503", "CJ1504", "CJ1505", "CJ1512", "CJ1523", "CJ1525", "CJ1528", "CJ1529",
+    "CJ1532", "CJ1535", "CJ1539", "CJ1546", "DJ2225", "DJ2229", "DJ2231", "DJ2235", "DJ2237",
+    "DJ2253", "DJ2267", "DJ2269", "DJ2271", "DJ2304", "DJ2306", "DJ2308", "DJ2322", "DJ2323",
+    "DJ2324", "DJ2326", "DJ2327", "DJ2328", "DJ2329", "DJ2336", "DJ2337", "DJ2338", "DJ2349",
+    "DJ2372", "DJ2376", "DJ2378", "DJ2379", "EJ2795", "EJ2801", "EJ2803", "EJ2819", "EJ2833",
+    "EJ2835", "EJ2837", "EJ2850", "EJ2868", "EJ2870", "EJ2876", "EJ2878", "EJ2880", "EJ2890",
+    "EJ2914", "EJ2922", "EJ2926", "EJ2930", "EJ2932", "EJ2934", "EJ2948", "EJ2950", "EJ2986",
+  ]);
+  const reach = {
+    AJ0193: 2, AJ0195: 2, AJ0197: 2, AJ0247: 2, AJ0253: 2, AJ0254: 2, AJ0256: 2, BJ0873: 2,
+    BJ0901: 2, BJ0923: 2, BJ0928: 2, BJ0968: 3, CJ1397: 2, CJ1425: 2, CJ1470: 2, CJ1482: 2, CJ1510: 2,
+    CJ1518: 2, DJ2233: 2, DJ2239: 2, DJ2298: 2, DJ2339: 2, DJ2348: 2, DJ2350: 2, DJ2371: 3,
+    EJ2797: 2, EJ2799: 2, EJ2908: 3, EJ2912: 2, EJ2918: 3, EJ2979: 2, EJ2980: 3, EJ2991: 2,
+  };
+  const ranged = {
+    AJ0189: [4, 6], AJ0191: [2, 4], AJ0249: [2, 4], AJ0251: [3, 5], AJ0279: [2, 4], BJ0864: [2, 4],
+    BJ0903: [4, 7], BJ0930: [2, 3], BJ0964: [2, 3], CJ1399: [2, 5], CJ1427: [2, 5], CJ1433: [2, 4],
+    CJ1483: [2, 3], CJ1484: [3, 5], CJ1514: [2, 3], DJ2241: [2, 5], DJ2243: [2, 3], DJ2272: [3, 6],
+    DJ2284: [2, 4], DJ2299: [2, 4], DJ2309: [4, 6], DJ2325: [5, 10], DJ2330: [3, 6], DJ2335: [2, 3],
+    DJ2340: [2, 4], EJ2806: [3, 4], EJ2807: [2, 5], EJ2809: [3, 3], EJ2838: [3, 8], EJ2858: [1, 4],
+    EJ2882: [2, 5], EJ2924: [4, 6], EJ2928: [3, 4], EJ2936: [4, 6], EJ2946: [2, 3], EJ2952: [1, 6],
+  };
+  // These printed bonuses change range only after a card condition or cost.
+  const conditionalMax = { CJ1399: 6, CJ1427: 6, DJ2241: 6, EJ2799: 3 };
+
+  function printedRange(id) {
     if (melee.has(id)) return { kind: "melee", min: 1, max: 1 };
     if (Object.hasOwn(reach, id)) return { kind: "reach", min: 1, max: reach[id] };
-    if (Object.hasOwn(ranged, id)) return { kind: "ranged", min: ranged[id][0], max: ranged[id][1] };
+    if (Object.hasOwn(ranged, id)) {
+      const [min, max] = ranged[id];
+      return { kind: "ranged", min, max, ...(id === "BJ0864" && { adjacentMelee: true }) };
+    }
     return null;
+  }
+
+  function canAdjustRange(id) {
+    return !printedRange(id) || id === "EJ2807" || id === "DJ2350" || Object.hasOwn(conditionalMax, id);
+  }
+
+  function range(id, submitted) {
+    const printed = printedRange(id);
+    const adjusted = manualRange(submitted);
+    if (!printed || id === "EJ2807" && adjusted?.kind === "melee") return adjusted;
+    if (adjusted?.kind === printed.kind && adjusted.min === printed.min
+        && (adjusted.max === conditionalMax[id] || id === "DJ2350" && adjusted.max >= printed.max)) return adjusted;
+    return printed;
   }
 
   function manualRange(value) {
@@ -296,11 +343,11 @@
         || !Number.isInteger(value.min) || !Number.isInteger(value.max) || value.max > 32) return null;
     const { kind, min, max } = value;
     const valid = kind === "melee" ? min === 1 && max === 1
-      : kind === "reach" ? min === 1 && max >= 1 : min >= 2 && max >= min;
+      : kind === "reach" ? min === 1 && max >= 1 : min >= 1 && max >= min;
     return valid ? { kind, min, max } : null;
   }
 
-  const api = { weapons, defenseKeywords, power, range, manualRange };
+  const api = { weapons, defenseKeywords, power, range, canAdjustRange, manualRange };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else window.ATO_GEAR_ROLL_PROFILES = api;
 })();

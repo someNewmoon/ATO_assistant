@@ -784,9 +784,9 @@
   function normalizeWeapon(weapon = {}) {
     const kind = ["reach", "ranged"].includes(weapon.kind) ? weapon.kind : "melee";
     const bound = (number, floor, fallback) => Number.isFinite(number) ? Math.min(32, Math.max(floor, Math.round(number))) : fallback;
-    const min = kind === "ranged" ? bound(weapon.min, 2, 2) : 1;
+    const min = kind === "ranged" ? bound(weapon.min, 1, 2) : 1;
     const max = kind === "melee" ? 1 : bound(weapon.max, min, kind === "reach" ? 2 : Math.max(min, 4));
-    return { kind, min, max };
+    return { kind, min, max, ...(weapon.adjacentMelee && { adjacentMelee: true }) };
   }
 
   function edgeBetween(from, to) {
@@ -802,16 +802,19 @@
       for (let r = 1; r <= ROWS; r++) {
         const key = cellKey(c, r);
         const steps = distance[key];
-        grid[key] = steps >= profile.min && steps <= profile.max
-          && (profile.kind !== "melee" || source.some(from =>
-            Math.abs(from.c - c) + Math.abs(from.r - r) === 1 && !occ.red.has(edgeBetween(from, { c, r }))));
+        const melee = profile.kind === "melee" || profile.adjacentMelee && steps === 1;
+        grid[key] = melee ? steps === 1 && source.some(from =>
+          Math.abs(from.c - c) + Math.abs(from.r - r) === 1 && !occ.red.has(edgeBetween(from, { c, r })))
+          : steps >= profile.min && steps <= profile.max;
       }
     }
     const keys = targets.map(({ c, r }) => cellKey(c, r));
     const nearest = Math.min(...keys.map(key => distance[key]));
     return { grid, distance, target: keys.length ? {
       distance: nearest,
-      inRange: profile.kind === "melee" ? keys.some(key => grid[key]) : nearest >= profile.min && nearest <= profile.max,
+      inRange: profile.kind === "melee" || profile.adjacentMelee && nearest === 1
+        ? keys.some(key => distance[key] === 1 && grid[key])
+        : nearest >= profile.min && nearest <= profile.max,
     } : null };
   }
 
@@ -1277,11 +1280,12 @@
         facing,
       })
       : null;
+    const adjacentMelee = state.weapon?.adjacentMelee && weapon?.target?.distance === 1;
     const weaponTarget = weapon?.target ? {
       ...weapon.target, visible: targets.some(({ c, r }) => grid[cellKey(c, r)]),
       legal: weapon.target.inRange && targets.some(({ c, r }) => {
         const key = cellKey(c, r);
-        return weapon.grid[key] && grid[key];
+        return weapon.grid[key] && grid[key] && (!adjacentMelee || weapon.distance[key] === 1);
       }),
     } : null;
     return { ...base, facing, blindspots, visible, blocked, inRange, distance, range, movement, weaponTarget };

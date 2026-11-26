@@ -90,6 +90,7 @@ main:has(> .room-style-dock:not([hidden])) > #viewer { scroll-margin-top: max(4.
   background: var(--folio-paper);
   color: var(--folio-ink);
 }
+.room-style-dock .room-tool-actions button[aria-expanded="true"],
 .room-style-dock .room-tool-actions button:not(:disabled):hover,
 .room-style-preview .room-turn-window button:not(.battle-room-card-art, :disabled):hover {
   border-color: var(--folio-rule);
@@ -369,7 +370,7 @@ body:has(.room-style-preview:not([hidden])) .title-actions .return-main-link { m
   border-radius: 2px;
 }
 .room-style-preview .room-tool-sheet > header { padding-bottom: .5rem; border-bottom: 3px double var(--folio-edge); }
-.room-style-preview :is(.room-tool-sheet, .room-trauma-dialog)::backdrop { background: #29251e73; }
+.room-style-preview .room-trauma-dialog::backdrop { background: #29251e73; }
 .room-style-preview .room-loadout-folio :is(.room-loadout-equipment, .room-loadout-side > section) {
   border-color: var(--folio-edge);
   background: var(--folio-paper);

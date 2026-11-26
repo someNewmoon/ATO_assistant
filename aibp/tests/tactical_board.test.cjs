@@ -2,6 +2,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const los = require("../battle_los.js");
 const terrain = require("../../ss/terrain-data.js");
+const gear = require("../gear-roll-profiles.js");
 
 function pursuitBoard() {
   return {
@@ -40,6 +41,29 @@ test("a multi-square target uses the closest occupied square for ranged weapons"
     { distance: 1, inRange: true });
   assert.deepEqual(los.computeTitanWeapon(src, cells, { kind: "melee" }, { red: new Set(["8,8|8,9"]) }).target,
     { distance: 1, inRange: false });
+});
+
+test("printed weapon ranges cover melee, reach and ranged on both ends of the printed interval", () => {
+  assert.deepEqual(gear.range("AJ0224"), { kind: "melee", min: 1, max: 1 });
+  assert.deepEqual(gear.range("AJ0247"), { kind: "reach", min: 1, max: 2 });
+  assert.deepEqual(gear.range("EJ2809"), { kind: "ranged", min: 3, max: 3 });
+  const source = [{ c: 8, r: 9 }];
+  const adjacent = [{ c: 9, r: 9 }];
+  const open = { red: new Set() };
+  assert.equal(los.computeTitanWeapon(source, adjacent, gear.range("EJ2858"), open).target.inRange, true);
+  assert.equal(los.computeTitanWeapon(source, adjacent, gear.range("EJ2809"), open).target.inRange, false);
+  assert.equal(los.computeTitanWeapon(source, adjacent, gear.range("BJ0864"), open).target.inRange, true);
+  const wall = { red: new Set(["8,8|8,9"]) };
+  assert.equal(los.computeTitanWeapon(source, [...adjacent, { c: 10, r: 9 }], gear.range("BJ0864"), wall).target.inRange, false);
+});
+
+test("range entry accepts printed conditional changes and unverified faces", () => {
+  const extended = { kind: "ranged", min: 2, max: 6 };
+  assert.deepEqual(gear.range("CJ1399", extended), extended);
+  assert.deepEqual(gear.range("CJ1399", { ...extended, max: 8 }), { ...extended, max: 5 });
+  assert.deepEqual(gear.range("AJ0249", extended), { ...extended, max: 4 });
+  assert.equal(gear.range("AJ0249@c2"), null);
+  assert.deepEqual(gear.range("AJ0249@c2", extended), extended);
 });
 
 test("Titan movement is orthogonal and skips occupied squares; moving the piece changes the source", () => {

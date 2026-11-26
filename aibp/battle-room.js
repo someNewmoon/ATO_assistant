@@ -431,7 +431,27 @@
   const toolsBody = toolsDialog.querySelector('[data-tools-body]');
   const toolsStatus = toolsDialog.querySelector('[data-tools-status]');
   let activeTool;
+  let activeToolButton;
   let toolsMarkup;
+
+  function positionTools() {
+    if (!toolsDialog.open) return;
+    const { bottom, right } = dock.getBoundingClientRect();
+    toolsDialog.style.setProperty('--room-tools-top', Math.ceil(bottom) + 'px');
+    toolsDialog.style.setProperty('--room-tools-right', Math.max(8, document.documentElement.clientWidth - right) + 'px');
+  }
+
+  function closeTools(restoreFocus = false) {
+    if (!toolsDialog.open) return;
+    toolsDialog.close();
+    activeToolButton?.setAttribute('aria-expanded', 'false');
+    if (restoreFocus) activeToolButton?.focus({ preventScroll: true });
+    activeTool = null;
+    activeToolButton = null;
+    toolsMarkup = null;
+    toolsBody.replaceChildren();
+  }
+
   function toolButton(key, label = toolNames[key]) {
     const button = document.createElement('button');
     button.type = 'button';
@@ -439,12 +459,23 @@
     button.dataset.tool = key;
     button.setAttribute('aria-controls', toolsDialog.id);
     button.setAttribute('aria-haspopup', 'dialog');
+    button.setAttribute('aria-expanded', 'false');
     button.addEventListener('click', () => {
+      if (toolsDialog.open && activeTool === key) {
+        closeTools(true);
+        return;
+      }
+      activeToolButton?.setAttribute('aria-expanded', 'false');
+      activeToolButton = button;
+      button.setAttribute('aria-expanded', 'true');
       activeTool = key;
       toolsDialog.querySelector('h3').textContent = toolNames[key];
       toolsStatus.textContent = '';
       renderTools();
-      toolsDialog.showModal();
+      if (!toolsDialog.open) toolsDialog.show();
+      positionTools();
+      toolsDialog.scrollTop = 0;
+      toolsDialog.querySelector('[data-close-tools]').focus({ preventScroll: true });
     });
     return button;
   }
@@ -474,11 +505,11 @@
     if (seat !== null && roomBoard?.openForcedMovement(seat)) event.preventDefault();
   });
   dock.append(quick, toolLinks);
-  toolsDialog.querySelector('[data-close-tools]').addEventListener('click', () => toolsDialog.close());
-  toolsDialog.addEventListener('close', () => {
-    activeTool = null;
-    toolsMarkup = null;
-    toolsBody.replaceChildren();
+  toolsDialog.querySelector('[data-close-tools]').addEventListener('click', () => closeTools(true));
+  toolsDialog.addEventListener('keydown', event => {
+    if (event.key !== 'Escape') return;
+    event.preventDefault();
+    closeTools(true);
   });
   root.append(dock, toolsDialog);
 
@@ -519,7 +550,12 @@
   dock.classList.add('room-style-dock');
   root.before(dock);
   const dockContainer = dock.parentElement;
-  new ResizeObserver(() => dockContainer.style.setProperty('--round-nav-height', dock.offsetHeight + 'px')).observe(dock);
+  new ResizeObserver(() => {
+    dockContainer.style.setProperty('--round-nav-height', dock.offsetHeight + 'px');
+    positionTools();
+  }).observe(dock);
+  window.addEventListener('scroll', positionTools, { passive: true });
+  window.addEventListener('resize', positionTools);
   if (params.has('battle')) window.addEventListener('load', () => {
     const toolbox = document.querySelector('details.campaign-toolbox');
     if (toolbox) toolbox.open = false;
@@ -911,7 +947,7 @@
     const seat = personalSeat();
     root.classList.toggle('battle-room-personal', personal);
     dock.hidden = !personal;
-    if (!personal && toolsDialog.open) toolsDialog.close();
+    if (!personal) closeTools();
     movementShortcut.hidden = !state.board;
     bossShortcut.hidden = !state.board;
     const canJumpToBoss = actor.role === 'host' && !hostPersonalView && fullBossPanel;
@@ -1521,7 +1557,8 @@
 
   function weaponRangeLabel(range) {
     return range.kind === 'melee' ? '近战 · 1 格' : range.kind === 'reach' ? '远触 · 1–' + range.max + ' 格'
-      : '远程 · ' + range.min + '–' + range.max + ' 格';
+      : (range.adjacentMelee ? '相邻按近战 · ' : '') + '远程 · '
+        + (range.min === range.max ? range.min : range.min + '–' + range.max) + ' 格';
   }
 
   function selectedWeapon(seat) {
@@ -1532,11 +1569,10 @@
   function chosenBoardWeapon(seat) {
     const item = selectedWeapon(seat);
     if (!item) return null;
-    const printed = gearRolls.range(item.id);
     const attack = activeAttackFor(seat);
     const saved = readDiceDraft(seat, 'attack');
-    return { ...item, manual: !printed, range: attack?.range || printed
-      || (saved.weapon === item.id ? gearRolls.manualRange(saved.range) : null) };
+    const range = attack?.range || gearRolls.range(item.id, saved.weapon === item.id ? saved.range : null);
+    return { ...item, printedRange: gearRolls.range(item.id), manual: gearRolls.canAdjustRange(item.id), range };
   }
 
   function chooseWeapon(seat, id) {
@@ -1551,7 +1587,12 @@
   }
 
   function chooseWeaponRange(seat, range) {
-    if (!gearRolls.manualRange(range)) { say('请填写合法的牌面射程。'); return; }
+    const item = selectedWeapon(seat);
+    const resolved = gearRolls.range(item?.id, range);
+    if (!item || !resolved || resolved.kind !== range.kind || resolved.min !== range.min || resolved.max !== range.max) {
+      say('请填写合法的牌面射程。');
+      return;
+    }
     saveDiceDraft(seat, 'attack', { ...readDiceDraft(seat, 'attack'), range });
     roomBoard?.render();
     render();
@@ -1640,7 +1681,7 @@
       const attack = activeAttackFor(seat);
       const cards = availableWeapons(seat).map(item => {
         const profile = gearProfile(item);
-        const range = gearRolls.range(item.id);
+        const range = weapon?.id === item.id ? weapon.range : gearRolls.range(item.id);
         return '<li><button type="button" data-attack-weapon="' + escape(item.id) + '" aria-pressed="' + (weapon?.id === item.id)
           + '"' + (attack && attack.stage !== 'select' || !item.ready && tracked ? ' disabled' : '') + '>' + escape(item.name) + '<small>'
           + (profile ? '攻击骰 ' + profile[0] : '骰数按牌面') + (range ? ' · ' + weaponRangeLabel(range) : '') + '</small></button>'
@@ -1848,7 +1889,7 @@
   function renderRecap() {
     if (content.querySelector('.room-battle-recap')) return;
     dock.hidden = true;
-      if (toolsDialog.open) toolsDialog.close();
+    closeTools();
     boardMount.hidden = true;
     summary.innerHTML = '';
     const trip = roomVoyage();
@@ -2735,7 +2776,7 @@
       const defense = rollMode === 'defense' && source;
       if (rollFollowup) rollSeat = Number(seat);
       if (defense && source.defenseCount) saveDiceDraft(rollSeat, 'defense', { red: source.defenseCount });
-      if (rollFollowup && toolsDialog.open) toolsDialog.close();
+      if (rollFollowup) closeTools();
       render();
       const form = content.querySelector('form[data-roll]');
       if (defense && form) restoreDiceDraft(form, rollSeat);

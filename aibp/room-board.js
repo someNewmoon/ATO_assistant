@@ -67,14 +67,16 @@
           + '<span>' + escape(item.name) + '</span>' + (item.ready ? '' : '<small>未回正</small>') + '</button>';
       }).join('');
       const range = weapon?.range;
-      const fixedRange = range && !weapon.manual ? actions.rangeLabel(range) : '';
-      const manual = weapon?.manual && !lockedWeapon ? '<div class="room-turn-range"><label>牌面射程 <select data-action-range>'
+      const rangeLabel = range ? actions.rangeLabel(range) : '';
+      const manual = weapon?.manual && !lockedWeapon ? (weapon.printedRange
+        ? '<details class="room-weapon-range-options" data-weapon="' + escape(weapon.id) + '"><summary>按条件调整射程</summary>' : '')
+        + '<div class="room-turn-range"><label>牌面射程 <select data-action-range>'
         + '<option value="">选择牌面射程…</option>'
         + ['melee', 'reach', 'ranged'].map(kind => '<option value="' + kind + '"' + (range?.kind === kind ? ' selected' : '') + '>'
           + ({ melee: '近战', reach: '远触', ranged: '远程' })[kind] + '</option>').join('')
-        + '</select></label><label' + (range?.kind === 'ranged' ? '' : ' hidden') + '>最小 <input data-action-min type="number" min="2" max="32" value="' + (range?.min > 1 ? range.min : 2) + '"></label>'
+        + '</select></label><label' + (range?.kind === 'ranged' ? '' : ' hidden') + '>最小 <input data-action-min type="number" min="1" max="32" value="' + (range?.kind === "ranged" ? range.min : 2) + '"></label>'
         + '<label' + (range?.kind && range.kind !== 'melee' ? '' : ' hidden') + '>最大 <input data-action-max type="number" min="1" max="32" value="' + (range?.max > 1 ? range.max : 4) + '"></label>'
-        + '<button type="button" data-action-range-confirm' + (range ? '' : ' disabled') + '>使用牌面射程</button></div>' : '';
+        + '<button type="button" data-action-range-confirm' + (range ? '' : ' disabled') + '>使用牌面射程</button></div>' + (weapon.printedRange ? '</details>' : '') : '';
       const legal = range && control?.weaponTarget(seat, range);
       const position = legal ? '距骇物 ' + legal.distance + ' 格 · ' + (legal.inRange ? '射程内' : '射程外')
         + ' · ' + (legal.visible ? '有视线' : '视线受阻') : '';
@@ -93,7 +95,7 @@
       const next = (bonusActions || turnActions) + '<div class="room-titan-action-weapon"><strong>武器</strong>'
         + (weapons ? '<div class="room-board-weapon-list" role="group" aria-label="选择已装备武器">' + weapons + '</div>'
           : '<small>该英雄未装备武器。</small>')
-        + (fixedRange ? '<small>' + fixedRange + '</small>' : '') + manual
+        + (rangeLabel ? '<small>' + rangeLabel + '</small>' : '') + manual
         + (weapon && !lockedWeapon ? '<small>牌面费用与条件请手动核对。</small>' : '')
         + (position ? '<small>' + position + '</small>' : '')
         + ((bonus ? !lockedWeapon : canUseAttack) ? '<button type="button" data-action-entry="declare"'
@@ -105,11 +107,14 @@
         + '<button type="button" data-action-entry="spend-movement"' + (canMoveHere && !activeMove ? '' : ' disabled') + '>花费移动行动</button>'
         + '<button type="button" data-action-entry="spend-attack"' + (canUseAttack ? '' : ' disabled') + '>花费作战行动</button></details>');
       if (actionMarkup === next) return;
-      const detailsOpen = actionPanel.querySelector("details")?.open;
+      const detailsOpen = actionPanel.querySelector(".room-titan-action-options")?.open;
+      const adjustedWeapon = actionPanel.querySelector(".room-weapon-range-options[open]")?.dataset.weapon;
       const focused = actionPanel.contains(document.activeElement) && document.activeElement.dataset.actionWeapon;
       actionPanel.innerHTML = next;
-      const details = actionPanel.querySelector("details");
+      const details = actionPanel.querySelector(".room-titan-action-options");
       if (details) details.open = Boolean(detailsOpen);
+      const adjustment = actionPanel.querySelector(".room-weapon-range-options");
+      if (adjustment) adjustment.open = adjustedWeapon === weapon.id;
       if (focused) actionPanel.querySelector(`[data-action-weapon="${CSS.escape(focused)}"]`)?.focus({ preventScroll: true });
       actionMarkup = next;
     }

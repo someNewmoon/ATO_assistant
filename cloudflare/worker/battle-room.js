@@ -1005,7 +1005,7 @@ export class BattleRoom extends DurableObject {
           || !Array.from({ length: item.count }, (_, slot) => cardState.gearState(item, slot)).includes('ready')) {
         reject('请选择未横置且未弃除的已装备武器。', 409);
       }
-      const range = gearRolls.range(item.id) ?? gearRolls.manualRange(body.range);
+      const range = gearRolls.range(item.id, body.range);
       if (!range) reject('请按武器牌面确认有效射程。', 409);
       if (!titanAttackTarget(room.board, seat, range)?.legal) reject('从当前站位无法同时满足有效射程和视线。', 409);
       const declared = { stage: 'declared', weapon: item.id, range };

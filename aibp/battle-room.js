@@ -513,6 +513,38 @@
   combatStart.className = 'room-combat-start';
   boardMount.before(combatStart);
   let combatView = location.hash === '#room-dice' ? 'dice' : 'board';
+  const personalTurnButton = document.createElement('button');
+  personalTurnButton.type = 'button';
+  personalTurnButton.className = 'room-personal-turn-action';
+  personalTurnButton.hidden = true;
+  quick.append(personalTurnButton);
+  let pendingPersonalTurn;
+
+  function personalTurnAction() {
+    const seat = personalSeat();
+    const turn = state.turn;
+    if (combatTabs.hidden || turn?.phase !== 'titans' || turn.bonusAttack || turn.finished.includes(seat) || !state.heroes[seat]) return;
+    if (turn.seat === seat) return { type: 'turn-finish', seat, label: '结束回合', enabled: canFinishTitanTurn(seat) };
+    if (turn.seat === null && state.heroes[seat].condition !== 'dead') {
+      return { type: 'turn-take', seat, label: '认领回合', enabled: true };
+    }
+  }
+
+  function renderPersonalTurn() {
+    const action = personalTurnAction();
+    personalTurnButton.hidden = !action;
+    personalTurnButton.disabled = !action?.enabled || Boolean(pendingPersonalTurn);
+    personalTurnButton.title = action && !action.enabled ? '请先结束正在结算的移动、作战或招牌技。' : '';
+    if (action && personalTurnButton.textContent !== action.label) personalTurnButton.textContent = action.label;
+  }
+
+  personalTurnButton.addEventListener('click', () => {
+    const action = personalTurnAction();
+    if (!action?.enabled || pendingPersonalTurn) return;
+    pendingPersonalTurn = crypto.randomUUID();
+    renderPersonalTurn();
+    send({ id: pendingPersonalTurn, type: action.type, seat: action.seat, round: state.round, phase: state.turn.phase });
+  });
 
   function renderCombatTabs(personal) {
     combatTabs.hidden = !personal;
@@ -545,6 +577,7 @@
     }
     combatView = view;
     renderCombatTabs(true);
+    renderPilotView();
     if (position && combatStart.getBoundingClientRect().top < dock.getBoundingClientRect().bottom) {
       combatStart.scrollIntoView({ block: 'start' });
     }
@@ -589,9 +622,11 @@
   titanLink.className = 'room-titan-link';
   titanLink.setAttribute('aria-label', '泰坦接合');
   titanLink.hidden = true;
-  titanLink.innerHTML = '<img alt=""><div class="room-titan-link-identity"><strong></strong><span></span></div>';
+  titanLink.innerHTML = '<img class="room-titan-link-art" alt=""><div class="room-titan-link-identity">'
+    + '<img class="room-titan-link-avatar" alt="" hidden><div><strong></strong><span></span></div></div>';
   summary.after(titanLink);
-  const pilotImage = titanLink.querySelector('img');
+  const pilotImage = titanLink.querySelector('.room-titan-link-art');
+  const pilotPortrait = titanLink.querySelector('.room-titan-link-avatar');
   const pilotName = titanLink.querySelector('strong');
   const pilotTitan = titanLink.querySelector('span');
   const titanLinkAssets = 'images/titan-link/';
@@ -621,6 +656,13 @@
   pilotStatus.append(pilotStatusIdentity, pilotStats);
   dock.append(pilotStatus);
 
+  function renderPilotView() {
+    const seat = actor.role !== 'host' ? actor.seat : combatView === 'dice' ? rollSeat
+      : state.turn?.bonusAttack?.seat ?? state.turn?.seat ?? personalSeat();
+    renderTitanLink(combatTabs.hidden ? null : state.heroes[seat]);
+    renderPersonalTurn();
+  }
+
   function renderTitanLink(hero) {
     titanLink.hidden = pilotStatus.hidden = !hero;
     if (!hero) return;
@@ -628,21 +670,26 @@
       .then(response => response.ok ? response.json() : null)
       .catch(() => null);
     const inventory = window.ATO_GEAR_INVENTORY;
-    const type = inventory.dreamwalkerPanel(hero.titan)?.id || inventory.titanType(hero.titan)?.id.replace(/^tt_/, '');
     const titan = hero.titan ? inventory.titanLabel(hero.titan) : '未分配泰坦';
+    const portrait = heroPortrait(hero);
+    const portraitSrc = portrait && '../hero/assets/' + portrait;
+    pilotPortrait.hidden = !portraitSrc;
+    if (portraitSrc && pilotPortrait.getAttribute('src') !== portraitSrc) pilotPortrait.src = portraitSrc;
     pilotName.textContent = hero.name;
     pilotTitan.textContent = titan;
     pilotStatusIdentity.textContent = hero.name + ' · ' + titan;
     pilotStatusIdentity.title = pilotStatusIdentity.textContent;
     for (const [key, value] of Object.entries(pilotValues)) value.textContent = hero.stats?.[key] ?? 0;
 
-    const artKey = hero.argonaut + ':' + type;
+    const view = combatView;
+    const artKey = hero.argonaut + ':' + view;
     if (artKey === pilotArtwork) return;
     pilotArtwork = artKey;
     titanLinkManifest.then(manifest => {
       if (pilotArtwork !== artKey) return;
       const entry = manifest?.heroes?.[hero.argonaut];
-      const image = entry?.referenceTitan === type && entry?.image || manifest?.fallback?.image || pilotFallback;
+      const image = (view === 'dice' && entry?.poses?.brace) || entry?.image
+        || (view === 'dice' && manifest?.fallback?.poses?.rear) || manifest?.fallback?.image || pilotFallback;
       const src = titanLinkAssets + image;
       if (pilotImage.getAttribute('src') === src) return;
       pilotImage.hidden = false;
@@ -2553,7 +2600,6 @@
       if (!choices.size) selectedDice.delete(id);
     }
     const personal = (role === 'player' || (host && hostPersonalView)) && edit;
-    renderTitanLink(personal ? state.heroes[seat] : null);
     const latestRoll = personal ? null : state.rolls.find(roll => roll.id === state.lastBattleRollId) || state.rolls[0];
     const logCard = (roll, latest) => rollCard(roll, latest, { showBpControls: roll.seat !== rollSeat });
     const rolls = latestRoll ? logCard(latestRoll, true)
@@ -2599,6 +2645,7 @@
     ]);
     if (edit) renderDicePanel(content.querySelector('#room-dice'), poolByDice ? poolSection : '');
     renderCombatTabs(personal);
+    renderPilotView();
     if (showHistory) renderSections(content.querySelector('[data-room-history]'), [!personal && rollLog, activity]);
     if (!edit) {
       const bossPanel = content.querySelector('[data-closed-apostle]');
@@ -2755,7 +2802,7 @@
         } else if (error instanceof RejectedAction) {
           if (action.id === turnAiAction) turnAiAction = null;
           if (error.status === 409 && ['ai-request', 'ai-guide', 'ai-guide-discard', 'turn-undo', 'bp-request', 'bp-settle',
-            'board-forced-effect', 'attack-declare'].includes(action.type)) await refreshRoomState();
+            'board-forced-effect', 'attack-declare', 'turn-take', 'turn-finish'].includes(action.type)) await refreshRoomState();
           if (action.type === 'board-forced-effect') roomBoard?.resolveForcedEffect(action.id, error.message);
           if (action.id === pendingAttackDeclaration) {
             pendingAttackDeclaration = null;
@@ -2774,6 +2821,10 @@
           actionRetryDelay = Math.min(actionRetryDelay * 2, 15000);
         }
       } finally {
+        if (action.id === pendingPersonalTurn && failedAction?.id !== action.id) {
+          pendingPersonalTurn = null;
+          renderPersonalTurn();
+        }
         if (timing) {
           activeCardAction = null;
           updateStatus();

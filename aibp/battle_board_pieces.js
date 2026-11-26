@@ -82,6 +82,30 @@
     layer.appendChild(svg);
   }
 
+  function drawPendingDirections(layer, decision) {
+    if (!decision) return;
+    const document = layer.ownerDocument;
+    const overlay = document.createElementNS(svgNS, "svg");
+    overlay.setAttribute("viewBox", "0 0 20 14");
+    overlay.setAttribute("preserveAspectRatio", "none");
+    overlay.setAttribute("class", "battle-piece-pending-directions");
+    overlay.setAttribute("aria-hidden", "true");
+    const { column, row } = decision.point;
+    const x = column - .5, y = 14.5 - row;
+    for (const option of decision.options) {
+      const dx = option.point.column - column, dy = row - option.point.row;
+      const arrow = document.createElementNS(svgNS, "path");
+      const endX = x + dx * .86, endY = y + dy * .86;
+      const baseX = endX - dx * .24, baseY = endY - dy * .24;
+      arrow.dataset.forcedCandidate = option.id;
+      arrow.setAttribute("d", `M${x + dx * .29} ${y + dy * .29} L${endX} ${endY}
+        M${baseX - dy * .14} ${baseY + dx * .14} L${endX} ${endY} L${baseX + dy * .14} ${baseY - dx * .14}`);
+      arrow.setAttribute("vector-effect", "non-scaling-stroke");
+      overlay.appendChild(arrow);
+    }
+    layer.appendChild(overlay);
+  }
+
   function drawPriorityLink(layer, boss, target) {
     if (!boss || !target) return;
     const document = layer.ownerDocument;
@@ -142,11 +166,9 @@
     const routes = forcedPreview?.effect && Object.keys(forcedRoles).map(role => ({
       role, id: forcedPreview.effect[role], path: forcedPreview.result?.[role + "Path"],
     }));
-    if (routes) {
-      for (const { role, id, path } of routes) drawTrail(layer, { route: path }, id === "apostle", true, role);
-    } else if (aiRoute) {
+    if (!routes && aiRoute) {
       drawTrail(layer, { route: aiRoute.centers }, true, true);
-    } else {
+    } else if (!routes) {
       if (!deadSeats.includes(trail?.seat)) drawTrail(layer, trail);
       drawTrail(layer, bossTrail, true);
       if (priorityVisible) drawPriorityLink(layer, pieces.apostle, pieces.titans[priorityTarget]);
@@ -178,6 +200,7 @@
       marker.classList.toggle("is-ai-route-crossed", !routes && !boss && aiRoute?.crossedSeats?.includes(index));
       const pendingCollision = !boss && pendingCollisionSeats.includes(index);
       if (route) {
+        marker.classList.toggle("is-forced-origin", route.path?.length > 1);
         marker.dataset.forcedModel = route.role;
         marker.style.setProperty("--forced-preview-accent", forcedRoles[route.role].accent);
       }
@@ -246,6 +269,10 @@
       token(piece, 1, names[index] || "泰坦 " + (index + 1), index, sprite,
         portrait?.label === "查看泰坦插图" ? portrait.src : null);
     });
+    if (routes) {
+      for (const { role, id, path } of routes) drawTrail(layer, { route: path }, id === "apostle", true, role);
+      drawPendingDirections(layer, forcedPreview.result?.pending);
+    }
   }
 
   window.BattleBoardPieces = { render };

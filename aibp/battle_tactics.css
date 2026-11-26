@@ -222,7 +222,29 @@ button.battle-piece { pointer-events: auto; cursor: pointer; min-height: 0; }
 
 .is-forced-preview [data-battle-map-los-layer] { visibility: hidden; }
 .battle-piece.battle-piece-route-ghost[data-forced-ghost] {
+  z-index: 2;
+  opacity: .75;
   border-color: var(--forced-preview-accent);
   background: #19252caa;
 }
 .battle-piece[data-forced-model] { outline: 2px solid var(--forced-preview-accent); outline-offset: 2px; }
+
+
+.battle-piece.is-forced-origin > :is(svg, img:not(.battle-piece-hero), .battle-piece-facing) { opacity: .42; }
+.battle-piece-trail[data-forced-route] polyline { stroke-dasharray: none; }
+.battle-piece-pending-directions {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 4;
+  pointer-events: none;
+  filter: drop-shadow(0 0 2px #0c1011);
+}
+.battle-piece-pending-directions path {
+  fill: none;
+  stroke: #ffdb92;
+  stroke-width: 2.5px;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}

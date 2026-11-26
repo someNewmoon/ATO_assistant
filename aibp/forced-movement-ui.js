@@ -144,9 +144,10 @@
       }
       const selection = result.decisions.map((decision, step) =>
         '<div class="room-forced-choice" role="group" aria-label="' + decision.type + '"><strong>' + decision.type + '</strong>'
+        + (decision === result.pending ? '<small class="room-forced-board-hint">版图上的金色箭头是本格可选方向。</small>' : '')
         + decision.options.map(option => '<button type="button" data-forced-step="' + step + '" data-forced-option="' + option.id
           + '" aria-pressed="' + (choices[step] === option.id) + '"' + (pendingId ? ' disabled' : '') + '>'
-          + option.label + ' · ' + cellLabel(option.point) + '</button>').join("") + '</div>').join("");
+          + '<span aria-hidden="true" class="room-forced-choice-check">✓ </span>' + option.label + ' · ' + cellLabel(option.point) + '</button>').join("") + '</div>').join("");
       const nextMarkup = selection + '<div class="room-forced-paths">' + pathMarkup(room, result, "source", effect.source)
         + pathMarkup(room, result, "target", effect.target) + '</div>'
         + (kind === "push" && effect.source === "apostle" ? '<p>骇物朝向 · ' + (directionLabel[result.positions.apostle.facing] || "原朝向") + '</p>' : '')

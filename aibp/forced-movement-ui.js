@@ -2,19 +2,23 @@
   const directionLabel = { 0: "上", 90: "右", 180: "下", 270: "左" };
   const cellLabel = point => point.column + " 列 " + point.row + " 行";
 
-  function create(mount, send, getState, triggerButton, receipt) {
+  function create(mount, send, getState, triggerButton, receipt, showPreview) {
     const rules = window.ATO_FORCED_MOVEMENT;
     const { escape } = window.ATO_HERO_CATALOG;
-    const dialog = document.createElement("dialog");
-    dialog.className = "room-forced-dialog";
-    dialog.setAttribute("aria-labelledby", "roomForcedEffectTitle");
-    dialog.innerHTML = '<form><header><h3 id="roomForcedEffectTitle">非主动移动</h3>'
+    const editor = document.createElement("section");
+    editor.className = "room-forced-editor";
+    editor.hidden = true;
+    editor.setAttribute("aria-labelledby", "roomForcedEffectTitle");
+    editor.innerHTML = '<form><header><h3 id="roomForcedEffectTitle">非主动移动</h3>'
       + '<button type="button" data-forced-close>取消</button></header>'
       + '<div class="room-forced-fields"><label>效果<select name="kind">'
       + Object.entries(rules.names).map(([id, label]) => '<option value="' + id + '">' + label + '</option>').join("")
       + '</select></label><label>来源<select name="source"></select></label>'
       + '<label>受影响模型<select name="target"></select></label>'
-      + '<label>有效格数<input name="amount" type="number" min="0" max="32" step="1" required inputmode="numeric"></label>'
+      + '<div class="room-forced-amount" role="group" aria-label="有效格数"><span>有效格数</span>'
+      + '<div><button type="button" data-forced-less aria-label="减少有效格数">−</button>'
+      + '<output aria-label="有效格数" data-forced-amount>—</output>'
+      + '<button type="button" data-forced-more aria-label="增加有效格数">+</button></div></div>'
       + '<label data-forced-direction>方向<select name="direction"><option value="">按站位推导</option>'
       + rules.directions.map(dir => '<option value="' + dir.id + '">按牌面朝' + dir.label + '</option>').join("")
       + '</select></label></div><div data-forced-attack-range hidden class="room-forced-fields">'
@@ -29,8 +33,7 @@
       + '<div data-forced-preview></div><p data-forced-status role="status" aria-live="polite"></p>'
       + '<footer><button type="button" data-forced-reset hidden>重选路线</button>'
       + '<button type="submit" data-forced-confirm disabled>确认并同步</button></footer></form>';
-    mount.append(dialog);
-    const form = dialog.querySelector("form");
+    const form = editor.querySelector("form");
     const fields = form.elements;
     const preview = form.querySelector("[data-forced-preview]");
     const status = form.querySelector("[data-forced-status]");
@@ -38,6 +41,10 @@
     const submit = form.querySelector("[data-forced-confirm]");
     const cancel = form.querySelector("[data-forced-close]");
     const reset = form.querySelector("[data-forced-reset]");
+    const less = form.querySelector("[data-forced-less]");
+    const more = form.querySelector("[data-forced-more]");
+    const amountOutput = form.querySelector("[data-forced-amount]");
+    let amount, suspendedTurn;
     let trigger = "manual", opener, choices, pendingId, previewAction, recordedError, displayedEffect;
 
     function modelLabel(room, seat) {
@@ -64,15 +71,6 @@
         + '<small>' + (path.length - 1) + ' 格</small></div>';
     }
 
-    function mapMarkup(result) {
-      const markers = (path, who) => path.map((point, index) =>
-        '<span class="room-forced-marker ' + who + '" aria-hidden="true" style="left:'
-        + (point.column - .5) * 5 + '%;top:' + (14.5 - point.row) / .14 + '%">'
-        + (index || (who === "source" ? "源" : "目")) + '</span>').join("");
-      return '<div class="room-forced-grid" aria-hidden="true">'
-        + markers(result.sourcePath, "source") + markers(result.targetPath, "target") + '</div>';
-    }
-
     function selected(element) {
       return element.value === "apostle" ? "apostle" : element.value === "" ? null : Number(element.value);
     }
@@ -92,7 +90,8 @@
       const { room, actor } = getState();
       triggerButton.hidden = !room?.board || room.closed || actor?.role === "viewer";
       renderReceipt(room, actor);
-      if (!dialog.open || !room?.board) return;
+      if (editor.hidden) return;
+      if (triggerButton.hidden) { close(); return; }
       const roster = [["apostle", "骇物"], ...room.heroes.flatMap((hero, index) => hero.condition === "dead" ? [] : [[index, hero.name]])];
       populate(fields.source, roster);
       populate(fields.target, roster);
@@ -113,9 +112,9 @@
       form.querySelector("[data-forced-boundary]").hidden = !room.board.map.terrain.some(tile => /^(?:Black Glacier|Track Tile|Trench)/.test(tile.name));
       help.textContent = absolute ? "仅用于骇物落点内的泰坦。按骇物移速和加成填入格数。只有牌面明确说明时才可减免。"
         : trigger === "bp" && kind === "knockback" ? "部位牌骇物响应的击退只影响相邻攻击者。"
-          : "请按牌面和减免填写有效格数。冲撞及地形牌上的额外效果在结果中提示。";
+          : "请按牌面和减免调整有效格数。冲撞及地形牌上的额外效果在结果中提示。";
       const effect = {
-        kind, source: selected(fields.source), target: selected(fields.target), amount: fields.amount.valueAsNumber,
+        kind, source: selected(fields.source), target: selected(fields.target), amount,
         trigger, direction: kind === "knockback" ? fields.direction.value : "", choices,
         wartimeCity: fields.wartimeCity.checked, terrainBoundary: fields.terrainBoundary.checked,
         ...(absolute && { absoluteException: fields.exception.checked }),
@@ -130,9 +129,13 @@
       previewAction = result && !result.error && !result.pending ? { effect, stamp: rules.stamp(room, effect) } : null;
       submit.disabled = !previewAction || Boolean(pendingId);
       cancel.disabled = Boolean(pendingId);
+      amountOutput.value = amount ?? "—";
+      less.disabled = Boolean(pendingId) || amount == null || amount === 0;
+      more.disabled = Boolean(pendingId) || amount === 32;
       reset.hidden = !choices.length;
       reset.disabled = Boolean(pendingId);
       status.textContent = recordedError || (pendingId ? "正在同步版图…" : result?.error || "");
+      showPreview({ effect, result: result?.error ? null : result });
       if (!result || result.error) {
         preview.replaceChildren();
         return;
@@ -146,7 +149,7 @@
         + (kind === "push" && effect.source === "apostle" ? '<p>骇物朝向 · ' + (directionLabel[result.positions.apostle.facing] || "原朝向") + '</p>' : '')
         + '<p>使用 ' + result.used + ' / ' + effect.amount + ' 格</p>'
         + (result.deaths.length ? '<p>确认将记录死亡。如有救生索等牌面例外，请先取消并按牌面结算。</p>' : '')
-        + mapMarkup(result) + (result.sourcePath.length > 1 || result.targetPath.length > 1
+        + (result.sourcePath.length > 1 || result.targetPath.length > 1
           ? '<details><summary>逐格路线</summary><p>来源 · ' + result.sourcePath.map(cellLabel).join(" → ")
             + '</p><p>目标 · ' + result.targetPath.map(cellLabel).join(" → ") + '</p></details>' : '')
         + selection + eventList(room, result);
@@ -167,19 +170,34 @@
           + escape(modelLabel(room, seat)) + ' 的绝对击退</button>').join(""));
     }
 
-    function restoreFocus() {
-      if (opener?.isConnected) opener.focus({ preventScroll: true });
-      else if (opener?.dataset.forcedContext) mount.closest('#battleRoom')
-        ?.querySelector('[data-forced-context="' + opener.dataset.forcedContext + '"]')?.focus({ preventScroll: true });
+    function close() {
+      editor.hidden = true;
+      showPreview(null);
+      if (suspendedTurn?.isConnected) suspendedTurn.open = true;
+      suspendedTurn = null;
+      const button = opener?.isConnected ? opener : opener?.dataset.forcedContext && mount.closest("#battleRoom")
+        ?.querySelector('[data-forced-context="' + opener.dataset.forcedContext + '"]');
+      if (button) {
+        button.scrollIntoView({ block: "nearest" });
+        button.focus({ preventScroll: true });
+      }
     }
-    cancel.addEventListener("click", () => dialog.close());
-    dialog.addEventListener("cancel", event => { if (pendingId) event.preventDefault(); });
-    dialog.addEventListener("close", restoreFocus);
-    form.addEventListener("input", () => {
+
+    function resetPreview() {
       choices = [];
       recordedError = "";
       render();
+    }
+    cancel.addEventListener("click", close);
+    editor.addEventListener("keydown", event => {
+      if (event.key === "Escape" && !pendingId) {
+        event.preventDefault();
+        close();
+      }
     });
+    form.addEventListener("input", resetPreview);
+    less.addEventListener("click", () => { amount -= 1; resetPreview(); });
+    more.addEventListener("click", () => { amount = (amount ?? 0) + 1; resetPreview(); });
     preview.addEventListener("click", event => {
       const direction = event.target.closest("[data-forced-option]")?.dataset.forcedOption;
       if (!direction || pendingId) return;
@@ -187,7 +205,7 @@
       render();
       preview.querySelector("[data-forced-option]")?.focus({ preventScroll: true });
     });
-    reset.addEventListener("click", () => { choices = []; recordedError = ""; render(); });
+    reset.addEventListener("click", resetPreview);
     form.addEventListener("submit", event => {
       event.preventDefault();
       if (!previewAction || pendingId) return;
@@ -197,13 +215,16 @@
     });
 
     return {
+      editor,
       open(context = {}, button = triggerButton) {
         const { room, actor } = getState();
-        if (!room?.board || room.closed || actor.role === "viewer" || dialog.open) return false;
+        if (!room?.board || room.closed || actor.role === "viewer" || !editor.hidden) return false;
         form.reset();
         choices = [];
         recordedError = "";
         opener = button;
+        suspendedTurn = mount.closest("#battleRoom")?.querySelector(".room-turn-window[open]");
+        if (suspendedTurn) suspendedTurn.open = false;
         trigger = context.trigger || "manual";
         fields.kind.value = trigger === "collision" ? "absolute" : "knockback";
         fields.kind.disabled = trigger === "collision";
@@ -211,21 +232,22 @@
         populate(fields.source, roster, "apostle");
         populate(fields.target, roster, context.seat ?? (actor.role === "player" ? actor.seat : ""));
         const speed = window.BattleTerrain.getApostleProfile(room.board.apostle, room.board.level)?.speed;
-        if (trigger === "collision" && Number.isInteger(speed) && speed <= 32) fields.amount.value = speed;
+        amount = trigger === "collision" && Number.isInteger(speed) && speed <= 32 ? speed : null;
         if (trigger === "ai" && Number.isInteger(context.range) && context.range > 1) {
           fields.attackType.value = "ranged";
           fields.attackRange.value = context.range;
         }
-        dialog.showModal();
+        editor.hidden = false;
         render();
-        fields.amount.focus();
+        more.focus({ preventScroll: true });
         return true;
       },
       render,
       resolve(id, error) {
         if (pendingId !== id) return;
         pendingId = null;
-        if (!error && dialog.open) dialog.close();
+        if (editor.hidden) return;
+        if (!error) close();
         else {
           recordedError = error;
           choices = [];

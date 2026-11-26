@@ -1,6 +1,10 @@
 (function () {
   const svgNS = "http://www.w3.org/2000/svg";
   const accents = ["#79d1ef", "#f1c57d", "#b8df97", "#d8a8f9"];
+  const forcedRoles = {
+    source: { label: "来源", accent: "#82dfff" },
+    target: { label: "目标", accent: "#ffa78b" },
+  };
   let nextClip = 0;
 
   function spriteNode(document, sprite, facing) {
@@ -43,7 +47,7 @@
     return svg;
   }
 
-  function drawTrail(layer, trail, boss = false, suggested = false) {
+  function drawTrail(layer, trail, boss = false, suggested = false, role) {
     const route = trail?.route;
     if (!route || route.length < 2) return;
     const document = layer.ownerDocument;
@@ -53,9 +57,10 @@
     svg.setAttribute("class", "battle-piece-trail" + (boss ? " battle-piece-boss-trail" : ""));
     svg.setAttribute("role", "img");
     if (suggested) svg.classList.add("battle-piece-suggested-route");
+    if (role) svg.dataset.forcedRoute = role;
     const square = ({ column, row }) => String.fromCharCode(64 + row) + column;
-    svg.setAttribute("aria-label", (suggested ? "AI 建议路线 " : boss ? "骇物正交移动路线 " : "泰坦移动路线 ") + route.map(square).join(" → "));
-    svg.style.setProperty("--piece-accent", suggested ? "#f9d478" : boss ? "#f4a284" : accents[trail.seat]);
+    svg.setAttribute("aria-label", (role ? forcedRoles[role].label + "路线 " : suggested ? "AI 建议路线 " : boss ? "骇物正交移动路线 " : "泰坦移动路线 ") + route.map(square).join(" → "));
+    svg.style.setProperty("--piece-accent", role ? forcedRoles[role].accent : suggested ? "#f9d478" : boss ? "#f4a284" : accents[trail.seat]);
     const line = document.createElementNS(svgNS, "polyline");
     line.setAttribute("points", route.map(({ column, row }) => (column - 0.5) + "," + (14.5 - row)).join(" "));
     line.setAttribute("vector-effect", "non-scaling-stroke");
@@ -67,11 +72,11 @@
       dot.setAttribute("r", index === 0 ? 0.32 : 0.12);
       dot.setAttribute("class", index === 0 ? "trail-origin" : "trail-step");
       svg.appendChild(dot);
-      if (boss && (index > 0 || suggested)) {
+      if ((boss || role) && (index > 0 || suggested)) {
         const label = document.createElementNS(svgNS, "text");
         label.setAttribute("x", column - .5); label.setAttribute("y", (index === 0 ? 14.60 : 14.4) - row);
         label.setAttribute("class", "trail-step-number"); label.setAttribute("text-anchor", "middle");
-        label.textContent = index === 0 ? "起" : String(index); svg.appendChild(label);
+        label.textContent = index === 0 ? (role ? forcedRoles[role].label[0] : "起") : String(index); svg.appendChild(label);
       }
     }
     layer.appendChild(svg);
@@ -97,7 +102,7 @@
     layer.appendChild(svg);
   }
 
-  function drawRouteGhost(layer, route, sprite, size) {
+  function drawRouteGhost(layer, route, sprite, size, role, fallback) {
     if (!route?.finalCenter) return;
     const { column, row } = route.finalCenter;
     const document = layer.ownerDocument;
@@ -109,20 +114,37 @@
     ghost.style.height = size / 14 * 100 + "%";
     ghost.setAttribute("aria-hidden", "true");
     if (sprite) ghost.appendChild(spriteNode(document, sprite, route.facing));
-    const arrow = document.createElement("span");
-    arrow.className = "battle-piece-facing";
-    arrow.style.transform = "translate(-50%, -50%) rotate(" + route.facing + "deg)";
-    arrow.textContent = "▲";
-    ghost.appendChild(arrow);
+    else if (fallback) {
+      const image = document.createElement("img");
+      image.src = fallback;
+      image.alt = "";
+      ghost.appendChild(image);
+    }
+    if (role) {
+      ghost.dataset.forcedGhost = role;
+      ghost.style.setProperty("--forced-preview-accent", forcedRoles[role].accent);
+    }
+    if (Number.isFinite(route.facing)) {
+      const arrow = document.createElement("span");
+      arrow.className = "battle-piece-facing";
+      arrow.style.transform = "translate(-50%, -50%) rotate(" + route.facing + "deg)";
+      arrow.textContent = "▲";
+      ghost.appendChild(arrow);
+    }
     layer.appendChild(ghost);
   }
 
   function render(layer, pieces, {
-    apostle, size = 1, selected = 0, mode, names = [], roster, portraits = [], deadSeats = [], priorityTarget, priorityVisible, aiTarget, aiRoute, pendingCollisionSeats = [], trail, bossTrail, onSelect, onSelectBoss,
+    apostle, size = 1, selected = 0, mode, names = [], roster, portraits = [], deadSeats = [], priorityTarget, priorityVisible, aiTarget, aiRoute, forcedPreview, pendingCollisionSeats = [], trail, bossTrail, onSelect, onSelectBoss,
   } = {}) {
     layer.replaceChildren();
     layer.hidden = false;
-    if (aiRoute) {
+    const routes = forcedPreview?.effect && Object.keys(forcedRoles).map(role => ({
+      role, id: forcedPreview.effect[role], path: forcedPreview.result?.[role + "Path"],
+    }));
+    if (routes) {
+      for (const { role, id, path } of routes) drawTrail(layer, { route: path }, id === "apostle", true, role);
+    } else if (aiRoute) {
       drawTrail(layer, { route: aiRoute.centers }, true, true);
     } else {
       if (!deadSeats.includes(trail?.seat)) drawTrail(layer, trail);
@@ -131,10 +153,16 @@
     }
     const document = layer.ownerDocument;
     const sprites = window.BattleBoardSprites || {};
-    drawRouteGhost(layer, aiRoute, sprites.forApostle?.(apostle), size);
+    if (!routes) drawRouteGhost(layer, aiRoute, sprites.forApostle?.(apostle), size);
     function token(piece, span, name, index, sprite, fallback) {
       const boss = index === null;
-      const select = boss ? onSelectBoss : onSelect && (() => onSelect(index));
+      const id = boss ? "apostle" : index;
+      const route = routes?.find(item => item.id === id);
+      const select = !routes && (boss ? onSelectBoss : onSelect && (() => onSelect(index)));
+      if (route?.path?.length > 1) {
+        const facing = boss ? forcedPreview.result.positions.apostle.facing : undefined;
+        drawRouteGhost(layer, { finalCenter: route.path.at(-1), facing }, sprite, span, route.role, fallback || portraits[index]);
+      }
       const interactive = Boolean(select);
       const marker = document.createElement(interactive ? "button" : "div");
       if (interactive) {
@@ -146,9 +174,13 @@
       }
       marker.className = "battle-piece " + (boss ? "battle-piece-apostle" : "battle-piece-titan");
       marker.classList.toggle("is-selected", boss ? mode?.startsWith("apostle-") : selected === index && mode?.startsWith("titan-"));
-      marker.classList.toggle("is-ai-target", !boss && index === aiTarget);
-      marker.classList.toggle("is-ai-route-crossed", !boss && aiRoute?.crossedSeats?.includes(index));
+      marker.classList.toggle("is-ai-target", !routes && !boss && index === aiTarget);
+      marker.classList.toggle("is-ai-route-crossed", !routes && !boss && aiRoute?.crossedSeats?.includes(index));
       const pendingCollision = !boss && pendingCollisionSeats.includes(index);
+      if (route) {
+        marker.dataset.forcedModel = route.role;
+        marker.style.setProperty("--forced-preview-accent", forcedRoles[route.role].accent);
+      }
       if (!boss) marker.style.setProperty("--piece-accent", accents[index]);
       marker.style.left = (piece.column - 0.5) * 5 + "%";
       marker.style.top = (14 - piece.row + 0.5) / 14 * 100 + "%";

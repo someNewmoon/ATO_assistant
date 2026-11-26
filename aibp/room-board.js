@@ -45,7 +45,17 @@
     const receipt = document.createElement("section");
     receipt.className = "room-forced-receipt";
     receipt.hidden = true;
-    const forcedEffect = window.ATO_FORCED_MOVEMENT_UI?.create(mount, send, () => ({ room, actor }), forcedButton, receipt);
+    let forcedPreview;
+    const forcedEffect = window.ATO_FORCED_MOVEMENT_UI?.create(mount, send, () => ({ room, actor }), forcedButton, receipt, preview => {
+      const wasActive = Boolean(forcedPreview);
+      forcedPreview = preview;
+      if (preview && !wasActive) selectingPoint = false;
+      if (Boolean(preview) !== wasActive) {
+        grid?.classList.toggle("is-forced-preview", Boolean(preview));
+        renderPingStatus();
+      }
+      control?.render();
+    });
     let attackDeclarationError = "";
 
 
@@ -299,7 +309,13 @@
       forced.after(ability, preview);
       movementActions.append(finishTurn);
       tactics.before(actionPanel);
+      if (forcedEffect) actionPanel.before(forcedEffect.editor);
       grid = panel.querySelector("[data-battle-map-board]");
+      grid.addEventListener("click", event => {
+        if (!forcedPreview) return;
+        event.preventDefault();
+        event.stopImmediatePropagation();
+      }, true);
       const head = panel.querySelector(".battle-map-head");
       const title = head.querySelector("h3");
       const heading = document.createElement("div");
@@ -350,6 +366,7 @@
         priorityTarget: () => room.priorityTarget?.seat,
         aiTarget: () => room.turn?.aiTarget,
         aiRoute: () => aiRoute,
+        forcedPreview: () => forcedPreview,
         pendingCollisionSeats: () => room.turn?.aiMovement?.pending ? room.turn.aiMovement.crossedSeats : [],
         deadSeats: () => room.heroes.flatMap((hero, seat) => hero.condition === "dead" ? [seat] : []),
         heroPortraits: () => room.heroes.map(hero => {
@@ -484,7 +501,9 @@
         control?.render();
       },
       openForcedEffect(context, button) {
-        return forcedEffect?.open(context, button);
+        if (!forcedEffect?.open(context, button)) return false;
+        grid.scrollIntoView({ block: "start" });
+        return true;
       },
       resolveForcedEffect(id, error) { forcedEffect?.resolve(id, error); },
       attackDeclarationFailed(error) {

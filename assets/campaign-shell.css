@@ -592,6 +592,22 @@ body.art-module-shell .campaign-toolbox { inset-inline-start: var(--art-module-i
   #appShell.art-dashboard-shell {
     padding-inline: calc(var(--art-sidebar-width) + 11px) 8px;
   }
+  #appShell.art-dashboard-shell .campaign-toolbox {
+    position: static;
+    margin-block: 8px;
+  }
+  #appShell.art-dashboard-shell[data-art-view="settings"] .campaign-toolbox { display: none; }
+  #appShell.art-dashboard-shell .campaign-toolbox-menu {
+    position: static;
+    min-width: 0;
+    margin-block-start: 5px;
+    box-shadow: none;
+  }
+  #appShell.art-dashboard-shell .art-log-dock {
+    position: static;
+    width: auto;
+    max-width: none;
+  }
   body.art-module-shell { --art-module-inset: calc(var(--art-sidebar-width) + 8px); }
   .art-sidebar { inset-block: 6px; padding-inline: 2px; }
   .art-sidebar .art-sidebar-brand { font-size: 15px; }

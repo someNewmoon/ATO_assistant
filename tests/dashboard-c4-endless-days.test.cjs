@@ -200,7 +200,7 @@ test('补出来的当天行也带战斗标记，顶部 day 输入框接受任意
   ctx.state.day = 201;
   const entry = ctx.trackEntriesForRender(ctx.dateTrackData.c4).at(-1);
   assert.ok(ctx.dateTrackIcons(entry, ctx.dateTrackData.c4).some(battleIcon));
-  assert.ok(source.includes('state.day = normalizeCampaignDay(elements.dayInput.value, currentCycleConfig().id)'));
+  assert.match(extractFunction('jumpCampaignDay'), /normalizeCampaignDay\(value, cycleId\)/);
 
   vm.runInContext([extractFunction('defaultDayForCycle'), extractFunction('normalizeCampaignDay')].join('\n'), ctx);
   assert.equal(ctx.normalizeCampaignDay('97', 'c4'), 97);

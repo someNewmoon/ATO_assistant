@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="zh-CN">
 <head>
-    <script src="./assets/campaign-toolbox.js?v=20261124-hero-status" defer></script>
+    <script src="./assets/campaign-toolbox.js?v=20261126-dashboard-mobile" data-start-collapsed-on-mobile defer></script>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>ATO 战役主控台</title>
@@ -345,7 +345,7 @@
       box-shadow: var(--shadow);
     }
 
-    .day-card label {
+    .day-jump-form {
       grid-column: 1;
       display: grid;
       gap: 6px;
@@ -354,6 +354,8 @@
       font-size: 13px;
       font-weight: 700;
     }
+
+    .day-jump-form button { justify-self: start; }
 
     .day-card input {
       width: 116px;
@@ -2417,6 +2419,8 @@
 
     .map-step-group {
       display: flex;
+      min-width: 0;
+      max-width: 100%;
       align-items: center;
       flex-wrap: wrap;
       gap: 7px;
@@ -2442,7 +2446,7 @@
       font-size: 12px;
     }
 
-    .campaign-mini-map { min-width: 0; margin: 0; }
+    .campaign-mini-map { min-width: 0; max-width: 100%; margin: 0; }
     .campaign-mini-map figcaption {
       display: flex;
       flex-wrap: wrap;
@@ -2663,7 +2667,7 @@
         grid-template-columns: 1fr;
       }
 
-      .day-card label,
+      .day-jump-form,
       .record-links,
       .day-actions {
         grid-column: 1;
@@ -2781,9 +2785,10 @@
         </div>
       </div>
       <section class="day-card" aria-label="当前天数">
-        <label>
-          <input id="dayInput" type="text" inputmode="numeric" value="0" aria-label="当前天数">
-        </label>
+        <form id="dayJumpForm" class="day-jump-form">
+          <input id="dayInput" type="text" inputmode="numeric" value="0" aria-label="当前天数" required>
+          <button type="submit" class="secondary">跳转日期</button>
+        </form>
         <div class="day-actions">
           <button id="resetTodayButton" type="button" class="secondary">重置今日</button>
           <button id="nextDayButton" type="button">进入下一天</button>
@@ -7622,6 +7627,7 @@
 
     function syncInputs() {
       elements.dayInput.value = state.day;
+      elements.dayInput.setCustomValidity("");
       syncCampaignLog();
       renderCurrentDateNote();
     }
@@ -14649,6 +14655,8 @@
       for (const event of events) {
         const row = document.createElement("div");
         row.className = `structure-tech-due-item${event.overdue ? " overdue" : ""}`;
+        row.id = `due-tech-${encodeURIComponent(event.id)}`;
+        row.tabIndex = -1;
         const label = document.createElement("span");
         label.textContent = `${event.overdue ? "逾期" : "今日"} · Day ${event.dueDay} · ${event.label}${event.targetLabel ? ` · 目标：${event.targetLabel}` : ""}：${event.rewardLabel || "请按卡面处理时间线事件"}`;
         const complete = document.createElement("button");
@@ -14804,7 +14812,10 @@
         }
       }
       const tech = structureTechEvents().filter(event => event.kind !== "cooldown" && event.status !== "completed" && event.due);
-      if (tech.length) items.push({ step: "development", label: `发展 · ${tech.length} 项科技时间线事项到期` });
+      for (const event of tech) {
+        items.push({ targetId: `due-tech-${encodeURIComponent(event.id)}`,
+          label: `科技事项 · ${event.overdue ? "逾期" : "今日到期"} · ${event.label}${event.targetLabel ? ` · ${event.targetLabel}` : ""}` });
+      }
       for (const label of storyOutstandingItems()) items.push({ step: "story", label: "剧情 · " + label });
       if (inwardExchangeDetails().available) items.push({ step: "story", label: "剧情末尾 · 内部之旅可消耗希望推进" });
       const doom = storyRewardCount(state.storyRewards?.doom);
@@ -14821,7 +14832,8 @@
       const list = document.getElementById("todayPreviewItems");
       title.textContent = items.length ? `今日待结算 · ${items.length} 项` : "今日待结算 · 暂无提示";
       list.replaceChildren();
-      for (const { step, label } of items) {
+      const activeIndex = activeFlowStepIndex();
+      for (const { step, targetId, label } of items) {
         const row = document.createElement("li");
         const text = document.createElement("span");
         text.textContent = label;
@@ -14829,11 +14841,23 @@
         jump.type = "button";
         jump.className = "secondary";
         jump.dataset.dashboardReadonlyAllowed = "";
-        jump.textContent = "去步骤";
-        jump.setAttribute("aria-label", `去步骤：${label}`);
+        const stepIndex = flowSteps.findIndex(item => item.id === step);
+        const waiting = !targetId && stepIndex > activeIndex;
+        jump.textContent = targetId ? "去结算" : waiting ? "去当前步骤" : "去步骤";
+        if (waiting) text.textContent += `（完成「${flowSteps[activeIndex].title}」及前置步骤后处理）`;
+        jump.setAttribute("aria-label", `${jump.textContent}：${label}`);
         jump.addEventListener("click", () => {
-          if (flowSteps.slice(0, activeFlowStepIndex()).some(item => item.id === step)
-              && reviewedFlowStep?.id !== step) {
+          if (targetId) {
+            const target = document.getElementById(targetId);
+            (target?.querySelector("input:not(:disabled), button:not(:disabled), a") || target)?.focus({ preventScroll: true });
+            target?.scrollIntoView({ block: "center" });
+            return;
+          }
+          if (waiting) {
+            focusFlowStep(flowSteps[activeIndex].id);
+            return;
+          }
+          if (stepIndex < activeIndex && reviewedFlowStep?.id !== step) {
             reviewedFlowStep = { id: step, context: adventureRollContext() };
             renderFlow();
           }
@@ -15559,7 +15583,7 @@
           .map((icon) => ({
             title: icon.label,
             tag: icon,
-            desc: `时间表标记了今日${icon.label}突破，在发展阶段处理。`,
+            desc: `今日可进行${icon.label}突破。请在「今日研发」打开科技树。`,
             className: `tech ${icon.className}`,
           }))];
       }
@@ -16513,13 +16537,74 @@
         .replace(/'/g, "&#039;");
     }
 
-    elements.dayInput.addEventListener("input", () => {
-      state.day = normalizeCampaignDay(elements.dayInput.value, currentCycleConfig().id);
-      state.latestSurveyAdventureAction = null;
-      state.latestSimpleAdventureAction = null;
-      saveState();
-      renderFlow();
-      renderDateTrack();
+    async function jumpCampaignDay() {
+      if (campaignRestoreInFlight || nextDay.busy || elements.appShell.inert || !ownsDashboardWriteLease()) return;
+      const cycleId = currentCycleConfig().id;
+      const input = elements.dayInput;
+      const value = input.value.trim().toUpperCase();
+      const prologueDay = cycleId === "c1" && /^(?:T[0-5]|T6\/00)$/.test(value);
+      if (!prologueDay && (!/^\d+$/.test(value) || !Number.isSafeInteger(Number(value)))) {
+        input.setCustomValidity("请输入有效的战役日期。");
+        input.reportValidity();
+        return;
+      }
+      const destination = normalizeCampaignDay(value, cycleId);
+      const currentDay = String(state.day);
+      if (String(destination) === currentDay) {
+        input.value = state.day;
+        return;
+      }
+      const pending = todaySettlementItems();
+      const warning = pending.length
+        ? `当前仍有待办：\n\n${pending.map(item => item.label).join("\n")}\n\n`
+        : "";
+      if ((pending.length || Object.values(state.completed || {}).some(Boolean))
+          && !window.confirm(`${warning}跳到第 ${destination} 天并打开该日流程？未处理的事项不会因此结算。`)) {
+        input.value = state.day;
+        return;
+      }
+      const profileId = archive.activeProfileId;
+      const sessionEpoch = campaignSessionEpoch;
+      elements.appShell.inert = true;
+      try {
+        saveState();
+        if (!await flushCampaignSave()) throw new Error("当前进度尚未保存，请恢复连接后重试。");
+        if (sessionEpoch !== campaignSessionEpoch || !ownsDashboardWriteLease()
+            || profileId !== archive.activeProfileId || cycleId !== currentCycleConfig().id
+            || currentDay !== String(state.day)) throw new Error("账号、档案或日期已变更，请重试。");
+        const datedFlow = isPlainObject(state.manualDateFlow) ? state.manualDateFlow : {};
+        const destinationFlow = datedFlow[String(destination)];
+        state.manualDateFlow = { ...datedFlow, [currentDay]: {
+          completed: state.completed,
+          latestSurveyAdventureAction: state.latestSurveyAdventureAction,
+          latestSimpleAdventureAction: state.latestSimpleAdventureAction,
+        }};
+        state.day = destination;
+        state.completed = { ...destinationFlow?.completed };
+        state.latestSurveyAdventureAction = destinationFlow?.latestSurveyAdventureAction ?? null;
+        state.latestSimpleAdventureAction = destinationFlow?.latestSimpleAdventureAction ?? null;
+        syncInputs();
+        saveState();
+        renderFlow();
+        renderDateTrack({ focusCurrentDay: true });
+        if (!await flushCampaignSave()) throw new Error("新日期尚未存档，请恢复连接后重试保存。");
+      } catch (error) {
+        input.value = state.day;
+        window.alert(error.message);
+      } finally {
+        elements.appShell.inert = false;
+      }
+    }
+
+    elements.dayInput.addEventListener("input", () => elements.dayInput.setCustomValidity(""));
+    elements.dayInput.addEventListener("keydown", event => {
+      if (event.key !== "Escape") return;
+      elements.dayInput.setCustomValidity("");
+      elements.dayInput.value = state.day;
+    });
+    document.getElementById("dayJumpForm").addEventListener("submit", event => {
+      event.preventDefault();
+      void jumpCampaignDay();
     });
     elements.flowList.addEventListener("click", (event) => {
       const fateButton = event.target.closest("[data-map-progress-fate]");
@@ -16771,6 +16856,7 @@
     setAuthMode("login");
     window.ATO_CAMPAIGN_TOOLBOX_OPTIONS = {
       container: elements.appShell,
+      before: document.querySelector("#appShell .grid"),
       async beforeRead() {
         if (elements.appShell.inert || !ownsDashboardWriteLease()) throw new Error("请先接管主控台编辑。");
         if (!campaignStorageAvailable || !await flushCampaignSave()) {

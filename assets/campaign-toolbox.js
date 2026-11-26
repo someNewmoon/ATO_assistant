@@ -6,7 +6,8 @@
   const options = window.ATO_CAMPAIGN_TOOLBOX_OPTIONS || {};
   const tooltip = document.createElement("details");
   tooltip.className = "campaign-toolbox";
-  tooltip.open = !script.hasAttribute("data-start-collapsed");
+  tooltip.open = !script.hasAttribute("data-start-collapsed")
+    && !(script.hasAttribute("data-start-collapsed-on-mobile") && window.matchMedia("(max-width: 640px)").matches);
   tooltip.innerHTML = `<summary>工具箱 <span data-toolbox-draft hidden></span></summary>
     <div class="campaign-toolbox-menu">
       <button type="button" data-tool="settlement" aria-haspopup="dialog">阿尔戈号快捷结算</button>
@@ -14,7 +15,8 @@
       <button type="button" data-tool="heroes" aria-haspopup="dialog">英雄状态</button>
       <p role="status" hidden></p>
     </div>`;
-  (options.container || document.body).append(tooltip);
+  if (options.before) options.before.before(tooltip);
+  else (options.container || document.body).append(tooltip);
   const summary = tooltip.querySelector("summary");
   const draft = tooltip.querySelector("[data-toolbox-draft]");
   const status = tooltip.querySelector("[role=status]");
@@ -79,6 +81,7 @@
   tooltip.addEventListener("click", async event => {
     const button = event.target.closest("[data-tool]");
     if (!button || button.disabled) return;
+    tooltip.open = true;
     status.hidden = true;
     buttons.forEach(item => { item.disabled = true; });
     try {

@@ -421,7 +421,7 @@
   const toolLinks = document.createElement('div');
   toolLinks.className = 'room-tool-actions';
   toolLinks.setAttribute('role', 'group');
-  toolLinks.setAttribute('aria-label', '战斗功能');
+  toolLinks.setAttribute('aria-label', '战斗工具');
   const toolsDialog = document.createElement('dialog');
   toolsDialog.className = 'room-tool-sheet';
   toolsDialog.id = 'room-tool-sheet';
@@ -516,18 +516,10 @@
   });
   quick.prepend(jump);
 
-  const disclosure = document.createElement('details');
-  disclosure.className = 'room-style-tools';
-  const label = document.createElement('summary');
-  label.textContent = '战斗工具';
-  disclosure.append(label, toolLinks);
-  disclosure.addEventListener('click', event => {
-    if (event.target.closest('[data-tool]')) disclosure.open = false;
-  });
-  dock.append(disclosure);
   dock.classList.add('room-style-dock');
   root.before(dock);
-  new ResizeObserver(() => turnBar.style.setProperty('--round-nav-height', dock.offsetHeight + 'px')).observe(dock);
+  const dockContainer = dock.parentElement;
+  new ResizeObserver(() => dockContainer.style.setProperty('--round-nav-height', dock.offsetHeight + 'px')).observe(dock);
   if (params.has('battle')) window.addEventListener('load', () => {
     const toolbox = document.querySelector('details.campaign-toolbox');
     if (toolbox) toolbox.open = false;

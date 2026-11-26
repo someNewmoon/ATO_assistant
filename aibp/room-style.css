@@ -31,7 +31,7 @@
 }
 .room-tool-dock.room-style-dock[hidden] { display: none; }
 main:has(> .room-style-preview .is-picking-point) > .room-style-dock { visibility: hidden; }
-main:has(> .room-style-dock:not([hidden])) > #viewer { scroll-margin-top: 4.5rem; }
+main:has(> .room-style-dock:not([hidden])) > #viewer { scroll-margin-top: max(4.5rem, calc(var(--round-nav-height, 0px) + .75rem)); }
 
 .room-style-dock .room-primary-nav {
   justify-content: start;
@@ -68,26 +68,20 @@ main:has(> .room-style-dock:not([hidden])) > #viewer { scroll-margin-top: 4.5rem
   background: var(--folio-nav-hover);
   border-color: var(--folio-rule);
 }
-.room-style-dock .room-style-tools { position: relative; }
-.room-style-dock .room-style-tools summary {
-  cursor: pointer;
+.room-style-dock .room-tool-actions {
+  margin-inline-start: auto;
+  gap: .25rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.room-style-dock .room-tool-actions button {
+  min-height: 32px;
   padding: .3rem .5rem;
-  border: 1px solid var(--folio-rule);
   font-size: .79rem;
-  white-space: nowrap;
 }
-.room-style-dock .room-style-tools .room-tool-actions {
-  position: absolute;
-  top: calc(100% + .35rem);
-  inset-inline-end: 0;
-  width: max-content;
-  max-width: min(78vw, 26rem);
-  justify-content: start;
-  border-radius: 2px;
-  background: var(--folio-sheet);
-  border: 3px double var(--folio-rule);
-  box-shadow: 0 .3rem .8rem #30241a28;
-}
+.room-style-dock .room-tool-actions button[hidden] { display: none; }
 
 .room-style-dock .room-tool-actions button,
 .room-style-preview .room-turn-window button:not(.battle-room-card-art, :disabled) {
@@ -198,7 +192,7 @@ main:has(> .room-style-dock:not([hidden])) > #viewer { scroll-margin-top: 4.5rem
 }
 
 .battle-room.room-style-preview :is(#room-dice, #room-movement, #room-status, #room-equipment, #room-kratos-pool) {
-  scroll-margin-top: 4.5rem;
+  scroll-margin-top: max(4.5rem, calc(var(--round-nav-height, 0px) + .75rem));
 }
 .room-style-preview #room-dice {
   margin-block: 1rem;
@@ -274,7 +268,6 @@ main:has(> .room-style-dock:not([hidden])) > #viewer { scroll-margin-top: 4.5rem
 }
 @media (max-width: 540px) {
   .battle-room.room-style-preview { padding-top: .65rem; }
-  .room-style-dock .room-style-tools .room-tool-actions { inset-inline: 0 auto; }
 }
 
 body.aibp-active-online-battle main:has(> .room-style-preview) { overflow: visible; }

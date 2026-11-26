@@ -1,0 +1,214 @@
+:root {
+  color-scheme: dark;
+  --bg:#171310; --panel:#24201c; --tray:#171916; --ink:#f6ead8;
+  --muted:#c6b49d; --line:#68533a; --accent:#e4bb7d; --ember:#f08872;
+  --serif:"Songti SC","Noto Serif CJK SC","STSong",Georgia,serif;
+  --sans:"PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+}
+* { box-sizing:border-box; }
+body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.55 var(--sans); }
+button { font:inherit; color:inherit; cursor:pointer; }
+button:disabled { opacity:.55; cursor:default; }
+button:focus-visible { outline:2px solid #edc78a; outline-offset:3px; }
+.topbar {
+  display:flex; align-items:center; justify-content:space-between; padding:9px max(18px,calc((100vw - 1256px)/2));
+  gap:12px; border-bottom:1px solid #786044; background:#211b16;
+}
+.top-title,.top-actions { display:flex; align-items:center; gap:12px; }
+.top-title b { color:#f0c990; font:700 23px/1 Georgia,serif; letter-spacing:.05em; }
+.top-title span,.top-actions span { color:var(--muted); white-space:nowrap; }
+.top-title span { padding-left:12px; border-left:1px solid var(--line); }
+.top-actions button { border:1px solid var(--line); background:#30261f; padding:5px 9px; }
+.cockpit { max-width:1290px; margin:16px auto 0; padding:0 16px; }
+.hull {
+  position:relative; isolation:isolate; overflow:hidden; min-height:285px; display:flex;
+  flex-direction:column; justify-content:space-between; border:1px solid #957344;
+  border-bottom:4px double #a58256; box-shadow:0 10px 30px #0906048c;
+}
+.hull-image {
+  position:absolute; inset:0; z-index:-1; background:#34291e;
+  background-image:linear-gradient(90deg,#1d1511ce,#251a1254 40%,#15100b00 78%),
+    linear-gradient(0deg,#18130ff2,#17120e00 46%),url("./art/cockpit.jpg");
+  background-position:center,center,center 29%; background-size:cover; transition:transform 270ms,filter 270ms;
+}
+.hull-content { padding:20px 34px 10px; }
+.pilot { display:flex; align-items:center; gap:9px; margin-bottom:13px; color:var(--muted); font-size:11px; }
+.pilot img { width:41px; height:41px; object-fit:cover; border:1px solid #a78050; border-radius:50%; background:#30291f; }
+.pilot b { display:block; color:var(--ink); font:700 15px/1.4 var(--serif); }
+h1 { font:700 clamp(2.65rem,6vw,4.5rem)/1.1 var(--serif); letter-spacing:.035em; margin:0; }
+.stance { display:inline-flex; align-items:center; gap:8px; margin:9px 0 0; color:#f0ca92; }
+.stance::before { content:""; width:7px; height:7px; border-radius:50%; background:#edc882; box-shadow:0 0 10px #e28436; }
+.knocked .hull-image { transform:translateY(13px) scale(1.04); filter:saturate(.55) brightness(.68); }
+.knocked .stance { color:#ffc1ae; }
+.knocked .stance::before { background:#f98673; box-shadow:0 0 10px #ef3e24; }
+.gauges { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); width:min(100%,620px); margin:0; padding:0 32px 18px; }
+.gauge { min-width:0; display:flex; justify-content:space-between; align-items:center; gap:5px; padding:9px 12px; border:1px solid #8d6b45; background:#231b15ed; }
+.gauge + .gauge { border-left:0; }
+.gauge dt { display:flex; align-items:center; gap:7px; white-space:nowrap; }
+.gauge img { width:19px; height:19px; object-fit:contain; }
+.gauge dd { margin:0; font:700 29px/1 Georgia,serif; color:#f0dfc2; }
+.rage dd { color:#fba18b; }
+.fate dd { color:#d9e7e5; }
+.danger dd { color:#efb28c; }
+.rage.pulse { animation:meter-pulse .45s ease-out; }
+.deck { display:grid; grid-template-areas:"weapon attack bp" "pool pool pool"; grid-template-columns:minmax(205px,.85fr) minmax(360px,1.9fr) minmax(155px,.6fr); gap:11px; margin-top:13px; }
+.well { padding:13px 15px; border:1px solid var(--line); background:linear-gradient(155deg,#322720,var(--panel) 52%); box-shadow:inset 0 0 0 3px #1915107d; min-width:0; }
+.well h2 { color:#efc998; margin:0; font:700 21px/1.35 var(--serif); }
+.weapon { grid-area:weapon; }
+.weapon-content { display:flex; align-items:start; gap:12px; margin-top:13px; }
+.weapon-card { background:#181511; padding:4px; width:110px; flex:none; border:1px solid #967045; box-shadow:0 5px 12px #16110d; }
+.weapon-card img { display:block; width:100%; aspect-ratio:470/740; object-fit:contain; }
+.weapon-card[aria-pressed=true] { border-color:#efc288; box-shadow:0 0 13px #f3a55266; opacity:1; }
+.weapon-info h3 { font:700 24px/1.2 var(--serif); margin:4px 0 7px; }
+.weapon-info p { margin:4px 0; color:var(--muted); font-size:13px; }
+.weapon-status { display:inline-block; margin-top:8px; font-size:12px; padding:2px 7px; border:1px solid #8d6945; color:#f1c995; background:#392719; }
+.attack { grid-area:attack; }
+.attack-heading { display:flex; flex-wrap:wrap; align-items:baseline; gap:4px 14px; justify-content:space-between; }
+.attack-heading span,.pool-heading span { color:var(--muted); font-size:13px; }
+.phases { display:flex; flex-wrap:wrap; list-style:none; margin:9px 0 11px; padding:0; gap:4px; }
+.phases li { border-bottom:2px solid #6d614d; padding:3px 7px; color:var(--muted); font-size:12px; }
+.phases li[aria-current] { color:#ffdba6; border-color:#eab166; background:#553b2882; }
+.tray { min-height:142px; border:1px solid #856744; padding:8px 13px; background:radial-gradient(ellipse at center,#75674224,transparent 70%),var(--tray); box-shadow:inset 0 0 15px #0009; }
+.tray-hint { margin:0 0 6px; color:#d5c4ae; font-size:13px; }
+.dice { display:flex; flex-wrap:wrap; align-items:center; gap:9px; min-height:69px; }
+.dice img { width:42px; height:42px; object-fit:contain; display:block; }
+.die { display:grid; justify-items:center; min-width:49px; gap:3px; }
+.die span { font-size:12px; color:#e8d7be; }
+.die.landed { animation:land .28s cubic-bezier(.2,.8,.4,1) both; }
+.die.landed:nth-child(2) { animation-delay:.05s; }
+.die.landed:nth-child(3) { animation-delay:.10s; }
+.dice-group { border:1px solid #7a6243; background:#3c2b2180; padding:5px 8px; min-width:105px; }
+.dice-group strong { font-size:13px; font-weight:600; }
+.dice-group > div { display:flex; gap:5px; }
+.dice-group img { width:34px; height:34px; }
+.action-line { display:flex; margin-top:9px; }
+.main-action { width:100%; min-height:40px; background:linear-gradient(#f1cf97,#d8a569); color:#25180f; border:1px solid #f6d7a7; font-weight:800; }
+.main-action:not(:disabled):hover { background:#f8d7a3; }
+.bodypart { grid-area:bp; }
+.bp-stand { background:#151511; border:1px solid #706044; width:min(103px,100%); padding:4px; margin:12px auto 7px; box-shadow:0 5px 11px #15110e; }
+.bp-stand img { display:block; width:100%; aspect-ratio:5/7; object-fit:contain; }
+.bp-stand img.revealed { animation:turn .28s ease-out; }
+.bodypart p { color:var(--muted); font-size:12px; margin:4px 0 0; text-align:center; }
+.pool { grid-area:pool; }
+.pool-heading { display:flex; flex-wrap:wrap; align-items:baseline; gap:5px 13px; margin-bottom:8px; }
+.pool.live { border-color:#d8aa70; box-shadow:inset 0 0 16px #cf8d423c; }
+.tokens { display:flex; flex-wrap:wrap; gap:7px; }
+.token { display:flex; align-items:center; gap:7px; border:1px solid #725b41; background:#1f1a16; padding:4px 8px; min-height:33px; }
+.token img { width:17px; height:17px; object-fit:contain; }
+.token b { font:700 16px/1 Georgia,serif; }
+.token:disabled { opacity:.73; }
+.token:not(:disabled):hover { border-color:#e3bf89; }
+footer { max-width:1290px; padding:10px 17px 20px; margin:auto; color:var(--muted); font-size:12px; }
+@keyframes meter-pulse { 50% { box-shadow:inset 0 0 20px #e5533977; } }
+@keyframes land { from { transform:translateY(-10px) rotate(-12deg); opacity:.4; } to { transform:none; opacity:1; } }
+@keyframes turn { from { transform:perspective(200px) rotateY(-75deg); } to { transform:none; } }
+@media (max-width:850px) {
+  .deck { grid-template-columns:minmax(125px,.75fr) minmax(0,1.9fr) minmax(100px,.55fr); gap:8px; }
+  .weapon-content { flex-direction:column; }
+  .weapon-card { width:min(90px,100%); }
+}
+@media (max-width:660px) {
+  .topbar { padding:8px 10px; }.top-title,.top-actions { gap:6px; }
+  .top-title span { padding-left:6px; font-size:12px; }.top-actions span { display:none; }.top-actions button { font-size:12px; }
+  .cockpit { padding:0 9px; margin-top:9px; }
+  .hull { min-height:211px; }.hull-content { padding:13px 16px 8px; }
+  .hull-image { background-position:center,center,65% 46%; }.pilot { margin-bottom:8px; }
+  .gauges { padding:0 10px 11px; }.gauge { padding:7px; }.gauge dt { gap:4px; font-size:12px; }.gauge dd { font-size:22px; }
+  .deck { grid-template-areas:"weapon bp" "attack attack" "pool pool"; grid-template-columns:minmax(0,1fr) 94px; margin-top:8px; }
+  .well { padding:9px 10px; }.well h2 { font-size:18px; }
+  .weapon-content { flex-direction:row; gap:10px; margin-top:5px; }.weapon-card { width:60px; }
+  .weapon-info h3 { font-size:19px; margin-bottom:2px; }.weapon-info p { font-size:12px; margin:2px 0; }
+  .weapon-status { margin-top:3px; }.bp-stand { width:51px; margin:4px auto; }.bodypart p { font-size:11px; }
+  .phases li { padding-inline:5px; }
+}
+@media (prefers-reduced-motion:reduce) { *,*::before,*::after { animation:none !important; transition:none !important; } }
+
+/* The tactical view shares the paper surfaces of the battle room. */
+:root {
+  color-scheme: light;
+  --bg:#f2eadd;
+  --panel:#f9f2e6;
+  --tray:#29231e;
+  --ink:#32241b;
+  --muted:#675442;
+  --line:#be9e77;
+}
+[hidden] { display:none !important; }
+.topbar { background:#29221c; color:#f1e4d0; border-bottom:3px double #a87f51; }
+.top-title span,.top-actions span { color:#e3ccb1; }
+.top-actions button { background:#372b23; color:#f1e4d0; }
+.cockpit { margin-top:11px; }
+.battle-nav { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:9px; color:#694a34; }
+.battle-nav > div { display:flex; gap:5px; }
+.battle-nav a,.board-footer a { text-decoration:none; color:#603f29; background:#fbf5eb; border:1px solid #bc9d7b; padding:5px 13px; font-weight:700; }
+.battle-nav a[aria-current] { background:#593b29; color:#fff2e1; border-color:#593b29; }
+.battle-nav a:hover,.board-footer a:hover { border-color:#8f5b3b; }
+a:focus-visible { outline:2px solid #3c6466; outline-offset:3px; }
+.hull {
+  color:#f7eadd; min-height:281px; border-color:#997651; box-shadow:0 4px 15px #50301c28;
+}
+.hull-image {
+  background-image:linear-gradient(90deg,#21171ef8,#231820ed 25%,#271b223b 47%,transparent 64%),
+    linear-gradient(0deg,#211720bf,transparent 35%),var(--pose-image, url("../../aibp/images/titan-link/titan-link-v3.jpg"));
+  background-position:center,center,right var(--pose-focus, 44%);
+  background-repeat:no-repeat; background-size:cover,cover,var(--pose-scale, 78%) auto;
+}
+.hull-content { padding:13px 28px 6px; }
+.hull h1 { font-size:clamp(2.5rem,5.4vw,3.8rem); }
+.hull .pilot { color:#e4cbb8; margin-bottom:9px; }
+.hull .pilot b { color:#f7eadc; }
+.hull .gauges { padding:0 27px 12px; width:min(100%,540px); }
+.hull .gauge { background:#271b24ef; border-color:#927451; }
+.hull .gauge dd { color:#f0dfc2; }
+.hull .rage dd { color:#fba18b; }.hull .fate dd { color:#d9e7e5; }.hull .danger dd { color:#efb28c; }
+body[data-view=board] .hull { min-height:216px; }
+body[data-view=board] .hull h1 { font-size:clamp(1.9rem,4vw,2.75rem); }
+body[data-view=board] .hull .pilot { margin-bottom:6px; }
+.well { background:#f8f0e3; box-shadow:none; }
+.well h2 { color:#633f28; }
+.phases li { border-color:#c2aa8b; }
+.phases li[aria-current] { color:#643f25; border-color:#a47141; background:#ecd9bf; }
+.weapon-status { color:#6d442c; background:#ead6b8; border-color:#b99a72; }
+.weapon-card[aria-pressed=true] { border-color:#9b6642; box-shadow:0 0 0 2px #dcc2a0; }
+.tray { color:#f5e7d5; box-shadow:inset 0 0 16px #100c0a9c; }
+.dice-group { background:#623c2b96; }
+.main-action { color:#fff1dd; background:#68412c; border-color:#7f5538; }
+.main-action:not(:disabled):hover { background:#815336; }
+.pool.live { border-color:#9c653c; box-shadow:inset 0 0 0 2px #ead1ad; }
+.token { background:#f5e9d7; border-color:#bf9f7b; }
+.token:not(:disabled):hover { border-color:#805336; }
+.board-view { margin-top:12px; padding:12px; background:var(--panel); border:1px solid var(--line); }
+.board-heading,.board-footer { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+.board-heading h2 { color:#633f28; margin:0; font:700 21px/1.4 var(--serif); }
+.board-heading span { color:var(--muted); font-size:13px; }
+.board-view img { display:block; width:100%; max-height:70vh; object-fit:contain; background:#151413; margin:10px 0; }
+.board-footer { justify-content:end; }
+@media (max-width:660px) {
+  .battle-nav { margin-bottom:6px; }.battle-nav span { font-size:12px; }
+  .hull,body[data-view=board] .hull { min-height:0; background:#251b23; }
+  .hull-content { padding:158px 12px 6px; }
+  .hull-image {
+    inset:0 0 auto; height:166px; transform-origin:center top;
+    background-image:linear-gradient(0deg,#251b23,transparent 26%),var(--pose-image, url("../../aibp/images/titan-link/titan-link-v3.jpg"));
+    background-size:cover,cover; background-position:center,center 46%;
+  }
+  .hull .gauges { padding:0 9px 9px; }
+}
+
+.pose-page { max-width:1290px; margin:0 auto; padding:27px 18px 34px; }
+.pose-page h1 { font-size:clamp(2.05rem,5vw,3.4rem); margin-bottom:16px; }
+.pose-page .back { color:#674629; font-size:14px; }
+.pose-gallery { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; margin-top:16px; }
+.pose-card { background:#faf2e6; border:1px solid #b79570; min-width:0; }
+.pose-card img { display:block; width:100%; aspect-ratio:16/9; object-fit:cover; }
+.pose-info { padding:10px 14px 13px; }
+.pose-info h2 { color:#62412c; font:700 23px/1.3 var(--serif); margin:0; }
+.pose-info p { color:#594638; margin:5px 0 8px; }
+.pose-info a, footer a { color:#674629; text-underline-offset:.22em; }
+@media (max-width:640px) { .pose-gallery { grid-template-columns:minmax(0,1fr); } }
+.pilot-links { display:flex; flex-wrap:wrap; gap:8px 20px; margin-bottom:11px; }
+.pilot-section-title { font:700 25px/1.3 var(--serif); margin:23px 0 0; color:#65432c; }
+.pilot-gallery { grid-template-columns:repeat(3,minmax(0,1fr)); }
+.pilot-gallery .pose-info h3 { color:#62412c; font:700 22px/1.3 var(--serif); margin:0; }
+.pilot-gallery .pose-info p { margin-bottom:0; }
+@media (max-width:720px) { .pilot-gallery { grid-template-columns:minmax(0,1fr); } }

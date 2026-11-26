@@ -1,0 +1,32 @@
+{
+  "heroes": {
+    "circe": {
+      "image": "titan-link-v3.jpg",
+      "referenceTitan": "earthshaker",
+      "poses": {
+        "link": "pose-link.jpg",
+        "brace": "pose-brace.jpg",
+        "strike": "pose-strike.jpg"
+      }
+    },
+    "phenelope": {
+      "image": "pilot-phenelope.jpg",
+      "referenceTitan": "earthshaker"
+    },
+    "olympia": {
+      "image": "pilot-olympia.jpg",
+      "referenceTitan": "solon"
+    },
+    "oleander": {
+      "image": "pilot-wu.jpg",
+      "referenceTitan": "ulyssia"
+    }
+  },
+  "fallback": {
+    "image": "pilot-default-hands.jpg",
+    "poses": {
+      "rear": "pilot-default-rear.jpg",
+      "hood": "pilot-default-hood.jpg"
+    }
+  }
+}

@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="zh-Hans">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<title>撼地者 · 个人战斗面板</title>
+<link rel="stylesheet" href="./style.css">
+<script src="./cockpit.js" defer></script>
+</head>
+<body>
+<header class="topbar">
+  <div class="top-title"><b>ATO</b><span>个人战斗面板</span></div>
+  <div class="top-actions"><span class="round-label">第 1 轮 · 泰坦轮次</span><button type="button" id="posture">模拟击倒</button><button type="button" id="reset">重置演示</button></div>
+</header>
+<main class="cockpit">
+  <nav class="battle-nav" aria-label="战斗视图">
+    <div><a href="?view=board" data-view="board">版图</a><a href="?view=dice" data-view="dice">掷骰</a></div>
+    <span>赫耳墨斯追击者 · I</span>
+  </nav>
+  <section class="hull" aria-labelledby="titan-title">
+    <div class="hull-image"></div>
+    <div class="hull-content">
+      <div class="pilot"><img src="./art/pilot.png" alt=""><span>已与泰坦接合<b>喀耳刻加德</b></span></div>
+      <h1 id="titan-title">撼地者泰坦</h1>
+      <p id="stance" class="stance" role="status">行动中</p>
+    </div>
+    <dl class="gauges">
+      <div class="gauge rage" id="rage-meter"><dt><img src="./art/tri_rage.png" alt="">怒气</dt><dd id="rage">1</dd></div>
+      <div class="gauge fate"><dt><img src="./art/tri_fate.png" alt="">命运</dt><dd>2</dd></div>
+      <div class="gauge danger"><dt><img src="./art/tri_danger.png" alt="">凶险</dt><dd>3</dd></div>
+    </dl>
+  </section>
+  <section class="board-view" id="board-view" aria-label="决战版图" hidden>
+    <div class="board-heading"><h2>决战版图</h2><span>本地练习房快照</span></div>
+    <img src="./art/battle-board-review.jpg" alt="本地练习房的决战版图，显示泰坦、追击者和地形">
+    <div class="board-footer"><a href="?view=dice" data-view="dice">前往掷骰 →</a></div>
+  </section>
+  <div class="deck" id="dice-view">
+    <section class="well weapon" aria-labelledby="weapon-title">
+      <h2 id="weapon-title">武器槽</h2>
+      <div class="weapon-content">
+        <button type="button" class="weapon-card" id="weapon" aria-label="宣告鲸刀" aria-pressed="false"><img src="./art/weapon.webp" alt=""></button>
+        <div class="weapon-info"><h3>鲸刀</h3><p>攻击骰 3</p><p>每次命中 · 红威力骰 1</p><span class="weapon-status" id="weapon-status">待宣告</span></div>
+      </div>
+    </section>
+    <section class="well attack" aria-labelledby="attack-title">
+      <div class="attack-heading"><h2 id="attack-title">攻击结算</h2></div>
+      <ol class="phases" aria-label="攻击步骤">
+        <li>攻击</li><li>第一能力时段</li><li>部位牌与威力</li><li>第二能力时段</li>
+      </ol>
+      <div class="tray" id="tray">
+        <p class="tray-hint" id="hint" role="status"></p>
+        <div id="dice" class="dice" aria-live="polite"></div>
+      </div>
+      <div class="action-line"><button class="main-action" id="next" type="button">宣告鲸刀</button></div>
+    </section>
+    <section class="well bodypart" aria-labelledby="bp-title">
+      <h2 id="bp-title">部位牌</h2>
+      <div class="bp-stand"><img id="bp" src="./art/bp-back.jpg" alt="追击者部位牌背面"></div>
+      <p id="bp-status">命中后揭示</p>
+    </section>
+    <section class="well pool" aria-labelledby="pool-title">
+      <div class="pool-heading"><h2 id="pool-title">克拉托斯池</h2><span id="pool-window" aria-live="polite"></span></div>
+      <div class="tokens" id="tokens"></div>
+    </section>
+  </div>
+</main>
+<footer>交互原型 · 版图为本地快照，掷骰走预设示例 · <a href="./poses.html">接合姿势对照</a></footer>
+</body>
+</html>

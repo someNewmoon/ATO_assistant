@@ -56,8 +56,13 @@
       const legacy = !actions.tracked(seat);
       const canUseAttack = !legacy && !attack && !activeMove && !turn.aiSignatureId;
       const lockedWeapon = Boolean(attack);
-      const weapons = actions.weapons(seat).map(item => '<option value="' + escape(item.id) + '"'
-        + (item.id === weapon?.id ? ' selected' : '') + '>' + escape(item.name) + (item.ready ? '' : '（未回正）') + '</option>').join('');
+      const weapons = actions.weapons(seat).map(item => {
+        const src = actions.weaponArt(item.id);
+        return '<button type="button" class="room-board-weapon" data-action-weapon="' + escape(item.id)
+          + '" aria-pressed="' + (item.id === weapon?.id) + '"' + (lockedWeapon || !item.ready ? ' disabled' : '') + '>'
+          + (src ? '<img src="' + escape(src) + '" alt="" decoding="async">' : '')
+          + '<span>' + escape(item.name) + '</span>' + (item.ready ? '' : '<small>未回正</small>') + '</button>';
+      }).join('');
       const range = weapon?.range;
       const fixedRange = range && !weapon.manual ? actions.rangeLabel(range) : '';
       const manual = weapon?.manual && !lockedWeapon ? '<div class="room-turn-range"><label>牌面射程 <select data-action-range>'
@@ -78,8 +83,9 @@
         + (legacy ? '按原流程结算' : attack?.stage === 'done' ? '已使用' : attack ? actions.stageLabel(attack.stage) : '可用 1 次')
         + '</small><button type="button" data-action-entry="attack"' + (canUseAttack || activeAttack() || legacy ? '' : ' disabled') + '>'
         + (attack ? '继续作战' : '查看作战') + '</button></div>'
-        + '<div class="room-titan-action-weapon"><label>武器 <select data-action-weapon' + (lockedWeapon ? ' disabled' : '') + '>'
-        + '<option value="">选择已装备武器…</option>' + weapons + '</select></label>'
+        + '<div class="room-titan-action-weapon"><strong>武器</strong>'
+        + (weapons ? '<div class="room-board-weapon-list" role="group" aria-label="选择已装备武器">' + weapons + '</div>'
+          : '<small>该英雄未装备武器。</small>')
         + (fixedRange ? '<small>' + fixedRange + '</small>' : '') + manual
         + (weapon && !lockedWeapon ? '<small>牌面费用与条件请手动核对。</small>' : '')
         + (position ? '<small>' + position + '</small>' : '')
@@ -90,19 +96,20 @@
         + '<button type="button" data-action-entry="spend-attack"' + (canUseAttack ? '' : ' disabled') + '>花费作战行动</button></details>';
       if (actionMarkup === next) return;
       const detailsOpen = actionPanel.querySelector("details")?.open;
+      const focused = actionPanel.contains(document.activeElement) && document.activeElement.dataset.actionWeapon;
       actionPanel.innerHTML = next;
       actionPanel.querySelector("details").open = Boolean(detailsOpen);
+      if (focused) actionPanel.querySelector(`[data-action-weapon="${CSS.escape(focused)}"]`)?.focus({ preventScroll: true });
       actionMarkup = next;
     }
 
+    actionPanel.addEventListener("error", event => {
+      if (event.target.matches(".room-board-weapon img")) event.target.remove();
+    }, true);
+
     actionPanel.addEventListener("change", event => {
       const field = event.target;
-      const seat = room.turn?.seat;
       if (actionPanel.hidden) return;
-      if (field.matches("[data-action-weapon]")) {
-        actions.select(seat, field.value);
-        return;
-      }
       if (field.matches("[data-action-range]")) {
         const kind = field.value;
         actionPanel.querySelector("[data-action-min]").closest("label").hidden = kind !== "ranged";
@@ -114,6 +121,10 @@
       const button = event.target.closest("button");
       if (!button || button.disabled || actionPanel.hidden) return;
       const seat = room.turn.seat;
+      if (button.hasAttribute("data-action-weapon")) {
+        actions.select(seat, button.dataset.actionWeapon);
+        return;
+      }
       if (button.hasAttribute("data-action-range-confirm")) {
         const kind = actionPanel.querySelector("[data-action-range]").value;
         const range = { kind, min: kind === "ranged" ? Number(actionPanel.querySelector("[data-action-min]").value) : 1,

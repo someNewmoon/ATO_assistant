@@ -86,6 +86,8 @@
     send({ id: crypto.randomUUID(), ...action }), {
       inProgress: attackInProgress, tracked: usesTitanActions, stageLabel: attackStageLabel,
       weapon: chosenBoardWeapon, weapons: availableWeapons, rangeLabel: weaponRangeLabel,
+      weaponArt: id => window.ATO_BATTLE_ASSETS?.gearThumbSrc(id, roomLanguage)
+        || window.ATO_BATTLE_ASSETS?.gearSrc(id, roomLanguage),
       select: chooseWeapon, selectRange: chooseWeaponRange, openDice: openAttackDice, declare: declareAttack,
       speed: seat => window.ATO_TITAN_PANEL_REFERENCE?.forTitan(state.heroes[seat]?.titan, window.ATO_GEAR_INVENTORY)?.movement,
     });

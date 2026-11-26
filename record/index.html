@@ -1563,6 +1563,7 @@
   </style>
   <link rel="stylesheet" href="../api/cycle-theme.css?v=20261125-folio">
   <link rel="stylesheet" href="./record.css?v=20261125-titan-panel-reference">
+  <link rel="stylesheet" href="../assets/titan-fitting.css?v=1">
   <script src="../story/data/english-source-data.js?v=20261011-english4"></script>
   <script src="../assets/theme.js?v=20261114-light-sidebar1" defer></script>
   <link rel="stylesheet" href="../assets/card-art.css?v=20261017-corners1">
@@ -1916,6 +1917,9 @@
   <script src="enemy-evolution.js?v=20261120"></script>
   <script src="../aibp/tactical-sprites.js?v=20261123-earthshaker"></script>
   <script src="../technology/gear-inventory.js?v=20261120-titan-management"></script>
+  <script src="../hero/hero-catalog.js?v=20261117-battle-polish"></script>
+  <script src="../aibp/kratos-tables.js?v=20261127-titan-fitting"></script>
+  <script src="../assets/titan-fitting.js?v=1"></script>
   <script src="../assets/titan-panel-reference.js?v=20261125-power"></script>
   <script src="../assets/campaign-notes.js?v=20261015"></script>
   <script src="../assets/record-attachments.js?v=20261009"></script>
@@ -2401,6 +2405,7 @@
     };
 
     let state = loadState();
+    let fittingHeroes = [];
     let saveTimer = null;
     let matrixUnlocked = false;
     let serverStorageAvailable = false;
@@ -2595,6 +2600,7 @@
       if (recordProfileLoaded && dashboard?.profiles && !dashboard.profiles[userId]) {
         throw new Error("原记录表档案已不存在，请刷新页面后重试。");
       }
+      fittingHeroes = window.ATO_HERO_CATALOG.activeHeroes(campaign, userId);
       const recordSection = campaign?.sections?.record;
       const userState = recordSection?.users?.[userId] || (recordSection?.users ? null : recordSection);
       const countersMigrated = (typeof userState?.counters === "string" && userState.counters.trim() !== "")
@@ -3570,6 +3576,70 @@
       elements.titanListCount.textContent = `总数 ${totals.total}/${limit} · 残废 ${totals.crippled} · 已死亡 ${state.deadTitans === "" ? "-" : Math.max(0, Number(state.deadTitans || 0))}`;
     }
 
+    let fittingCatalog;
+    function titanGalleryFitting(titan, expanded) {
+      const inv = window.ATO_GEAR_INVENTORY;
+      const roster = window.ATO_HERO_CATALOG;
+      const component = window.ATO_TITAN_FITTING;
+      const section = document.createElement("details");
+      section.className = "titan-gallery-fitting";
+      const title = document.createElement("summary");
+      title.textContent = "查看配装";
+      const content = document.createElement("div");
+      section.append(title, content);
+      section.open = expanded;
+      let generation = 0;
+      async function refresh() {
+        const current = ++generation;
+        if (!section.open) return;
+        const read = path => fetch(path).then(response => response.ok ? response.json() : {}).catch(() => ({}));
+        fittingCatalog ||= Promise.all([
+          component.assets(), read("../technology/gear_part_labels.json"), read("../technology/ato_gear_production.json"),
+        ]);
+        const [art, parts, names] = await fittingCatalog;
+        if (current !== generation || !section.isConnected || !section.open) return;
+        const assigned = inv.assignedLoadouts(state, fittingHeroes)
+          .filter(([, kit]) => inv.titanIdFor(state, String(kit.titanId || "")) === String(titan.id));
+        content.replaceChildren();
+        for (const [heroId, kit] of assigned.length ? assigned : [["", {}]]) {
+          const hero = fittingHeroes.find(entry => entry.id === heroId);
+          const label = hero && roster.heroDisplayName(hero);
+          const portrait = hero && roster.heroPortrait(hero);
+          const model = inv.loadoutTitan(titan, kit.titanPanelId);
+          const panel = inv.titanArtwork(model);
+          const loadout = inv.normalizeLoadout(kit);
+          const gear = Object.entries(loadout.gear).map(([id, count]) => {
+            const base = inv.baseGearId(id);
+            const cardName = names.gearCards?.[base] || id;
+            return { key: id, name: cardName.replace(/^[^一-鿿㐀-䶿豈-﫿]*/, "").trim() || cardName,
+              src: component.artGear(art, id), part: component.part(parts.labels?.[base]), detail: "×" + count };
+          });
+          const link = document.createElement("a");
+          link.href = "../technology/?tab=loadout" + (heroId ? "&hero=" + encodeURIComponent(heroId) : "");
+          link.dataset.pageRouterIgnore = "true";
+          link.textContent = heroId ? "编辑" + label + "的配装" : "去配装";
+          const fitted = document.createElement("div");
+          fitted.innerHTML = component.render({
+            key: "gallery:" + titan.id + ":" + heroId, mode: "preparation", titan: model, name: inv.titanLabel(model),
+            panel: panel && "../" + panel.path, gear,
+            references: [
+              ...(hero ? [{ key: "hero", name: label, detail: "英雄", src: portrait && "../hero/assets/" + portrait }] : []),
+              ...(panel ? [{ key: "panel", name: panel.name, detail: "泰坦面板", src: "../" + panel.path }] : []),
+              ...(hero ? roster.mnemosCards(hero).map(card => ({ key: "memory:" + card.card, name: card.zh,
+                detail: card.fated ? "命业旧忆" : "旧忆 · " + card.progress + "/" + card.limit, src: component.artMemory(art, card.card) })) : []),
+              ...inv.loadoutPatterns(model, loadout, state.cycle).map(card => ({ key: card.id, name: card.name,
+                detail: card.track ? "创伤样式" : "克拉托斯样式", src: "../" + card.art })),
+            ],
+            kratos: window.ATO_KRATOS_TABLES.preview(window.ATO_KRATOS_TABLES.forTitan(model, loadout, state.cycle)),
+          });
+          content.append(fitted, link);
+        }
+      }
+      section.addEventListener("toggle", refresh);
+      if (expanded) queueMicrotask(refresh);
+      return { section, refresh };
+    }
+
     function renderTitans() {
       if (!newTitanTypeField && elements.titanTypeInput) resetNewTitanType();
       state.titans = normalizeTitanList(state.titans);
@@ -3597,6 +3667,8 @@
       updateTitanListCount();
       const expanded = new Set([...elements.titanList.querySelectorAll(".titan-entry-details[open]")]
         .map((entry) => entry.closest(".titan-row").dataset.titanId));
+      const fittingExpanded = new Set([...elements.titanList.querySelectorAll(".titan-gallery-fitting[open]")]
+        .map(entry => entry.closest(".titan-row").dataset.titanId));
       elements.titanList.innerHTML = "";
 
       if (!state.titans.length) {
@@ -3624,6 +3696,7 @@
         badge.textContent = titan.crippled ? "伤残" : "在库";
         cardHeader.append(cardName, badge, quantity);
         const inventory = window.ATO_GEAR_INVENTORY;
+        const fitting = titanGalleryFitting(titan, fittingExpanded.has(titan.id));
         const abilities = document.createElement("ul");
         abilities.className = "titan-card-abilities";
         abilities.setAttribute("aria-label", "泰坦面板能力");
@@ -3799,6 +3872,7 @@
             previewLabel.textContent = art.name;
           }
           refreshAttributes();
+          fitting.refresh();
         };
         type.element.addEventListener("change", refreshPreview);
         refreshPreview();
@@ -3817,6 +3891,7 @@
         const trauma = createTitanTraumaField(titan, (track) => {
           activeTraumaTrack = track;
           refreshAttributes();
+          fitting.refresh();
         });
         type.element.addEventListener("change", trauma.refresh);
         const options = createTitanOptionsField(titan, refreshPreview, trauma.refresh);
@@ -3831,7 +3906,7 @@
         controls.className = "titan-entry-controls";
         controls.append(nameInput, countField, crippledLabel, removeButton);
         edit.append(editLabel, controls, details);
-        row.append(cardHeader, artSlot, attributes, abilities, edit);
+        row.append(cardHeader, artSlot, attributes, abilities, fitting.section, edit);
         elements.titanList.appendChild(row);
       });
     }

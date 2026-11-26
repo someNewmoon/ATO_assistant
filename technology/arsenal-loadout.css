@@ -51,7 +51,7 @@
 .loadout-folio .folio-counter strong { color: #fff0d0; font: 28px/1 Georgia, serif; }
 .loadout-folio .folio-columns {
   display: grid;
-  grid-template-columns: minmax(210px, 1fr) minmax(220px, 1fr) minmax(340px, 1.7fr);
+  grid-template-columns: minmax(0, 2.1fr) minmax(290px, 1fr);
   gap: 1px;
   background: var(--folio-edge);
 }
@@ -63,8 +63,8 @@
   gap: 12px;
   background: var(--folio-sheet);
 }
-.loadout-folio .folio-assigned { background: var(--folio-inset); }
-.loadout-folio .folio-supply { background: var(--folio-paper); }
+.loadout-folio .folio-assigned { grid-column: 1; grid-row: 2; background: var(--folio-inset); }
+.loadout-folio .folio-supply { grid-column: 2; grid-row: 1 / span 2; background: var(--folio-paper); }
 .loadout-folio .folio-title {
   margin: 0;
   padding-bottom: 8px;
@@ -222,8 +222,8 @@
 .loadout-folio .arsenal-loadout-actions button[type="submit"] { background: #503a2b; color: #fff1d7; border-color: #503a2b; }
 .loadout-folio .arsenal-loadout-actions .arsenal-message { margin: 0 auto 0 0; color: #6a3e2a; }
 @media (max-width: 850px) {
-  .loadout-folio .folio-columns { grid-template-columns: repeat(2,minmax(0,1fr)); }
-  .loadout-folio .folio-supply { grid-column: 1 / -1; }
+  .loadout-folio .folio-columns { grid-template-columns: minmax(0, 1fr); }
+  .loadout-folio .folio-supply { grid-column: 1; grid-row: auto; }
 }
 @media (max-width: 490px) {
   .arsenal-loadout-dialog.loadout-folio { width: calc(100% - 14px); }

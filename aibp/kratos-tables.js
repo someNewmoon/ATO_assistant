@@ -154,13 +154,39 @@
     ambrosiaElation: '↑', ignoreCumbersome: '⊘', replaceBp: '⇄', provoke: '◎',
   };
 
-  function forTitan(titan) {
+  function forTitan(titan, kit, cycle) {
     const inventory = window.ATO_GEAR_INVENTORY;
-    const pattern = inventory.TITAN_PATTERNS.find(item => !item.track && titan?.patternIds?.includes(item.id));
-    const titanType = inventory.titanType(titan)?.id;
-    const rows = tables[pattern?.id || (titanType === 'spartan-dreamwalker' ? 'BW0974' : titanType)];
-    return rows && { rows, name: pattern?.name || inventory.titanLabel(titan) };
+    if (!titan) return null;
+    // Current records have one explicit Kratos slot. Preserve catalog order for old battle snapshots.
+    const explicit = Object.hasOwn(titan, 'kratosPatternId') || Object.hasOwn(kit || {}, 'kratosPatternId');
+    const patterns = explicit ? inventory.loadoutPatterns(titan, kit, cycle)
+      : inventory.TITAN_PATTERNS.filter(item => titan.patternIds?.includes(item.id));
+    const pattern = patterns.find(item => !item.track && Object.hasOwn(tables, item.id));
+    const type = inventory.titanType(titan)?.id;
+    const base = type === 'spartan-dreamwalker' ? 'BW0974' : type;
+    const rows = tables[pattern?.id || base];
+    return rows ? { rows, name: pattern?.name || inventory.titanLabel(titan), source: pattern ? '样式' : '泰坦底表' } : null;
   }
 
-  window.ATO_KRATOS_TABLES = { forTitan, labels, icons, glyphs };
+  function forHero(hero) {
+    const titan = hero?.titan;
+    if (!titan) return null;
+    const available = titan.patternIds?.filter(id => hero.patternCards?.[id] !== 'discarded');
+    const live = { ...titan, patternIds: available };
+    if (hero.patternCards?.[live.kratosPatternId] === 'discarded') live.kratosPatternId = '';
+    return forTitan(live);
+  }
+
+  function preview(table, rage) {
+    const escape = window.ATO_HERO_CATALOG?.escape || (value => String(value).replace(/[&<>"']/g,
+      char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]));
+    if (!table) return '<p class="titan-fitting-kratos">克拉托斯表尚无录入，请核对牌面。</p>';
+    const hasRage = Number.isFinite(rage);
+    const rows = table.rows.map(([threshold, choices]) => '<li>' + (hasRage && threshold <= rage ? '<strong>已解锁</strong> · ' : '')
+      + '怒气 ' + threshold + ' · ' + choices.map(effects => effects.map(effect => labels[effect]).join(' + ')).join(' 或 ') + '</li>').join('');
+    return '<details class="titan-fitting-kratos"><summary>克拉托斯表 · ' + escape(table.source + ' · ' + table.name)
+      + (hasRage ? ' · 怒气 ' + rage : '') + '</summary><ul>' + rows + '</ul></details>';
+  }
+
+  window.ATO_KRATOS_TABLES = { forTitan, forHero, preview, labels, icons, glyphs };
 })();

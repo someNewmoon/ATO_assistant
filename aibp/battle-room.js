@@ -394,23 +394,28 @@
       + '</span>' + thresholds + passages + '</div>';
   }
 
+  function cardStateTools({ item, type, seat, slot = 0, value, editable }) {
+    const id = [type, seat, item.id, slot].join(':');
+    if (!editable || value === 'discarded') return '';
+    const armed = armedCard === id;
+    const text = armed ? '横置并弃除' : value === 'exhausted' ? '回正' : '横置';
+    const next = armed ? 'discarded' : value === 'exhausted' ? 'ready' : 'exhausted';
+    return '<button type="button" data-action="' + type + '" data-key="' + escape(item.id)
+      + '" data-seat="' + seat + '" data-slot="' + slot + '" data-value="' + next + '">' + text + '</button>'
+      + '<button type="button" data-arm-card="' + escape(id) + '" aria-pressed="' + armed
+      + '" aria-label="' + (armed ? '取消弃除' : '准备弃除') + escape(item.name) + '">' + (armed ? '取消' : '弃除') + '</button>';
+  }
+
   function playableCard({ item, type, seat, slot = 0, value, detail, src, thumb, memory, editable }) {
     const id = [type, seat, item.id, slot].join(':');
-    const armed = armedCard === id;
-    const discarded = value === 'discarded';
-    const text = discarded ? '已弃除' : armed ? '横置并弃除' : value === 'exhausted' ? '恢复' : '横置';
-    const next = armed ? 'discarded' : value === 'exhausted' ? 'ready' : 'exhausted';
-    const attrs = ' data-key="' + escape(item.id) + '" data-seat="' + seat + '" data-slot="' + slot + '"';
+    const actions = cardStateTools({ item, type, seat, slot, value, editable });
     return '<li class="battle-room-playable" data-card-state="' + value + '" data-card-id="' + escape(id)
       + '"><div class="battle-room-card-window">' + (src ? cardImage(src, item.name, '', thumb)
         : referenceCard(item.name, item.id, memory ? '旧忆资料卡' : '装备资料卡', memory)) + '</div>'
       + '<span class="battle-room-card-name">' + escape(item.name) + '</span>'
       + (detail ? '<small>' + escape(detail) + '</small>' : '')
-      + (editable && !discarded ? '<div class="battle-room-card-controls"><button type="button" data-action="' + type
-        + '"' + attrs + ' data-value="' + next + '">' + text + '</button><button type="button" data-arm-card="' + escape(id)
-        + '" aria-pressed="' + armed + '" aria-label="' + (armed ? '取消弃除' : '准备弃除') + escape(item.name) + '" title="'
-        + (armed ? '取消弃除' : '准备弃除') + '">' + (armed ? '取消' : '弃除') + '</button></div>'
-        : value !== 'ready' ? '<small class="battle-room-card-status">' + (discarded ? '已弃除' : '已横置') + '</small>' : '') + '</li>';
+      + (actions ? '<div class="battle-room-card-controls">' + actions + '</div>'
+        : value !== 'ready' ? '<small class="battle-room-card-status">' + (value === 'discarded' ? '已弃除' : '已横置') + '</small>' : '') + '</li>';
   }
 
   const traumaDecks = window.ATO_GEAR_INVENTORY.TRAUMA_DECKS;
@@ -1395,11 +1400,28 @@
       + '<ul class="battle-room-card-list">' + cards + '</ul></section>' : '';
     const equipment = '<section class="room-card-group room-loadout-equipment"><h4>' + (own ? '已配装备' : '装备') + '</h4>'
       + (gear || '<p>未分配装备</p>') + '</section>';
-    const reference = deck('样式卡牌', patternCards) + deck('旧忆', mnemos);
-    const loadout = own ? '<div class="room-loadout-folio">' + equipment + '<div class="room-loadout-side">'
-      + (titanImage ? '<section class="room-card-group room-loadout-titan"><h4>泰坦面板</h4>' + titanImage + '</section>' : '')
-      + reference + '</div></div>'
-      : deck('旧忆', mnemos) + deck('样式卡牌', patternCards) + equipment;
+    const slotCard = (item, type, slot, value, src, part, detail, thumb) => ({
+      key: [type, seat, item.id, slot].join(':'), name: item.name, state: value, src, part, thumb,
+      detail: [detail, value === 'discarded' ? '已弃除' : value === 'exhausted' ? '已横置' : ''].filter(Boolean).join(' · '),
+      actions: cardStateTools({ item, type, seat, slot, value, editable }),
+    });
+    const fitting = window.ATO_TITAN_FITTING;
+    const loadout = own && fitting ? fitting.render({
+      key: 'battle:' + id + ':' + seat, mode: 'battle', titan: hero.titan,
+      name: hero.titan ? inventory.titanLabel(hero.titan) : '', panel: titanArt?.src, zoom: true,
+      gear: hero.gear.flatMap(item => Array.from({ length: Math.min(item.count, 48) }, (_, slot) =>
+        slotCard(item, 'gear-card', slot, gearState(item, slot), art?.gearSrc(item.id, roomLanguage),
+          fitting.part(item.category), item.count > 1 ? (slot + 1) + '/' + item.count : '', art?.gearThumbSrc(item.id, roomLanguage)))),
+      references: [
+        ...(portrait ? [{ key: 'hero', name: hero.name, detail: '英雄', src: '../hero/assets/' + portrait }] : []),
+        ...(titanArt ? [{ key: 'titan', name: titanArt.name, detail: '泰坦面板', src: titanArt.src }] : []),
+        ...hero.mnemos.map(item => slotCard(item, 'mnemos-card', 0, item.state || 'ready', art?.mnemosSrc(item.id),
+          '', item.fated ? '命业旧忆' : '旧忆 · ' + item.progress + '/' + item.limit)),
+        ...patterns.map(item => slotCard(item, 'pattern-card', 0, hero.patternCards?.[item.id] || 'ready',
+          '../' + item.art, '', item.track ? '创伤样式' : '克拉托斯样式')),
+      ],
+      kratos: hero.titan && window.ATO_KRATOS_TABLES.preview(window.ATO_KRATOS_TABLES.forHero(hero), hero.stats.rage),
+    }) : deck('旧忆', mnemos) + deck('样式卡牌', patternCards) + equipment;
     const exportButton = own && actor.role !== 'viewer'
       ? '<button type="button" class="room-export-loadout" data-export-loadout="' + seat + '"'
         + (exportingLoadout ? ' disabled' : '') + '>' + (exportingLoadout ? '正在生成…' : '导出图片') + '</button>' : '';
@@ -1678,7 +1700,7 @@
 
   function kratosReminder(hero) {
     const kratos = window.ATO_KRATOS_TABLES;
-    const table = kratos?.forTitan(hero?.titan);
+    const table = kratos?.forHero(hero);
     if (!table) return '';
     const rage = hero.stats.rage;
     const unlocked = table.rows.filter(([threshold]) => threshold <= rage);
@@ -1696,7 +1718,7 @@
         .join('<small class="room-kratos-or">或</small>') + '</div></li>';
     }
     return '<section class="room-kratos-reminder" aria-label="克拉托斯表能力">'
-      + '<h4>克拉托斯表 · ' + escape(table.name) + '</h4><p aria-live="polite">当前怒气 ' + rage
+      + '<h4>克拉托斯表 · ' + escape(table.source + ' · ' + table.name) + '</h4><p aria-live="polite">当前怒气 ' + rage
       + ' · 解锁 ' + unlocked.length + ' 档' + (next ? ' · 下一档怒气 ' + next[0] : ' · 全部档位已解锁') + '</p>'
       + (unlocked.length ? '<ul>' + unlocked.map(rowMarkup).join('') + '</ul>'
         + '<small>每档选一项，带「+」的效果一起结算。按能力时段手动放置标记。</small>' : '')

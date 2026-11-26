@@ -519,6 +519,71 @@
     return actor.role === 'host' ? state.squad?.hostSeat : actor.seat;
   }
 
+  const titanLink = document.createElement('section');
+  titanLink.className = 'room-titan-link';
+  titanLink.setAttribute('aria-label', '泰坦接合');
+  titanLink.hidden = true;
+  titanLink.innerHTML = '<img alt=""><div class="room-titan-link-identity"><strong></strong><span></span></div>';
+  summary.after(titanLink);
+  const pilotImage = titanLink.querySelector('img');
+  const pilotName = titanLink.querySelector('strong');
+  const pilotTitan = titanLink.querySelector('span');
+  const titanLinkAssets = 'images/titan-link/';
+  const pilotFallback = 'pilot-default-hands.jpg';
+  let titanLinkManifest;
+  let pilotArtwork;
+  pilotImage.addEventListener('error', () => {
+    if (pilotImage.getAttribute('src') !== titanLinkAssets + pilotFallback) {
+      pilotImage.src = titanLinkAssets + pilotFallback;
+    } else pilotImage.hidden = true;
+  });
+
+  const pilotStatus = document.createElement('section');
+  pilotStatus.className = 'room-pilot-status';
+  pilotStatus.setAttribute('aria-label', '当前泰坦状态');
+  pilotStatus.hidden = true;
+  const pilotStatusIdentity = document.createElement('span');
+  pilotStatusIdentity.className = 'room-pilot-identity';
+  const pilotStats = document.createElement('dl');
+  const pilotValues = Object.fromEntries(Object.entries(statNames).map(([key, label]) => {
+    const item = document.createElement('div');
+    item.className = 'room-pilot-stat room-pilot-stat-' + key;
+    item.innerHTML = '<dt><img alt="" src="../hero/assets/tri_' + key + '.png">' + label + '</dt><dd></dd>';
+    pilotStats.append(item);
+    return [key, item.querySelector('dd')];
+  }));
+  pilotStatus.append(pilotStatusIdentity, pilotStats);
+  dock.append(pilotStatus);
+
+  function renderTitanLink(hero) {
+    titanLink.hidden = pilotStatus.hidden = !hero;
+    if (!hero) return;
+    titanLinkManifest ||= fetch(titanLinkAssets + 'manifest.json')
+      .then(response => response.ok ? response.json() : null)
+      .catch(() => null);
+    const inventory = window.ATO_GEAR_INVENTORY;
+    const type = inventory.dreamwalkerPanel(hero.titan)?.id || inventory.titanType(hero.titan)?.id.replace(/^tt_/, '');
+    const titan = hero.titan ? inventory.titanLabel(hero.titan) : '未分配泰坦';
+    pilotName.textContent = hero.name;
+    pilotTitan.textContent = titan;
+    pilotStatusIdentity.textContent = hero.name + ' · ' + titan;
+    pilotStatusIdentity.title = pilotStatusIdentity.textContent;
+    for (const [key, value] of Object.entries(pilotValues)) value.textContent = hero.stats?.[key] ?? 0;
+
+    const artKey = hero.argonaut + ':' + type;
+    if (artKey === pilotArtwork) return;
+    pilotArtwork = artKey;
+    titanLinkManifest.then(manifest => {
+      if (pilotArtwork !== artKey) return;
+      const entry = manifest?.heroes?.[hero.argonaut];
+      const image = entry?.referenceTitan === type && entry?.image || manifest?.fallback?.image || pilotFallback;
+      const src = titanLinkAssets + image;
+      if (pilotImage.getAttribute('src') === src) return;
+      pilotImage.hidden = false;
+      pilotImage.src = src;
+    });
+  }
+
   const turnWindow = document.createElement('details');
   turnWindow.className = 'room-turn-window';
   turnWindow.innerHTML = '<summary aria-live="polite"></summary><div data-turn-body></div><small data-turn-status role="status"></small>';
@@ -2417,6 +2482,7 @@
       if (!choices.size) selectedDice.delete(id);
     }
     const personal = (role === 'player' || (host && hostPersonalView)) && edit;
+    renderTitanLink(personal ? state.heroes[seat] : null);
     const latestRoll = personal ? null : state.rolls.find(roll => roll.id === state.lastBattleRollId) || state.rolls[0];
     const logCard = (roll, latest) => rollCard(roll, latest, { showBpControls: roll.seat !== rollSeat });
     const rolls = latestRoll ? logCard(latestRoll, true)

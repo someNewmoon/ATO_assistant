@@ -379,3 +379,68 @@ body:has(.room-style-preview:not([hidden])) .title-actions .return-main-link { m
   color: var(--folio-label);
   font-family: var(--folio-serif);
 }
+
+
+.room-titan-link {
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  align-items: end;
+  min-height: clamp(7rem, 17vw, 12rem);
+  overflow: hidden;
+  margin-block: .7rem;
+  border: 1px solid var(--folio-rule);
+  background: #202823;
+  color: #fff5e3;
+}
+.room-titan-link[hidden], .room-pilot-status[hidden] { display: none; }
+.room-titan-link > img {
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 57%;
+}
+.room-titan-link::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(8deg, #151a18f2 2%, #17201a88 32%, #17201a10 72%);
+}
+.room-titan-link-identity { display: grid; gap: .15rem; padding: clamp(.65rem, 2vw, 1.35rem); }
+.room-titan-link-identity strong { font-size: clamp(1.2rem, 2.35vw, 1.85rem); line-height: 1.2; }
+.room-titan-link-identity span { color: #f1d3a0; }
+.room-pilot-status {
+  display: flex;
+  flex: 1 0 100%;
+  min-width: 0;
+  justify-content: space-between;
+  align-items: center;
+  gap: .25rem .75rem;
+  padding: .3rem .15rem 0;
+  border-top: 1px solid #e7c99155;
+  font-size: .82rem;
+  line-height: 1.25;
+}
+.room-pilot-identity { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.room-pilot-status dl, .room-pilot-stat, .room-pilot-stat dt {
+  display: flex;
+  align-items: center;
+  gap: .24rem;
+  margin: 0;
+}
+.room-pilot-status dl { gap: .5rem; flex: none; }
+.room-pilot-stat { color: #ffd5cb; }
+.room-pilot-stat-fate { color: #bdeaff; }
+.room-pilot-stat-danger { color: #ffe1a5; }
+.room-pilot-stat img { width: .85rem; height: .85rem; object-fit: contain; }
+.room-pilot-stat dd { margin: 0; font-variant-numeric: tabular-nums; font-weight: 700; }
+
+@media (max-width: 480px) {
+  .room-pilot-status { font-size: .75rem; gap: .25rem; }
+  .room-pilot-status dl { gap: .3rem; }
+  .room-pilot-stat img { display: none; }
+}

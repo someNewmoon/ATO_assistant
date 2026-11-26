@@ -418,7 +418,7 @@
   traumaDialog.className = 'room-trauma-dialog';
   root.appendChild(traumaDialog);
 
-  const toolNames = { rolls: '战斗掷骰记录', argo: '阿尔戈能力', apostle: '骇物面板', trauma: '创伤牌库' };
+  const toolNames = { rolls: '战斗掷骰记录', argo: '阿尔戈能力', apostle: '骇物面板', trauma: '创伤牌库', assign: '分配回合' };
   const fullBossPanel = document.getElementById('viewer');
   const dock = document.createElement('div');
   dock.className = 'room-tool-dock';
@@ -474,6 +474,7 @@
       activeToolButton = button;
       button.setAttribute('aria-expanded', 'true');
       activeTool = key;
+      if (key === 'assign') turnWindow.open = false;
       toolsDialog.querySelector('h3').textContent = toolNames[key];
       toolsStatus.textContent = '';
       renderTools();
@@ -492,7 +493,9 @@
   bossJump.href = '#viewer';
   bossJump.textContent = toolNames.apostle;
   bossJump.addEventListener('click', () => { turnWindow.open = false; });
-  toolLinks.append(toolButton('rolls'), toolButton('argo'), bossTool, toolButton('trauma'));
+  const assignTurnTool = toolButton('assign');
+  assignTurnTool.hidden = true;
+  toolLinks.append(assignTurnTool, toolButton('rolls'), toolButton('argo'), bossTool, toolButton('trauma'));
 
   const quick = document.createElement('nav');
   quick.className = 'room-primary-nav';
@@ -518,7 +521,7 @@
   personalTurnButton.className = 'room-personal-turn-action';
   personalTurnButton.hidden = true;
   quick.append(personalTurnButton);
-  let pendingPersonalTurn;
+  let pendingTurnControl;
 
   function personalTurnAction() {
     const seat = personalSeat();
@@ -533,17 +536,22 @@
   function renderPersonalTurn() {
     const action = personalTurnAction();
     personalTurnButton.hidden = !action;
-    personalTurnButton.disabled = !action?.enabled || Boolean(pendingPersonalTurn);
+    personalTurnButton.disabled = !action?.enabled || Boolean(pendingTurnControl);
     personalTurnButton.title = action && !action.enabled ? '请先结束正在结算的移动、作战或招牌技。' : '';
     if (action && personalTurnButton.textContent !== action.label) personalTurnButton.textContent = action.label;
   }
 
+  function queueTurnControl(type, seat) {
+    if (pendingTurnControl) return;
+    pendingTurnControl = crypto.randomUUID();
+    renderPersonalTurn();
+    if (activeTool === 'assign') renderTools();
+    send({ id: pendingTurnControl, type, seat, round: state.round, phase: state.turn.phase });
+  }
+
   personalTurnButton.addEventListener('click', () => {
     const action = personalTurnAction();
-    if (!action?.enabled || pendingPersonalTurn) return;
-    pendingPersonalTurn = crypto.randomUUID();
-    renderPersonalTurn();
-    send({ id: pendingPersonalTurn, type: action.type, seat: action.seat, round: state.round, phase: state.turn.phase });
+    if (action?.enabled) queueTurnControl(action.type, action.seat);
   });
 
   function renderCombatTabs(personal) {
@@ -1138,6 +1146,31 @@
     body.prepend(flow);
   }
 
+  function canAssignTurn(seat) {
+    const turn = state.turn;
+    const hero = state.heroes[seat];
+    return actor.role === 'host' && !hostPersonalView && !state.closed && turn?.phase === 'titans'
+      && turn.seat === null && !turn.bonusAttack && hero && hero.condition !== 'dead' && !turn.finished.includes(seat);
+  }
+
+  function turnAssignmentMarkup() {
+    const turn = state.turn;
+    const hint = pendingTurnControl ? '正在同步回合…' : turn?.phase !== 'titans' ? '进入泰坦轮次后可分配回合。'
+      : turn.bonusAttack ? '请先结算奖励攻击。'
+        : turn.seat !== null ? '等当前英雄结束回合后可分配。'
+          : state.heroes.some((_, seat) => canAssignTurn(seat)) ? '选择下一位行动的英雄。' : '本轮没有可分配的英雄。';
+    const heroes = state.heroes.map((hero, seat) => {
+      const label = hero.condition === 'dead' ? '死亡' : turn?.finished.includes(seat) ? '本轮已结束'
+        : turn?.seat === seat ? '行动中' : '';
+      return '<li><button type="button" data-action="assign-turn" data-seat="' + seat + '"'
+        + (!pendingTurnControl && canAssignTurn(seat) ? '' : ' disabled') + '>'
+        + rollAvatar(seat) + '<strong>' + escape(hero.name) + '</strong>'
+        + (label ? '<small>' + label + '</small>' : '') + '</button></li>';
+    }).join('');
+    return '<p class="room-turn-assignment-hint" role="status">' + hint
+      + '</p><ul class="room-turn-assignment" aria-label="选择行动英雄">' + heroes + '</ul>';
+  }
+
   function renderTools() {
     const personal = actor.role !== 'viewer' && !state.closed;
     const seat = personalSeat();
@@ -1149,6 +1182,7 @@
     const canJumpToBoss = actor.role === 'host' && !hostPersonalView && fullBossPanel;
     bossJump.hidden = !state.board || !canJumpToBoss;
     bossTool.hidden = !state.board || Boolean(canJumpToBoss);
+    assignTurnTool.hidden = !personal || actor.role !== 'host' || hostPersonalView;
     const forced = forcedMovementSeat() !== null;
     if (forced !== (movementShortcut.dataset.forced === 'true')) {
       movementShortcut.dataset.forced = String(forced);
@@ -1163,6 +1197,7 @@
       argo: () => argoAbilities() || '<p>本场尚未准备阿尔戈能力。</p>',
       apostle: () => roomProjection(true),
       trauma: traumaToolMarkup,
+      assign: turnAssignmentMarkup,
     }[activeTool]();
     if (markup !== toolsMarkup) {
       const focused = toolsBody.contains(document.activeElement) ? document.activeElement : null;
@@ -2821,9 +2856,10 @@
           actionRetryDelay = Math.min(actionRetryDelay * 2, 15000);
         }
       } finally {
-        if (action.id === pendingPersonalTurn && failedAction?.id !== action.id) {
-          pendingPersonalTurn = null;
+        if (action.id === pendingTurnControl && failedAction?.id !== action.id) {
+          pendingTurnControl = null;
           renderPersonalTurn();
+          if (activeTool === 'assign') renderTools();
         }
         if (timing) {
           activeCardAction = null;
@@ -3072,6 +3108,8 @@
       send({ id: crypto.randomUUID(), type: action, seat: Number(seat), draw: button.dataset.draw, operation: value });
     } else if (action === 'public-lobby') {
       send({ id: crypto.randomUUID(), type: action, value: value === 'true' });
+    } else if (action === 'assign-turn') {
+      if (canAssignTurn(Number(seat))) queueTurnControl('turn-take', Number(seat));
     } else if (action === 'turn-finish') {
       send({ id: crypto.randomUUID(), type: action, seat: Number(seat), round: state.round, phase: state.turn?.phase });
     } else if (action === 'pool-clear') {

@@ -504,3 +504,26 @@ body:has(.room-style-preview:not([hidden])) .title-actions .return-main-link { m
 }
 .room-tool-dock.room-style-dock .room-primary-nav .room-personal-turn-action:disabled { opacity: .6; }
 .room-tool-dock.room-style-dock .room-primary-nav .room-personal-turn-action[hidden] { display: none; }
+
+
+.room-style-dock .room-tool-actions [data-tool="assign"] { font-weight: 700; }
+.room-style-dock .room-tool-actions [data-tool="assign"][hidden] { display: none; }
+.room-turn-assignment-hint { margin: 0 0 .55rem; color: var(--folio-muted); }
+.room-turn-assignment {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(9rem, 100%), 1fr));
+  gap: .4rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.room-turn-assignment button {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: .32rem;
+  width: 100%;
+  min-height: 2.75rem;
+  text-align: start;
+}
+.room-turn-assignment small { margin-inline-start: auto; }

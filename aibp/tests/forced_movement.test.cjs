@@ -26,6 +26,29 @@ test("large moth wings knockback uses the final two spaces along the east edge",
   assert.equal(plan.positions.apostle.facing, 180);
 });
 
+test("diagonal knockback accepts either displayed direction and retains the alternatives", () => {
+  const state = room(point(10.5, 7.5), [point(13, 5)]);
+  const initial = move(state, "knockback", 4);
+  assert.deepEqual(initial.pending.options.map(option => option.id), ["right", "down"]);
+  for (const [choice, destination] of [["right", point(17, 5)], ["down", point(13, 1)]]) {
+    const resolved = move(state, "knockback", 4, { choices: [choice] });
+    assert.equal(resolved.pending, undefined);
+    assert.deepEqual(resolved.decisions, [initial.pending]);
+    assert.deepEqual(resolved.targetPath.at(-1), destination);
+  }
+});
+
+test("a chosen knockback direction can be followed by a separate displacement choice", () => {
+  const state = room(point(10.5, 7.5), [point(13, 5), point(13, 1)]);
+  const landing = move(state, "knockback", 4, { choices: ["down"] });
+  assert.equal(landing.decisions.length, 2);
+  assert.equal(landing.pending.type, "移位");
+  const resolved = move(state, "knockback", 4, { choices: ["down", "right"] });
+  assert.equal(resolved.pending, undefined);
+  assert.deepEqual(resolved.decisions, landing.decisions);
+  assert.deepEqual(resolved.positions.titans, [point(13, 1), point(14, 1)]);
+});
+
 test("column stops knockback but push and pull break it and continue", () => {
   const obstacle = tile("Column", 7, 7);
   const pushing = room(point(4.5, 7.5), [point(6, 7)], [obstacle]);

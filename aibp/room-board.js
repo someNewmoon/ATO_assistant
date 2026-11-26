@@ -502,7 +502,7 @@
       },
       openForcedEffect(context, button) {
         if (!forcedEffect?.open(context, button)) return false;
-        grid.scrollIntoView({ block: "start" });
+        if (button !== forcedButton) grid.scrollIntoView({ block: "start" });
         return true;
       },
       resolveForcedEffect(id, error) { forcedEffect?.resolve(id, error); },

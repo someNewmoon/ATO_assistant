@@ -957,6 +957,11 @@ body.aibp-active-online-battle #heroBattleRoster { display: none; }
 .room-forced-editor .room-forced-paths > :first-child { border-inline-start: 3px solid #397895; }
 .room-forced-editor .room-forced-paths > :last-child { border-inline-start: 3px solid #b15439; }
 .room-forced-choice strong { flex-basis: 100%; }
+.room-forced-choice button[aria-pressed="true"] {
+  color: var(--folio-paper, #fff8ed);
+  background: var(--folio-ink, #50341e);
+  border-color: var(--folio-ink, #50341e);
+}
 .room-forced-events { margin: .45rem 0; padding-inline-start: 1.4rem; }
 .room-forced-events li { margin-block: .22rem; }
 .room-forced-receipt {

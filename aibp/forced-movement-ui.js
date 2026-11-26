@@ -31,7 +31,7 @@
       + '<label data-forced-city hidden><input type="checkbox" name="wartimeCity">受影响城市为交战状态，视为障碍</label>'
       + '<label data-forced-boundary hidden><input type="checkbox" name="terrainBoundary">按牌面将边界地形作为版图边界</label>'
       + '<div data-forced-preview></div><p data-forced-status role="status" aria-live="polite"></p>'
-      + '<footer><button type="button" data-forced-reset hidden>重选路线</button>'
+      + '<footer>'
       + '<button type="submit" data-forced-confirm disabled>确认并同步</button></footer></form>';
     const form = editor.querySelector("form");
     const fields = form.elements;
@@ -40,11 +40,10 @@
     const help = form.querySelector("[data-forced-rule]");
     const submit = form.querySelector("[data-forced-confirm]");
     const cancel = form.querySelector("[data-forced-close]");
-    const reset = form.querySelector("[data-forced-reset]");
     const less = form.querySelector("[data-forced-less]");
     const more = form.querySelector("[data-forced-more]");
     const amountOutput = form.querySelector("[data-forced-amount]");
-    let amount, suspendedTurn;
+    let amount, suspendedTurn, boardStamp, previewMarkup;
     let trigger = "manual", opener, choices, pendingId, previewAction, recordedError, displayedEffect;
 
     function modelLabel(room, seat) {
@@ -115,12 +114,16 @@
           : "请按牌面和减免调整有效格数。冲撞及地形牌上的额外效果在结果中提示。";
       const effect = {
         kind, source: selected(fields.source), target: selected(fields.target), amount,
-        trigger, direction: kind === "knockback" ? fields.direction.value : "", choices,
+        trigger, direction: kind === "knockback" ? fields.direction.value : "",
         wartimeCity: fields.wartimeCity.checked, terrainBoundary: fields.terrainBoundary.checked,
         ...(absolute && { absoluteException: fields.exception.checked }),
         ...(withRange && { attackRange: fields.attackType.value === "zone" ? "zone" : fields.attackType.value === "ranged" ? fields.attackRange.valueAsNumber : 1,
           attackMin: fields.attackType.value === "ranged" ? fields.attackMin.valueAsNumber : 1 }),
       };
+      const nextStamp = rules.stamp(room, effect);
+      if (nextStamp !== boardStamp) choices = [];
+      boardStamp = nextStamp;
+      effect.choices = choices;
       let result;
       if (effect.source !== null && effect.target !== null && Number.isFinite(effect.amount)) {
         result = rules.validActor(actor, effect) ? rules.plan(room, effect, window.BattleTerrain, window.BattleLOS)
@@ -132,19 +135,19 @@
       amountOutput.value = amount ?? "—";
       less.disabled = Boolean(pendingId) || amount == null || amount === 0;
       more.disabled = Boolean(pendingId) || amount === 32;
-      reset.hidden = !choices.length;
-      reset.disabled = Boolean(pendingId);
       status.textContent = recordedError || (pendingId ? "正在同步版图…" : result?.error || "");
       showPreview({ effect, result: result?.error ? null : result });
       if (!result || result.error) {
-        preview.replaceChildren();
+        if (previewMarkup) preview.replaceChildren();
+        previewMarkup = "";
         return;
       }
-      const selection = result.pending
-        ? '<div class="room-forced-choice" role="group" aria-label="' + result.pending.type + '"><strong>' + result.pending.type + '</strong>'
-          + result.pending.options.map(option => '<button type="button" data-forced-option="' + option.id + '">'
-            + option.label + ' · ' + cellLabel(option.point) + '</button>').join("") + '</div>' : '';
-      preview.innerHTML = '<div class="room-forced-paths">' + pathMarkup(room, result, "source", effect.source)
+      const selection = result.decisions.map((decision, step) =>
+        '<div class="room-forced-choice" role="group" aria-label="' + decision.type + '"><strong>' + decision.type + '</strong>'
+        + decision.options.map(option => '<button type="button" data-forced-step="' + step + '" data-forced-option="' + option.id
+          + '" aria-pressed="' + (choices[step] === option.id) + '"' + (pendingId ? ' disabled' : '') + '>'
+          + option.label + ' · ' + cellLabel(option.point) + '</button>').join("") + '</div>').join("");
+      const nextMarkup = selection + '<div class="room-forced-paths">' + pathMarkup(room, result, "source", effect.source)
         + pathMarkup(room, result, "target", effect.target) + '</div>'
         + (kind === "push" && effect.source === "apostle" ? '<p>骇物朝向 · ' + (directionLabel[result.positions.apostle.facing] || "原朝向") + '</p>' : '')
         + '<p>使用 ' + result.used + ' / ' + effect.amount + ' 格</p>'
@@ -152,7 +155,11 @@
         + (result.sourcePath.length > 1 || result.targetPath.length > 1
           ? '<details><summary>逐格路线</summary><p>来源 · ' + result.sourcePath.map(cellLabel).join(" → ")
             + '</p><p>目标 · ' + result.targetPath.map(cellLabel).join(" → ") + '</p></details>' : '')
-        + selection + eventList(room, result);
+        + eventList(room, result);
+      if (nextMarkup !== previewMarkup) {
+        preview.innerHTML = nextMarkup;
+        previewMarkup = nextMarkup;
+      }
     }
 
     function renderReceipt(room, actor) {
@@ -178,7 +185,7 @@
       const button = opener?.isConnected ? opener : opener?.dataset.forcedContext && mount.closest("#battleRoom")
         ?.querySelector('[data-forced-context="' + opener.dataset.forcedContext + '"]');
       if (button) {
-        button.scrollIntoView({ block: "nearest" });
+        if (button !== triggerButton) button.scrollIntoView({ block: "nearest" });
         button.focus({ preventScroll: true });
       }
     }
@@ -199,13 +206,15 @@
     less.addEventListener("click", () => { amount -= 1; resetPreview(); });
     more.addEventListener("click", () => { amount = (amount ?? 0) + 1; resetPreview(); });
     preview.addEventListener("click", event => {
-      const direction = event.target.closest("[data-forced-option]")?.dataset.forcedOption;
-      if (!direction || pendingId) return;
-      choices = [...choices, direction];
+      const button = event.target.closest("[data-forced-option]");
+      if (!button || pendingId) return;
+      const { forcedOption: direction, forcedStep } = button.dataset;
+      const step = Number(forcedStep);
+      if (step > choices.length || choices[step] === direction) return;
+      choices = [...choices.slice(0, step), direction];
       render();
-      preview.querySelector("[data-forced-option]")?.focus({ preventScroll: true });
+      preview.querySelector('[data-forced-step="' + step + '"][aria-pressed="true"]')?.focus({ preventScroll: true });
     });
-    reset.addEventListener("click", resetPreview);
     form.addEventListener("submit", event => {
       event.preventDefault();
       if (!previewAction || pendingId) return;

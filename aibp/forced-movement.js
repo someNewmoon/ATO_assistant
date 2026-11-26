@@ -86,7 +86,7 @@
     const sourcePath = [sourceStart], targetPath = [targetStart];
     const displaced = [], collisions = [], deaths = new Set(), seenCollisions = new Set();
     const destroyed = new Set(), flipped = new Set(), checkedTiles = new Set();
-    const events = [];
+    const events = [], decisions = [];
     let pending, invalid, usedChoices = 0, spent = 0;
     let facing = board.map.pieces.apostle.facing;
     const occ = los.buildOccluders(board.map.terrain, terrainApi);
@@ -186,13 +186,16 @@
     function pick(options, type, id, origin) {
       if (!options.length) return null;
       if (options.length === 1) return options[0];
+      const decision = { type, model: id, point: origin, options: options.map(dir => ({
+        id: dir.id, label: dir.label, point: translate(origin, dir),
+      })) };
+      decisions.push(decision);
       if (usedChoices === choices.length) {
-        pending = { type, model: id, point: origin, options: options.map(dir => ({
-          id: dir.id, label: dir.label, point: translate(origin, dir),
-        })) };
+        pending = decision;
         return null;
       }
-      const picked = options.find(option => option.id === choices[usedChoices++]);
+      const selected = choices[usedChoices++];
+      const picked = options.find(option => option.id === selected);
       if (!picked) invalid = "路线选项已变化，请重新预览。";
       return picked || null;
     }
@@ -411,7 +414,7 @@
     return {
       sourcePath, targetPath, displaced, collisions, deaths: [...deaths], destroyed: [...destroyed], flipped: [...flipped],
       positions: { ...board.map.pieces, apostle: { ...boss, facing }, titans: board.map.pieces.titans.map((point, id) => positions.get(id) || point) },
-      events, used: spent, pending, endSeats,
+      events, used: spent, pending, decisions, endSeats,
     };
   }
 

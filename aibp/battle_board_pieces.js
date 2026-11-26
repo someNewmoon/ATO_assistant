@@ -47,7 +47,7 @@
     return svg;
   }
 
-  function drawTrail(layer, trail, boss = false, suggested = false, role) {
+  function drawTrail(layer, trail, boss = false, suggested = false, role, size = 1) {
     const route = trail?.route;
     if (!route || route.length < 2) return;
     const document = layer.ownerDocument;
@@ -58,7 +58,10 @@
     svg.setAttribute("role", "img");
     if (suggested) svg.classList.add("battle-piece-suggested-route");
     if (role) svg.dataset.forcedRoute = role;
-    const square = ({ column, row }) => String.fromCharCode(64 + row) + column;
+    const square = point => {
+      const { column, row } = role ? window.ATO_FORCED_MOVEMENT.upperLeft(point, size) : point;
+      return String.fromCharCode(64 + row) + column;
+    };
     svg.setAttribute("aria-label", (role ? forcedRoles[role].label + "路线 " : suggested ? "AI 建议路线 " : boss ? "骇物正交移动路线 " : "泰坦移动路线 ") + route.map(square).join(" → "));
     svg.style.setProperty("--piece-accent", role ? forcedRoles[role].accent : suggested ? "#f9d478" : boss ? "#f4a284" : accents[trail.seat]);
     const line = document.createElementNS(svgNS, "polyline");
@@ -270,7 +273,7 @@
         portrait?.label === "查看泰坦插图" ? portrait.src : null);
     });
     if (routes) {
-      for (const { role, id, path } of routes) drawTrail(layer, { route: path }, id === "apostle", true, role);
+      for (const { role, id, path } of routes) drawTrail(layer, { route: path }, id === "apostle", true, role, id === "apostle" ? size : 1);
       drawPendingDirections(layer, forcedPreview.result?.pending);
     }
   }

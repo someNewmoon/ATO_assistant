@@ -390,6 +390,15 @@ body:has(.room-style-preview:not([hidden])) .title-actions .return-main-link { m
   margin-block: .45rem .7rem;
   color: var(--folio-ink);
 }
+.room-titan-link::after {
+  content: "";
+  position: absolute;
+  inset: .35rem .35rem .2rem;
+  border: 1px solid color-mix(in srgb, var(--folio-rule) 55%, transparent);
+  box-shadow: inset 0 0 0 3px color-mix(in srgb, var(--folio-sheet) 15%, transparent);
+  background: linear-gradient(125deg, color-mix(in srgb, var(--folio-sheet) 12%, transparent), transparent 55%);
+  pointer-events: none;
+}
 .room-titan-link[hidden], .room-pilot-status[hidden] { display: none; }
 .room-titan-link > .room-titan-link-art {
   position: absolute;

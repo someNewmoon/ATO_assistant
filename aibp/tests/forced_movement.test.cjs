@@ -98,6 +98,29 @@ test("push uses approach steps and the labyrinth only blocks its red edges", () 
   assert.deepEqual(trapped.sourcePath.at(-1), point(8.5, 5.5));
 });
 
+test("diagonal apostle push chooses an opening axis once and consumes the approach budget", () => {
+  const state = room(point(10.5, 7.5), [point(8, 10)], [tile("Labyrinth I", 10.5, 9)]);
+  const unresolved = move(state, "push", 4);
+  assert.deepEqual(unresolved.pending.options.map(option => option.label), ["横向优先", "纵向优先"]);
+  const cases = [
+    ["left", [point(10, 8), point(9, 8), point(9, 9), point(8, 9)], point(8, 11)],
+    ["up", [point(10, 8), point(10, 9), point(9, 9), point(9, 10)], point(7, 10)],
+  ];
+  for (const [direction, footprint, destination] of cases) {
+    const contact = move(state, "push", 3, { choices: [direction] });
+    assert.equal(contact.pending, undefined);
+    assert.equal(contact.used, 3);
+    assert.equal(contact.approachSteps, 3);
+    assert.deepEqual(contact.sourcePath.map(step => forced.upperLeft(step, 2)), footprint);
+    assert.deepEqual(contact.targetPath, [point(8, 10)]);
+    const pushed = move(state, "push", 4, { choices: [direction] });
+    assert.equal(pushed.pending, undefined);
+    assert.equal(pushed.approachSteps, 3);
+    assert.equal(pushed.used, 4);
+    assert.deepEqual(pushed.targetPath.at(-1), destination);
+  }
+});
+
 test("pull goes around a cliff and moves the source only after contact", () => {
   const state = room(point(9.5, 7.5), [point(6, 7)], [tile("Cliff O", 7.5, 7.5)]);
   const plan = move(state, "pull", 2);

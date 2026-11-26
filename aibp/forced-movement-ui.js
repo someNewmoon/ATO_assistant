@@ -1,6 +1,5 @@
 (() => {
   const directionLabel = { 0: "上", 90: "右", 180: "下", 270: "左" };
-  const cellLabel = point => point.column + " 列 " + point.row + " 行";
 
   function create(mount, send, getState, triggerButton, receipt, showPreview, returnToDice) {
     const rules = window.ATO_FORCED_MOVEMENT;
@@ -50,9 +49,15 @@
       return seat === "apostle" ? "骇物" : room.heroes[seat]?.name || "泰坦";
     }
 
+    function cellLabel(room, id, point) {
+      const size = id === "apostle" ? window.BattleTerrain.getApostleProfile(room.board.apostle, room.board.level)?.size ?? 1 : 1;
+      const { column, row } = rules.upperLeft(point, size);
+      return column + " 列 " + row + " 行" + (size > 1 ? "（左上占格）" : "");
+    }
+
     function eventList(room, result) {
       const named = (item, label) => '<li>' + escape(modelLabel(room, item.model)) + ' · ' + escape(label)
-        + '（' + cellLabel(item.point) + '）</li>';
+        + '（' + cellLabel(room, item.model, item.point) + '）</li>';
       const events = [
         ...result.collisions.map(item => named(item, "冲撞，按牌面结算凶险和击倒")),
         ...result.displaced.map(item => named({ model: item.model, point: item.to }, "移位")),
@@ -66,7 +71,7 @@
     function pathMarkup(room, result, who, id) {
       const path = result[who + "Path"];
       return '<div><strong>' + (who === "source" ? "来源" : "目标") + ' · ' + escape(modelLabel(room, id))
-        + '</strong><span>' + cellLabel(path[0]) + ' → ' + cellLabel(path.at(-1)) + '</span>'
+        + '</strong><span>' + cellLabel(room, id, path[0]) + ' → ' + cellLabel(room, id, path.at(-1)) + '</span>'
         + '<small>' + (path.length - 1) + ' 格</small></div>';
     }
 
@@ -147,15 +152,16 @@
         + (decision === result.pending ? '<small class="room-forced-board-hint">版图上的金色箭头是本格可选方向。</small>' : '')
         + decision.options.map(option => '<button type="button" data-forced-step="' + step + '" data-forced-option="' + option.id
           + '" aria-pressed="' + (choices[step] === option.id) + '"' + (pendingId ? ' disabled' : '') + '>'
-          + '<span aria-hidden="true" class="room-forced-choice-check">✓ </span>' + option.label + ' · ' + cellLabel(option.point) + '</button>').join("") + '</div>').join("");
+          + '<span aria-hidden="true" class="room-forced-choice-check">✓ </span>' + option.label + ' · ' + cellLabel(room, decision.model, option.point) + '</button>').join("") + '</div>').join("");
       const nextMarkup = selection + '<div class="room-forced-paths">' + pathMarkup(room, result, "source", effect.source)
         + pathMarkup(room, result, "target", effect.target) + '</div>'
         + (kind === "push" && effect.source === "apostle" ? '<p>骇物朝向 · ' + (directionLabel[result.positions.apostle.facing] || "原朝向") + '</p>' : '')
-        + '<p>使用 ' + result.used + ' / ' + effect.amount + ' 格</p>'
+        + '<p>使用 ' + result.used + ' / ' + effect.amount + ' 格'
+        + (kind === "push" && result.approachSteps ? ' · 其中接近 ' + result.approachSteps + ' 格' : '') + '</p>'
         + (result.deaths.length ? '<p>确认将记录死亡。如有救生索等牌面例外，请先取消并按牌面结算。</p>' : '')
         + (result.sourcePath.length > 1 || result.targetPath.length > 1
-          ? '<details><summary>逐格路线</summary><p>来源 · ' + result.sourcePath.map(cellLabel).join(" → ")
-            + '</p><p>目标 · ' + result.targetPath.map(cellLabel).join(" → ") + '</p></details>' : '')
+          ? '<details><summary>逐格路线</summary><p>来源 · ' + result.sourcePath.map(point => cellLabel(room, effect.source, point)).join(" → ")
+            + '</p><p>目标 · ' + result.targetPath.map(point => cellLabel(room, effect.target, point)).join(" → ") + '</p></details>' : '')
         + eventList(room, result);
       if (nextMarkup !== previewMarkup) {
         preview.innerHTML = nextMarkup;

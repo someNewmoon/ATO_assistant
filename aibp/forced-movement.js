@@ -20,6 +20,10 @@
   const translate = (point, direction) => ({
     column: point.column + direction.dc, row: point.row + direction.dr,
   });
+  const upperLeft = (point, size = 1) => ({
+    column: Math.round(point.column - (size - 1) / 2),
+    row: Math.round(point.row + (size - 1) / 2),
+  });
   const model = (room, id) => id === "apostle" ? room.board?.map.pieces?.apostle
     : Number.isInteger(id) && room.heroes[id]?.condition !== "dead" ? room.board?.map.pieces?.titans[id] : null;
 
@@ -87,7 +91,7 @@
     const displaced = [], collisions = [], deaths = new Set(), seenCollisions = new Set();
     const destroyed = new Set(), flipped = new Set(), checkedTiles = new Set();
     const events = [], decisions = [];
-    let pending, invalid, usedChoices = 0, spent = 0;
+    let pending, invalid, usedChoices = 0, spent = 0, approachSteps = 0;
     let facing = board.map.pieces.apostle.facing;
     const occ = los.buildOccluders(board.map.terrain, terrainApi);
     const tiles = new Map();
@@ -183,11 +187,11 @@
       }
       if (scope !== "skip" || id === "apostle") activateTerrain(id, point, scope);
     }
-    function pick(options, type, id, origin) {
+    function pick(options, type, id, origin, labels) {
       if (!options.length) return null;
       if (options.length === 1) return options[0];
       const decision = { type, model: id, point: origin, options: options.map(dir => ({
-        id: dir.id, label: dir.label, point: translate(origin, dir),
+        id: dir.id, label: labels?.get(dir.id) || dir.label, point: translate(origin, dir),
       })) };
       decisions.push(decision);
       if (usedChoices === choices.length) {
@@ -314,7 +318,28 @@
       if (!pending && !invalid && spent) activateTerrain(target, positions.get(target), "forced");
     }
 
+    function approachWithApostle() {
+      const from = positions.get(source), at = positions.get(target);
+      if (source !== "apostle" || distance(from, source, at, target) <= 1) return;
+      const { rules } = los.computeApostleMovePaths({
+        sourceAnchor: from, targetAnchor: at, size, speed: amount, reach: 1, facing,
+      });
+      const routes = new Map(rules.filter(route => route.steps
+          && route.centers.slice(1).every(point => inside(source, point)))
+        .map(route => [directions.find(dir => dir.facing === route.firstFacing).id, route]));
+      const options = [...routes.keys()].map(id => directions.find(dir => dir.id === id));
+      const labels = new Map([...routes].map(([id, route]) => [id, route.label]));
+      const choice = pick(options, "选择接近路线的起始方向", source, from, labels);
+      if (!choice) return;
+      const route = routes.get(choice.id);
+      for (const point of route.centers.slice(1)) move(source, point, "active", sourcePath);
+      approachSteps = spent = route.steps;
+      facing = route.facing;
+    }
+
     function push() {
+      approachWithApostle();
+      if (pending || invalid) return;
       while (spent < amount && !deaths.has(target)) {
         const from = positions.get(source), at = positions.get(target);
         const gap = distance(from, source, at, target);
@@ -329,6 +354,7 @@
         if (source === "apostle") facing = dir.facing;
         if (gap > 1) {
           move(source, following, "active", sourcePath);
+          approachSteps++;
           spent++;
           continue;
         }
@@ -414,11 +440,11 @@
     return {
       sourcePath, targetPath, displaced, collisions, deaths: [...deaths], destroyed: [...destroyed], flipped: [...flipped],
       positions: { ...board.map.pieces, apostle: { ...boss, facing }, titans: board.map.pieces.titans.map((point, id) => positions.get(id) || point) },
-      events, used: spent, pending, decisions, endSeats,
+      events, used: spent, approachSteps, pending, decisions, endSeats,
     };
   }
 
-  const api = { plan, stamp, validActor, names, directions };
+  const api = { plan, stamp, validActor, names, directions, upperLeft };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else window.ATO_FORCED_MOVEMENT = api;
 })();

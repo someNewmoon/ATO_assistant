@@ -527,3 +527,26 @@ body:has(.room-style-preview:not([hidden])) .title-actions .return-main-link { m
   text-align: start;
 }
 .room-turn-assignment small { margin-inline-start: auto; }
+
+.room-persistent-turn {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: .3rem;
+  padding: .25rem .5rem;
+  border-top: 1px solid #8b6e49;
+  font-size: .82rem;
+  line-height: 1.35;
+}
+.room-persistent-turn.is-own-turn { font-weight: 650; }
+@media (prefers-reduced-motion: no-preference) {
+  .room-persistent-turn.is-own-turn { animation: room-turn-arrival 1.15s ease-out; }
+}
+@keyframes room-turn-arrival { from { background: #6d522d; } to { background: transparent; } }
+.room-response-panel { scroll-margin-top: calc(var(--round-nav-height, 4rem) + 1rem); padding: .65rem; border: 1px solid var(--room-border); margin-bottom: .65rem; }
+.room-response-panel h3, .room-response-panel ul { margin: .25rem 0; }
+.room-response-panel :is(form, div) { display: flex; flex-wrap: wrap; align-items: end; gap: .35rem; }
+.room-response-panel label { display: grid; gap: .15rem; }
+.room-response-panel input { min-width: 0; max-width: 100%; }
+.room-response-panel small { flex-basis: 100%; }

@@ -1208,22 +1208,26 @@ test('线上普通移动与作战各用一次，可任选先后，宣告只增�
       act('board-move', { point: { ...from, row: 8 }, from, speed: 5, move: null });
       assert.throws(() => act('attack-declare', { weapon: 'AJ0185' }), /结束移动|已使用/);
       act('board-end-move', { move: 'board-move' });
-      assert.throws(() => act('board-move', { point: from, from: r.board.map.pieces.titans[0], speed: 5 }), /普通移动已用完/);
+      assert.throws(() => act('board-move', { point: from, from: r.board.map.pieces.titans[0], speed: 5 }), /普通移动已用完|可行动的回合/);
     };
-    act('turn-take');
     const origin = r.board.map.pieces.titans[0];
     r.board.map.pieces.titans[0] = { column: 3, row: 2 };
     assert.throws(() => act('attack-declare', {
       weapon: 'AJ0185', range: { kind: 'ranged', min: 2, max: 20 },
     }), /有效射程和视线/);
     assert.equal(r.heroes[0].stats.rage, 0);
+    assert.equal(r.turn.seat, null);
     r.board.map.pieces.titans[0] = origin;
-    if (movesFirst) move();
+    if (movesFirst) {
+      move();
+      assert.equal(r.turn.seat, 0);
+    }
     assert.throws(() => act('roll', { mode: 'attack', counts: { d10: 2 }, weapon: 'AJ0185' }), /先宣告/);
     act('gear-card', { key: 'AJ0185', slot: 0, value: 'exhausted' });
     assert.throws(() => act('attack-declare', { weapon: 'AJ0185' }), /未横置/);
     act('gear-card', { key: 'AJ0185', slot: 0, value: 'ready' });
     act('attack-declare', { weapon: 'AJ0185' });
+    assert.equal(r.turn.seat, 0);
     assert.throws(() => act('attack-declare', { weapon: 'AJ0185' }), /已使用/);
     assert.equal(r.heroes[0].stats.rage, 1);
     assert.deepEqual(r.priorityTarget, { seat: 0, locked: false });
@@ -1239,7 +1243,7 @@ test('线上普通移动与作战各用一次，可任选先后，宣告只增�
     assert.throws(() => act('roll', { mode: 'power', parentRoll: 'attack-roll', counts: { red: 1 } }), /揭示/);
     act('attack-finish');
     if (!movesFirst) move();
-    act('turn-finish');
+    assert.throws(() => act('turn-finish'), /已经结束/);
     assert.deepEqual(r.turn, { phase: 'titans', seat: null, finished: [0] });
   }
 });
@@ -1252,7 +1256,7 @@ test('奖励攻击独立于回合行动，支持骇物轮次、取消、触发�
     r.board.map.pieces = { apostle: { column: 8.5, row: 7.5, facing: 0 },
       titans: [{ column: 7, row: 7 }, { column: 7, row: 8 }] };
     r.heroes[1].gear = [{ id: 'AJ0185', count: 1, used: 0 }];
-    r.turn = phase === 'titans' ? { phase, seat: 0, finished: [1], actions: { movementUsed: true, attack: { stage: 'done' } } }
+    r.turn = phase === 'titans' ? { phase, seat: 0, finished: [1], actions: { hold: true, movementUsed: true, attack: { stage: 'done' } } }
       : { phase, seat: null, finished: [], aiGuide: 'resolve', aiTarget: 1 };
     const originalTurn = structuredClone(r.turn);
     const face = type => ({ type, level: 'I', index: 1, _room: {
@@ -1359,4 +1363,74 @@ test('奖励攻击独立于回合行动，支持骇物轮次、取消、触发�
     assert.equal(r.rolls[0].bpOutcome, 1);
     assert.throws(() => action('roll', { mode: 'power', parentRoll: 'attack', counts: { red: 1 } }), /当前奖励攻击/);
   }
+});
+
+test('响应窗口绑定同张牌的具体步骤，保留归属并允许不同泰坦各记录同名能力', () => {
+  const r = room();
+  const member = { role: 'player', seat: 1 };
+  r.board = api.setupRoomBoard({ apostle: 'HERMESIAN_PURSUER', level: 1 }, 2);
+  r.board.map.terrain = [];
+  const act = (actor, type, fields = {}) => reducer.apply(r, actor, { type, round: r.round, phase: r.turn.phase, ...fields });
+  for (const source of ['ai', 'bp']) {
+    r.turn = source === 'ai' ? { phase: 'apostle', seat: null, finished: [], aiGuide: 'resolve', aiTarget: 0 }
+      : { phase: 'titans', seat: 0, finished: [], actions: { movementUsed: true,
+        attack: { stage: 'power', roll: 'attack', powerRoll: 'power' } } };
+    r.projection = source === 'ai' ? { aiPending: true, ai: { src: 'ai.jpg' } } : { bpPending: true, bp: { src: 'bp.jpg' } };
+    r.battleDeck = { revision: 3, bpSeat: source === 'bp' ? 0 : undefined };
+    const before = structuredClone(r.turn);
+    const context = dice.responseSource(r, source);
+    const open = { id: 'response-1', source, context: context.key };
+    assert.throws(() => act(host, 'response-open', { ...open, context: 'stale' }), /牌面步骤/);
+    assert.throws(() => act(member, 'response-open', open), /当前结算者/);
+    act(player, 'response-open', open);
+    assert.throws(() => act(host, 'response-open', { ...open, id: 'race' }), /窗口开放/);
+    assert.throws(() => act(host, 'round'), /结束当前响应窗口/);
+    assert.throws(() => act(player, 'turn-free', { seat: 0, name: '移动' }), /结束当前响应窗口/);
+    assert.throws(() => act(host, source === 'ai' ? 'ai-guide-discard' : 'bp-settle'), /结束当前响应窗口/);
+    act(player, 'response-use', { windowId: 'response-1', name: '急 停' });
+    assert.throws(() => act(player, 'response-use', { windowId: 'response-1', name: '急停' }), /同名能力/);
+    act(member, 'response-use', { windowId: 'response-1', name: '急停' });
+    assert.deepEqual(r.turn.responseWindow.used.map(entry => entry.seat), [0, 1]);
+    const pieces = r.board.map.pieces;
+    const from = pieces.titans[1] = { column: 2, row: 2 };
+    act(member, 'board-move', { id: 'response-move', seat: 1, from, point: { column: 2, row: 3 }, speed: 1, ability: true });
+    assert.throws(() => act(host, 'response-close', { windowId: 'response-1' }), /结束本窗口内/);
+    act(member, 'board-end-move', { seat: 1, move: 'response-move', ability: true });
+    assert.throws(() => act(member, 'response-close', { windowId: 'response-1' }), /开启者/);
+    act(player, 'response-close', { windowId: 'response-1' });
+    assert.deepEqual(r.turn, before);
+    act(host, 'response-open', { ...open, id: 'response-2' });
+    assert.throws(() => act(host, 'response-close', { windowId: 'response-1' }), /已更换或关闭/);
+    assert.deepEqual(r.turn.responseWindow.used, []);
+    act(host, 'response-close', { windowId: 'response-2' });
+    assert.deepEqual(r.turn, before);
+  }
+});
+
+test('首次合法自由行动开回合，过时起手不会接管，保留待办时两项用完须主动收尾', () => {
+  const r = room();
+  const member = { role: 'player', seat: 1 };
+  r.board = api.setupRoomBoard({ apostle: 'HEKATON', level: 1 }, 2);
+  r.turn = { phase: 'titans', seat: null, finished: [] };
+  const act = (actor, type, fields = {}) => reducer.apply(r, actor, {
+    type, id: type, seat: actor.seat ?? 0, round: 1, phase: 'titans', ...fields,
+  });
+  assert.throws(() => act(player, 'turn-free', { name: ' ', turnStart: 0 }), /能力名称/);
+  assert.equal(r.turn.seat, null);
+  act(player, 'turn-free', { name: '准备', turnStart: 0 });
+  assert.equal(r.turn.seat, 0);
+  assert.throws(() => act(member, 'turn-free', { name: '预备', turnStart: 0 }), /已有泰坦/);
+  assert.throws(() => act(player, 'turn-free', { name: '准备' }), /同名能力/);
+  act(player, 'turn-hold', { value: true });
+  act(player, 'turn-spend', { value: 'movement' });
+  act(player, 'turn-spend', { value: 'attack' });
+  assert.equal(r.turn.seat, 0);
+  assert.throws(() => act(player, 'turn-free', { name: '准备二' }), /两项普通行动/);
+  act(player, 'turn-hold', { value: false });
+  assert.deepEqual(r.turn, { phase: 'titans', seat: null, finished: [0] });
+  assert.throws(() => act(member, 'turn-free', { name: '预备', turnStart: 0 }), /已有泰坦/);
+  act(host, 'turn-take', { seat: 1, turnStart: 1 });
+  assert.equal(r.turn.seat, 1);
+  act(member, 'turn-finish');
+  assert.deepEqual(r.turn, { phase: 'titans', seat: null, finished: [0, 1] });
 });

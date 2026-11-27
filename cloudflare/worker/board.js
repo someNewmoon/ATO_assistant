@@ -4,7 +4,7 @@ import los from '../../aibp/battle_los.js';
 import guide from '../../aibp/ai-turn-guide.js';
 import forcedMovement from '../../aibp/forced-movement.js';
 import { ApiError, object } from './campaign.js';
-import { attackInProgress, canClaimTurn, claimTurn, forcedTitanMove } from './room-turn.js';
+import { attackInProgress, canClaimTurn, claimTurn, finishSpentTurn, forcedTitanMove } from './room-turn.js';
 
 const H = 14;
 const W = 20;
@@ -197,7 +197,8 @@ export function applyRoomBoard(room, actor, body) {
       || (actor.role === 'player' && actor.seat !== seat)) fail('只能移动自己英雄的泰坦。', 403);
     if (room.heroes[seat].condition === 'dead') fail('死亡的泰坦无法移动。', 409);
     const deadSeats = room.heroes.flatMap((hero, index) => hero.condition === 'dead' ? [index] : []);
-    const forced = forcedTitanMove(room, body);
+    const response = room.turn?.responseWindow;
+    const forced = response && body.ability === true ? false : forcedTitanMove(room, body);
     const ability = body.ability === true && !forced;
     const normal = !forced && !ability && room.turn?.phase === 'titans';
     if (normal && (room.turn.seat !== seat && !canClaimTurn(room, seat))) {
@@ -212,6 +213,7 @@ export function applyRoomBoard(room, actor, body) {
       if (!move || move.id !== body.move) fail('本次移动已更新，请重试。', 409);
       delete board[movesKey][seat];
       if (normal && room.turn.actions) room.turn.actions.movementUsed = true;
+      if (normal || ability) finishSpentTurn(room);
       return;
     }
     if (body.type === 'board-undo-move') {
@@ -228,7 +230,7 @@ export function applyRoomBoard(room, actor, body) {
         fail('原位置已有棋子，无法撤回。', 409);
       }
       pieces.titans[seat] = { ...origin };
-      if (previous) board[movesKey][seat] = previous;
+      if (previous) board[movesKey][seat] = { ...previous, ...(move.responseId && { responseId: move.responseId }) };
       else delete board[movesKey][seat];
       if (board.lastTitanMove?.id === move.id) {
         if (previous) board.lastTitanMove = previous;
@@ -252,6 +254,7 @@ export function applyRoomBoard(room, actor, body) {
     const route = los.titanMoveRoute(overlay, point);
     if (!route) fail('这一格当前不可达。', 409);
     const next = los.appendTitanMove(active, { id: body.id, seat, speed: active?.speed ?? speed, route });
+    if (response) next.responseId = response.id;
     (board[movesKey] ||= {})[seat] = next;
     if (!forced && !ability) claimTurn(room, seat);
     board.lastTitanMove = next;

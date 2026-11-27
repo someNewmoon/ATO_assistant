@@ -8,7 +8,7 @@ import roomDice from '../../aibp/room-dice.js';
 import gearRolls from '../../aibp/gear-roll-profiles.js';
 import { roomProjection } from './room-projection.js';
 import { discardRoomAi, prepareRoomDeck, revealRoomAi, revealRoomBp, roomDeckProjection, settleRoomBp } from './room-deck.js';
-import { applyTurn, attackInProgress, claimTurn, finishAiMovement, setTurnPhase, captureTurnUndo, canUndoTurn, undoTurn } from './room-turn.js';
+import { applyTurn, attackInProgress, claimTurn, finishSpentTurn, recordAbility, finishAiMovement, setTurnPhase, captureTurnUndo, canUndoTurn, undoTurn } from './room-turn.js';
 import { battleRecap, battleStats, countReaction, setRollWounds } from './room-recap.js';
 import battleConfig from '../../technology/battle-config.js';
 import techDictionary from '../../technology/tech_card_dictionary.min.json';
@@ -163,6 +163,8 @@ function publicSquadLoadouts(room) {
 const activityLabels = {
   'bonus-attack-start': '准备奖励攻击', 'bonus-attack-cancel': '取消奖励攻击',
   'attack-declare': '宣告攻击', 'attack-check': '确认攻击命中结果', 'attack-first': '完成第一能力时段',
+  'response-open': '开启响应窗口', 'response-use': '记录响应能力', 'response-close': '结束响应窗口',
+  'turn-free': '记录自由行动', 'turn-hold': '调整回合收尾',
   'attack-clear': '清空克拉托斯池', 'attack-finish': '结束本次作战', 'turn-spend': '以行动结算能力',
   'turn-undo': '撤回上一步轮次行动', 'turn-phase': '切换轮次', 'turn-take': '开始英雄回合', 'turn-finish': '结束英雄回合',
   'board-move': '移动泰坦', 'board-undo-move': '撤回上一步', 'board-apostle-move': '移动骇物',
@@ -176,10 +178,14 @@ const activityLabels = {
 
 function recordBattleActivity(room, actor, body, previousProjection) {
   let label = Object.hasOwn(activityLabels, body.type) ? activityLabels[body.type] : '';
-  let seat = Number.isInteger(body.seat) && room.heroes[body.seat] ? body.seat : null;
+  let seat = body.type === 'response-use' && actor.role === 'player' ? actor.seat
+    : Number.isInteger(body.seat) && room.heroes[body.seat] ? body.seat : null;
   const hero = room.heroes[seat];
   let detail = '';
   const projection = room.projection;
+  if (body.type === 'response-open') detail = room.turn.responseWindow.label;
+  if (body.type === 'response-use') detail = room.turn.responseWindow.label + ' · ' + room.turn.responseWindow.used.at(-1).label;
+  if (body.type === 'turn-free') detail = room.turn.actions.freeActions.at(-1).label;
   if (body.type === 'ai-guide') {
     label = ({ begin: '开始逐步结算', extra: '结算额外指令技', hope: '希望终结 · 执行招牌技',
       'signature-begin': '开始结算招牌技', 'signature-resolve': '招牌技已结算' })[body.value] || '完成骇物步骤';
@@ -291,7 +297,8 @@ function attackActionPatch(room, body, previousRolls, previousDeckRevision) {
   } else if (['attack-check', 'attack-clear'].includes(type)) {
     changes = { turn: room.turn };
     if (type === 'attack-clear' || body.value === 'miss') changes.pool = room.pool;
-  } else if (['attack-first', 'turn-spend', 'bonus-attack-start', 'bonus-attack-cancel', 'attack-finish'].includes(type)) {
+  } else if (['attack-first', 'turn-spend', 'turn-free', 'turn-hold', 'response-open', 'response-use', 'response-close',
+    'bonus-attack-start', 'bonus-attack-cancel', 'attack-finish'].includes(type)) {
     changes = { turn: room.turn, secondAbility: room.secondAbility ?? null };
   } else if (['roll', 'reroll', 'convert'].includes(type)) {
     rolls = { latest: room.rolls[0] };
@@ -706,10 +713,26 @@ export class BattleRoom extends DurableObject {
       try { room.configuration = battleConfig.prepare(body.battleConfig, available); }
       catch (error) { reject(error.message); }
     }
-    if (typeof body.type === 'string' && body.type.startsWith('squad-')) return applySquad(room, actor, body, randomInt, savedTrauma);
+    if (typeof body.type === 'string' && body.type.startsWith('squad-')) {
+      if (room.turn?.responseWindow) reject('请先结束当前响应窗口。', 409);
+      return applySquad(room, actor, body, randomInt, savedTrauma);
+    }
     if (room.squad && body.type !== 'public-lobby'
       && (room.squad.phase !== 'battle' || body.battleNumber !== room.squad.battleNumber)) reject('当前战斗已结束或已经切换。', 409);
     if (body.expectedRound !== undefined && body.expectedRound !== room.round) reject('轮次已更新，请重新操作。', 409);
+    if (body.turnStart !== undefined && (room.turn?.phase !== 'titans' || room.turn.seat !== null
+        || room.turn.finished.length !== body.turnStart)) reject('已有泰坦开始行动，请等待自己的回合。', 409);
+    if (['response-open', 'response-use', 'response-close'].includes(body.type)) return this.applyResponse(room, actor, body);
+    if (room.turn?.responseWindow) {
+      const responseMove = ['board-move', 'board-undo-move', 'board-end-move'].includes(body.type)
+        && (body.ability === true || body.forced === true);
+      const responseRoll = body.type === 'roll' && !['attack', 'power'].includes(body.mode);
+      if (!responseMove && !responseRoll && !['stat', 'condition', 'titan-marker', 'pool', 'gear-card',
+        'gear', 'mnemos-card', 'pattern-card', 'reroll', 'convert', 'roll-reaction', 'board-forced-effect', 'board-ping',
+        'board-overlay', 'trauma-draw', 'trauma-resolve', 'argo-use', 'argo-undo'].includes(body.type)) {
+        reject('请先结束当前响应窗口，再推进原步骤。', 409);
+      }
+    }
     if (body.type === 'turn-undo') return undoTurn(room, actor, body);
     if (['turn-phase', 'turn-take', 'turn-finish', 'ai-guide'].includes(body.type)) return applyTurn(room, actor, body);
     if (typeof body.type === 'string' && body.type.startsWith('trauma-')) return applyTrauma(room, actor, body, randomInt);
@@ -918,7 +941,7 @@ export class BattleRoom extends DurableObject {
     const hero = Number.isInteger(seat) ? room.heroes[seat] : null;
     if (!hero || (actor.role === 'player' && actor.seat !== seat)) reject('只能操作自己的英雄。', 403);
     if ((typeof body.type === 'string' && body.type.startsWith('attack-'))
-        || ['turn-spend', 'bonus-attack-start', 'bonus-attack-cancel'].includes(body.type)) {
+        || ['turn-spend', 'turn-free', 'turn-hold', 'bonus-attack-start', 'bonus-attack-cancel'].includes(body.type)) {
       return this.applyTitanAction(room, hero, seat, body);
     }
     switch (body.type) {
@@ -941,7 +964,7 @@ export class BattleRoom extends DurableObject {
         if (!conditions.includes(body.value)) reject('未知英雄状态。');
         hero.condition = body.value;
         if (hero.condition === 'dead') {
-          if (room.turn?.seat === seat) {
+          if (room.turn?.seat === seat && !room.turn.responseWindow) {
             room.turn.seat = null;
             delete room.turn.actions;
           }
@@ -1016,6 +1039,36 @@ export class BattleRoom extends DurableObject {
     }
   }
 
+  applyResponse(room, actor, body) {
+    const turn = room.turn;
+    const window = turn?.responseWindow;
+    const owner = actor.role === 'host' ? 'host' : actor.role === 'player' ? String(actor.seat) : null;
+    if (!owner || !turn || body.round !== room.round) reject('响应窗口所属轮次已更新。', 409);
+    if (body.type === 'response-open') {
+      const context = roomDice.responseSource(room, body.source);
+      if (window || !context || context.key !== body.context) reject('牌面步骤已更新，或已有响应窗口开放。', 409);
+      if (actor.role !== 'host' && context.seat !== actor.seat) reject('由当前结算者或房主开启响应窗口。', 403);
+      turn.responseWindow = { id: body.id, opener: owner, ...context, used: [] };
+      return;
+    }
+    if (!window || body.windowId !== window.id) reject('响应窗口已更换或关闭。', 409);
+    if (body.type === 'response-use') {
+      const seat = actor.role === 'player' ? actor.seat : body.seat;
+      if (!Number.isInteger(seat) || !room.heroes[seat] || room.heroes[seat].condition === 'dead') {
+        reject('请选择可以响应的泰坦。', 403);
+      }
+      recordAbility(window.used, seat, body.name);
+      return;
+    }
+    if (actor.role !== 'host' && window.opener !== owner) reject('由开启者或房主关闭响应窗口。', 403);
+    const moves = [...Object.values(room.board?.abilityTitanMoves || {}), ...Object.values(room.board?.forcedTitanMoves || {})];
+    if (moves.some(move => move.responseId === window.id)) {
+      reject('请先结束本窗口内的牌面移动。', 409);
+    }
+    delete turn.responseWindow;
+    finishSpentTurn(room);
+  }
+
   applyTitanAction(room, hero, seat, body) {
     const turn = room.turn;
     const { type, bonusId } = body;
@@ -1043,6 +1096,26 @@ export class BattleRoom extends DurableObject {
       reject('请在该泰坦可行动的回合操作，先完成招牌技。', 409);
     }
     const attack = bonus || turn.actions?.attack;
+    if (type === 'turn-free' || type === 'turn-hold') {
+      if (bonus || type === 'turn-free' && (moving(seat) || attackInProgress(turn))) {
+        reject('请先结束正在结算的移动或作战。', 409);
+      }
+      if (type === 'turn-hold') {
+        if (turn.seat !== seat || typeof body.value !== 'boolean') reject('请在自己的回合登记待处理效果。', 409);
+        if (body.value) (turn.actions ||= {}).hold = true;
+        else {
+          if (turn.actions) delete turn.actions.hold;
+          finishSpentTurn(room);
+        }
+        return;
+      }
+      if (turn.actions?.movementUsed && attack?.stage === 'done') reject('两项普通行动均已结算，不能再执行普通自由行动。', 409);
+      const used = turn.actions?.freeActions || [];
+      recordAbility(used, seat, body.name);
+      claimTurn(room, seat);
+      (turn.actions ||= {}).freeActions = used;
+      return;
+    }
     if (type === 'attack-declare') {
       if (hero.condition === 'dead' || (bonus ? attack.stage !== 'select' : Boolean(attack)) || moving(seat)) {
         reject('请先结束移动，或本回合的作战行动已使用。', 409);
@@ -1069,7 +1142,7 @@ export class BattleRoom extends DurableObject {
       return;
     }
     if (type === 'turn-spend') {
-      if (!['movement', 'attack'].includes(body.value) || attackInProgress(turn)
+      if (bonus || !['movement', 'attack'].includes(body.value) || attackInProgress(turn)
           || room.board.titanMoves?.[seat] || room.board.abilityTitanMoves?.[seat]
           || turn.actions?.[body.value === 'movement' ? 'movementUsed' : 'attack']) {
         reject('该行动已使用，或请先结束当前行动。', 409);
@@ -1078,6 +1151,7 @@ export class BattleRoom extends DurableObject {
       const actions = turn.actions ||= {};
       if (body.value === 'movement') actions.movementUsed = true;
       else actions.attack = { stage: 'done', spent: true };
+      finishSpentTurn(room);
       return;
     }
     if ((!bonus && turn.seat !== seat) || !attack) reject('当前没有待结算的作战。', 409);
@@ -1099,6 +1173,7 @@ export class BattleRoom extends DurableObject {
       if (bonus) delete turn.bonusAttack;
       else attack.stage = 'done';
       if (room.secondAbility?.seat === seat) delete room.secondAbility;
+      finishSpentTurn(room);
       return;
     }
     reject('作战步骤已经变化，请核对后继续。', 409);

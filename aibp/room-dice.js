@@ -49,6 +49,25 @@
     return faceLabel(strengths.reduce((sum, face) => sum.map((value, index) => value + face[index]), [0, 0, 0]));
   }
 
+  function responseSource(room, kind) {
+    const { turn, projection } = room;
+    if (!turn || room.closed) return null;
+    const deck = room.deckRevision ?? room.battleDeck?.revision;
+    if (kind === 'ai') {
+      if (turn.bonusAttack) return null;
+      const signature = turn.aiSignatureId || turn.aiGuide === 'hope-resolve';
+      const face = signature ? projection?.signature : projection?.aiPending && turn.phase === 'apostle' && projection.ai;
+      return face?.src ? { kind, seat: turn.aiTarget, label: signature ? '招牌技响应' : '指令技响应',
+        key: JSON.stringify([room.round, deck, face.src, turn.aiGuide, turn.aiSignatureId, turn.aiTarget]) } : null;
+    }
+    if (kind !== 'bp') return null;
+    const attack = turn.bonusAttack || turn.actions?.attack;
+    const seat = room.bpSeat ?? room.battleDeck?.bpSeat ?? turn.bonusAttack?.seat ?? turn.seat;
+    const settled = attack?.stage === 'cleanup' && attack.powerRoll && attack.powerRoll === room.secondAbility?.roll;
+    return projection?.bp?.src && (projection.bpPending || settled) ? { kind, seat,
+      label: '部位牌响应', key: JSON.stringify([room.round, deck, projection.bp.src, attack?.roll, settled && room.secondAbility.id]) } : null;
+  }
+
   function canAttackNormally(turn, seat) {
     return !turn || (turn.phase === 'titans' && (turn.seat == null || turn.seat === seat)
       && !turn.finished?.includes(seat));
@@ -137,5 +156,5 @@
     }));
   }
 
-  return { faces, names, limits, modes, naturalFace, remainingFace, canReroll, canAttackNormally, canAdjustRoll, faceIndex, faceLabel, rollSummary, woundResults, criticalLabel, pipMarkup, faceMarkup, storyFaces, rollOwner, pendingPowerRoll, canUseBodyPart, latestByHero, reactionGroups };
+  return { faces, names, limits, modes, naturalFace, remainingFace, canReroll, canAttackNormally, canAdjustRoll, faceIndex, faceLabel, rollSummary, woundResults, criticalLabel, pipMarkup, faceMarkup, storyFaces, rollOwner, pendingPowerRoll, canUseBodyPart, responseSource, latestByHero, reactionGroups };
 });

@@ -95,7 +95,7 @@
       select: chooseWeapon, selectRange: chooseWeaponRange, openDice: openAttackDice, declare: declareAttack,
       declaring: () => Boolean(pendingAttackDeclaration),
       returnToDice: () => switchCombatView('dice', false),
-      startBonus: startBonusAttack, canStartBonus: canStartBonusAttack,
+      startBonus: startBonusAttack, canStartBonus: canStartBonusAttack, hostSeat: personalSeat,
       speed: seat => window.ATO_TITAN_PANEL_REFERENCE?.forTitan(state.heroes[seat]?.titan, window.ATO_GEAR_INVENTORY)?.movement,
     });
 
@@ -541,9 +541,6 @@
     const turn = state.turn;
     if (combatTabs.hidden || turn?.phase !== 'titans' || turn.bonusAttack || turn.finished.includes(seat) || !state.heroes[seat]) return;
     if (turn.seat === seat) return { type: 'turn-finish', seat, label: '结束回合', enabled: canFinishTitanTurn(seat) };
-    if (turn.seat === null && state.heroes[seat].condition !== 'dead') {
-      return { type: 'turn-take', seat, label: '认领回合', enabled: true };
-    }
   }
 
   function renderPersonalTurn() {
@@ -676,12 +673,111 @@
   }));
   pilotStatus.append(pilotStatusIdentity, pilotStats);
   dock.append(pilotStatus);
+  const turnStatus = document.createElement('div');
+  turnStatus.className = 'room-persistent-turn';
+  turnStatus.setAttribute('role', 'status');
+  turnStatus.hidden = true;
+  dock.append(turnStatus);
+  const responsePanel = document.createElement('section');
+  responsePanel.className = 'room-response-panel';
+  responsePanel.id = 'room-response-panel';
+  responsePanel.hidden = true;
+  responsePanel.tabIndex = -1;
+  const responseHeading = document.createElement('h3');
+  const responseForm = document.createElement('form');
+  const responseLog = document.createElement('ul');
+  const responseControls = document.createElement('div');
+  let responseReturn;
+  responsePanel.append(responseHeading, responseForm, responseLog, responseControls);
+  root.prepend(responsePanel);
+
+  function responseOpenButton(kind) {
+    const context = dice.responseSource(state, kind);
+    if (!context || state.turn.responseWindow || !(actor.role === 'host' || actor.seat === context.seat)) return '';
+    return '<button type="button" data-response-open="' + kind + '">进入响应窗口</button>';
+  }
+
+  function responseSeat() {
+    return actor.role === 'player' ? actor.seat : Number(responseForm.elements.seat?.value ?? personalSeat());
+  }
+
+  function showResponsePanel() {
+    responsePanel.scrollIntoView({ block: 'nearest' });
+    responsePanel.focus({ preventScroll: true });
+  }
+
+  function renderTurnStatus() {
+    const turn = state.turn;
+    const response = turn?.responseWindow;
+    const activeSeat = turn?.bonusAttack?.seat ?? turn?.seat;
+    const mine = activeSeat === personalSeat();
+    const hero = state.heroes[activeSeat];
+    const actions = turn?.actions;
+    const attack = turn?.bonusAttack || actions?.attack;
+    const moving = state.board?.titanMoves?.[activeSeat] || state.board?.abilityTitanMoves?.[activeSeat];
+    const everyoneFinished = turn?.phase === 'titans'
+      && state.heroes.every((hero, seat) => hero.condition === 'dead' || turn.finished.includes(seat));
+    const activity = attack && attack.stage !== 'done' ? (attack.stage === 'select' ? '待宣告' : attackStageLabel(attack.stage))
+      : moving ? '移动结算中' : actions?.hold ? '牌面待办待结算' : '';
+    const ordinary = actions && '移动' + (actions.movementUsed ? '已用' : moving ? '进行中' : '可用')
+      + ' · 作战' + (actions.attack?.stage === 'done' ? '已用' : actions.attack ? '进行中' : '可用');
+    const status = response ? '响应窗口开放 · ' + response.label
+      : !turn ? '等待房主设置轮次' : hero
+        ? (turn.bonusAttack ? '奖励攻击 · ' + hero.name : mine ? '你的回合 · ' + hero.name
+          : (actor.role === 'player' ? '队友回合 · ' : '泰坦轮 · ') + hero.name)
+          + (activity ? ' · ' + activity : '') + (ordinary && !turn.bonusAttack ? ' · ' + ordinary : '')
+        : turn.phase === 'apostle' ? '骇物轮 · ' + (turn.aiTarget == null ? '等待结算' : '目标 ' + state.heroes[turn.aiTarget]?.name)
+          : everyoneFinished ? '泰坦轮 · 全员已结束' : turn.finished.length ? '泰坦轮 · 等待下一位泰坦行动' : '泰坦轮 · 等待首位泰坦行动';
+    turnStatus.hidden = state.closed;
+    turnStatus.classList.toggle('is-own-turn', Boolean(hero && mine && !response));
+    const editable = actor.role !== 'viewer' && !state.closed;
+    renderMarkup(turnStatus, '<span>' + escape(status) + '</span>'
+      + (response && editable ? '<button type="button" data-response-show>查看响应</button>' : ''));
+    responsePanel.hidden = !editable || !response;
+    if (!response || !editable) return;
+    responseHeading.textContent = response.label + ' · 响应窗口';
+    const eligible = state.heroes.map((item, seat) => item.condition !== 'dead'
+      ? '<option value="' + seat + '">' + escape(item.name) + '</option>' : '').join('');
+    const seatField = actor.role === 'host' ? '<label>响应泰坦 <select name="seat">' + eligible + '</select></label>' : '';
+    renderMarkup(responseForm, seatField + '<label>能力名称 <input name="name" maxlength="64" required></label>'
+      + '<button type="submit">记录响应</button>');
+    renderMarkup(responseLog, response.used.map(entry => '<li>' + escape(state.heroes[entry.seat]?.name) + ' · ' + escape(entry.label) + '</li>').join(''));
+    const canClose = actor.role === 'host' || response.opener === String(actor.seat);
+    const moves = [...Object.values(state.board?.abilityTitanMoves || {}), ...Object.values(state.board?.forcedTitanMoves || {})];
+    const active = moves.some(move => move.responseId === response.id);
+    renderMarkup(responseControls, '<small>按牌面核对时点、状态与费用。同一泰坦同名能力在本窗口只记录一次。</small>'
+      + '<button type="button" data-response-move>结算牌面移动</button>'
+      + (canClose ? '<button type="button" data-response-close' + (active ? ' disabled' : '') + '>结束窗口并继续</button>' : ''));
+  }
+
+  turnStatus.addEventListener('click', event => {
+    if (event.target.closest('[data-response-show]')) showResponsePanel();
+  });
+  responseForm.addEventListener('submit', event => {
+    event.preventDefault();
+    const response = state.turn?.responseWindow;
+    const input = responseForm.elements.name;
+    if (!response || !input.value.trim()) return;
+    send({ id: crypto.randomUUID(), type: 'response-use', seat: responseSeat(), name: input.value,
+      round: state.round, windowId: response.id });
+    input.value = '';
+  });
+  responseControls.addEventListener('click', event => {
+    if (event.target.closest('[data-response-close]') && state.turn?.responseWindow) {
+      responseReturn = { id: state.turn.responseWindow.id, source: state.turn.responseWindow.kind };
+      send({ id: crypto.randomUUID(), type: 'response-close', round: state.round, windowId: state.turn.responseWindow.id });
+    } else if (event.target.closest('[data-response-move]')) {
+      switchCombatView('board', false);
+      roomBoard?.openResponseMovement(responseSeat());
+    }
+  });
 
   function renderPilotView() {
     const seat = actor.role !== 'host' ? actor.seat : combatView === 'dice' ? rollSeat
       : state.turn?.bonusAttack?.seat ?? state.turn?.seat ?? personalSeat();
     renderTitanLink(combatTabs.hidden ? null : state.heroes[seat]);
     renderPersonalTurn();
+    renderTurnStatus();
   }
 
   function renderTitanLink(hero) {
@@ -916,7 +1012,7 @@
     const everyoneFinished = titans && state.heroes.every((hero, seat) => hero.condition === 'dead' || turn.finished.includes(seat));
     const label = !turn ? '等待房主设置轮次' : !titans ? '骇物轮次'
       : activeSeat !== null ? '泰坦轮次 · ' + state.heroes[activeSeat].name
-        : everyoneFinished ? '泰坦轮次 · 全员已结束' : '泰坦轮次 · 等待认领';
+        : everyoneFinished ? '泰坦轮次 · 全员已结束' : '泰坦轮次 · 等待行动';
     const heading = '第 ' + state.round + ' 轮 · ' + label
       + (signatureActive ? ' · 招牌技结算中' : '') + (turn?.aiMovement?.pending ? ' · 待结算冲撞' : '')
       + (bonus ? ' · 奖励攻击 · ' + state.heroes[bonus.seat].name : '');
@@ -924,7 +1020,9 @@
       turnHeading = heading;
       turnWindow.querySelector('summary').textContent = heading;
     }
-    const action = (type, text, attr = '') => '<button type="button" data-turn-action="' + type + '"' + attr + '>' + text + '</button>';
+    const action = (type, text, attr = '') => '<button type="button" data-turn-action="' + type + '"' + attr
+      + (turn?.responseWindow && !['guide-defense', 'board-forced-effect'].includes(type) && !attr.includes(' disabled') ? ' disabled' : '')
+      + '>' + text + '</button>';
     const roster = state.heroes.map((hero, seat) => {
       const dead = hero.condition === 'dead';
       const acted = turn?.finished.includes(seat);
@@ -932,7 +1030,7 @@
       const editable = host || (actor.role === 'player' && actor.seat === seat);
       const actions = titans && editable && !acted ? current
         ? action('turn-finish', '结束回合', ' data-seat="' + seat + '"' + (canFinishTitanTurn(seat) ? '' : ' disabled'))
-        : !dead && activeSeat === null && !bonus ? action('turn-take', '认领回合', ' data-seat="' + seat + '"') : '' : '';
+        : '' : '';
       return '<li' + (current ? ' aria-current="true"' : '') + '>' + rollAvatar(seat)
         + '<span>' + escape(hero.name) + '<small>' + (dead ? '死亡' : current ? '行动中' : acted ? '已结束' : '待行动')
         + '</small></span>' + actions + '</li>';
@@ -1044,7 +1142,7 @@
     }
     const hint = !turn ? '' : !titans ? '<p>泰坦仍可结算闪避、击退和推斥。</p>'
       : everyoneFinished ? '<p>结算本轮结束效果后，由房主开启下一轮。</p>'
-        : activeSeat === null ? '<p>认领后可任选先移动或先作战。</p>' : '';
+        : activeSeat === null ? '<p>可在版图直接开始第一项行动。</p>' : '';
     const back = host && turn ? action('turn-undo', '上一步', state.canUndoTurn ? ''
       : ' disabled title="仅可撤回刚才的轮次操作；其他战斗操作已发生时无法撤回。"') : '';
     const bonusSeatAttr = seat => ' data-seat="' + seat + '"';
@@ -1064,7 +1162,7 @@
     const actions = bonus ? (bonusControls ? '<div class="room-turn-controls">' + bonusControls + '</div>' : '')
       : controls || back || bonusControls ? '<div class="room-turn-controls">' + back + controls + bonusControls + '</div>' : '';
     roomBoard?.setAiRoute(route);
-    const next = (bonus ? '' : guidance) + actions + (step && !signatureActive ? '' : '<ul>' + roster + '</ul>') + hint;
+    const next = (bonus ? '' : guidance) + responseOpenButton('ai') + actions + (step && !signatureActive ? '' : '<ul>' + roster + '</ul>') + hint;
     if (turnMarkup !== next) {
       turnMarkup = next;
       const body = turnWindow.querySelector('[data-turn-body]');
@@ -1163,7 +1261,7 @@
     const turn = state.turn;
     const hero = state.heroes[seat];
     return actor.role === 'host' && !hostPersonalView && !state.closed && turn?.phase === 'titans'
-      && turn.seat === null && !turn.bonusAttack && hero && hero.condition !== 'dead' && !turn.finished.includes(seat);
+      && turn.seat === null && !turn.responseWindow && !turn.bonusAttack && hero && hero.condition !== 'dead' && !turn.finished.includes(seat);
   }
 
   function turnAssignmentMarkup() {
@@ -1692,7 +1790,7 @@
   function bpOutcomeButtons(roll) {
     return ['失败', '伤口', '暴击'].map((label, value) =>
       '<button type="button" data-bp-settle="' + value + '" data-roll-id="' + escape(roll.id)
-      + '" data-seat="' + roll.seat + '">' + label + '</button>').join('');
+      + '" data-seat="' + roll.seat + '"' + (state.turn?.responseWindow ? ' disabled' : '') + '>' + label + '</button>').join('');
   }
 
   function powerPartCard(seat, roll) {
@@ -1719,7 +1817,7 @@
           + '<small>' + (projection ? '等待揭示本次部位牌' : '等待房主同步') + '</small>')
       + control + (currentResponse && state.board && (actor.role === 'host' || actor.seat === seat)
         ? '<button type="button" data-forced-context="bp" data-forced-seat="' + seat + '">结算非主动移动</button>' : '')
-      + outcome + '</aside>';
+      + (currentResponse ? responseOpenButton('bp') : '') + outcome + '</aside>';
   }
 
   function kratosReminder(hero) {
@@ -1818,7 +1916,7 @@
   }
 
   function canFinishTitanTurn(seat) {
-    return !attackInProgress(state.turn) && !state.board?.titanMoves?.[seat]
+    return !state.turn?.responseWindow && !state.turn?.actions?.hold && !attackInProgress(state.turn) && !state.board?.titanMoves?.[seat]
       && !state.board?.abilityTitanMoves?.[seat] && !state.turn?.aiSignatureId;
   }
 
@@ -1919,6 +2017,7 @@
 
   function canSubmitAttack(seat) {
     if (rollMode !== 'attack' && rollMode !== 'power') return true;
+    if (state.turn?.responseWindow) return false;
     if (state.heroes[seat]?.condition === 'dead' || state.turn?.aiSignatureId) return false;
     const readyForPower = (state.projection?.bpPending && state.bpSeat === seat) || canRevealBpWithPower(seat);
     if (state.turn?.bonusAttack) {
@@ -2038,7 +2137,7 @@
     const bonus = state.turn?.bonusAttack?.seat === seat;
     const finishLabel = bonus ? '结束奖励攻击' : '结束作战';
     const control = (type, label, value = '') => '<button type="button" data-titan-attack="' + type
-      + '" data-seat="' + seat + '" data-value="' + value + '">' + label + '</button>';
+      + '" data-seat="' + seat + '" data-value="' + value + '"' + (state.turn?.responseWindow ? ' disabled' : '') + '>' + label + '</button>';
     const controls = {
       rolled: '<small>核对精准、关键命中和重掷后确认结果。</small>'
         + control('attack-check', '确认有命中', 'hit') + control('attack-check', '确认完全失手', 'miss'),
@@ -2232,6 +2331,7 @@
   }
 
   function syncProjection() {
+    if (state?.turn?.responseWindow) return;
     if (actor?.role !== 'host' || state.closed || !state.board || (state.squad && state.squad.phase !== 'battle')) return;
     const authoritative = state.hostBattleDeck;
     if (authoritative && authoritative.revision !== hostDeckRevision) {
@@ -2675,7 +2775,10 @@
   function render() {
     if (traumaDialog.open) updateHitTraumaPreview();
     const { role } = actor;
-    if (role === 'viewer') return renderViewer();
+    if (role === 'viewer') {
+      renderTurnStatus();
+      return renderViewer();
+    }
     const seat = personalSeat();
     const host = role === 'host';
     const edit = role !== 'viewer' && !state.closed;
@@ -2784,7 +2887,12 @@
   }
 
   function send(action) {
-    const queued = { ...action, ...(state.squad && { battleNumber: state.squad.battleNumber }),
+    const turn = state.turn;
+    const startsTurn = turn?.phase === 'titans' && turn.seat === null && !turn.bonusAttack
+      && (['turn-take', 'turn-free', 'turn-spend', 'attack-declare'].includes(action.type)
+        || action.type === 'board-move' && !action.ability && !action.forced);
+    const queued = { ...action, ...(startsTurn && { turnStart: turn.finished.length }),
+      ...(state.squad && { battleNumber: state.squad.battleNumber }),
       ...(action.type !== 'room-projection' && { expectedRound: state.round }) };
     actions.push(queued);
     if (Object.hasOwn(cardActionLabels, action.type)) {
@@ -2864,6 +2972,20 @@
         const result = await submitAction(action, timing);
         const confirmedAt = timing ? performance.now() : 0;
         acceptUpdate(result);
+        if (action.type === 'response-open' && state.turn?.responseWindow?.id === action.id) {
+          turnWindow.open = false;
+          showResponsePanel();
+        }
+        if (action.type === 'response-close' && responseReturn?.id === action.windowId) {
+          if (responseReturn.source === 'ai') {
+            turnWindow.open = true;
+            turnWindow.querySelector('summary').focus({ preventScroll: true });
+          } else {
+            switchCombatView('dice');
+            content.querySelector('[data-response-open="bp"]')?.focus({ preventScroll: true });
+          }
+          responseReturn = null;
+        }
         if (action.type === 'board-forced-effect') roomBoard?.resolveForcedEffect(action.id);
         if (action.id === pendingAttackDeclaration) {
           pendingAttackDeclaration = null;
@@ -3017,7 +3139,18 @@
     if (state) { roomBoard?.render(); render(); }
   });
 
+  function openResponseFrom(event) {
+    const button = event.target.closest('[data-response-open]');
+    const source = button?.dataset.responseOpen;
+    const context = source && dice.responseSource(state, source);
+    if (!context || state.turn.responseWindow) return false;
+    send({ id: crypto.randomUUID(), type: 'response-open', source, context: context.key, round: state.round });
+    return true;
+  }
+  turnWindow.addEventListener('click', openResponseFrom);
+
   root.addEventListener('click', async event => {
+    if (openResponseFrom(event)) return;
     const boardLink = event.target.closest('a[href="#room-movement"]');
     if (boardLink && !combatTabs.hidden) {
       event.preventDefault();

@@ -18,7 +18,7 @@ export function forcedTitanMove(room, body) {
 export function canClaimTurn(room, seat) {
   const turn = room.turn;
   return turn?.phase === 'titans' && turn.seat === null && !turn.bonusAttack && room.heroes[seat]
-    && room.heroes[seat].condition !== 'dead' && !turn.finished.includes(seat);
+    && !turn.responseWindow && !turn.aiSignatureId && room.heroes[seat].condition !== 'dead' && !turn.finished.includes(seat);
 }
 
 export function claimTurn(room, seat) {
@@ -123,6 +123,40 @@ function confirmAiStep(room, actor, action) {
   throw new ApiError(409, '当前步骤、目标或指令技牌面已变化，请核对后继续。');
 }
 
+function finishTurn(room) {
+  const { turn, board } = room;
+  const seat = turn.seat;
+  turn.finished.push(seat);
+  turn.seat = null;
+  delete turn.actions;
+  if (board?.titanMoves) delete board.titanMoves[seat];
+  if (room.secondAbility?.seat === seat) delete room.secondAbility;
+}
+
+export function finishSpentTurn(room) {
+  const { turn, board } = room;
+  if (turn?.phase !== 'titans' || !Number.isInteger(turn.seat) || turn.responseWindow || turn.bonusAttack
+      || turn.aiSignatureId || turn.actions?.hold || board?.abilityTitanMoves?.[turn.seat]
+      || !turn.actions?.movementUsed || turn.actions.attack?.stage !== 'done') return;
+  finishTurn(room);
+}
+
+export function actionName(value) {
+  if (typeof value !== 'string') throw new ApiError(400, '请填写牌面能力名称。');
+  const label = value.normalize('NFKC').trim().replace(/\s+/g, ' ');
+  if (!label || label.length > 64) throw new ApiError(400, '请填写 1 至 64 个字符的能力名称。');
+  return { label, key: label.replace(/\s/g, '').toLowerCase() };
+}
+
+export function recordAbility(list, seat, value) {
+  const entry = actionName(value);
+  if (list.some(item => item.seat === seat && item.key === entry.key)) {
+    throw new ApiError(409, '该泰坦已在本次结算中使用同名能力。');
+  }
+  if (list.length >= 64) throw new ApiError(409, '本次能力记录已达上限。');
+  list.push({ seat, ...entry });
+}
+
 export function applyTurn(room, actor, action) {
   if (actor.role === 'viewer') throw new ApiError(403, '投屏只能查看回合。');
   const { turn, round } = room;
@@ -151,13 +185,11 @@ export function applyTurn(room, actor, action) {
     return;
   }
   if (type === 'turn-finish' && turn?.phase === 'titans' && turn.seat === seat) {
+    if (turn.actions?.hold) throw new ApiError(409, '请先处理已登记的牌面待办。');
     if (attackInProgress(turn) || (turn.actions && (room.board?.titanMoves?.[seat] || room.board?.abilityTitanMoves?.[seat])) || turn.aiSignatureId) {
       throw new ApiError(409, '请先结束正在结算的移动、作战或招牌技。');
     }
-    turn.finished.push(seat);
-    turn.seat = null;
-    delete turn.actions;
-    if (room.board?.titanMoves) delete room.board.titanMoves[seat];
+    finishTurn(room);
     return;
   }
   throw new ApiError(409, '该回合已被认领、已经结束，或当前是骇物轮次。');

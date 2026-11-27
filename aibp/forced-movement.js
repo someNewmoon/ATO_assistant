@@ -415,11 +415,12 @@
     }
 
     function pull() {
+      let lastStep;
       while (spent < amount && !deaths.has(target)) {
         const from = positions.get(target), at = positions.get(source);
         const approach = directionOptions(target, from, at, source, true);
         if (distance(from, target, at, source) === 1) {
-          const dir = pick(approach, "选择来源后退方向", target, from);
+          const [dir] = approach;
           if (!dir) break;
           let retreats = 0;
           for (; retreats < amount - spent; retreats++) {
@@ -439,7 +440,9 @@
           collide(target, from, blocked.type === "wall" ? "pull-wall:" + pointKey(from) : "pull-tile:" + blocked.index);
           notify("遇不毁障碍 · 沿边绕行", target, from);
         }
-        const dir = pick(options, "选择最短拖拽路线", target, from);
+        // Preserve the shortest legal route and alternate axes when both remain available.
+        const dir = lastStep ? options.find(step => Boolean(step.dc) !== Boolean(lastStep.dc)) || options[0]
+          : pick(options, "选择拖拽起始方向", target, from);
         if (!dir) {
           if (!pending && !invalid) notify("目标没有可用的拖拽路线", target, from);
           break;
@@ -448,6 +451,7 @@
         const blocked = blocker(target, from, to);
         if (blocked?.type === "fragile") collide(target, to, "pull:" + spent);
         move(target, to, "forced", targetPath);
+        lastStep = dir;
         spent++;
       }
     }

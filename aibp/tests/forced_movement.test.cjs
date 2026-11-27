@@ -121,6 +121,30 @@ test("diagonal apostle push chooses an opening axis once and consumes the approa
   }
 });
 
+test("diagonal pull asks only for the first direction and alternates along a shortest route", () => {
+  const state = room(point(10.5, 8.5), [point(5, 4)]);
+  const undecided = move(state, "pull", 9);
+  assert.equal(undecided.pending.type, "选择拖拽起始方向");
+  assert.deepEqual(undecided.pending.options.map(option => option.id), ["up", "right"]);
+  const paths = {
+    right: [point(6, 4), point(6, 5), point(7, 5), point(7, 6), point(8, 6), point(8, 7), point(9, 7), point(9, 8)],
+    up: [point(5, 5), point(6, 5), point(6, 6), point(7, 6), point(7, 7), point(8, 7), point(8, 8), point(9, 8)],
+  };
+  for (const [direction, approach] of Object.entries(paths)) {
+    const result = move(state, "pull", 9, { choices: [direction] });
+    assert.equal(result.pending, undefined);
+    assert.equal(result.decisions.length, 1);
+    assert.equal(result.used, 9);
+    assert.deepEqual(result.targetPath, [point(5, 4), ...approach, point(10, 8)]);
+    assert.deepEqual(result.sourcePath.slice(1), [point(11.5, 8.5)]);
+  }
+
+  const occupied = room(point(10.5, 8.5), [point(5, 4), point(7, 5)]);
+  const landing = move(occupied, "pull", 3, { choices: ["right"] });
+  assert.equal(landing.pending.type, "移位");
+  assert.equal(landing.pending.model, 1);
+});
+
 test("pull goes around a cliff and moves the source only after contact", () => {
   const state = room(point(9.5, 7.5), [point(6, 7)], [tile("Cliff O", 7.5, 7.5)]);
   const plan = move(state, "pull", 2);

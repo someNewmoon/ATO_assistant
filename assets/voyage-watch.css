@@ -96,20 +96,6 @@ body[data-cycle="c1"] #appShell > header.topbar:has(.voyage-journal) .day-card {
   border-radius: 3px;
 }
 
-#appShell .voyage-scene-picker {
-  display: inline-flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 4px 8px;
-  font-size: 12px;
-  color: var(--muted);
-}
-
-#appShell .voyage-scene-picker select {
-  width: auto;
-  min-height: 32px;
-}
-
 #appShell .voyage-chronicle {
   margin-bottom: 14px;
   padding: 10px 14px;
@@ -261,7 +247,7 @@ body[data-cycle="c1"] #appShell .voyage-flow .flow-step-footer {
   border-top-color: #cbbfa8;
 }
 
-body[data-cycle="c1"] #appShell :is(.voyage-flow, .voyage-chronicle, .voyage-scene-picker, .topbar) :focus-visible {
+body[data-cycle="c1"] #appShell :is(.voyage-flow, .voyage-chronicle, .topbar) :focus-visible {
   outline: 2px solid #ad7428;
   outline-offset: 2px;
 }

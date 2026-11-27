@@ -2751,7 +2751,7 @@
   <!-- Mobile composition is enabled only by the installed APK in portrait. -->
   <link rel="stylesheet" href="./assets/mobile/common.css?v=20261028-apk-portrait1">
   <link rel="stylesheet" href="./assets/mobile/dashboard.css?v=20261028-apk-portrait1">
-  <link rel="stylesheet" href="./assets/voyage-watch.css?v=2">
+  <link rel="stylesheet" href="./assets/voyage-watch.css?v=3">
   <script src="./assets/mobile/layout.js?v=20261028-apk-portrait1" defer></script>
   <script src="./assets/mobile/dashboard.js?v=20261028-apk-portrait1" defer></script>
 </head>
@@ -2823,14 +2823,6 @@
         <a class="record-card-link" href="./aibp/trauma" data-online-trauma hidden>创伤牌库</a>
         <a class="record-card-link" href="./aibp/squads" data-online-squads hidden><span class="nav-icon" aria-hidden="true" style="--nav-icon-w:18px;--nav-icon-h:18px;--icon-src:url(../assets/icons/argonauts.svg?v=apk-ui-a72da92bdf63)"></span>联机小队</a>
       </nav>
-      <label class="voyage-scene-picker" data-voyage-watch>
-        日志场景
-        <select id="voyageScene" data-dashboard-readonly-allowed>
-          <option value="dusk">暮色灯火</option>
-          <option value="storm">雨夜值更</option>
-          <option value="dawn">晨光入湾</option>
-        </select>
-      </label>
       <label class="title-cycle-control">
         当前 Cycle
         <select id="cycleSelect"></select>
@@ -7778,14 +7770,27 @@
       selectDay(voyageChronicleDay);
     }
 
+    function voyageSceneForDay(accountId, profileId, day) {
+      const key = JSON.stringify([accountId, profileId, "c1", String(day)]);
+      // Derive a draw from the save identity and campaign date so every view agrees.
+      let hash = 2166136261;
+      for (let index = 0; index < key.length; index++) {
+        hash = Math.imul(hash ^ key.charCodeAt(index), 16777619);
+      }
+      return ["dusk", "storm", "dawn"][(hash >>> 0) % 3];
+    }
+
     function renderVoyageWatch(stepId) {
       if (currentCycleConfig().id !== "c1") {
+        delete document.body.dataset.voyageScene;
         voyageWatchStep = null;
         voyageWatchAnimation?.cancel();
         return;
       }
       const profile = archive.activeProfileId;
       const day = state.day;
+      const scene = voyageSceneForDay(sessionUser?.id || "", profile, day);
+      if (document.body.dataset.voyageScene !== scene) document.body.dataset.voyageScene = scene;
       const previous = voyageWatchStep;
       const settled = campaignStorageAvailable && !elements.appShell.hidden;
       const changed = settled && previous?.session === campaignSessionEpoch
@@ -7814,10 +7819,6 @@
       }
       renderVoyageChronicle();
     }
-
-    document.getElementById("voyageScene").addEventListener("change", event => {
-      document.body.dataset.voyageScene = event.currentTarget.value;
-    });
 
     function syncCampaignLog() {
       const input = elements.notesInput;

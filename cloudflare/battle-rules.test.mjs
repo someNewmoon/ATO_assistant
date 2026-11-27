@@ -1371,14 +1371,22 @@ test('响应窗口绑定同张牌的具体步骤，保留归属并允许不同�
   r.board = api.setupRoomBoard({ apostle: 'HERMESIAN_PURSUER', level: 1 }, 2);
   r.board.map.terrain = [];
   const act = (actor, type, fields = {}) => reducer.apply(r, actor, { type, round: r.round, phase: r.turn.phase, ...fields });
-  for (const source of ['ai', 'bp']) {
-    r.turn = source === 'ai' ? { phase: 'apostle', seat: null, finished: [], aiGuide: 'resolve', aiTarget: 0 }
-      : { phase: 'titans', seat: 0, finished: [], actions: { movementUsed: true,
-        attack: { stage: 'power', roll: 'attack', powerRoll: 'power' } } };
-    r.projection = source === 'ai' ? { aiPending: true, ai: { src: 'ai.jpg' } } : { bpPending: true, bp: { src: 'bp.jpg' } };
+  const cases = [
+    { source: 'ai', turn: { phase: 'apostle', seat: null, finished: [], aiGuide: 'resolve', aiTarget: 0 },
+      projection: { aiPending: true, ai: { src: 'ai.jpg' } }, label: '指令技响应' },
+    { source: 'ai', turn: { phase: 'titans', seat: null, finished: [], aiGuide: 'signature-resolve', aiSignatureId: 'signature-1', aiTarget: 0 },
+      projection: { signature: 'signature.jpg' }, label: '招牌技响应' },
+    { source: 'bp', turn: { phase: 'titans', seat: 0, finished: [], actions: { movementUsed: true,
+      attack: { stage: 'power', roll: 'attack', powerRoll: 'power' } } },
+      projection: { bpPending: true, bp: { src: 'bp.jpg' } }, label: '部位牌响应' },
+  ];
+  for (const { source, turn, projection, label } of cases) {
+    r.turn = turn;
+    r.projection = projection;
     r.battleDeck = { revision: 3, bpSeat: source === 'bp' ? 0 : undefined };
     const before = structuredClone(r.turn);
     const context = dice.responseSource(r, source);
+    assert.equal(context.label, label);
     const open = { id: 'response-1', source, context: context.key };
     assert.throws(() => act(host, 'response-open', { ...open, context: 'stale' }), /牌面步骤/);
     assert.throws(() => act(member, 'response-open', open), /当前结算者/);

@@ -438,8 +438,29 @@
   dock.hidden = true;
   const toolLinks = document.createElement('div');
   toolLinks.className = 'room-tool-actions';
+  toolLinks.id = 'room-tool-actions';
   toolLinks.setAttribute('role', 'group');
   toolLinks.setAttribute('aria-label', '战斗工具');
+  const mobileTools = document.createElement('button');
+  mobileTools.type = 'button';
+  mobileTools.className = 'room-mobile-tools';
+  mobileTools.textContent = '工具';
+  mobileTools.setAttribute('aria-controls', toolLinks.id);
+  function setMobileToolsOpen(open) {
+    mobileTools.setAttribute('aria-expanded', String(open));
+    toolLinks.classList.toggle('is-mobile-open', open);
+  }
+  setMobileToolsOpen(false);
+  mobileTools.addEventListener('click', () => setMobileToolsOpen(mobileTools.getAttribute('aria-expanded') !== 'true'));
+  document.addEventListener('click', event => {
+    if (!mobileTools.contains(event.target) && !toolLinks.contains(event.target)) setMobileToolsOpen(false);
+  });
+  dock.addEventListener('keydown', event => {
+    if (event.key !== 'Escape' || mobileTools.getAttribute('aria-expanded') !== 'true') return;
+    event.preventDefault();
+    setMobileToolsOpen(false);
+    mobileTools.focus({ preventScroll: true });
+  });
   const toolsDialog = document.createElement('dialog');
   toolsDialog.className = 'room-tool-sheet';
   toolsDialog.id = 'room-tool-sheet';
@@ -453,17 +474,25 @@
   let toolsMarkup;
 
   function positionTools() {
-    if (!toolsDialog.open) return;
+    if (!toolsDialog.open && !turnWindow.open) return;
     const { bottom, right } = dock.getBoundingClientRect();
-    toolsDialog.style.setProperty('--room-tools-top', Math.ceil(bottom) + 'px');
-    toolsDialog.style.setProperty('--room-tools-right', Math.max(8, document.documentElement.clientWidth - right) + 'px');
+    const top = Math.ceil(bottom) + 'px';
+    if (turnWindow.open) turnBar.style.setProperty('--room-turn-top', top);
+    if (toolsDialog.open) {
+      toolsDialog.style.setProperty('--room-tools-top', top);
+      toolsDialog.style.setProperty('--room-tools-right', Math.max(8, document.documentElement.clientWidth - right) + 'px');
+    }
   }
 
   function closeTools(restoreFocus = false) {
     if (!toolsDialog.open) return;
     toolsDialog.close();
     activeToolButton?.setAttribute('aria-expanded', 'false');
-    if (restoreFocus) activeToolButton?.focus({ preventScroll: true });
+    if (restoreFocus) {
+      const trigger = activeToolButton?.getClientRects().length ? activeToolButton
+        : mobileTools.getClientRects().length ? mobileTools : jump;
+      trigger.focus({ preventScroll: true });
+    }
     activeTool = null;
     activeToolButton = null;
     toolsMarkup = null;
@@ -487,7 +516,8 @@
       activeToolButton = button;
       button.setAttribute('aria-expanded', 'true');
       activeTool = key;
-      if (key === 'assign') turnWindow.open = false;
+      setMobileToolsOpen(false);
+      turnWindow.open = false;
       toolsDialog.querySelector('h3').textContent = toolNames[key];
       toolsStatus.textContent = '';
       renderTools();
@@ -533,7 +563,7 @@
   personalTurnButton.type = 'button';
   personalTurnButton.className = 'room-personal-turn-action';
   personalTurnButton.hidden = true;
-  quick.append(personalTurnButton);
+  quick.append(personalTurnButton, mobileTools);
   let pendingTurnControl;
 
   function personalTurnAction() {
@@ -677,7 +707,7 @@
   turnStatus.className = 'room-persistent-turn';
   turnStatus.setAttribute('role', 'status');
   turnStatus.hidden = true;
-  dock.append(turnStatus);
+  dock.prepend(turnStatus);
   const responsePanel = document.createElement('section');
   responsePanel.className = 'room-response-panel';
   responsePanel.id = 'room-response-panel';
@@ -706,33 +736,68 @@
     responsePanel.focus({ preventScroll: true });
   }
 
+  function turnStatusMarkup(turn) {
+    const response = turn?.responseWindow;
+    if (response) return { title: '响应窗口开放', detail: response.label };
+    if (!turn) return { title: '等待房主设置轮次' };
+
+    const activeSeat = turn.bonusAttack?.seat ?? turn.seat;
+    const hero = state.heroes[activeSeat];
+    const mine = hero && activeSeat === personalSeat();
+    const personalPerspective = actor.role === 'player' || hostPersonalView;
+    const ownFinished = personalPerspective && turn.finished.includes(personalSeat()) && !mine;
+    const remaining = state.heroes.filter((item, seat) => item.condition !== 'dead'
+      && seat !== activeSeat && !turn.finished.includes(seat)).map(item => item.name);
+    const signature = aiGuide.isInsertedSignature(turn.aiGuide);
+    if (turn.phase === 'apostle' || signature) {
+      const step = aiGuide.steps[aiGuide.stepFor(turn.aiGuide)]?.[0];
+      const target = state.heroes[turn.aiTarget]?.name;
+      return { title: signature ? '招牌技结算中' : '骇物轮', detail: [step || '等待结算', target && '目标 ' + target].filter(Boolean).join(' · ') };
+    }
+    if (!hero) {
+      const detail = remaining.length ? '待行动 · ' + remaining.join('、') : '等待房主进入骇物轮';
+      return { title: ownFinished ? '你已结束' : !remaining.length ? '全员已结束'
+        : !turn.finished.length ? '等待首位泰坦行动' : '等待队友行动', detail };
+    }
+
+    const actions = turn.actions;
+    const attack = turn.bonusAttack || actions?.attack;
+    const moving = state.board?.titanMoves?.[activeSeat] || state.board?.abilityTitanMoves?.[activeSeat];
+    const activity = attack && attack.stage !== 'done' ? (attack.stage === 'select' ? '待宣告攻击' : attackStageLabel(attack.stage))
+      : moving ? '移动进行中' : actions?.hold ? '等待结算牌面效果' : '等待选择行动';
+    const tags = actions && !turn.bonusAttack ? [
+      '移动' + (moving ? '进行中' : actions.movementUsed ? '已用' : '可用'),
+      '作战' + (actions.attack?.stage === 'done' ? '已用' : actions.attack ? '进行中' : '可用'),
+    ] : [];
+    const title = ownFinished ? '你已结束' : turn.bonusAttack ? '奖励攻击'
+      : mine && personalPerspective ? '轮到你' : personalPerspective ? '队友回合' : hero.name;
+    const actingHero = ownFinished ? '队友回合 · ' + hero.name
+      : title === hero.name || title === '轮到你' ? '' : hero.name;
+    const detail = [actingHero, activity].filter(Boolean).join(' · ');
+    return { title, detail, tags, mine };
+  }
+
   function renderTurnStatus() {
     const turn = state.turn;
     const response = turn?.responseWindow;
-    const activeSeat = turn?.bonusAttack?.seat ?? turn?.seat;
-    const mine = activeSeat === personalSeat();
-    const hero = state.heroes[activeSeat];
-    const actions = turn?.actions;
-    const attack = turn?.bonusAttack || actions?.attack;
-    const moving = state.board?.titanMoves?.[activeSeat] || state.board?.abilityTitanMoves?.[activeSeat];
-    const everyoneFinished = turn?.phase === 'titans'
-      && state.heroes.every((hero, seat) => hero.condition === 'dead' || turn.finished.includes(seat));
-    const activity = attack && attack.stage !== 'done' ? (attack.stage === 'select' ? '待宣告' : attackStageLabel(attack.stage))
-      : moving ? '移动结算中' : actions?.hold ? '牌面待办待结算' : '';
-    const ordinary = actions && '移动' + (actions.movementUsed ? '已用' : moving ? '进行中' : '可用')
-      + ' · 作战' + (actions.attack?.stage === 'done' ? '已用' : actions.attack ? '进行中' : '可用');
-    const status = response ? '响应窗口开放 · ' + response.label
-      : !turn ? '等待房主设置轮次' : hero
-        ? (turn.bonusAttack ? '奖励攻击 · ' + hero.name : mine ? '你的回合 · ' + hero.name
-          : (actor.role === 'player' ? '队友回合 · ' : '泰坦轮 · ') + hero.name)
-          + (activity ? ' · ' + activity : '') + (ordinary && !turn.bonusAttack ? ' · ' + ordinary : '')
-        : turn.phase === 'apostle' ? '骇物轮 · ' + (turn.aiTarget == null ? '等待结算' : '目标 ' + state.heroes[turn.aiTarget]?.name)
-          : everyoneFinished ? '泰坦轮 · 全员已结束' : turn.finished.length ? '泰坦轮 · 等待下一位泰坦行动' : '泰坦轮 · 等待首位泰坦行动';
+    const status = turnStatusMarkup(turn);
     turnStatus.hidden = state.closed;
-    turnStatus.classList.toggle('is-own-turn', Boolean(hero && mine && !response));
+    turnStatus.classList.toggle('is-own-turn', Boolean(status.mine));
+    turnStatus.classList.toggle('is-response', Boolean(response));
     const editable = actor.role !== 'viewer' && !state.closed;
-    renderMarkup(turnStatus, '<span>' + escape(status) + '</span>'
-      + (response && editable ? '<button type="button" data-response-show>查看响应</button>' : ''));
+    const activeSeat = turn?.bonusAttack?.seat ?? turn?.seat;
+    const roster = actor.role === 'host' && !hostPersonalView && turn?.phase === 'titans'
+      ? '<ul class="room-turn-roster" aria-label="泰坦行动状态">' + state.heroes.map((hero, seat) => {
+        const current = activeSeat === seat;
+        const phase = hero.condition === 'dead' ? '离场' : current ? '行动中' : turn.finished.includes(seat) ? '已结束' : '待行动';
+        return '<li' + (current ? ' aria-current="true"' : '') + ' title="' + escape(hero.name + ' · ' + phase) + '">'
+          + rollAvatar(seat) + '<span>' + escape(phase) + '</span></li>';
+      }).join('') + '</ul>' : '';
+    renderMarkup(turnStatus, '<div class="room-turn-caption"><strong>' + escape(status.title) + '</strong>'
+      + (status.detail ? '<span>' + escape(status.detail) + '</span>' : '') + '</div>'
+      + (status.tags?.length ? '<div class="room-turn-action-tags" aria-label="行动余量">'
+        + status.tags.map(tag => '<span>' + escape(tag) + '</span>').join('') + '</div>' : '')
+      + (response && editable ? '<button type="button" data-response-show aria-controls="room-response-panel">查看响应</button>' : roster));
     responsePanel.hidden = !editable || !response;
     if (!response || !editable) return;
     responseHeading.textContent = response.label + ' · 响应窗口';
@@ -829,10 +894,14 @@
   jump.textContent = '轮次';
   turnWindow.id = 'room-style-round-window';
   jump.setAttribute('aria-controls', turnWindow.id);
-  const syncRound = () => jump.setAttribute('aria-expanded', String(turnWindow.open));
+  const syncRound = () => {
+    jump.setAttribute('aria-expanded', String(turnWindow.open));
+    if (turnWindow.open) positionTools();
+  };
   turnWindow.addEventListener('toggle', syncRound);
   syncRound();
   jump.addEventListener('click', () => {
+    closeTools();
     turnWindow.open = !turnWindow.open;
     syncRound();
     if (turnWindow.open) turnWindow.querySelector('summary')?.focus({ preventScroll: true });

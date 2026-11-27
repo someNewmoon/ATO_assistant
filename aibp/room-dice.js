@@ -56,9 +56,9 @@
     if (kind === 'ai') {
       if (turn.bonusAttack) return null;
       const signature = turn.aiSignatureId || turn.aiGuide === 'hope-resolve';
-      const face = signature ? projection?.signature : projection?.aiPending && turn.phase === 'apostle' && projection.ai;
-      return face?.src ? { kind, seat: turn.aiTarget, label: signature ? '招牌技响应' : '指令技响应',
-        key: JSON.stringify([room.round, deck, face.src, turn.aiGuide, turn.aiSignatureId, turn.aiTarget]) } : null;
+      const src = signature ? projection?.signature : projection?.aiPending && turn.phase === 'apostle' && projection.ai?.src;
+      return src ? { kind, seat: turn.aiTarget, label: signature ? '招牌技响应' : '指令技响应',
+        key: JSON.stringify([room.round, deck, src, turn.aiGuide, turn.aiSignatureId, turn.aiTarget]) } : null;
     }
     if (kind !== 'bp') return null;
     const attack = turn.bonusAttack || turn.actions?.attack;

@@ -105,7 +105,7 @@ main:has(> .room-style-dock:not([hidden])) > #viewer { scroll-margin-top: max(4.
 .room-style-preview .room-turn-bar {
   position: fixed;
   z-index: 33;
-  inset: calc(max(.25rem, env(safe-area-inset-top)) + var(--round-nav-height, 3.2rem) + .5rem)
+  inset: calc(var(--room-turn-top, max(.25rem, env(safe-area-inset-top)) + var(--round-nav-height, 3.2rem)) + .5rem)
     max(.75rem, env(safe-area-inset-right)) auto auto;
   width: min(33rem, calc(100vw - 1.5rem));
   max-width: none !important;
@@ -120,7 +120,7 @@ main:has(> .room-style-dock:not([hidden])) > #viewer { scroll-margin-top: max(4.
   box-shadow: 0 .5rem 1.7rem #39271933;
 }
 .room-style-preview .room-turn-window[open] {
-  max-height: min(64dvh, calc(100dvh - var(--round-nav-height, 3.2rem) - 2rem));
+  max-height: min(64dvh, calc(100dvh - var(--room-turn-top, 3.2rem) - 1rem));
   overscroll-behavior: contain;
 }
 .room-style-preview .room-turn-window > summary {
@@ -530,16 +530,97 @@ body:has(.room-style-preview:not([hidden])) .title-actions .return-main-link { m
 
 .room-persistent-turn {
   display: flex;
+  flex: 1 0 100%;
   flex-wrap: wrap;
+  min-width: 0;
   align-items: center;
-  justify-content: space-between;
-  gap: .3rem;
-  padding: .25rem .5rem;
-  border-top: 1px solid #8b6e49;
-  font-size: .82rem;
-  line-height: 1.35;
+  gap: .3rem .6rem;
+  padding: .2rem .25rem .35rem;
+  border-bottom: 1px solid #b792655e;
+  font-size: .83rem;
+  line-height: 1.33;
 }
-.room-persistent-turn.is-own-turn { font-weight: 650; }
+.room-persistent-turn[hidden] { display: none; }
+.room-turn-caption {
+  display: flex;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  min-width: 0;
+  align-items: baseline;
+  gap: .1rem .6rem;
+  overflow-wrap: anywhere;
+}
+.room-turn-caption > strong {
+  color: #ffe6ba;
+  font-size: 1.04rem;
+}
+.room-turn-caption > span { color: #fff5e4; }
+.room-persistent-turn.is-response .room-turn-caption > strong { color: #ffe3a3; }
+.room-turn-action-tags {
+  display: flex;
+  flex: none;
+  gap: .25rem;
+}
+.room-turn-action-tags > span {
+  padding: .12rem .38rem;
+  border: 1px solid #b7926588;
+  border-radius: 2px;
+  color: #fff5e4;
+  background: #17150f55;
+  white-space: nowrap;
+}
+.room-tool-dock.room-style-dock .room-persistent-turn > button[data-response-show] {
+  min-height: 30px;
+  padding: .2rem .55rem;
+  border: 1px solid #e1be82;
+  border-radius: 2px;
+  background: #ffe8ba;
+  color: #392713;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.room-tool-dock.room-style-dock .room-persistent-turn > button[data-response-show]:hover { background: #fff4db; }
+.room-turn-roster {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .25rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.room-turn-roster > li {
+  display: flex;
+  align-items: center;
+  gap: .22rem;
+  padding: .12rem .3rem;
+  border: 1px solid #a5886055;
+  color: #fff5e4;
+  white-space: nowrap;
+  font-size: .72rem;
+}
+.room-turn-roster > li[aria-current="true"] { border-color: #e9c47e; background: #a9834748; }
+.room-turn-roster .roll-hero-avatar { width: 1.18rem; height: 1.18rem; }
+.room-tool-dock.room-style-dock .room-primary-nav .room-mobile-tools { display: none; }
+@media (max-width: 690px) {
+  .room-tool-dock.room-style-dock .room-primary-nav .room-mobile-tools {
+    display: inline-flex;
+    border-color: var(--folio-rule);
+  }
+  .room-tool-dock.room-style-dock .room-primary-nav :is(a, button) { padding-inline: .32rem; }
+  .room-tool-dock.room-style-dock .room-tool-actions {
+    position: absolute;
+    z-index: 1;
+    inset: calc(100% + .3rem) 0 auto auto;
+    max-width: 100%;
+    padding: .35rem;
+    border: 1px solid var(--folio-rule);
+    background: var(--folio-nav);
+  }
+  .room-tool-dock.room-style-dock .room-tool-actions:not(.is-mobile-open),
+  .room-turn-roster { display: none; }
+  .room-turn-caption > strong { font-size: 1rem; }
+  .room-turn-action-tags > span { padding: .08rem .3rem; }
+}
 @media (prefers-reduced-motion: no-preference) {
   .room-persistent-turn.is-own-turn { animation: room-turn-arrival 1.15s ease-out; }
 }

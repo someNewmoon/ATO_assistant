@@ -2751,7 +2751,7 @@
   <!-- Mobile composition is enabled only by the installed APK in portrait. -->
   <link rel="stylesheet" href="./assets/mobile/common.css?v=20261028-apk-portrait1">
   <link rel="stylesheet" href="./assets/mobile/dashboard.css?v=20261028-apk-portrait1">
-  <link rel="stylesheet" href="./assets/voyage-watch.css?v=1">
+  <link rel="stylesheet" href="./assets/voyage-watch.css?v=2">
   <script src="./assets/mobile/layout.js?v=20261028-apk-portrait1" defer></script>
   <script src="./assets/mobile/dashboard.js?v=20261028-apk-portrait1" defer></script>
 </head>
@@ -2846,7 +2846,7 @@
       <summary>远征纪事</summary>
       <div id="voyageChronicleDays"></div>
       <ul id="voyageChronicleEntries" aria-live="polite"></ul>
-      <p id="voyageChronicleEmpty" hidden>航海日志还没有带日期的战役记录。</p>
+      <p id="voyageChronicleEmpty" hidden>这一卷的纪事还未落笔。</p>
     </details>
 
     <div class="grid">
@@ -7659,6 +7659,62 @@
     let voyageChronicleCache;
     let voyageChronicleDay;
 
+    function describeVoyageMoment(source, record) {
+      // Draw the chronicle from saved events. Raw fields remain in the campaign log.
+      const moment = (line, priority, kind) => ({ line, priority, kind });
+      if (/宿敌与阿尔戈号相遇|阿尔戈号[^；。]*与宿敌相遇/u.test(record)) {
+        return moment("阿尔戈号遇上了宿敌。", 6);
+      }
+      if (source === "结构科技" && /^已(?:手动|自动)处理；/u.test(record)) {
+        const [, effect] = record.split("；");
+        const hero = /(?:^|；)目标：([^；]+)/u.exec(record)?.[1];
+        if (/^阿尔戈英雄(?:寝园|陵墓)$/u.test(effect) && hero) {
+          return moment(`我们记下了${hero}在阿尔戈英雄陵墓的进展。`, 5);
+        }
+        if (effect && /\p{Script=Han}/u.test(effect) && !effect.includes("→")) {
+          return moment(`我们处理了「${effect}」的效果。`, 4);
+        }
+      }
+      if (source === "AIBP") {
+        const bossName = name => name.replace(/^(HEKATON|LABYRINTHAUROS|HERMESIAN[ _]PURSUER|ALPHA[ _]TEMENOS)(?=\s|$)/u, key => ({
+          HEKATON: "百手巨魔",
+          LABYRINTHAUROS: "迷宫机牛",
+          HERMESIAN_PURSUER: "赫尔墨斯追击者",
+          ALPHA_TEMENOS: "领首卫域",
+        })[key.replace(" ", "_")]);
+        const foe = /^战斗对象：(.+)$/u.exec(record)?.[1];
+        if (foe) return moment(`我们为迎战${bossName(foe)}做了准备。`, 3, "battle-prep");
+        return null;
+      }
+      if (source === "故事" && record.startsWith("阅读 ")) {
+        const title = record.split(" · ").at(-1);
+        if (title && title !== record) return moment(`我们翻阅了「${title}」。`, 2);
+      }
+      const manufactured = /(?:^|；)装备库存 \/ ([^：；/]+?) \/ 制造总数：(\d+|空) → (\d+)(?:；|$)/u.exec(record);
+      if (manufactured && Number(manufactured[2]) > (Number(manufactured[1]) || 0)) {
+        return moment(`船上的工匠制成了「${manufactured[1]}」。`, 4);
+      }
+      const unlocked = /(?:^|；)已解锁科技：添加 ([^；]+)/u.exec(record)?.[1];
+      if (unlocked) return moment(`我们解锁了「${unlocked}」。`, 4);
+      const memory = /(?:^|；)英雄 \/ ([^；/]+?) \/ (?:旧忆|回忆)进度 \/ ([^：；/]+)：(\d+|空) → (\d+)(?:；|$)/u.exec(record);
+      if (memory && Number(memory[4]) > (Number(memory[3]) || 0)) {
+        return moment(`${memory[1]}在「${memory[2]}」的旧忆中又向前走了一步。`, 4);
+      }
+      const memoryMark = /(?:^|；)英雄 \/ ([^；/]+?) \/ (?:旧忆|回忆)节点 \/ ([^：；/]+?) \/ [^：；/]+：(?:空|未标记) → 已标记(?:；|$)/u.exec(record);
+      if (memoryMark) return moment(`${memoryMark[1]}在「${memoryMark[2]}」里记下了一处旧忆节点。`, 3);
+
+      const cargo = /(?:^|；)资源 \/ ([^：；/]*\p{Script=Han}[^：；/]*?)：(\d+|空) → (\d+|空)(?:；|$)/u.exec(record);
+      if (cargo) {
+        const delta = (Number(cargo[3]) || 0) - (Number(cargo[2]) || 0);
+        if (delta > 0) return moment(`我们把 ${delta} 份${cargo[1]}收入船舱。`, 2);
+        if (delta < 0) return moment(`船上的${cargo[1]}少了 ${-delta} 份。`, 2);
+      }
+      if (/(?:^|；)loadouts \//u.test(record)) return moment("船上重新整理了出战配装。", 1);
+      if (source === "英雄") return moment("这一天的英雄记录有了补记。", 0);
+      if (source.includes("记录表")) return moment("这一天的船上记录有了补记。", 0);
+      return null;
+    }
+
     function renderVoyageChronicle() {
       if (currentCycleConfig().id !== "c1") return;
       const notes = typeof state.notes === "string" ? state.notes : "";
@@ -7675,7 +7731,12 @@
         const date = Number(match[1]);
         if (!days.has(date)) days.set(date, []);
         const entries = days.get(date);
-        if (entries.length < 4) entries.push({ source: match[2], text: match[3] });
+        const moment = describeVoyageMoment(match[2], match[3]);
+        if (moment && !entries.some(entry => entry.line === moment.line || (moment.kind && entry.kind === moment.kind))) {
+          entries.push(moment);
+          entries.sort((left, right) => right.priority - left.priority);
+          if (entries.length > 4) entries.pop();
+        }
       }
       const recent = [...days.keys()].sort((left, right) => right - left).slice(0, 3);
       const chooser = document.getElementById("voyageChronicleDays");
@@ -7683,14 +7744,19 @@
       document.getElementById("voyageChronicleEmpty").hidden = recent.length > 0;
       if (!recent.includes(voyageChronicleDay)) voyageChronicleDay = undefined;
 
+      const quietDay = "这一天留有战役记录，详情可在战役日志查阅。";
+      const entriesFor = date => {
+        const entries = days.get(date);
+        return entries?.length ? entries.filter((entry, index) => entry.priority > 0 || index === 0).map(entry => entry.line) : [quietDay];
+      };
+
       function selectDay(date) {
         voyageChronicleDay = date;
         for (const button of chooser.children) button.setAttribute("aria-pressed", String(Number(button.value) === date));
-        list.replaceChildren(...(days.get(date) || []).map(entry => {
+        const lines = date === undefined ? [] : entriesFor(date);
+        list.replaceChildren(...(lines.length > 1 ? lines.slice(1) : lines).map(line => {
           const item = document.createElement("li");
-          const source = document.createElement("strong");
-          source.textContent = entry.source;
-          item.append(source, entry.text);
+          item.textContent = line;
           return item;
         }));
       }
@@ -7704,7 +7770,7 @@
         const label = document.createElement("strong");
         label.textContent = `第 ${date} 日`;
         const preview = document.createElement("span");
-        preview.textContent = days.get(date)[0].text;
+        preview.textContent = entriesFor(date)[0];
         button.append(label, preview);
         button.addEventListener("click", () => selectDay(voyageChronicleDay === date ? undefined : date));
         return button;

@@ -1386,9 +1386,20 @@
     const markers = Object.entries(titanMarkerNames).map(([key, label]) => '<div data-titan-marker="' + key + '">'
       + '<span class="room-titan-marker-name">' + label + '</span>'
       + buttons('titan-marker', key, hero.markers?.[key] ?? 0, seat, label, 99, editable) + '</div>').join('');
-    const condition = editable ? '<select data-condition="' + seat + '" aria-label="' + escape(hero.name) + '的泰坦状态">'
+    const conditionField = editable ? '<select data-condition="' + seat + '" aria-label="' + escape(hero.name) + '的泰坦状态">'
       + Object.entries(conditionNames).map(([key, label]) => '<option value="' + key + '"' + (key === hero.condition ? ' selected' : '') + '>' + label + '</option>').join('')
       + '</select>' : '<small>' + conditionNames[hero.condition] + '</small>';
+    const conditionPaths = {
+      standing: 'M8 6v5m-3-3 3-2 3 2M6 14l2-3 2 3',
+      down: 'M5 10h6l3 2M8 10l2 3M2 14h12',
+      rising: 'M6 7l3 3-3 2-1 2m4-4 3 1m0-7V1m-2 2 2-2 2 2',
+      dead: 'M5 11H3V6a5 5 0 0 1 10 0v5h-2v3H5zM6 8h.1m3.9 0h.1M8 12v2',
+    };
+    const conditionKey = Object.hasOwn(conditionNames, hero.condition) ? hero.condition : 'standing';
+    const condition = '<span class="room-titan-condition" data-titan-condition="' + conditionKey + '">'
+      + '<svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="' + conditionPaths[conditionKey] + '"/>'
+      + ({ standing: '<circle cx="8" cy="3.2" r="1.3"/>', down: '<circle cx="3.1" cy="9" r="1.3"/>',
+        rising: '<circle cx="5" cy="4.6" r="1.3"/>' }[conditionKey] || '') + '</svg>' + conditionField + '</span>';
     const last = state.rolls.find(roll => roll.seat === seat);
     const summary = last && (!own || !editable) ? '<p class="battle-room-result" data-dice-summary="' + escape(last.id) + '">最近一次掷骰 · ' + rollSummary(last) + '</p>' : '';
     const hasExhausted = hero.gear.some(item => findGearSlot(item, 'exhausted') >= 0)
@@ -1429,8 +1440,8 @@
       + avatar + '<div><h3>' + escape(hero.name) + '</h3><small>' + escape(hero.player || '待认领') + '</small></div></div>'
       + (own ? '' : titanImage) + '<div class="battle-room-titan-status"><span>' + titan + '</span>' + condition + '</div></header>'
       + '<section class="room-hero-status"' + (own ? ' id="room-status"' : '') + '><h4>状态</h4>'
-      + '<div class="battle-room-stats" role="group" aria-label="三曲盘">' + stats + '</div>'
-      + '<div class="battle-room-stats room-titan-markers" role="group" aria-label="泰坦状态标记">' + markers + '</div>'
+      + '<div class="room-status-counters"><div class="battle-room-stats" role="group" aria-label="三曲盘">' + stats + '</div>'
+      + '<div class="battle-room-stats room-titan-markers" role="group" aria-label="泰坦状态标记">'  + markers + '</div></div>'
       + traumaControls(hero, seat, editable) + '</section>'
       + '<section class="room-card-groups"' + (own ? ' id="room-equipment"' : '') + '><div class="room-equipment-head"><h4>'
       + (own ? '战斗配装' : '战斗卡牌') + '</h4><div class="room-loadout-actions">' + readyGear + exportButton
@@ -1887,13 +1898,20 @@
       && (activeAttackFor(seat)?.roll === prior.id || parentRoll === prior.id || state.rolls.find(roll => roll.seat === seat)?.id === prior.id) ? prior : null;
   }
 
+  function canRevealBpWithPower(seat) {
+    const attack = activeAttackFor(seat);
+    return rollMode === 'power' && attack?.stage === 'bp' && state.deckRevision
+      && !(state.projection?.bpPending && state.bpSeat === seat) && canRequestBp(seat);
+  }
+
   function canSubmitAttack(seat) {
     if (rollMode !== 'attack' && rollMode !== 'power') return true;
     if (state.heroes[seat]?.condition === 'dead' || state.turn?.aiSignatureId) return false;
+    const readyForPower = (state.projection?.bpPending && state.bpSeat === seat) || canRevealBpWithPower(seat);
     if (state.turn?.bonusAttack) {
       const attack = activeAttackFor(seat);
       return rollMode === 'attack' ? attack?.stage === 'declared'
-        : attack?.stage === 'bp' && state.projection?.bpPending && state.bpSeat === seat;
+        : attack?.stage === 'bp' && readyForPower;
     }
     const source = rollMode === 'power' && powerRollParent(seat);
     if (source?.extraAttack && !source.bonusId && !attackInProgress(state.turn)) return true;
@@ -1901,7 +1919,7 @@
     if (!usesTitanActions(seat)) return true;
     const attack = activeAttackFor(seat);
     return rollMode === 'attack' ? attack?.stage === 'declared'
-      : attack?.stage === 'bp' && state.projection?.bpPending && state.bpSeat === seat;
+      : attack?.stage === 'bp' && readyForPower;
   }
 
   function weaponPowerReference(seat) {
@@ -2051,15 +2069,15 @@
       attack: '宣告武器，增加 1 怒气并检查首要目标，再按武器牌投攻击骰。命中后先结算第一能力时段，再揭示部位卡牌。',
       dodge: '先投闪避并按牌面结算格挡。仍受命中且会获得凶险时，再投护甲。',
       defense: '按有效装备和加固效果填写护甲骰。护甲每点潜力（△）减免 1 凶险。同一次攻击只激活一件防御武器。',
-      power: '先揭示部位卡牌。重掷和转换潜力后，对照永世力场选结果，再按牌面结算骇物响应、伤口和激化。结算后清空克拉托斯池，再进入第二能力时段。',
+      power: '第一能力时段结束后，可以一并揭示部位牌和投掷威力。重掷和转换潜力后，对照永世力场选结果，再按牌面结算骇物响应、伤口和激化。结算后清空克拉托斯池，再进入第二能力时段。',
     };
     const weapon = rollMode === 'attack' && selectedWeapon(seat);
     const canSubmit = canSubmitAttack(seat);
+    const rollLabel = canRevealBpWithPower(seat) ? '揭示并投掷威力' : '投掷' + dice.modes[rollMode].name;
     const form = '<form data-roll data-dice-seat="' + seat + '" class="battle-room-dice"'
       + (rollMode === 'power' ? ' data-power-context="' + escape(powerDraftContext(seat)) + '"' : '') + '>'
       + (weapon ? '<input type="hidden" name="weapon" value="' + escape(weapon.id) + '">' : '')
-      + '<div>' + fields + '<button type="submit"' + (canSubmit ? '' : ' disabled') + '>投掷'
-      + dice.modes[rollMode].name + '</button></div>'
+      + '<div>' + fields + '<button type="submit"' + (canSubmit ? '' : ' disabled') + '>' + rollLabel + '</button></div>'
       + (!canSubmit ? '<p class="room-dice-help">'
         + (state.heroes[seat]?.condition === 'dead' ? '该泰坦已死亡。' : usesTitanActions(seat)
           ? rollMode === 'attack' ? (attack?.stage === 'done' ? '本回合作战行动已使用。' : attack ? '请继续结算当前作战。' : '请从版图选武器、核对射程并宣告攻击。')
@@ -3156,6 +3174,7 @@
       const linked = rollMode === 'power' ? powerRollParent(seat)?.id : parentRoll;
       send({ id: crypto.randomUUID(), type: 'roll', mode: rollMode, seat, counts,
         ...(['attack', 'power'].includes(rollMode) && bonusContext(seat)),
+        ...(canRevealBpWithPower(seat) && { revealBp: true, round: state.round }),
         ...(weapon && { weapon }), ...(linked && { parentRoll: linked }) });
       parentRoll = '';
 

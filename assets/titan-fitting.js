@@ -68,8 +68,9 @@
         : '<a class="titan-fitting-original" target="_blank" rel="noopener" href="' + esc(link)
           + '" aria-label="打开原卡"' + (link ? '' : ' hidden') + '>' + feature + '</a>')
       + '<small data-fitting-no-art' + (link ? ' hidden' : '') + '>暂无卡图</small></aside></div>'
-      + (references.length ? '<div class="titan-fitting-archive">' + references.map(slot).join('') + '</div>' : '')
-      + kratos + '</div>';
+      + (references.length || kratos ? '<div class="titan-fitting-footer">'
+        + (references.length ? '<div class="titan-fitting-archive">' + references.map(slot).join('') + '</div>' : '')
+        + kratos + '</div>' : '') + '</div>';
   }
 
   function updateLine(fitting) {

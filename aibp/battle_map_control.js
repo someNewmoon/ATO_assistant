@@ -812,6 +812,10 @@
       if (managed) control('mode="titan-attack"').disabled =
         Boolean(options.getTitanMovement?.(losState.selectedTitan, false, false));
       speedInput.disabled = Boolean(movement);
+      for (const step of control("speed-field").querySelectorAll("[data-board-speed-step]")) {
+        const bound = Number(step.dataset.boardSpeedStep) < 0 ? Number(speedInput.min) : Number(speedInput.max);
+        step.disabled = speedInput.disabled || speed === bound;
+      }
       const bossMovement = bossMove ? apostleMovement(map) : null;
       const bossSpeed = bossMovement ? bossMovement.speed : apostleSpeed(map);
       const bossRemaining = bossMovement ? bossMovement.remaining : bossSpeed;
@@ -917,6 +921,15 @@
         });
       }
       tactics.addEventListener("click", event => {
+        const speedStep = event.target.closest("[data-board-speed-step]");
+        if (speedStep) {
+          const input = tactics.querySelector("[data-board-speed]");
+          const speed = titanSpeed(losState.selectedTitan);
+          if (speedStep.disabled || input.disabled) return;
+          input.value = Math.max(Number(input.min), Math.min(Number(input.max), speed + Number(speedStep.dataset.boardSpeedStep)));
+          input.dispatchEvent(new Event("change", { bubbles: true }));
+          return;
+        }
         if (event.target.closest("[data-board-preview-destination]")) {
           losState.previewDestination = !losState.previewDestination;
           losState.previewPoint = null;

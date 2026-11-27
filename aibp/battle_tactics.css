@@ -248,3 +248,9 @@ button.battle-piece { pointer-events: auto; cursor: pointer; min-height: 0; }
   stroke-linecap: round;
   stroke-linejoin: round;
 }
+
+.battle-tactics-speed { display: grid; gap: 3px; }
+.battle-tactics-stepper { display: flex; align-items: stretch; gap: 3px; }
+.battle-tactics-stepper button { min-width: 1.85rem; }
+.battle-tactics-stepper input { width: 3rem; text-align: center; appearance: textfield; }
+.battle-tactics-stepper input::-webkit-inner-spin-button { appearance: none; }

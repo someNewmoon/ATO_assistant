@@ -1093,9 +1093,14 @@ export class BattleRoom extends DurableObject {
     if (activeAttack && (turn?.aiSignatureId || (extra && !bonus && attackInProgress(turn)))) {
       reject('请先结束当前作战或招牌技，再结算下一次攻击。', 409);
     }
+    const revealBp = body.revealBp === true;
+    if (revealBp && (mode !== 'power' || !attack || !parent || body.round !== room.round)) {
+      reject('本次攻击已更新，请核对部位牌和威力骰。', 409);
+    }
+    const bpReady = room.projection?.bpPending && room.battleDeck?.bpSeat === seat;
     if ((normal || bonus) && (mode === 'attack'
       ? attack?.stage !== 'declared' || attack.weapon !== weapon
-      : attack?.stage !== 'bp' || attack.roll !== parent?.id || !room.projection?.bpPending || room.battleDeck?.bpSeat !== seat)) {
+      : attack?.stage !== 'bp' || attack.roll !== parent?.id || (!bpReady && !revealBp))) {
       reject(mode === 'attack' ? '请先宣告本次攻击。' : '请先揭示本次攻击的部位牌，再投掷威力。', 409);
     }
     const dice = [];
@@ -1108,6 +1113,12 @@ export class BattleRoom extends DurableObject {
       }
     }
     if (!dice.length) reject('请选择至少一枚骰子。');
+    if (revealBp && !bpReady) {
+      this.apply(room, actor, { ...body, type: 'bp-request', seat });
+      if (!room.projection?.bpPending || room.battleDeck?.bpSeat !== seat) {
+        reject('本次攻击没有可用的部位牌。', 409);
+      }
+    }
     const roll = { id: body.id, seat, hero: hero.name, round: room.round, mode, dice,
       by: actor.role === 'host' ? 'host' : 'seat:' + seat };
     if (weapon) roll.weapon = weapon;

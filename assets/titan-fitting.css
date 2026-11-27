@@ -50,7 +50,26 @@
 .titan-fitting-preview header { display: grid; gap: .12rem; overflow-wrap: anywhere; }
 .titan-fitting-original { display: block; padding: 0; border: 0; background: none; width: 100%; }
 .titan-fitting-original img { display: block; width: 100%; max-height: 15rem; object-fit: contain; }
-.titan-fitting-archive { display: flex; flex-wrap: wrap; gap: .36rem; padding-top: .4rem; }
+.titan-fitting-footer {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  gap: .5rem;
+  margin-top: .5rem;
+}
+.titan-fitting-footer:has(.titan-fitting-archive):has(.titan-fitting-kratos) {
+  grid-template-columns: minmax(0, 1fr) minmax(125px, 25%);
+}
+.titan-fitting-archive {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(4.35rem, 100%), 1fr));
+  align-items: start;
+  gap: .36rem;
+  padding: .42rem;
+  border: 1px solid var(--folio-edge, #d5c0a0);
+  background: var(--folio-paper, #f6eee0);
+}
+.titan-fitting-archive .titan-fitting-slot { max-width: none; }
 .titan-fitting-line { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
 .titan-fitting-line line { stroke: var(--fitting-copper); stroke-width: 1.25; }
 .titan-fitting-target {
@@ -65,10 +84,17 @@
   pointer-events: none;
 }
 .titan-fitting-stage:not([data-fitting-active]) :is(.titan-fitting-target,.titan-fitting-line), .titan-fitting [hidden] { display: none; }
-.titan-fitting-kratos { margin-top: .45rem; color: var(--fitting-ink); }
+.titan-fitting-kratos {
+  min-width: 0;
+  padding: .42rem;
+  border: 1px solid var(--folio-edge, #d5c0a0);
+  background: var(--folio-paper, #f6eee0);
+  color: var(--fitting-ink);
+}
+.titan-fitting-kratos summary { cursor: pointer; overflow-wrap: anywhere; }
 .titan-fitting-kratos ul { display: grid; gap: .25rem; margin: .35rem 0 0; padding-inline-start: 1.1rem; }
 @container (max-width: 530px) {
-  .titan-fitting-layout { grid-template-columns: minmax(0, 1fr); }
+  .titan-fitting-layout, .titan-fitting-footer:has(.titan-fitting-archive):has(.titan-fitting-kratos) { grid-template-columns: minmax(0, 1fr); }
   .titan-fitting-preview { flex-direction: row; justify-content: space-between; align-items: center; text-align: start; }
   .titan-fitting[data-fitting-mode="battle"] .titan-fitting-preview { position: sticky; bottom: .25rem; z-index: 4; }
   .titan-fitting-card { font-size: .68rem; }

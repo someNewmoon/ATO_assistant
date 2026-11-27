@@ -2453,7 +2453,7 @@
   </style>
   <link rel="stylesheet" href="c45_specials.css?v=20260926-titan-group-layout1">
   <link rel="stylesheet" href="battle_map_control.css?v=20261117-battle-polish">
-  <link rel="stylesheet" href="battle_tactics.css?v=20261126-approach-preview">
+  <link rel="stylesheet" href="battle_tactics.css?v=20261127-combat-five">
   <link rel="stylesheet" href="../api/cycle-theme.css?v=20261125-folio">
   <script src="../assets/theme.js?v=20261114-light-sidebar1" defer></script>
   <link rel="stylesheet" href="editorial.css?v=20261123-room-boss-nav">
@@ -2473,10 +2473,10 @@
   <script src="../assets/mobile/layout.js?v=20261028-apk-portrait1" defer></script>
   <script src="../assets/mobile/play.js?v=20261114-theatre-return" defer></script>
   <link rel="stylesheet" href="room-recap.css?v=20261125-critical">
-  <link rel="stylesheet" href="battle-room.css?v=20261126-approach-preview">
+  <link rel="stylesheet" href="battle-room.css?v=20261127-combat-five">
   <link rel="stylesheet" href="table-battle.css?v=20261125-table-recap">
   <link rel="stylesheet" href="room-style.css?v=20261126-host-turn-assignment">
-  <link rel="stylesheet" href="../assets/titan-fitting.css?v=1">
+  <link rel="stylesheet" href="../assets/titan-fitting.css?v=2">
   <link rel="stylesheet" href="./die-cube.css?v=3">
   <script src="theatre-battle.js?v=2"></script>
   <script src="../theatre/terms.js?v=2"></script>
@@ -2753,7 +2753,14 @@
                 <div class="battle-tactics-fields">
                   <div data-board-titan-field hidden><div class="room-seat-tabs" data-board-titan role="group" aria-label="选中泰坦"></div></div>
                   <label data-board-forced-field hidden><input data-board-forced type="checkbox">非主动移动</label>
-                  <label data-board-speed-field hidden>本次移动上限 <input data-board-speed type="number" min="0" max="20" step="1"></label>
+                  <div class="battle-tactics-speed" data-board-speed-field hidden>
+                    <span>本次移动上限</span>
+                    <div class="battle-tactics-stepper">
+                      <button type="button" data-board-speed-step="-1" aria-label="减少本次移动上限">−</button>
+                      <input data-board-speed type="number" min="0" max="20" step="1" aria-label="本次移动上限">
+                      <button type="button" data-board-speed-step="1" aria-label="增加本次移动上限">+</button>
+                    </div>
+                  </div>
                   <label data-board-apostle-speed-field hidden>骇物移动上限 <input data-board-apostle-speed type="number" min="0" max="32" step="1"></label>
                   <label data-board-weapon-field hidden>武器射程
                     <select data-board-weapon aria-label="武器射程">
@@ -3033,10 +3040,10 @@
   <script src="squad-link.js?v=20261125-critical" defer></script>
   <script src="../record/enemy-evolution.js?v=20261120"></script>
   <script src="kratos-tables.js?v=20261127-titan-fitting" defer></script>
-  <script src="../assets/titan-fitting.js?v=1" defer></script>
+  <script src="../assets/titan-fitting.js?v=2" defer></script>
   <script src="ai-turn-guide.js?v=20261124-inserted-signature" defer></script>
   <script src="../technology/loadout-image.js?v=20261124" defer></script>
-  <script src="battle-room.js?v=20261127-titan-fitting" defer></script>
+  <script src="battle-room.js?v=20261127-combat-five" defer></script>
   <script src="../technology/gear-inventory.js?v=20261124-trauma-preview"></script>
   <script src="../assets/campaign-notes.js?v=20261015-aibp-summary1"></script>
   <script src="../assets/cycle-symbols.js?v=20261115-module-logo"></script>
@@ -3052,7 +3059,7 @@
   <script src="battle_los.js?v=20261126-forced-movement"></script>
   <script src="tactical-sprites.js?v=20261123-earthshaker"></script>
   <script src="battle_board_pieces.js?v=20261126-push-footprints"></script>
-  <script src="battle_map_control.js?v=20261126-personal-tabs"></script>
+  <script src="battle_map_control.js?v=20261127-combat-five"></script>
   <script src="b4d7e218.js?v=20260926-hidden-ready2"></script>
   <script src="c9f0a6d3.js?v=20261011-panel-trait1"></script>
   <script src="5158e31a.js?v=20261019-blackbeak-shared-backs2"></script>

@@ -977,3 +977,38 @@ body.aibp-active-online-battle #heroBattleRoster { display: none; }
 .room-forced-receipt button { justify-self: start; }
 .room-forced-receipt[hidden], .room-forced-editor[hidden], .room-forced-editor [hidden] { display: none; }
 .room-attack-declaration-error { color: var(--danger, #972c18); }
+
+.room-titan-condition {
+  display: inline-flex;
+  align-items: center;
+  gap: .3rem;
+  color: var(--room-muted);
+}
+.room-titan-condition svg {
+  width: 1.15rem;
+  height: 1.15rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.35;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.room-titan-condition[data-titan-condition="standing"] { color: #31594c; }
+.room-titan-condition[data-titan-condition="down"] { color: #935328; }
+.room-titan-condition[data-titan-condition="rising"] { color: #365b76; }
+.room-titan-condition[data-titan-condition="dead"] { color: #8b3229; }
+.room-hero-status {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: .4rem .8rem;
+  padding: .55rem .65rem;
+  border: 1px solid var(--room-border);
+  background: var(--room-surface);
+}
+.room-hero-status h4 { grid-column: 1 / -1; margin: 0; }
+.room-status-counters { display: flex; flex-wrap: wrap; gap: .35rem .6rem; }
+.room-hero-status .room-trauma-hero { margin: 0; justify-items: end; }
+@media (max-width: 820px) {
+  .room-hero-status { grid-template-columns: minmax(0, 1fr); }
+  .room-hero-status .room-trauma-hero { justify-items: start; }
+}

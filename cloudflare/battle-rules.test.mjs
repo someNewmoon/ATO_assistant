@@ -1253,10 +1253,25 @@ test('奖励攻击独立于回合行动，支持骇物轮次、取消、触发�
     assert.throws(() => act('roll', { bonusId: 'bonus', seat: 0, mode: 'attack', counts: { d10: 1 } }, host), /当前奖励攻击/);
     action('roll', { id: 'attack', mode: 'attack', weapon: 'AJ0185', counts: { d10: 2 } });
     action('attack-check', { roll: 'attack', value: 'hit' });
+    const power = { id: 'power', mode: 'power', parentRoll: 'attack', counts: { red: 1 }, revealBp: true };
+    assert.throws(() => action('roll', power), /揭示本次攻击/);
     action('attack-first');
-    action('bp-request');
+    const beforeReveal = structuredClone(r.battleDeck);
+    assert.throws(() => action('roll', { ...power, counts: { red: 0 } }), /至少一枚/);
+    assert.throws(() => action('roll', { ...power, round: 0 }), /攻击已更新/);
+    assert.deepEqual(r.battleDeck, beforeReveal);
+    assert.equal(r.rolls.length, 1);
+    if (phase === 'apostle') {
+      action('bp-request');
+      assert.equal(r.battleDeck.bpSeat, 1);
+    }
+    action('roll', power);
     assert.equal(r.battleDeck.bpSeat, 1);
-    action('roll', { id: 'power', mode: 'power', parentRoll: 'attack', counts: { red: 1 } });
+    assert.equal(r.battleDeck.revision, beforeReveal.revision + 1);
+    assert.equal(r.rolls[0].parentRoll, 'attack');
+    assert.throws(() => action('roll', { ...power, id: 'second-power' }), /揭示本次攻击/);
+    assert.equal(r.battleDeck.revision, beforeReveal.revision + 1);
+    assert.equal(r.rolls.length, 2);
     action('bp-settle', { id: 'bp-result', roll: 'power', value: 1, card: face('BP')._room.face.src });
     assert.equal(r.battleStats[1].damage, 1);
     assert.equal(r.battleStats[0]?.damage ?? 0, 0);

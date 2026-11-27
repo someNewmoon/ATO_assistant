@@ -47,12 +47,17 @@
     // The model occupies 84% of the composition height after the pool overlaps it.
     const start = y * .84;
     const [endX, endY] = pool;
-    const bend = x + (x >= endX ? 9 : -9);
+    const rise = endY - start;
+    const path = offset => 'M ' + endX + ' ' + endY + ' C '
+      + (endX + 8 + offset) + ' ' + (endY - rise * .23) + ', '
+      + (x - 14 + offset) + ' ' + (start + rise * .40) + ', ' + x + ' ' + start;
     return '<div class="titan-fitting-mind-link" aria-hidden="true" style="--head-x:' + x + '%;--head-y:' + start
       + '%;--pool-x:' + endX + '%;--pool-y:' + endY + '%">'
-      + '<svg viewBox="0 0 100 100" preserveAspectRatio="none"><path d="M ' + x + ' ' + start + ' C '
-      + bend + ' ' + (start + 19) + ', ' + bend + ' ' + (endY - 7) + ', ' + endX + ' ' + endY + '"/></svg>'
-      + '<span class="titan-fitting-head-ring"></span><span class="titan-fitting-water-ring"></span></div>';
+      + '<svg viewBox="0 0 100 100" preserveAspectRatio="none">'
+      + '<path class="titan-fitting-mist-wide" d="' + path(1) + '"/>'
+      + '<path class="titan-fitting-mist-deep" d="' + path(-3) + '"/>'
+      + '<path class="titan-fitting-mist-light" d="' + path(3) + '"/></svg>'
+      + '<span class="titan-fitting-head-glow"></span><span class="titan-fitting-pool-glow"></span></div>';
   }
 
   // Use the stable IDs of the pilots whose artwork is documented in titan-link.
@@ -62,6 +67,50 @@
     olympia: 'triskelion-dream-woman.jpg',
     oleander: 'triskelion-dream-man-matched.jpg',
   };
+
+  let keywordLibrary;
+  function definitions() {
+    return keywordLibrary ||= fetch('../aibp/ato-keywords.json?v=11')
+      .then(response => {
+        if (!response.ok) throw new Error('Keyword definitions unavailable');
+        return response.json();
+      })
+      .then(data => new Map((data.entries || []).filter(entry => entry.officialName && entry.officialDefinition)
+        .map(entry => [entry.word, entry])))
+      .catch(() => { keywordLibrary = null; return new Map(); });
+  }
+
+  async function updateKeywords(fitting, button = fitting.querySelector('[data-fitting-choice][aria-pressed="true"]')) {
+    const panel = fitting.querySelector('[data-fitting-keywords]');
+    const list = panel.querySelector('dl');
+    const gearId = button?.dataset.fittingGear;
+    const entries = gearId ? window.ATO_GEAR_ROLL_PROFILES?.fittingKeywords(gearId) || [] : [];
+    if (!entries.length || panel.dataset.gearId !== gearId) {
+      panel.hidden = true;
+      list.replaceChildren();
+      panel.dataset.gearId = gearId || '';
+    }
+    if (!entries.length) return;
+    const library = await definitions();
+    if (!fitting.isConnected || button !== fitting.querySelector('[data-fitting-choice][aria-pressed="true"]')) return;
+    if (!list.childElementCount) {
+      for (const { word, value, condition } of entries) {
+        const entry = library.get(word);
+        if (!entry) continue;
+        const term = document.createElement('dt');
+        term.textContent = value === undefined ? entry.officialName.replace(/X$/, ' X') : entry.officialName.replace(/X$/, ' ' + value);
+        const definition = document.createElement('dd');
+        if (condition) {
+          const trigger = document.createElement('strong');
+          trigger.textContent = condition;
+          definition.append(trigger);
+        }
+        definition.append(value === undefined ? entry.officialDefinition : entry.officialDefinition.replaceAll('X', String(value)));
+        list.append(term, definition);
+      }
+    }
+    panel.hidden = !list.childElementCount;
+  }
 
   function render({ key, mode, titan, name, panel, figure, argonaut, gear = [], references = [], kratos = '', zoom = false }) {
     const inv = window.ATO_GEAR_INVENTORY;
@@ -75,7 +124,7 @@
     const slot = card => '<article class="titan-fitting-slot" data-fitting-state="' + esc(card.state) + '">'
       + '<button type="button" class="titan-fitting-card" data-fitting-choice="' + esc(card.key) + '" aria-pressed="' + (featured === card)
       + '" data-fitting-src="' + esc(card.src) + '" data-fitting-name="' + esc(card.name) + '" data-fitting-part="' + esc(card.part)
-      + '" data-fitting-detail="' + esc(card.detail) + '">' + picture(card)
+      + '" data-fitting-detail="' + esc(card.detail) + '" data-fitting-gear="' + esc(card.gearId) + '">' + picture(card)
       + '<span>' + esc(card.name) + '</span>' + (card.detail ? '<small>' + esc(card.detail) + '</small>' : '') + '</button>'
       + (card.actions ? '<div class="titan-fitting-actions">' + card.actions + '</div>' : '') + '</article>';
     const side = groups => groups.map(part => {
@@ -109,7 +158,10 @@
         + '" aria-label="放大原卡"' + (link ? '' : ' hidden') + '>' + feature + '</button>'
         : '<a class="titan-fitting-original" target="_blank" rel="noopener" href="' + esc(link)
           + '" aria-label="打开原卡"' + (link ? '' : ' hidden') + '>' + feature + '</a>')
-      + '<small data-fitting-no-art' + (link ? ' hidden' : '') + '>暂无卡图</small></aside></div></div>';
+      + '<small data-fitting-no-art' + (link ? ' hidden' : '') + '>暂无卡图</small>'
+      + '<details class="titan-fitting-keywords" data-fitting-keywords data-language-ignore hidden'
+      + (window.matchMedia('(min-width: 641px)').matches ? ' open' : '') + '><summary>关键词速查</summary><dl></dl></details>'
+      + '</aside></div></div>';
   }
 
   function updateLine(fitting) {
@@ -137,11 +189,13 @@
   const observer = new ResizeObserver(entries => {
     for (const entry of entries) if (entry.target.isConnected) updateLine(entry.target);
   });
+  function mount(fitting) {
+    observer.observe(fitting);
+    updateLine(fitting);
+    void updateKeywords(fitting);
+  }
   function refresh(root = document) {
-    for (const fitting of root.querySelectorAll('[data-fitting]')) {
-      observer.observe(fitting);
-      updateLine(fitting);
-    }
+    for (const fitting of root.querySelectorAll('[data-fitting]')) mount(fitting);
   }
   new MutationObserver(records => {
     for (const record of records) {
@@ -154,7 +208,7 @@
       }
       for (const node of record.addedNodes) {
         if (!(node instanceof Element)) continue;
-        if (node.matches('[data-fitting]')) { observer.observe(node); updateLine(node); }
+        if (node.matches('[data-fitting]')) mount(node);
         else refresh(node);
       }
     }
@@ -187,6 +241,7 @@
       else original.href = fittingSrc;
     }
     updateLine(fitting);
+    void updateKeywords(fitting, button);
   });
   document.addEventListener('error', event => {
     const image = event.target;

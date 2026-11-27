@@ -1412,7 +1412,7 @@
     const equipment = '<section class="room-card-group room-loadout-equipment"><h4>' + (own ? '已配装备' : '装备') + '</h4>'
       + (gear || '<p>未分配装备</p>') + '</section>';
     const slotCard = (item, type, slot, value, src, part, detail, thumb) => ({
-      key: [type, seat, item.id, slot].join(':'), name: item.name, state: value, src, part, thumb,
+      key: [type, seat, item.id, slot].join(':'), gearId: type === 'gear-card' ? item.id : '', name: item.name, state: value, src, part, thumb,
       detail: [detail, value === 'discarded' ? '已弃除' : value === 'exhausted' ? '已横置' : ''].filter(Boolean).join(' · '),
       actions: cardStateTools({ item, type, seat, slot, value, editable }),
     });

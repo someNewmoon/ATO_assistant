@@ -349,7 +349,30 @@
     return valid ? { kind, min, max } : null;
   }
 
-  const api = { weapons, defenseKeywords, power, range, canAdjustRange, manualRange };
+  // Values and conditions verified against the printed faces, separate from the generic definitions.
+  const fittingCardKeywords = {
+    AJ0177: [
+      { word: "Reposition", value: 2 },
+      { word: "Reposition", value: 4, condition: "凶险 5+ 时取代走位 2" },
+      { word: "Opening", condition: "X 等于本次攻击投掷的命中数" },
+    ],
+    AJ0209: [
+      { word: "Tumble" },
+      { word: "Reinforce", value: 1, condition: "获得 1 命运" },
+      { word: "Reinforce", value: 2, condition: "凶险 8+ 时取代加固 1，仍需获得 1 命运" },
+      { word: "Second Chance", condition: "获得 1 命运并弃除本卡" },
+    ],
+    AJ0241: [{ word: "Lifeline", condition: "获得 1 命运并弃除本卡" }],
+    AJ0273: [{ word: "Reposition", value: 2 }, { word: "Carving", value: 1 }],
+  };
+
+  function fittingKeywords(id) {
+    const stats = printedRange(id);
+    const reach = stats?.kind === "reach" ? [{ word: "Reach", value: stats.max }] : [];
+    return [...reach, ...(Object.hasOwn(fittingCardKeywords, id) ? fittingCardKeywords[id] : [])];
+  }
+
+  const api = { weapons, defenseKeywords, power, range, canAdjustRange, manualRange, fittingKeywords };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else window.ATO_GEAR_ROLL_PROFILES = api;
 })();

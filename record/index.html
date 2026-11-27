@@ -1563,7 +1563,7 @@
   </style>
   <link rel="stylesheet" href="../api/cycle-theme.css?v=20261125-folio">
   <link rel="stylesheet" href="./record.css?v=20261125-titan-panel-reference">
-  <link rel="stylesheet" href="../assets/titan-fitting.css?v=3">
+  <link rel="stylesheet" href="../assets/titan-fitting.css?v=4">
   <script src="../story/data/english-source-data.js?v=20261011-english4"></script>
   <script src="../assets/theme.js?v=20261114-light-sidebar1" defer></script>
   <link rel="stylesheet" href="../assets/card-art.css?v=20261017-corners1">
@@ -1919,7 +1919,8 @@
   <script src="../technology/gear-inventory.js?v=20261120-titan-management"></script>
   <script src="../hero/hero-catalog.js?v=20261117-battle-polish"></script>
   <script src="../aibp/kratos-tables.js?v=20261127-titan-fitting"></script>
-  <script src="../assets/titan-fitting.js?v=3"></script>
+  <script src="../aibp/gear-roll-profiles.js?v=20261127-fitting"></script>
+  <script src="../assets/titan-fitting.js?v=4"></script>
   <script src="../assets/titan-panel-reference.js?v=20261125-power"></script>
   <script src="../assets/campaign-notes.js?v=20261015"></script>
   <script src="../assets/record-attachments.js?v=20261009"></script>
@@ -3611,7 +3612,7 @@
           const gear = Object.entries(loadout.gear).map(([id, count]) => {
             const base = inv.baseGearId(id);
             const cardName = names.gearCards?.[base] || id;
-            return { key: id, name: cardName.replace(/^[^一-鿿㐀-䶿豈-﫿]*/, "").trim() || cardName,
+            return { key: id, gearId: id, name: cardName.replace(/^[^一-鿿㐀-䶿豈-﫿]*/, "").trim() || cardName,
               src: component.artGear(art, id), part: component.part(parts.labels?.[base]), detail: "×" + count };
           });
           const link = document.createElement("a");

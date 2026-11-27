@@ -1093,7 +1093,7 @@ button.gear-group-name:hover {
 <link rel="stylesheet" href="tech-tree.css?v=20261125-module-folio">
 <link rel="stylesheet" href="arsenal.css?v=20261124-loadout-image">
 <link rel="stylesheet" href="arsenal-loadout.css?v=20261127-titan-fitting">
-<link rel="stylesheet" href="../assets/titan-fitting.css?v=3">
+<link rel="stylesheet" href="../assets/titan-fitting.css?v=4">
 <link rel="stylesheet" href="../hero/battle-roster.css">
 <link rel="stylesheet" href="../assets/card-art.css?v=20261017-corners1">
 <script src="../assets/card-art.js?v=20261017-corners1" defer></script>
@@ -1179,7 +1179,8 @@ button.gear-group-name:hover {
 <script src="../hero/hero-catalog.js?v=20261117-battle-polish"></script>
 <script src="gear-inventory.js?v=20261120-copy-limits"></script>
 <script src="../aibp/kratos-tables.js?v=20261127-titan-fitting"></script>
-<script src="../assets/titan-fitting.js?v=3"></script>
+<script src="../aibp/gear-roll-profiles.js?v=20261127-fitting"></script>
+<script src="../assets/titan-fitting.js?v=4"></script>
 <script src="loadout-image.js?v=20261124"></script>
 <script>
 const TECH_DICTIONARY_URL = 'tech_card_dictionary.min.json';
@@ -2461,7 +2462,7 @@ function editArsenalLoadout(heroId, catalog) {
     const patterns = inventory.loadoutPatterns(selectedTitan, draft, record.cycle);
     const gear = Object.entries(draft.gear).filter(([, count]) => count > 0).map(([id, count]) => {
       const name = getGearName(id);
-      return { key: id, name, part: fitting.part(gearPart(id).key), src: gearImageSrc(id),
+      return { key: id, gearId: id, name, part: fitting.part(gearPart(id).key), src: gearImageSrc(id),
         detail: '×' + count + (stock[id]?.quantity ? '' : ' · 旧配装库存为零'),
         actions: '<button type="button" class="tool-btn" data-release-gear="' + esc(id)
           + '" aria-label="释放一件' + esc(name) + '">移除一件</button>' };

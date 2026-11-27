@@ -51,6 +51,19 @@
 .titan-fitting-original { display: block; padding: 0; border: 0; background: none; width: 100%; }
 .titan-fitting-original img { display: block; width: 100%; max-height: 15rem; object-fit: contain; }
 .titan-fitting-main { display: grid; min-width: 0; gap: .5rem; }
+.titan-fitting-keywords {
+  width: 100%;
+  max-width: 100%;
+  padding: .35rem .4rem;
+  border-top: 1px solid var(--folio-edge, #d5c0a0);
+  text-align: start;
+  font-size: .8rem;
+}
+.titan-fitting-keywords summary { cursor: pointer; font-weight: 600; }
+.titan-fitting-keywords dl { margin: .35rem 0 0; max-height: 14rem; overflow: auto; }
+.titan-fitting-keywords dt { color: var(--fitting-copper); font-weight: 600; }
+.titan-fitting-keywords dd { margin: .05rem 0 .35rem; line-height: 1.38; overflow-wrap: anywhere; }
+.titan-fitting-keywords dd strong { display: block; color: var(--folio-muted, #695341); }
 .titan-fitting-archive {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(4.35rem, 100%), 1fr));
@@ -86,7 +99,9 @@
 .titan-fitting-kratos ul { display: grid; gap: .25rem; margin: .35rem 0 0; padding-inline-start: 1.1rem; }
 @container (max-width: 530px) {
   .titan-fitting-layout { grid-template-columns: minmax(0, 1fr); }
-  .titan-fitting-preview { flex-direction: row; justify-content: space-between; align-items: center; text-align: start; }
+  .titan-fitting-preview { flex-flow: row wrap; justify-content: space-between; align-items: center; text-align: start; }
+  .titan-fitting-keywords { flex-basis: 100%; }
+  .titan-fitting-keywords dl { max-height: min(10rem, 25dvh); }
   .titan-fitting[data-fitting-mode="battle"] .titan-fitting-preview { position: sticky; bottom: .25rem; z-index: 4; }
   .titan-fitting-card { font-size: .68rem; }
   .titan-fitting-original { width: auto; }
@@ -110,7 +125,8 @@
 .titan-fitting-composition:has(.titan-fitting-bath):not(:has(.titan-fitting-figure:not([hidden]))) .titan-fitting-model {
   display: none;
 }
-.titan-fitting-stage .titan-fitting-bath {
+.titan-fitting-stage .titan-fitting-bath,
+.battle-room .titan-fitting-stage .titan-fitting-bath {
   position: relative;
   z-index: 1;
   display: block;
@@ -142,6 +158,7 @@
   border: 1px solid transparent;
   border-radius: .25rem;
   background: #0c1d1ae8;
+  color: #effff7;
   overflow-wrap: anywhere;
   text-shadow: 0 1px 2px #07130e;
 }
@@ -158,35 +175,39 @@
   color: #bcffeb;
   opacity: .78;
 }
-.titan-fitting-head-ring,
-.titan-fitting-water-ring {
+.titan-fitting-head-glow,
+.titan-fitting-pool-glow {
   position: absolute;
   translate: -50% -50%;
-  border: 1px solid currentColor;
-  border-radius: 50%;
-  background: radial-gradient(ellipse, #d0fff08f, transparent 68%);
-  box-shadow: 0 0 12px #77ffcf8c, inset 0 0 8px #a2f6da66;
+  background: radial-gradient(ellipse, #e1f6c58f, #8dd8ae36 27%, transparent 72%);
 }
-.titan-fitting-head-ring {
+.titan-fitting-head-glow {
   left: var(--head-x);
   top: var(--head-y);
-  width: 11%;
-  aspect-ratio: 1;
+  width: 18%;
+  aspect-ratio: 1.2;
 }
-.titan-fitting-water-ring {
+.titan-fitting-pool-glow {
   left: var(--pool-x);
   top: var(--pool-y);
-  width: 23%;
-  aspect-ratio: 3.4;
+  width: 25%;
+  aspect-ratio: 2.3;
 }
-.titan-fitting-mind-link svg { display: block; width: 100%; height: 100%; overflow: visible; }
+.titan-fitting-mind-link svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  mask-image: linear-gradient(#000 16%, #0008 39%, #0006 54%, #000 85%);
+}
 .titan-fitting-mind-link path {
   fill: none;
-  stroke: currentColor;
-  stroke-width: 1.2;
+  stroke-linecap: round;
   vector-effect: non-scaling-stroke;
-  filter: drop-shadow(0 0 3px #8affdf) drop-shadow(0 0 7px #78e5c7);
 }
+.titan-fitting-mist-wide { stroke: #49b49d45; stroke-width: clamp(6px, 2.4cqw, 25px); filter: blur(8px); }
+.titan-fitting-mist-deep { stroke: #5ec2ab62; stroke-width: clamp(3px, .9cqw, 10px); filter: blur(3px); }
+.titan-fitting-mist-light { stroke: #b1dfbd60; stroke-width: clamp(1px, .32cqw, 4px); filter: blur(1.4px); }
 .titan-fitting-stage:has(.titan-fitting-bath) .titan-fitting-wing { position: relative; z-index: 3; }
 .titan-fitting-stage:has(.titan-fitting-bath) .titan-fitting-line { z-index: 4; }
 @media (prefers-reduced-motion: no-preference) {
@@ -195,8 +216,8 @@
   }
 }
 @keyframes titan-fitting-breathe {
-  from { opacity: .52; }
-  to { opacity: 1; }
+  from { opacity: .6; }
+  to { opacity: .92; }
 }
 
 @container (max-width: 530px) {

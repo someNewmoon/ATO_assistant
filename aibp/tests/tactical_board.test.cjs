@@ -139,3 +139,16 @@ test("single-target priority sight uses the Primordial footprint and current bli
   map.pieces.apostle.facing = 270;
   assert.equal(sight(), true);
 });
+
+test("fitting keywords use printed card IDs, range data, and reviewed conditional values", () => {
+  assert.deepEqual(gear.fittingKeywords("AJ0273"), [
+    { word: "Reach", value: 2 }, { word: "Reposition", value: 2 }, { word: "Carving", value: 1 },
+  ]);
+  assert.deepEqual(gear.fittingKeywords("BJ0968"), [{ word: "Reach", value: 3 }]);
+  assert.deepEqual(gear.fittingKeywords("AJ0241"), [{ word: "Lifeline", condition: "获得 1 命运并弃除本卡" }]);
+  assert.deepEqual(gear.fittingKeywords("AJ0177")[1], {
+    word: "Reposition", value: 4, condition: "凶险 5+ 时取代走位 2",
+  });
+  assert.deepEqual(gear.fittingKeywords("AJ0273@unverified"), []);
+  assert.deepEqual(gear.fittingKeywords("AJ0185"), []);
+});

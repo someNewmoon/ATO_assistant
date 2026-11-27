@@ -9,6 +9,7 @@
       tab.tabIndex = selected ? 0 : -1;
       panels[position].hidden = !selected;
     });
+    tabs[0].parentElement.dispatchEvent(new Event('record-tab-change'));
     if (!updateUrl) return;
     const url = new URL(location.href);
     if (index === 1) url.searchParams.set('tab', 'titans');

@@ -1571,6 +1571,7 @@
   <!-- Mobile composition is enabled only by the installed APK in portrait. -->
   <link rel="stylesheet" href="../assets/mobile/common.css?v=20261028-apk-portrait1">
   <link rel="stylesheet" href="../assets/mobile/record-hero.css?v=20261028-apk-portrait1">
+  <link rel="stylesheet" href="./record-deck.css?v=1">
   <script src="../assets/mobile/layout.js?v=20261028-apk-portrait1" defer></script>
   <script src="../assets/mobile/record-hero.js?v=20261028-apk-portrait1" defer></script>
 </head>
@@ -1581,7 +1582,8 @@
         <h1 id="recordTitle" class="cycle-title">阿尔戈号</h1>
         <span id="saveStatus" class="save-status" aria-live="polite">正在检查 NAS 存档...</span>
       </div>
-      <div class="topbar-tools">
+      <button id="recordToolsButton" type="button" aria-expanded="false" aria-controls="recordTools" hidden>存档与工具</button>
+      <div class="topbar-tools" id="recordTools">
         <div class="header-fields">
           <label>
             存档名称
@@ -1600,6 +1602,7 @@
           <input id="importInput" type="file" accept="application/json,.json" class="hidden">
         </nav>
       </div>
+      <div id="recordShipDeck" hidden></div>
     </header>
 
     <nav class="record-tabs" role="tablist" aria-label="阿尔戈号">
@@ -1735,7 +1738,8 @@
           </div>
         </section>
 
-        <section class="panel">
+        <span id="recordShipOrigin" hidden></span>
+        <section class="panel" id="recordShipPanel">
           <div class="panel-heading compact module-head">
             <h2><span class="panel-icon" aria-hidden="true" style="--panel-icon-w:21px;--panel-icon-h:14px;--icon-src:url(../assets/icons/argo.svg?v=apk-ui-a72da92bdf63)"></span>船体与船员</h2>
           </div>
@@ -1785,7 +1789,7 @@
       </div>
 
       <aside class="stack">
-        <section class="panel">
+        <section class="panel" id="recordCargoPanel">
           <div class="panel-heading compact module-head">
             <h2><span class="panel-icon" aria-hidden="true" style="--panel-icon-w:17px;--panel-icon-h:17px;--icon-src:url(../assets/icons/cargo-hold.svg?v=apk-ui-a72da92bdf63)"></span>资源</h2>
           </div>
@@ -1909,7 +1913,7 @@
   <script src="../assets/page-focus-router.js?v=20261125-no-blank"></script>
   <script src="../assets/voyage-return.js?v=2"></script>
   <script src="./mark-notes.js"></script>
-  <script src="./record-tabs.js?v=20261125" defer></script>
+  <script src="./record-tabs.js?v=20261127-deck" defer></script>
   <script src="./item-icons.js?v=apk-ui-a72da92bdf63"></script>
   <script src="./matrix-data.js?v=20261106-c123-fixes2"></script>
   <script src="../assets/cycle-symbols.js?v=20261115-module-logo"></script>
@@ -4099,8 +4103,31 @@
       queueSave();
     }
 
+    const recordDeck = document.querySelector("#recordShipDeck");
+    const recordShipPanel = document.querySelector("#recordShipPanel");
+    const recordTools = document.querySelector("#recordTools");
+    const recordToolsButton = document.querySelector("#recordToolsButton");
+
+    function setRecordToolsOpen(open) {
+      recordToolsButton.setAttribute("aria-expanded", String(open));
+    }
+
+    function renderRecordDeck() {
+      const showDeck = state.cycle === "c1" && !document.querySelector("#recordOverview").hidden;
+      recordDeck.closest(".app").classList.toggle("record-deck", showDeck);
+      recordToolsButton.hidden = !showDeck;
+      recordDeck.hidden = !showDeck;
+      if (showDeck && recordShipPanel.parentElement !== recordDeck) {
+        recordDeck.appendChild(recordShipPanel);
+      } else if (!showDeck && recordShipPanel.parentElement === recordDeck) {
+        document.querySelector("#recordShipOrigin").after(recordShipPanel);
+        setRecordToolsOpen(false);
+      }
+    }
+
     function renderAll() {
       document.body.dataset.cycle = state.cycle;
+      renderRecordDeck();
       renderCycleOptions();
       window.ATO_CYCLE_SYMBOLS?.prependModuleLogo(document.querySelector("#recordTitle"), "argo", "../");
       document.querySelectorAll("[data-bind]").forEach((input) => {
@@ -4339,6 +4366,14 @@
       const unlockKey = `${state.cycle}-${key}`;
       const cycleScoped = key === "hull" || key === "crew";
       const selectedValue = cycleScoped ? getCycleStat(key) : state[key];
+      const deckReading = state.cycle === "c1" && cycleScoped;
+      if (deckReading) {
+        const reading = document.createElement("output");
+        reading.className = "record-ship-reading";
+        reading.setAttribute("aria-label", `当前${zh}`);
+        reading.textContent = selectedValue === "" || selectedValue == null ? "—" : selectedValue;
+        title.appendChild(reading);
+      }
       const supportsMaxLock = ["c2", "c3"].includes(state.cycle);
       const isMaxLocked = (value) => Boolean(options.lockMax && supportsMaxLock && String(value) === String(values[0]) && !state.maxUnlocked[unlockKey]);
       if (options.lockMax && supportsMaxLock) {
@@ -4370,12 +4405,20 @@
           locked ? "locked-max" : "",
         ].filter(Boolean).join(" ");
         button.textContent = value;
+        if (deckReading) {
+          const selected = String(selectedValue ?? "") === String(value);
+          button.setAttribute("aria-pressed", String(selected));
+          button.setAttribute("aria-label", `${zh} ${value}`);
+          button.classList.toggle("filled", selectedValue !== "" && selectedValue != null && Number(value) <= Number(selectedValue));
+        }
         button.title = locked ? "最大值需先解锁" : "";
         button.addEventListener("click", () => {
           if (locked) return;
           if (cycleScoped) setCycleStat(key, String(value));
           else state[key] = String(value);
+          const keepFocus = deckReading && document.activeElement === button;
           renderAll();
+          if (keepFocus) container.querySelector(".chip.active")?.focus({ preventScroll: true });
           queueSave();
         });
         if (options.extraBoxesKey) {
@@ -5370,7 +5413,7 @@
       return heading;
     }
 
-    function makeNumberField(fullKey) {
+    function makeNumberField(fullKey, label, heading) {
       const numberField = document.createElement("div");
       numberField.className = "number-field";
       const minusFive = document.createElement("button");
@@ -5392,10 +5435,39 @@
       plusFive.type = "button";
       plusFive.className = "resource-step-five";
       plusFive.textContent = "+5";
+      input.setAttribute("aria-label", `${label}数量`);
+      minusFive.setAttribute("aria-label", `${label}减少 5`);
+      minus.setAttribute("aria-label", `${label}减少 1`);
+      plus.setAttribute("aria-label", `${label}增加 1`);
+      plusFive.setAttribute("aria-label", `${label}增加 5`);
+      const feedback = state.cycle === "c1" ? document.createElement("output") : null;
+      let feedbackTimer;
+      let lastReported = Number(state.resources[fullKey]) || 0;
+      heading.querySelector(".record-cargo-delta")?.remove();
+      if (feedback) {
+        feedback.className = "record-cargo-delta";
+        feedback.setAttribute("aria-label", `${label}库存变化`);
+        heading.appendChild(feedback);
+      }
+      const report = (total) => {
+        if (!feedback) return;
+        const delta = total - lastReported;
+        lastReported = total;
+        clearTimeout(feedbackTimer);
+        feedback.textContent = delta === 0 ? "" : `${delta > 0 ? "+" : "−"}${Math.abs(delta)}`;
+        feedback.classList.toggle("gain", delta > 0);
+        if (delta === 0) return;
+        if (!window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+          feedback.getAnimations().forEach(animation => animation.cancel());
+          feedback.animate([{ opacity: 0.4, transform: "translateY(3px)" }, { opacity: 1, transform: "none" }], { duration: 180, easing: "ease-out" });
+        }
+        feedbackTimer = window.setTimeout(() => { feedback.textContent = ""; }, 1600);
+      };
       const update = (delta) => {
         const next = Math.max(0, Number(input.value || 0) + delta);
         input.value = next;
         state.resources[fullKey] = next;
+        report(next);
         queueSave();
       };
       minusFive.addEventListener("click", () => update(-5));
@@ -5405,6 +5477,11 @@
       input.addEventListener("input", () => {
         state.resources[fullKey] = Math.max(0, Number(input.value || 0));
         queueSave();
+      });
+      if (feedback) input.addEventListener("change", () => {
+        const total = Math.max(0, Number(input.value || 0));
+        input.value = total;
+        report(total);
       });
       input.addEventListener("wheel", (event) => {
         event.preventDefault();
@@ -5473,17 +5550,18 @@
         const card = document.createElement("article");
         card.className = "resource-card";
         if (type === "text") card.classList.add("text-resource");
-        card.appendChild(makeResourceHeading(resource));
+        const heading = makeResourceHeading(resource);
+        card.appendChild(heading);
         if (key === "pygmalionStones") {
-          card.appendChild(makeNumberField(fullKey));
+          card.appendChild(makeNumberField(fullKey, zh, heading));
           card.appendChild(makeRepeatableResourceTrack(fullKey, "皮格马利翁之石"));
         } else if (key === "echoes" && ["c3", "c4", "c5"].includes(state.cycle)) {
-          card.appendChild(makeNumberField(fullKey));
+          card.appendChild(makeNumberField(fullKey, zh, heading));
           card.appendChild(makeRepeatableResourceTrack(fullKey, "记忆之回响"));
         } else if (type === "text") {
           card.appendChild(makeResourceTextField(fullKey, "记录稀有资源名称"));
         } else {
-          card.appendChild(makeNumberField(fullKey));
+          card.appendChild(makeNumberField(fullKey, zh, heading));
           if (type === "number-text") {
             card.appendChild(makeResourceTextField(`${fullKey}-names`, "记录祭司姓名"));
           }
@@ -5908,6 +5986,18 @@
     document.querySelector("#exportButton").addEventListener("click", exportState);
     document.querySelector("#importButton").addEventListener("click", () => elements.importInput.click());
     document.querySelector("#printButton").addEventListener("click", () => window.print());
+    document.querySelector(".record-tabs").addEventListener("record-tab-change", renderRecordDeck);
+    recordToolsButton.addEventListener("click", () => {
+      setRecordToolsOpen(recordToolsButton.getAttribute("aria-expanded") !== "true");
+    });
+    document.addEventListener("keydown", event => {
+      if (event.key !== "Escape" || recordToolsButton.getAttribute("aria-expanded") !== "true") return;
+      setRecordToolsOpen(false);
+      recordToolsButton.focus();
+    });
+    document.addEventListener("click", event => {
+      if (!recordToolsButton.contains(event.target) && !recordTools.contains(event.target)) setRecordToolsOpen(false);
+    });
     elements.importInput.addEventListener("change", (event) => {
       const file = event.target.files?.[0];
       if (file) importState(file);

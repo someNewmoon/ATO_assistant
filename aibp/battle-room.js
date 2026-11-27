@@ -263,11 +263,19 @@
       return;
     }
     const room = { ...state, ...patch.room, revision: patch.revision };
+    if (patch.room?.secondAbility === null) delete room.secondAbility;
     if (patch.hero) {
       const { seat, fields } = patch.hero;
       room.heroes = state.heroes.map((hero, index) => index === seat ? { ...hero, ...fields } : hero);
     }
-    if (patch.roll) {
+    if (patch.rolls) {
+      const { latest, removedId, linked } = patch.rolls;
+      room.lastBattleRollId = latest.id;
+      room.rolls = [latest, ...state.rolls
+        .filter(roll => roll.id !== latest.id && (removedId === undefined || roll.id !== removedId))
+        .map(roll => linked && linked.id === roll.id ? linked : roll)];
+      if (state.squad) room.squad = { ...state.squad, lastBattleRoll: latest };
+    } else if (patch.roll) {
       room.rolls = state.rolls.map(roll => roll.id === patch.roll.id ? patch.roll : roll);
       if (state.squad?.lastBattleRoll?.id === patch.roll.id) {
         room.squad = { ...state.squad, lastBattleRoll: patch.roll };
@@ -303,7 +311,7 @@
   let disconnectSocket;
   function connect() {
     if (!credentials?.token || socket) return;
-    const url = new URL(id + '/socket?patch=2', base);
+    const url = new URL(id + '/socket?patch=2&attackPatch=1', base);
     if (memberProjection) url.searchParams.set('projection', '1');
     url.protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
     const current = new WebSocket(url, ['ato-battle-v1', credentials.token]);
@@ -2644,6 +2652,26 @@
     updateStatus();
   }
 
+  function rollHistoryMarkup() {
+    const latestRoll = state.rolls.find(roll => roll.id === state.lastBattleRollId) || state.rolls[0];
+    const logCard = (roll, latest) => rollCard(roll, latest, { showBpControls: roll.seat !== rollSeat });
+    const rolls = latestRoll ? logCard(latestRoll, true)
+      + state.rolls.filter(roll => roll !== latestRoll).map(roll => logCard(roll, false)).join('') : '';
+    return '<section class="battle-room-rolls"><h3>掷骰记录</h3>'
+      + (rolls ? '<ol>' + rolls + '</ol>' : '<p>还没有掷骰。</p>') + '</section>';
+  }
+
+  function renderBattleHistory(details) {
+    const history = details.querySelector('[data-room-history]');
+    const personal = actor.role === 'player' || hostPersonalView;
+    renderSections(history, [details.open && !personal && rollHistoryMarkup(), details.open && teamActivity()]);
+  }
+
+  content.addEventListener('toggle', event => {
+    const details = event.target;
+    if (details.matches('.room-battle-history') && content.contains(details) && state) renderBattleHistory(details);
+  }, true);
+
   function render() {
     if (traumaDialog.open) updateHitTraumaPreview();
     const { role } = actor;
@@ -2680,12 +2708,6 @@
       if (!choices.size) selectedDice.delete(id);
     }
     const personal = (role === 'player' || (host && hostPersonalView)) && edit;
-    const latestRoll = personal ? null : state.rolls.find(roll => roll.id === state.lastBattleRollId) || state.rolls[0];
-    const logCard = (roll, latest) => rollCard(roll, latest, { showBpControls: roll.seat !== rollSeat });
-    const rolls = latestRoll ? logCard(latestRoll, true)
-      + state.rolls.filter(roll => roll !== latestRoll).map(roll => logCard(roll, false)).join('') : '';
-    const rollLog = '<section class="battle-room-rolls"><h3>掷骰记录</h3>'
-      + (rolls ? '<ol>' + rolls + '</ol>' : '<p>还没有掷骰。</p>') + '</section>';
     const active = document.activeElement;
     const focusRoot = summary.contains(active) ? summary : content;
     const focus = active && focusRoot.contains(active) ? [...focusRoot.querySelectorAll('button,select,input')].indexOf(active) : -1;
@@ -2709,8 +2731,7 @@
         + (canFinishTurn ? '<button type="button" data-action="turn-finish" data-seat="' + second.seat + '">结束回合</button>' : '') : '')
       + '<div>' + pool + '</div></section>';
     const poolByDice = edit && (personal || !!own || showFirstAbility);
-    const activity = edit && teamActivity();
-    const showHistory = edit && (!personal || activity);
+    const showHistory = edit && (!personal || state.activity?.length);
     renderSections(content, [
       goal, !personal && !poolByDice && poolSection,
       edit && '<section class="room-dice-panel" id="room-dice"></section>',
@@ -2718,7 +2739,7 @@
       !edit && state.board && '<details class="room-jump-panel"><summary>骇物面板</summary><div data-closed-apostle></div></details>',
       !edit && '<details class="room-jump-panel"><summary>创伤牌库</summary><div data-closed-trauma></div></details>',
       showHistory && '<details class="room-battle-history"><summary>战斗记录</summary><div data-room-history></div></details>',
-      overview, !edit && rollLog,
+      overview, !edit && rollHistoryMarkup(),
       state.squad && '<p><a href="' + escape(squadLink.link('/aibp/squad', id)) + '">返回联机小队</a>'
         + (roomVoyage() ? ' <a data-room-voyage-return data-page-router-ignore="true" href="'
           + escape(window.ATO_VOYAGE.returnUrl(roomVoyage().entry)) + '">返回航行</a>' : '') + '</p>',
@@ -2726,7 +2747,8 @@
     if (edit) renderDicePanel(content.querySelector('#room-dice'), poolByDice ? poolSection : '');
     renderCombatTabs(personal);
     renderPilotView();
-    if (showHistory) renderSections(content.querySelector('[data-room-history]'), [!personal && rollLog, activity]);
+    const history = showHistory && content.querySelector('.room-battle-history');
+    if (history?.open) renderBattleHistory(history);
     if (!edit) {
       const bossPanel = content.querySelector('[data-closed-apostle]');
       if (bossPanel) renderMarkup(bossPanel, roomProjection(true));

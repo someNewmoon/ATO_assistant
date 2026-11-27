@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { copyFile, lstat, mkdir, mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { basename, dirname, extname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import sharp from 'sharp';
 import { aibpImageIndex, collectHostedArt, roomCardArt } from './hosted-card-art.js';
 import { buildBattleRoom } from './build-battle-room.js';
 import { buildHostedStory } from './build-hosted-story.js';
@@ -51,6 +52,14 @@ async function addCampaignShell(staging) {
   }));
 }
 
+// These assets are only used as small UI icons. Resize the Pages copies
+// and keep the locally supplied and extracted artwork outside the repository.
+const roomIcons = new Set([
+  ...['opening', 'break', 'diversion', 'rouse', 'black', 'fire', 'hope']
+    .map(name => 'aibp/images/battle-markers/' + name + '.webp'),
+  'aibp/room-dice-art/dodge.webp',
+]);
+
 const staging = await mkdtemp(join(directory, '.pages-'));
 try {
   for (const [file, source] of sourceFiles) {
@@ -61,7 +70,9 @@ try {
       throw new Error(`Pages 单文件大于 25 MiB: ${file}`);
     }
     await mkdir(dirname(dest), { recursive: true });
-    await copyFile(source, dest);
+    if (!roomIcons.has(file)) await copyFile(source, dest);
+    else await sharp(source).resize(96, 96, { fit: 'inside', withoutEnlargement: true })
+      .webp({ quality: 88, effort: 6 }).toFile(dest);
   }
   const paths = [...sourceFiles.keys()].sort();
   const { images: gearCards } = JSON.parse(await readFile(join(repo, 'technology/gear_card_images.json'), 'utf8'));

@@ -381,6 +381,41 @@ test('卡牌增量按客户端版本发送，只有房主收到完整牌堆', ()
   assert.equal(legacy.messages[0].room.hostBattleDeck, undefined);
 });
 
+test('新版投掷增量保留历史顺序与护甲关联，旧版仍收到完整状态', () => {
+  const r = room();
+  r.revision = 0;
+  r.rolls = Array.from({ length: 30 }, (_, index) => ({
+    id: 'dodge-' + index, mode: 'dodge', seat: index % 2, round: 1,
+    dice: [{ id: 'die-' + index, kind: 'crit', value: 4 }],
+  }));
+  r.lastBattleRollId = r.rolls[0].id;
+  const viewer = { role: 'viewer' };
+  const messages = [];
+  const sender = { deserializeAttachment: () => ({ ...player, patches: true, attackPatches: true }) };
+  const legacy = { deserializeAttachment: () => ({ ...viewer, patches: true, cardPatches: true }),
+    send: text => messages.push(JSON.parse(text)) };
+  const next = Object.assign(Object.create(BattleRoom.prototype), {
+    save: () => {},
+    ctx: { getWebSockets: () => [sender, legacy], storage: { transactionSync: write => write() } },
+    sql: { exec: () => ({ toArray: () => [] }) },
+  });
+  const submit = fields => next.action(r, player, { id: crypto.randomUUID(), seat: 0, ...fields }, [], undefined, sender);
+  const reroll = submit({ type: 'reroll', roll: 'dodge-10', ids: ['die-10'] }).roomPatch;
+  assert.equal(reroll.rolls.latest.id, 'dodge-10');
+  assert.equal(reroll.rolls.latest.dice[0].rerolled, true);
+  assert.equal(r.rolls[0].id, 'dodge-10');
+  assert.equal(r.rolls.length, 30);
+  const defense = submit({ type: 'roll', mode: 'defense', counts: { red: 1 }, parentRoll: 'dodge-10' }).roomPatch;
+  assert.equal(defense.baseRevision, reroll.revision);
+  assert.equal(defense.rolls.latest.parentRoll, 'dodge-10');
+  assert.equal(defense.rolls.linked.defenseRoll, defense.rolls.latest.id);
+  assert.equal(defense.rolls.removedId, 'dodge-29');
+  assert.equal(r.rolls.length, 30);
+  assert.equal(messages[1].room.revision, defense.revision);
+  assert.equal(messages[1].room.rolls[0].id, defense.rolls.latest.id);
+  assert.equal(messages[1].room.rolls[1].defenseRoll, defense.rolls.latest.id);
+});
+
 test('成员的投屏连接使用只读身份，并只投影共享剧情', () => {
   const r = room();
   r.secrets = { host: 'host', viewer: 'viewer', players: ['player'] };
@@ -1265,7 +1300,34 @@ test('奖励攻击独立于回合行动，支持骇物轮次、取消、触发�
       action('bp-request');
       assert.equal(r.battleDeck.bpSeat, 1);
     }
-    action('roll', power);
+    let powerId = power.id;
+    if (phase === 'titans') {
+      r.revision = 0;
+      const viewers = {};
+      const sockets = ['host', 'viewer', 'legacy'].map(role => ({
+        deserializeAttachment: () => ({ role: role === 'legacy' ? 'viewer' : role,
+          patches: true, cardPatches: true, attackPatches: role !== 'legacy' }),
+        send: data => { viewers[role] = JSON.parse(data); },
+      }));
+      const sender = { deserializeAttachment: () => ({ ...attacker, patches: true, cardPatches: true, attackPatches: true }) };
+      const transport = Object.assign(Object.create(BattleRoom.prototype), {
+        save: () => {},
+        ctx: { getWebSockets: () => [sender, ...sockets], storage: { transactionSync: write => write() } },
+        sql: { exec: () => ({ toArray: () => [] }) },
+      });
+      powerId = crypto.randomUUID();
+      const body = { ...power, type: 'roll', id: powerId, seat: 1, round: 1, phase, bonusId: 'bonus' };
+      const { roomPatch } = transport.action(r, attacker, body, [], undefined, sender);
+      assert.equal(roomPatch.rolls.latest.id, body.id);
+      assert.equal(roomPatch.room.projection.bpPending, true);
+      assert.equal(roomPatch.room.bpSeat, 1);
+      assert.equal(roomPatch.room.hostBattleDeck, undefined);
+      assert.equal(viewers.host.roomPatch.room.hostBattleDeck.revision, beforeReveal.revision + 1);
+      assert.equal(viewers.viewer.roomPatch.room.hostBattleDeck, undefined);
+      assert.equal(viewers.legacy.room.projection.bpPending, true);
+    } else {
+      action('roll', power);
+    }
     assert.equal(r.battleDeck.bpSeat, 1);
     assert.equal(r.battleDeck.revision, beforeReveal.revision + 1);
     assert.equal(r.rolls[0].parentRoll, 'attack');
@@ -1274,7 +1336,7 @@ test('奖励攻击独立于回合行动，支持骇物轮次、取消、触发�
     assert.equal(r.rolls.length, 2);
     const pending = forced.bpResponse(r);
     assert.equal(pending.seat, 1);
-    action('bp-settle', { id: 'bp-result', roll: 'power', value: 1, card: face('BP')._room.face.src });
+    action('bp-settle', { id: 'bp-result', roll: powerId, value: 1, card: face('BP')._room.face.src });
     assert.equal(r.battleStats[1].damage, 1);
     assert.equal(r.battleStats[0]?.damage ?? 0, 0);
     assert.deepEqual(forced.bpResponse(r), { seat: 1, id: 'bp-result', settled: true });

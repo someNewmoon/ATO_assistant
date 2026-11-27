@@ -280,6 +280,45 @@ function combatPatch(room, { type, id, seat, key, delta }) {
     ...(hero && { hero }), ...(activity?.id === id && { activity }),
   } };
 }
+// Attack steps share only the changed fields and the dice entries they touched.
+function attackActionPatch(room, body, previousRolls, previousDeckRevision) {
+  const { type, id, seat } = body;
+  const changedDeck = type === 'roll' && room.battleDeck?.revision !== previousDeckRevision ? room.battleDeck : null;
+  let changes, hero, roll, rolls;
+  if (type === 'attack-declare') {
+    changes = { turn: room.turn, priorityTarget: priorityTarget(room), secondAbility: room.secondAbility ?? null };
+    hero = { seat, fields: { stats: room.heroes[seat].stats } };
+  } else if (['attack-check', 'attack-clear'].includes(type)) {
+    changes = { turn: room.turn };
+    if (type === 'attack-clear' || body.value === 'miss') changes.pool = room.pool;
+  } else if (['attack-first', 'turn-spend', 'bonus-attack-start', 'bonus-attack-cancel', 'attack-finish'].includes(type)) {
+    changes = { turn: room.turn, secondAbility: room.secondAbility ?? null };
+  } else if (['roll', 'reroll', 'convert'].includes(type)) {
+    rolls = { latest: room.rolls[0] };
+    if (type === 'roll') {
+      changes = { turn: room.turn, secondAbility: room.secondAbility ?? null };
+      // A combined reveal and Power roll publishes both mutations in one revision.
+      if (changedDeck) Object.assign(changes, { projection: room.projection,
+        deckRevision: changedDeck.revision, bpSeat: changedDeck.bpSeat ?? null });
+      if (room.squad) changes.damageBySeat = room.heroes.map((_, seat) => room.battleStats[seat]?.damage ?? 0);
+      const removed = previousRolls.find(entry => !room.rolls.includes(entry));
+      if (removed) rolls.removedId = removed.id;
+      const linked = body.mode === 'defense' && room.rolls.find(entry => entry.id === body.parentRoll);
+      if (linked) rolls.linked = linked;
+    }
+  } else if (type === 'roll-wounds') {
+    roll = room.rolls.find(entry => entry.id === body.roll);
+    if (room.squad) changes = { damageBySeat: room.heroes.map((_, seat) => room.battleStats[seat]?.damage ?? 0) };
+  } else return null;
+
+  const activity = room.activity?.[0];
+  return { attack: true, ...(changedDeck && { cards: true, hostDeck: changedDeck }), data: { roomPatch: {
+    baseRevision: room.revision - 1, revision: room.revision, room: changes,
+    ...(hero && { hero }), ...(roll && { roll }), ...(rolls && { rolls }),
+    ...(activity?.id === id && { activity }),
+  } } };
+}
+
 // Card operations change the public projection and at most one settled roll.
 function cardActionPatch(room, body, previousDeckRevision) {
   let changes, roll;
@@ -311,7 +350,8 @@ function cardActionPatch(room, body, previousDeckRevision) {
 }
 
 function patchForSocket(update, attachment) {
-  if (!update || !attachment?.patches || (update.cards && !attachment.cardPatches)) return null;
+  if (!update || !attachment?.patches || (update.cards && !attachment.cardPatches)
+      || (update.attack && !attachment.attackPatches)) return null;
   const { data, hostDeck } = update;
   if (!hostDeck || attachment.role !== 'host') return data;
   const roomPatch = data.roomPatch;
@@ -476,7 +516,8 @@ export class BattleRoom extends DurableObject {
         this.ctx.acceptWebSocket(server);
         const patchVersion = url.searchParams.get('patch');
         server.serializeAttachment({ ...actor, secretHash, projection,
-          patches: ['1', '2'].includes(patchVersion), cardPatches: patchVersion === '2' });
+          patches: ['1', '2'].includes(patchVersion), cardPatches: patchVersion === '2',
+          attackPatches: patchVersion === '2' && url.searchParams.get('attackPatch') === '1' });
         server.send(JSON.stringify({ ...this.view(room, actor), socketActions: true, socketHeartbeat: true }));
         return new Response(null, { status: 101, webSocket: client, headers: { 'Sec-WebSocket-Protocol': protocol } });
       }
@@ -630,6 +671,7 @@ export class BattleRoom extends DurableObject {
     }
     if (room.closed) reject(room.squad ? '小队已解散。' : '本场战斗已结束。', 409);
     const previousProjection = room.projection;
+    const previousRolls = body.type === 'roll' ? room.rolls.slice() : null;
     const previousDeckRevision = room.battleDeck?.revision;
     const undoWasAvailable = canUndoTurn(room);
     const turnUndo = captureTurnUndo(room, actor, body);
@@ -647,8 +689,11 @@ export class BattleRoom extends DurableObject {
       if (key && key !== room.secrets.players[seat]) this.revokeSeat(seat);
     });
     const combat = combatPatch(room, body);
-    const patch = combat ? { data: combat } : cardActionPatch(room, body, previousDeckRevision);
-    if (patch && (undoWasAvailable || turnUndo)) patch.data.roomPatch.room.canUndoTurn = Boolean(turnUndo);
+    const patch = combat ? { data: combat } : attackActionPatch(room, body, previousRolls, previousDeckRevision)
+      || cardActionPatch(room, body, previousDeckRevision);
+    if (patch && (undoWasAvailable || turnUndo)) {
+      (patch.data.roomPatch.room ||= {}).canUndoTurn = Boolean(turnUndo);
+    }
     this.publish(room, sender, patch);
     const acknowledgement = patchForSocket(patch, sender?.deserializeAttachment());
     return acknowledgement ? { ok: true, ...acknowledgement } : this.view(room, actor);

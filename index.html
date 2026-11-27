@@ -2751,6 +2751,7 @@
   <!-- Mobile composition is enabled only by the installed APK in portrait. -->
   <link rel="stylesheet" href="./assets/mobile/common.css?v=20261028-apk-portrait1">
   <link rel="stylesheet" href="./assets/mobile/dashboard.css?v=20261028-apk-portrait1">
+  <link rel="stylesheet" href="./assets/voyage-watch.css?v=1">
   <script src="./assets/mobile/layout.js?v=20261028-apk-portrait1" defer></script>
   <script src="./assets/mobile/dashboard.js?v=20261028-apk-portrait1" defer></script>
 </head>
@@ -2791,6 +2792,11 @@
         <div class="title-row">
           <h1 id="dashboardTitle" class="cycle-title">ATO 战役主控台</h1>
         </div>
+        <div class="voyage-journal" data-voyage-watch>
+          <p class="voyage-volume">阿尔戈号航海日志 <span id="voyageJournalDay"></span></p>
+          <p class="voyage-journal-title">迷宫的真理</p>
+          <p id="voyageJournalLine"></p>
+        </div>
       </div>
       <section class="day-card" aria-label="当前天数">
         <form id="dayJumpForm" class="day-jump-form">
@@ -2817,6 +2823,14 @@
         <a class="record-card-link" href="./aibp/trauma" data-online-trauma hidden>创伤牌库</a>
         <a class="record-card-link" href="./aibp/squads" data-online-squads hidden><span class="nav-icon" aria-hidden="true" style="--nav-icon-w:18px;--nav-icon-h:18px;--icon-src:url(../assets/icons/argonauts.svg?v=apk-ui-a72da92bdf63)"></span>联机小队</a>
       </nav>
+      <label class="voyage-scene-picker" data-voyage-watch>
+        日志场景
+        <select id="voyageScene" data-dashboard-readonly-allowed>
+          <option value="dusk">暮色灯火</option>
+          <option value="storm">雨夜值更</option>
+          <option value="dawn">晨光入湾</option>
+        </select>
+      </label>
       <label class="title-cycle-control">
         当前 Cycle
         <select id="cycleSelect"></select>
@@ -2828,10 +2842,20 @@
       <button id="dashboardTakeoverButton" type="button" data-dashboard-readonly-allowed>接管编辑</button>
     </section>
 
+    <details class="voyage-chronicle" data-voyage-watch open>
+      <summary>远征纪事</summary>
+      <div id="voyageChronicleDays"></div>
+      <ul id="voyageChronicleEntries" aria-live="polite"></ul>
+      <p id="voyageChronicleEmpty" hidden>航海日志还没有带日期的战役记录。</p>
+    </details>
+
     <div class="grid">
-      <section class="panel">
+      <section class="panel voyage-flow">
         <div class="panel-head">
-          <h2>今日流程</h2>
+          <div>
+            <h2>今日流程</h2>
+            <p id="voyageWatchNote" data-voyage-watch></p>
+          </div>
           <div class="flow-head-tools">
             <div class="progress" aria-live="polite">
               <div class="progress-track"><div id="progressFill" class="progress-fill"></div></div>
@@ -7620,6 +7644,115 @@
       return section;
     }
 
+    const voyageWatchNotes = {
+      move: "风把海图的一角掀起来。我用手肘压住它，等舵手报出下一段航向。",
+      explore: "桨声慢下来。我俯过船舷，辨认水面下那一段浅色的石墙。",
+      survey: "我把远岸的两个山尖描在海图边上。等我们返航，从另一面也该认得出来。",
+      encounter: "桅顶有人举起一只手。我搁下笔，跟着他的目光往浪脊上看。",
+      development: "甲板下传来铜锤的轻响。我翻到图样那一页，给工匠腾出地方。",
+      story: "我把灯芯挑亮些，让同伴从头讲。那天在岸上听见的话，我想照原样记下来。",
+      doom: "我数着两道浪之间的间隔。船舱里很静，连灯油的爆响都听得清。",
+      end: "墨迹干了。我在这一行末尾点了一点，把笔留给下一班值更的人。",
+    };
+    let voyageWatchStep = null;
+    let voyageWatchAnimation;
+    let voyageChronicleCache;
+    let voyageChronicleDay;
+
+    function renderVoyageChronicle() {
+      if (currentCycleConfig().id !== "c1") return;
+      const notes = typeof state.notes === "string" ? state.notes : "";
+      const profile = archive.activeProfileId;
+      const day = Number(state.day);
+      if (voyageChronicleCache?.notes === notes && voyageChronicleCache.profile === profile && voyageChronicleCache.day === day) return;
+      if (voyageChronicleCache?.profile !== profile || voyageChronicleCache?.day !== day) voyageChronicleDay = undefined;
+      voyageChronicleCache = { notes, profile, day };
+
+      const days = new Map();
+      for (const line of notes.split("\n").reverse()) {
+        const match = /^\[[^\s\]]+ C1 第(\d+)天 · ([^\]]+)\]\s+(.+)$/u.exec(line);
+        if (!match || Number(match[1]) > day) continue;
+        const date = Number(match[1]);
+        if (!days.has(date)) days.set(date, []);
+        const entries = days.get(date);
+        if (entries.length < 4) entries.push({ source: match[2], text: match[3] });
+      }
+      const recent = [...days.keys()].sort((left, right) => right - left).slice(0, 3);
+      const chooser = document.getElementById("voyageChronicleDays");
+      const list = document.getElementById("voyageChronicleEntries");
+      document.getElementById("voyageChronicleEmpty").hidden = recent.length > 0;
+      if (!recent.includes(voyageChronicleDay)) voyageChronicleDay = undefined;
+
+      function selectDay(date) {
+        voyageChronicleDay = date;
+        for (const button of chooser.children) button.setAttribute("aria-pressed", String(Number(button.value) === date));
+        list.replaceChildren(...(days.get(date) || []).map(entry => {
+          const item = document.createElement("li");
+          const source = document.createElement("strong");
+          source.textContent = entry.source;
+          item.append(source, entry.text);
+          return item;
+        }));
+      }
+
+      chooser.replaceChildren(...recent.map(date => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.value = date;
+        button.dataset.dashboardReadonlyAllowed = "";
+        button.setAttribute("aria-controls", list.id);
+        const label = document.createElement("strong");
+        label.textContent = `第 ${date} 日`;
+        const preview = document.createElement("span");
+        preview.textContent = days.get(date)[0].text;
+        button.append(label, preview);
+        button.addEventListener("click", () => selectDay(voyageChronicleDay === date ? undefined : date));
+        return button;
+      }));
+      selectDay(voyageChronicleDay);
+    }
+
+    function renderVoyageWatch(stepId) {
+      if (currentCycleConfig().id !== "c1") {
+        voyageWatchStep = null;
+        voyageWatchAnimation?.cancel();
+        return;
+      }
+      const profile = archive.activeProfileId;
+      const day = state.day;
+      const previous = voyageWatchStep;
+      const settled = campaignStorageAvailable && !elements.appShell.hidden;
+      const changed = settled && previous?.session === campaignSessionEpoch
+        && previous.profile === profile && previous.stepId !== stepId;
+      voyageWatchStep = settled ? { session: campaignSessionEpoch, profile, stepId } : null;
+      const map = dashboardNearbyMapState("c1");
+      const tile = mapCycleDefinition("c1")?.tiles?.find(tile => tile.id === map?.currentTile);
+      const journalDay = `卷 I · 第 ${day} 日`;
+      const journalLine = map?.currentTile ? `我把船位记在海图 ${tile?.label || map.currentTile}。接下来的航程，就从这一格写起。`
+        : "我摊开海图，等船位落定，再记下今天的航程。";
+      const heading = document.getElementById("voyageJournalDay");
+      const story = document.getElementById("voyageJournalLine");
+      const note = document.getElementById("voyageWatchNote");
+      const noteText = voyageWatchNotes[stepId] || "今天的航程记到这里。";
+      if (heading.textContent !== journalDay) heading.textContent = journalDay;
+      if (story.textContent !== journalLine) story.textContent = journalLine;
+      if (note.textContent !== noteText) note.textContent = noteText;
+
+      if (changed && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+        voyageWatchAnimation?.cancel();
+        voyageWatchAnimation = note.animate([{ opacity: 0.15 }, { opacity: 1 }], { duration: 330, easing: "ease-out" });
+        elements.flowList.querySelector(".flow-step.current .step-title")?.animate(
+          [{ backgroundColor: "#506756" }, { backgroundColor: "#2f433a" }],
+          { duration: 460, easing: "ease-out" },
+        );
+      }
+      renderVoyageChronicle();
+    }
+
+    document.getElementById("voyageScene").addEventListener("change", event => {
+      document.body.dataset.voyageScene = event.currentTarget.value;
+    });
+
     function syncCampaignLog() {
       const input = elements.notesInput;
       const value = typeof state.notes === "string" ? state.notes : "";
@@ -10473,6 +10606,7 @@
       elements.flowList.appendChild(fragment);
       if (focusedStep || focusedCard) document.getElementById(focusedStep || focusedCard)?.focus({ preventScroll: true });
       renderTodayPreview(pending);
+      renderVoyageWatch(flowSteps[active]?.id);
       renderStructureTechDue();
       renderProgress();
       updateRecordLinks();
@@ -16706,6 +16840,7 @@
     });
     elements.notesInput.addEventListener("input", () => {
       state.notes = elements.notesInput.value;
+      renderVoyageChronicle();
       saveState();
     });
     elements.resetTodayButton.addEventListener("click", resetToday);

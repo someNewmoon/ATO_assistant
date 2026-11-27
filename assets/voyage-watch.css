@@ -1,0 +1,336 @@
+body:not([data-cycle="c1"]) #appShell [data-voyage-watch] {
+  display: none;
+}
+
+body[data-cycle="c1"] #appShell {
+  --voyage-scene: url("./voyage-watch/captains-desk-pov.jpg");
+  --voyage-shadow: #16251e;
+  --voyage-metal: #a8834d;
+  --voyage-paper: #f6ead0;
+}
+
+body[data-cycle="c1"][data-voyage-scene="storm"] #appShell {
+  --voyage-scene: url("./voyage-watch/captains-desk-storm.jpg");
+  --voyage-shadow: #14202b;
+  --voyage-metal: #899eaa;
+  --voyage-paper: #ebebdf;
+}
+
+body[data-cycle="c1"][data-voyage-scene="dawn"] #appShell {
+  --voyage-scene: url("./voyage-watch/captains-desk-dawn.jpg");
+  --voyage-shadow: #293025;
+  --voyage-metal: #ad8253;
+  --voyage-paper: #fbecd6;
+}
+
+body[data-cycle="c1"] #appShell > header.topbar:has(.voyage-journal) {
+  min-height: clamp(285px, 27vw, 400px);
+  padding: clamp(15px, 3vw, 44px);
+  border: 1px solid var(--voyage-metal);
+  border-radius: 3px;
+  background: linear-gradient(90deg, var(--voyage-shadow), color-mix(in srgb, var(--voyage-shadow) 92%, transparent) 27%, transparent 75%),
+    var(--voyage-scene) center 55% / cover no-repeat var(--voyage-shadow);
+  color: #f8ebcc;
+  box-shadow: 0 6px 19px #29221842;
+}
+
+body[data-cycle="c1"] #appShell #dashboardTitle {
+  margin-bottom: 14px;
+  color: #eed2a0;
+  font-size: 13px;
+}
+
+body[data-cycle="c1"] #appShell #dashboardTitle .cycle-symbol {
+  width: 22px;
+  height: 22px;
+  flex-basis: 22px;
+}
+
+body[data-cycle="c1"] #appShell > header.topbar:has(.voyage-journal)::after {
+  content: none;
+}
+
+body[data-cycle="c1"] #appShell > header.topbar .day-card #dayInput {
+  color: #f8ebcc;
+}
+
+body[data-cycle="c1"] #appShell > header.topbar .day-jump-form button {
+  white-space: nowrap;
+}
+
+#appShell[data-art-view="settings"] > .voyage-chronicle {
+  display: none;
+}
+
+.voyage-volume {
+  color: #eed2a0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.voyage-volume span {
+  border-inline-start: 1px solid #d3ad7f;
+  margin-inline-start: 8px;
+  padding-inline-start: 8px;
+}
+
+.voyage-journal-title {
+  color: #ffeccb;
+  font: 700 clamp(30px, 5.9vw, 77px)/1.2 "Songti SC", STSong, SimSun, serif;
+  margin-block: 8px;
+  text-shadow: 0 2px 10px var(--voyage-shadow);
+}
+
+#voyageJournalLine {
+  font: 500 clamp(15px, 1.45vw, 20px)/1.65 "Kaiti SC", STKaiti, KaiTi, serif;
+  max-width: 28em;
+  text-shadow: 0 1px 4px #0b1711;
+}
+
+body[data-cycle="c1"] #appShell > header.topbar:has(.voyage-journal) .day-card {
+  min-width: 0;
+  width: auto;
+  align-self: start;
+  background: color-mix(in srgb, var(--voyage-shadow) 92%, transparent);
+  border: 1px solid var(--voyage-metal);
+  border-radius: 3px;
+}
+
+#appShell .voyage-scene-picker {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+#appShell .voyage-scene-picker select {
+  width: auto;
+  min-height: 32px;
+}
+
+#appShell .voyage-chronicle {
+  margin-bottom: 14px;
+  padding: 10px 14px;
+  border: 1px solid var(--voyage-metal);
+  box-shadow: inset 4px 0 #9b765158;
+  background: repeating-linear-gradient(0deg, transparent 0 27px, #9c7e531c 27px 28px), var(--voyage-paper);
+  color: #453426;
+  overflow-wrap: anywhere;
+}
+
+.voyage-chronicle summary {
+  cursor: pointer;
+  font: 700 17px/1.4 "Songti SC", STSong, SimSun, serif;
+}
+
+#voyageChronicleDays {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr));
+  gap: 6px;
+  margin-top: 7px;
+}
+
+body[data-cycle="c1"] #appShell #voyageChronicleDays button {
+  display: grid;
+  text-align: start;
+  gap: 2px;
+  min-width: 0;
+  padding: 6px 10px;
+  border: 1px solid #bca16f;
+  background: #f9f0dd;
+  color: #453426;
+}
+
+body[data-cycle="c1"] #appShell #voyageChronicleDays button[aria-pressed="true"] {
+  background: #e4cca1;
+  box-shadow: inset 0 -2px #956d3b;
+}
+
+#voyageChronicleDays button span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+#voyageChronicleEntries {
+  padding-inline-start: 0;
+  margin: 6px 0 0;
+  list-style: none;
+  font-size: 13px;
+}
+
+#voyageChronicleEntries li + li {
+  margin-top: 5px;
+}
+
+#voyageChronicleEntries strong {
+  display: inline-block;
+  padding-inline-end: 8px;
+  color: #795833;
+}
+
+body[data-cycle="c1"] #appShell .voyage-flow {
+  padding: 0;
+  border: 1px solid var(--voyage-metal);
+  border-radius: 3px;
+  background: var(--voyage-paper);
+  box-shadow: 0 4px 14px #473a241c;
+}
+
+body[data-cycle="c1"] #appShell .voyage-flow > .panel-head {
+  margin: 0;
+  padding: clamp(12px, 2.6vw, 36px);
+  gap: 10px;
+  flex-wrap: wrap;
+  background: linear-gradient(90deg, #f3e4c7 0%, #f3e4c7f7 38%, #f3e4c7d6 64%, #f3e4c745 100%),
+    var(--voyage-scene) center 60% / cover;
+  border-bottom: 2px solid var(--voyage-metal);
+  color: #403128;
+}
+
+#voyageWatchNote {
+  max-width: 27em;
+  margin-top: 6px;
+  color: #4e3d2b;
+  font: 500 clamp(16px, 1.4vw, 20px)/1.65 "Kaiti SC", STKaiti, KaiTi, serif;
+}
+
+body[data-cycle="c1"] #appShell .voyage-flow :is(.progress, .field-note) {
+  padding: 5px 9px;
+  background: #f9efdb;
+  color: #403128;
+}
+
+body[data-cycle="c1"] #appShell .voyage-flow > .panel-body {
+  padding: clamp(8px, 2vw, 24px);
+  background: transparent;
+}
+
+body[data-cycle="c1"] #appShell .voyage-flow #todayPreview {
+  padding: 10px 12px;
+  border: 1px solid #c5aa73;
+  border-left: 4px solid #976829;
+  background: #f2e2bd;
+}
+
+body[data-cycle="c1"] #appShell .voyage-flow .flow-step.current {
+  padding: clamp(8px, 1.5vw, 20px);
+  border: 1px solid #9e9d83;
+  border-top: 4px solid #345246;
+  border-radius: 3px;
+  background: #fcf8ef;
+}
+
+body[data-cycle="c1"] #appShell .voyage-flow .flow-step.current .step-title {
+  background: #2f433a;
+  color: #fff8e7;
+}
+
+body[data-cycle="c1"] #appShell .voyage-flow .flow-step.locked {
+  border-bottom: 1px solid #cbbea3;
+  background: #f5efdf;
+}
+
+body[data-cycle="c1"] #appShell .voyage-flow button.argo-nearby-cell {
+  border-color: #617e6d;
+  background: #e4eee4;
+  color: #213e31;
+}
+
+body[data-cycle="c1"] #appShell .voyage-flow .argo-nearby-cell.current {
+  background: #304a40;
+  color: #fff9e8;
+}
+
+body[data-cycle="c1"] #appShell .voyage-flow .argo-nearby-cell.current :is(strong, span) {
+  color: inherit;
+}
+
+body[data-cycle="c1"] #appShell .voyage-flow .campaign-mini-map {
+  max-width: 100%;
+  min-width: 0;
+}
+
+body[data-cycle="c1"] #appShell .voyage-flow .flow-step-footer {
+  border-top-color: #cbbfa8;
+}
+
+body[data-cycle="c1"] #appShell :is(.voyage-flow, .voyage-chronicle, .voyage-scene-picker, .topbar) :focus-visible {
+  outline: 2px solid #ad7428;
+  outline-offset: 2px;
+}
+
+@media (min-width: 1100px) {
+  body[data-cycle="c1"] #appShell .voyage-flow .map-step-group:has(> .campaign-mini-map) {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-areas: "label chart" "route chart" "note chart";
+    align-items: start;
+    align-content: start;
+    gap: 8px clamp(14px, 3vw, 40px);
+  }
+
+  body[data-cycle="c1"] #appShell .voyage-flow .map-step-label { grid-area: label; }
+  body[data-cycle="c1"] #appShell .voyage-flow .argo-nearby-layout { grid-area: route; }
+  body[data-cycle="c1"] #appShell .voyage-flow .map-step-group > .map-command-status { grid-area: note; }
+  body[data-cycle="c1"] #appShell .voyage-flow .campaign-mini-map { grid-area: chart; }
+}
+
+body[data-cycle="c1"][data-theme-dark] #appShell .voyage-flow {
+  --voyage-paper: var(--panel);
+}
+
+body[data-cycle="c1"][data-theme-dark] #appShell .voyage-flow .flow-step:is(.current, .locked) {
+  background: var(--panel);
+}
+
+body[data-cycle="c1"][data-theme-dark] #appShell .voyage-flow #todayPreview {
+  background: color-mix(in srgb, var(--panel) 90%, var(--ink));
+}
+
+body[data-cycle="c1"] #appShell .voyage-flow > .panel-head h2 {
+  color: #403128;
+}
+
+@media (max-width: 780px) {
+  #voyageChronicleDays {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 135px), 1fr));
+  }
+  body[data-cycle="c1"] #appShell > header.topbar:has(.voyage-journal) {
+    min-height: 0;
+    gap: 12px;
+    padding-bottom: clamp(55px, 19vw, 112px);
+    background-image: linear-gradient(180deg, var(--voyage-shadow), color-mix(in srgb, var(--voyage-shadow) 78%, transparent) 57%, #101d1633),
+      var(--voyage-scene);
+    background-position: center, 65% 64%;
+  }
+
+  body[data-cycle="c1"] #appShell > header.topbar:has(.voyage-journal) .day-card {
+    width: 100%;
+  }
+
+  body[data-cycle="c1"] #appShell .voyage-flow > .panel-head {
+    background-image: linear-gradient(90deg, #f3e4c7fa, #f3e4c7e6 80%, #f3e4c7b8), var(--voyage-scene);
+  }
+}
+
+@media (max-width: 360px) {
+  body[data-cycle="c1"] #appShell > header.topbar:has(.voyage-journal) .day-card {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  body[data-cycle="c1"] #appShell .day-jump-form {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+  }
+
+  body[data-cycle="c1"] #appShell .day-actions {
+    grid-column: 1;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    justify-content: stretch;
+  }
+}

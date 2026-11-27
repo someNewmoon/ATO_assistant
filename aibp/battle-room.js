@@ -1689,22 +1689,27 @@
 
   function powerPartCard(seat, roll) {
     const projection = state.projection;
-    const bp = projection?.bpPending ? projection.bp : null;
+    const response = window.ATO_FORCED_MOVEMENT.bpResponse(state);
+    const currentResponse = response && (response.seat == null || response.seat === seat);
+    const settled = currentResponse && response.settled;
+    const bp = projection?.bpPending || settled ? projection?.bp : null;
     const back = projection?.bpDeck?.back;
     const outcome = state.deckRevision && bp && roll && canSettleBp(seat)
       ? '<div class="room-bp-actions">' + bpOutcomeButtons(roll) + '</div>' : '';
     let control = '';
-    if (!projection?.bpPending) {
+    if (settled) {
+      control = '<small>部位牌结果已记录。可先结算牌面响应，再清空克拉托斯池。</small>';
+    } else if (!projection?.bpPending) {
       control = canRequestBp(seat) ? bpDrawButton(seat) : '<small>'
         + (projection?.sharedDeck && projection.aiPending ? '请先结算当前 AI' : '投掷威力骰后可揭示 BP') + '</small>';
     } else if (roll && !canSettleBp(seat)) {
       control = '<small>等待当前部位牌结算</small>';
     }
-    return '<aside class="room-power-card"><h4>' + (bp?.src ? '当前部位牌' : '部位牌') + '</h4>'
+    return '<aside class="room-power-card"><h4>' + (settled ? '已结算部位牌' : bp?.src ? '当前部位牌' : '部位牌') + '</h4>'
       + (bp?.src ? cardImage('/aibp/' + bp.src, bp.label || '部位牌')
         : (back?.src ? cardImage('/aibp/' + back.src, back.label || '部位牌牌背') : '')
           + '<small>' + (projection ? '等待揭示本次部位牌' : '等待房主同步') + '</small>')
-      + control + (bp && state.board && (actor.role === 'host' || actor.seat === seat)
+      + control + (currentResponse && state.board && (actor.role === 'host' || actor.seat === seat)
         ? '<button type="button" data-forced-context="bp" data-forced-seat="' + seat + '">结算非主动移动</button>' : '')
       + outcome + '</aside>';
   }

@@ -43,7 +43,7 @@
     const more = form.querySelector("[data-forced-more]");
     const amountOutput = form.querySelector("[data-forced-amount]");
     let amount, suspendedTurn, boardStamp, previewMarkup;
-    let trigger = "manual", opener, choices, pendingId, previewAction, recordedError, displayedEffect;
+    let trigger = "manual", bpResponseId, opener, choices, pendingId, previewAction, recordedError, displayedEffect;
 
     function modelLabel(room, seat) {
       return seat === "apostle" ? "骇物" : room.heroes[seat]?.name || "泰坦";
@@ -120,6 +120,7 @@
       const effect = {
         kind, source: selected(fields.source), target: selected(fields.target), amount,
         trigger, direction: kind === "knockback" ? fields.direction.value : "",
+        ...(trigger === "bp" && { bpResponseId }),
         wartimeCity: fields.wartimeCity.checked, terrainBoundary: fields.terrainBoundary.checked,
         ...(absolute && { absoluteException: fields.exception.checked }),
         ...(withRange && { attackRange: fields.attackType.value === "zone" ? "zone" : fields.attackType.value === "ranged" ? fields.attackRange.valueAsNumber : 1,
@@ -131,8 +132,9 @@
       effect.choices = choices;
       let result;
       if (effect.source !== null && effect.target !== null && Number.isFinite(effect.amount)) {
-        result = rules.validActor(actor, effect) ? rules.plan(room, effect, window.BattleTerrain, window.BattleLOS)
-          : { error: "队员只能处理自己参与的移动。" };
+        const error = !rules.validActor(actor, effect) ? "队员只能处理自己参与的移动。"
+          : trigger === "bp" ? rules.bpResponseError(room, effect) : "";
+        result = error ? { error } : rules.plan(room, effect, window.BattleTerrain, window.BattleLOS);
       }
       previewAction = result && !result.error && !result.pending ? { effect, stamp: rules.stamp(room, effect) } : null;
       submit.disabled = !previewAction || Boolean(pendingId);
@@ -243,11 +245,13 @@
         suspendedTurn = mount.closest("#battleRoom")?.querySelector(".room-turn-window[open]");
         if (suspendedTurn) suspendedTurn.open = false;
         trigger = context.trigger || "manual";
+        const response = trigger === "bp" ? rules.bpResponse(room) : null;
+        bpResponseId = response?.id;
         fields.kind.value = trigger === "collision" ? "absolute" : "knockback";
         fields.kind.disabled = trigger === "collision";
         const roster = [["apostle", "骇物"], ...room.heroes.flatMap((hero, index) => hero.condition === "dead" ? [] : [[index, hero.name]])];
         populate(fields.source, roster, "apostle");
-        populate(fields.target, roster, context.seat ?? (actor.role === "player" ? actor.seat : ""));
+        populate(fields.target, roster, response?.seat ?? context.seat ?? (actor.role === "player" ? actor.seat : ""));
         const speed = window.BattleTerrain.getApostleProfile(room.board.apostle, room.board.level)?.speed;
         amount = trigger === "collision" && Number.isInteger(speed) && speed <= 32 ? speed : null;
         if (trigger === "ai" && Number.isInteger(context.range) && context.range > 1) {

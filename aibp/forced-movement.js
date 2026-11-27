@@ -31,6 +31,33 @@
     return actor.role === "host" || actor.role === "player" && (input.source === actor.seat || input.target === actor.seat);
   }
 
+  function bpResponse(room) {
+    const { turn, secondAbility: settled } = room;
+    if (room.projection?.bpPending) {
+      const seat = room.battleDeck?.bpSeat ?? room.bpSeat;
+      const revision = room.battleDeck?.revision ?? room.deckRevision;
+      return { seat, id: "pending:" + revision };
+    }
+    const attack = turn?.bonusAttack || turn?.actions?.attack;
+    const seat = turn?.bonusAttack?.seat ?? turn?.seat;
+    if (attack?.stage === "cleanup" && settled?.round === room.round && settled.seat === seat
+        && settled.roll && settled.roll === attack.powerRoll) {
+      return { seat, id: settled.id, settled: true };
+    }
+    return null;
+  }
+
+  function bpResponseError(room, input) {
+    const response = bpResponse(room);
+    if (!response || (input.bpResponseId != null || response.settled) && input.bpResponseId !== response.id) {
+      return "部位牌响应步骤已更新，请从本次威力结算重新打开。";
+    }
+    if (Number.isInteger(response.seat) && ![input.source, input.target].includes(response.seat)) {
+      return "请对当前部位牌的攻击者结算响应。";
+    }
+    return "";
+  }
+
   function stamp(room, input) {
     const { board, turn } = room;
     return JSON.stringify([board.apostle, board.level, board.layoutRevision, board.map.pieces,
@@ -444,7 +471,7 @@
     };
   }
 
-  const api = { plan, stamp, validActor, names, directions, upperLeft };
+  const api = { plan, stamp, validActor, bpResponse, bpResponseError, names, directions, upperLeft };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else window.ATO_FORCED_MOVEMENT = api;
 })();

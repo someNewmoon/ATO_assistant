@@ -128,9 +128,9 @@ function applyForcedEffect(room, actor, body) {
   if (input.trigger === 'ai' && !room.projection?.aiPending && !guide.usesSignature(turn?.aiGuide)) {
     fail('当前没有待结算的指令技或招牌技。', 409);
   }
-  if (input.trigger === 'bp' && (!room.projection?.bpPending
-      || Number.isInteger(room.battleDeck?.bpSeat) && ![input.source, input.target].includes(room.battleDeck.bpSeat))) {
-    fail('请对当前部位牌的攻击者结算响应。', 409);
+  if (input.trigger === 'bp') {
+    const error = forcedMovement.bpResponseError(room, input);
+    if (error) fail(error, 409);
   }
   const result = forcedMovement.plan(room, input, terrain, los);
   if (result.error || result.pending) fail(result.error || '请完成路线选择。', 409);

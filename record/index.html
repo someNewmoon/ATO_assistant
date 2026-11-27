@@ -1563,7 +1563,7 @@
   </style>
   <link rel="stylesheet" href="../api/cycle-theme.css?v=20261125-folio">
   <link rel="stylesheet" href="./record.css?v=20261125-titan-panel-reference">
-  <link rel="stylesheet" href="../assets/titan-fitting.css?v=2">
+  <link rel="stylesheet" href="../assets/titan-fitting.css?v=3">
   <script src="../story/data/english-source-data.js?v=20261011-english4"></script>
   <script src="../assets/theme.js?v=20261114-light-sidebar1" defer></script>
   <link rel="stylesheet" href="../assets/card-art.css?v=20261017-corners1">
@@ -1919,7 +1919,7 @@
   <script src="../technology/gear-inventory.js?v=20261120-titan-management"></script>
   <script src="../hero/hero-catalog.js?v=20261117-battle-polish"></script>
   <script src="../aibp/kratos-tables.js?v=20261127-titan-fitting"></script>
-  <script src="../assets/titan-fitting.js?v=2"></script>
+  <script src="../assets/titan-fitting.js?v=3"></script>
   <script src="../assets/titan-panel-reference.js?v=20261125-power"></script>
   <script src="../assets/campaign-notes.js?v=20261015"></script>
   <script src="../assets/record-attachments.js?v=20261009"></script>
@@ -3621,7 +3621,7 @@
           const fitted = document.createElement("div");
           fitted.innerHTML = component.render({
             key: "gallery:" + titan.id + ":" + heroId, mode: "preparation", titan: model, name: inv.titanLabel(model),
-            panel: panel && "../" + panel.path, gear,
+            panel: panel && "../" + panel.path, argonaut: hero?.argonaut, gear,
             references: [
               ...(hero ? [{ key: "hero", name: label, detail: "英雄", src: portrait && "../hero/assets/" + portrait }] : []),
               ...(panel ? [{ key: "panel", name: panel.name, detail: "泰坦面板", src: "../" + panel.path }] : []),

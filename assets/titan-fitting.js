@@ -29,7 +29,41 @@
     return Object.hasOwn(position, normalized) ? normalized : 'other';
   }
 
-  function render({ key, mode, titan, name, panel, figure, gear = [], references = [], kratos = '', zoom = false }) {
+  // Head centers measured in the model box for each installed portrait.
+  const titanHeads = {
+    herodotus: [39, 34], philoctetra: [32, 38], solon: [36, 37], ulyssia: [44, 39],
+    tt_ascender: [52, 23], tt_cloudsoarer: [36, 22], tt_earthshaker: [41, 29],
+    tt_executioner: [59, 11], tt_feareater: [49, 16], tt_firestarter: [52, 34],
+    tt_helldiver: [44, 21], tt_mazerunner: [71, 19], tt_pabysswatcher: [42, 22],
+    tt_pdawnburner: [81, 29], tt_plogicbreaker: [29, 36], tt_plunarlander: [59, 32],
+    tt_returner: [29, 18], tt_shadowdancer: [55, 24], tt_trespasser: [41, 16],
+    tt_warkeeper: [54, 19], tt_wishender: [42, 22],
+  };
+  const pool = [51, 83];
+
+  function ritualLight(head) {
+    if (!head) return '';
+    const [x, y] = head;
+    // The model occupies 84% of the composition height after the pool overlaps it.
+    const start = y * .84;
+    const [endX, endY] = pool;
+    const bend = x + (x >= endX ? 9 : -9);
+    return '<div class="titan-fitting-mind-link" aria-hidden="true" style="--head-x:' + x + '%;--head-y:' + start
+      + '%;--pool-x:' + endX + '%;--pool-y:' + endY + '%">'
+      + '<svg viewBox="0 0 100 100" preserveAspectRatio="none"><path d="M ' + x + ' ' + start + ' C '
+      + bend + ' ' + (start + 19) + ', ' + bend + ' ' + (endY - 7) + ', ' + endX + ' ' + endY + '"/></svg>'
+      + '<span class="titan-fitting-head-ring"></span><span class="titan-fitting-water-ring"></span></div>';
+  }
+
+  // Use the stable IDs of the pilots whose artwork is documented in titan-link.
+  const bathArt = {
+    circe: 'triskelion-dream-woman.jpg',
+    phenelope: 'triskelion-dream-woman.jpg',
+    olympia: 'triskelion-dream-woman.jpg',
+    oleander: 'triskelion-dream-man-matched.jpg',
+  };
+
+  function render({ key, mode, titan, name, panel, figure, argonaut, gear = [], references = [], kratos = '', zoom = false }) {
     const inv = window.ATO_GEAR_INVENTORY;
     const type = inv.titanType(titan)?.id || '';
     const image = figure || portrait(titan, panel);
@@ -52,25 +86,30 @@
     }).join('');
     const feature = featured?.src ? '<img src="' + esc(featured.src) + '" alt="' + esc(featured.name) + '" decoding="async">' : '';
     const link = featured?.src || '';
+    const pilot = references.find(card => card.key === 'hero');
+    const bathImage = Object.hasOwn(bathArt, argonaut) ? bathArt[argonaut] : bathArt.circe;
+    const bath = pilot ? '<button type="button" class="titan-fitting-bath" data-fitting-bath aria-pressed="' + (pilot === featured)
+      + '" aria-label="查看英雄 ' + esc(pilot.name) + '"><img src="../assets/titan-fitting/' + bathImage
+      + '" alt="" loading="lazy" decoding="async"><span>' + esc(pilot.name) + '</span></button>' : '';
+    const modelId = inv.dreamwalkerPanel(titan)?.id || type;
+    const mindLink = pilot && image && !figure ? ritualLight(titanHeads[modelId]) : '';
     return '<div class="titan-fitting" data-fitting="' + esc(key) + '" data-fitting-mode="' + esc(mode)
-      + '" data-fitting-titan="' + esc(type) + '"><div class="titan-fitting-layout"><div class="titan-fitting-stage"'
-      + (featured?.part && image ? ' data-fitting-active="' + esc(featured.part) + '"' : '') + '>'
+      + '" data-fitting-titan="' + esc(type) + '"><div class="titan-fitting-layout"><div class="titan-fitting-main">'
+      + (references.length ? '<div class="titan-fitting-archive">' + references.map(slot).join('') + '</div>' : '')
+      + '<div class="titan-fitting-stage"' + (featured?.part && image ? ' data-fitting-active="' + esc(featured.part) + '"' : '') + '>'
       + '<div class="titan-fitting-wing">' + side(['arm', 'armor']) + '</div>'
-      + '<figure><div class="titan-fitting-model">' + (image ? '<img class="titan-fitting-figure" src="' + esc(image)
+      + '<figure><div class="titan-fitting-composition"><div class="titan-fitting-model">' + (image ? '<img class="titan-fitting-figure" src="' + esc(image)
         + '" data-fitting-fallback="' + esc(panel) + '" alt="" decoding="async">' : '') + '<span class="titan-fitting-target" aria-hidden="true"></span></div>'
-      + '<figcaption>' + esc(name || '未选择泰坦') + '</figcaption></figure>'
+      + bath + mindLink + '</div><figcaption>' + esc(name || '未选择泰坦') + '</figcaption></figure>'
       + '<div class="titan-fitting-wing">' + side(['aid', 'attachment', 'other']) + '</div>'
-      + '<svg class="titan-fitting-line" aria-hidden="true"><line/></svg></div>'
+      + '<svg class="titan-fitting-line" aria-hidden="true"><line/></svg></div>' + kratos + '</div>'
       + '<aside class="titan-fitting-preview" aria-label="原卡预览"><header><strong data-fitting-preview-name>' + esc(featured?.name || '原卡预览')
       + '</strong><small data-fitting-preview-detail>' + esc(featured?.detail) + '</small></header>'
       + (zoom ? '<button type="button" class="titan-fitting-original" data-room-art="' + esc(link)
         + '" aria-label="放大原卡"' + (link ? '' : ' hidden') + '>' + feature + '</button>'
         : '<a class="titan-fitting-original" target="_blank" rel="noopener" href="' + esc(link)
           + '" aria-label="打开原卡"' + (link ? '' : ' hidden') + '>' + feature + '</a>')
-      + '<small data-fitting-no-art' + (link ? ' hidden' : '') + '>暂无卡图</small></aside></div>'
-      + (references.length || kratos ? '<div class="titan-fitting-footer">'
-        + (references.length ? '<div class="titan-fitting-archive">' + references.map(slot).join('') + '</div>' : '')
-        + kratos + '</div>' : '') + '</div>';
+      + '<small data-fitting-no-art' + (link ? ' hidden' : '') + '>暂无卡图</small></aside></div></div>';
   }
 
   function updateLine(fitting) {
@@ -122,12 +161,18 @@
   }).observe(document.documentElement, { childList: true, subtree: true });
 
   document.addEventListener('click', event => {
+    const bath = event.target.closest('[data-fitting-bath]');
+    if (bath) {
+      bath.closest('[data-fitting]').querySelector('[data-fitting-choice="hero"]')?.click();
+      return;
+    }
     const button = event.target.closest('[data-fitting-choice]');
     if (!button) return;
     const fitting = button.closest('[data-fitting]');
     const { fittingChoice, fittingSrc, fittingName, fittingDetail } = button.dataset;
     selected.set(fitting.dataset.fitting, fittingChoice);
     for (const slot of fitting.querySelectorAll('[data-fitting-choice]')) slot.setAttribute('aria-pressed', String(slot === button));
+    fitting.querySelector('[data-fitting-bath]')?.setAttribute('aria-pressed', String(fittingChoice === 'hero'));
     fitting.querySelector('[data-fitting-preview-name]').textContent = fittingName;
     fitting.querySelector('[data-fitting-preview-detail]').textContent = fittingDetail;
     const original = fitting.querySelector('.titan-fitting-original');
@@ -149,7 +194,10 @@
     const fallback = image.dataset.fittingFallback;
     if (fallback && image.getAttribute('src') !== fallback) image.src = fallback;
     else image.hidden = true;
-    if (image.matches('.titan-fitting-figure')) updateLine(image.closest('[data-fitting]'));
+    if (image.matches('.titan-fitting-figure')) {
+      image.closest('.titan-fitting-composition').querySelector('.titan-fitting-mind-link')?.remove();
+      updateLine(image.closest('[data-fitting]'));
+    }
   }, true);
 
   window.ATO_TITAN_FITTING = { render, assets, artGear, artMemory, part };

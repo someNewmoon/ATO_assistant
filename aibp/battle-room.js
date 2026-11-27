@@ -1419,12 +1419,12 @@
     const fitting = window.ATO_TITAN_FITTING;
     const loadout = own && fitting ? fitting.render({
       key: 'battle:' + id + ':' + seat, mode: 'battle', titan: hero.titan,
-      name: hero.titan ? inventory.titanLabel(hero.titan) : '', panel: titanArt?.src, zoom: true,
+      name: hero.titan ? inventory.titanLabel(hero.titan) : '', panel: titanArt?.src, argonaut: hero.argonaut, zoom: true,
       gear: hero.gear.flatMap(item => Array.from({ length: Math.min(item.count, 48) }, (_, slot) =>
         slotCard(item, 'gear-card', slot, gearState(item, slot), art?.gearSrc(item.id, roomLanguage),
           fitting.part(item.category), item.count > 1 ? (slot + 1) + '/' + item.count : '', art?.gearThumbSrc(item.id, roomLanguage)))),
       references: [
-        ...(portrait ? [{ key: 'hero', name: hero.name, detail: '英雄', src: '../hero/assets/' + portrait }] : []),
+        { key: 'hero', name: hero.name, detail: '英雄', src: portrait && '../hero/assets/' + portrait },
         ...(titanArt ? [{ key: 'titan', name: titanArt.name, detail: '泰坦面板', src: titanArt.src }] : []),
         ...hero.mnemos.map(item => slotCard(item, 'mnemos-card', 0, item.state || 'ready', art?.mnemosSrc(item.id),
           '', item.fated ? '命业旧忆' : '旧忆 · ' + item.progress + '/' + item.limit)),

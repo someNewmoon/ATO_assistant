@@ -1093,7 +1093,7 @@ button.gear-group-name:hover {
 <link rel="stylesheet" href="tech-tree.css?v=20261125-module-folio">
 <link rel="stylesheet" href="arsenal.css?v=20261124-loadout-image">
 <link rel="stylesheet" href="arsenal-loadout.css?v=20261127-titan-fitting">
-<link rel="stylesheet" href="../assets/titan-fitting.css?v=2">
+<link rel="stylesheet" href="../assets/titan-fitting.css?v=3">
 <link rel="stylesheet" href="../hero/battle-roster.css">
 <link rel="stylesheet" href="../assets/card-art.css?v=20261017-corners1">
 <script src="../assets/card-art.js?v=20261017-corners1" defer></script>
@@ -1179,7 +1179,7 @@ button.gear-group-name:hover {
 <script src="../hero/hero-catalog.js?v=20261117-battle-polish"></script>
 <script src="gear-inventory.js?v=20261120-copy-limits"></script>
 <script src="../aibp/kratos-tables.js?v=20261127-titan-fitting"></script>
-<script src="../assets/titan-fitting.js?v=2"></script>
+<script src="../assets/titan-fitting.js?v=3"></script>
 <script src="loadout-image.js?v=20261124"></script>
 <script>
 const TECH_DICTIONARY_URL = 'tech_card_dictionary.min.json';
@@ -2468,9 +2468,9 @@ function editArsenalLoadout(heroId, catalog) {
     });
     fittingMount.innerHTML = fitting.render({
       key: 'arsenal:' + heroId, mode: 'preparation', titan: selectedTitan, name: selectedTitan && loadoutTitanLabel(selectedTitan),
-      panel: art && '../' + art.path, gear,
+      panel: art && '../' + art.path, argonaut: hero.argonaut, gear,
       references: [
-        ...(portrait ? [{ key: 'hero', name: heroes.heroDisplayName(hero), detail: '英雄', src: '../hero/assets/' + portrait }] : []),
+        { key: 'hero', name: heroes.heroDisplayName(hero), detail: '英雄', src: portrait && '../hero/assets/' + portrait },
         ...(art ? [{ key: 'panel', name: art.name, detail: '泰坦面板', src: '../' + art.path }] : []),
         ...heroes.mnemosCards(hero).map(card => ({ key: 'memory:' + card.card, name: card.zh,
           detail: card.fated ? '命业旧忆' : '旧忆 · ' + card.progress + '/' + card.limit, src: fitting.artMemory(sharedArt, card.card) })),

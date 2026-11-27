@@ -50,16 +50,7 @@
 .titan-fitting-preview header { display: grid; gap: .12rem; overflow-wrap: anywhere; }
 .titan-fitting-original { display: block; padding: 0; border: 0; background: none; width: 100%; }
 .titan-fitting-original img { display: block; width: 100%; max-height: 15rem; object-fit: contain; }
-.titan-fitting-footer {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  align-items: start;
-  gap: .5rem;
-  margin-top: .5rem;
-}
-.titan-fitting-footer:has(.titan-fitting-archive):has(.titan-fitting-kratos) {
-  grid-template-columns: minmax(0, 1fr) minmax(125px, 25%);
-}
+.titan-fitting-main { display: grid; min-width: 0; gap: .5rem; }
 .titan-fitting-archive {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(4.35rem, 100%), 1fr));
@@ -94,7 +85,7 @@
 .titan-fitting-kratos summary { cursor: pointer; overflow-wrap: anywhere; }
 .titan-fitting-kratos ul { display: grid; gap: .25rem; margin: .35rem 0 0; padding-inline-start: 1.1rem; }
 @container (max-width: 530px) {
-  .titan-fitting-layout, .titan-fitting-footer:has(.titan-fitting-archive):has(.titan-fitting-kratos) { grid-template-columns: minmax(0, 1fr); }
+  .titan-fitting-layout { grid-template-columns: minmax(0, 1fr); }
   .titan-fitting-preview { flex-direction: row; justify-content: space-between; align-items: center; text-align: start; }
   .titan-fitting[data-fitting-mode="battle"] .titan-fitting-preview { position: sticky; bottom: .25rem; z-index: 4; }
   .titan-fitting-card { font-size: .68rem; }
@@ -105,3 +96,119 @@
 .titan-gallery-fitting { grid-column: 1 / -1; min-width: 0; }
 .titan-gallery-fitting > summary { cursor: pointer; }
 .titan-gallery-fitting > div { display: grid; gap: .45rem; margin-top: .4rem; }
+
+.titan-fitting-composition {
+  position: relative;
+  justify-self: center;
+  width: min(100%, 18.5rem);
+  min-width: 0;
+}
+.titan-fitting-composition .titan-fitting-model { width: 100%; }
+.titan-fitting-composition:has(.titan-fitting-bath) .titan-fitting-figure {
+  mask-image: linear-gradient(black 66%, #000b 81%, transparent);
+}
+.titan-fitting-composition:has(.titan-fitting-bath):not(:has(.titan-fitting-figure:not([hidden]))) .titan-fitting-model {
+  display: none;
+}
+.titan-fitting-stage .titan-fitting-bath {
+  position: relative;
+  z-index: 1;
+  display: block;
+  width: 124%;
+  margin: -19% -12% 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  color: #effff7;
+  background: none;
+  line-height: 1.2;
+  text-align: center;
+}
+.titan-fitting-stage .titan-fitting-bath img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1300 / 464;
+  object-fit: cover;
+  mask-image: radial-gradient(ellipse 67% 66% at 50% 55%, black 55%, #000a 75%, transparent 100%);
+}
+.titan-fitting-stage .titan-fitting-bath span {
+  position: absolute;
+  inset: auto 7% 11%;
+  display: block;
+  width: fit-content;
+  max-width: 86%;
+  margin-inline: auto;
+  padding: .12rem .42rem;
+  border: 1px solid transparent;
+  border-radius: .25rem;
+  background: #0c1d1ae8;
+  overflow-wrap: anywhere;
+  text-shadow: 0 1px 2px #07130e;
+}
+.titan-fitting-stage .titan-fitting-bath[aria-pressed="true"] span { border-color: #9addc6; }
+.titan-fitting-stage .titan-fitting-bath:is(:focus-visible, :hover) span { text-decoration: underline; }
+.titan-fitting-composition:not(:has(.titan-fitting-figure:not([hidden]))) .titan-fitting-bath { margin-top: 0; }
+.titan-fitting-composition:not(:has(.titan-fitting-figure:not([hidden]))) .titan-fitting-mind-link,
+.titan-fitting-composition:has(.titan-fitting-bath img[hidden]) .titan-fitting-mind-link { display: none; }
+.titan-fitting-mind-link {
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  pointer-events: none;
+  color: #bcffeb;
+  opacity: .78;
+}
+.titan-fitting-head-ring,
+.titan-fitting-water-ring {
+  position: absolute;
+  translate: -50% -50%;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  background: radial-gradient(ellipse, #d0fff08f, transparent 68%);
+  box-shadow: 0 0 12px #77ffcf8c, inset 0 0 8px #a2f6da66;
+}
+.titan-fitting-head-ring {
+  left: var(--head-x);
+  top: var(--head-y);
+  width: 11%;
+  aspect-ratio: 1;
+}
+.titan-fitting-water-ring {
+  left: var(--pool-x);
+  top: var(--pool-y);
+  width: 23%;
+  aspect-ratio: 3.4;
+}
+.titan-fitting-mind-link svg { display: block; width: 100%; height: 100%; overflow: visible; }
+.titan-fitting-mind-link path {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.2;
+  vector-effect: non-scaling-stroke;
+  filter: drop-shadow(0 0 3px #8affdf) drop-shadow(0 0 7px #78e5c7);
+}
+.titan-fitting-stage:has(.titan-fitting-bath) .titan-fitting-wing { position: relative; z-index: 3; }
+.titan-fitting-stage:has(.titan-fitting-bath) .titan-fitting-line { z-index: 4; }
+@media (prefers-reduced-motion: no-preference) {
+  .titan-fitting[data-fitting-mode="battle"] .titan-fitting-mind-link {
+    animation: titan-fitting-breathe 7s ease-in-out infinite alternate;
+  }
+}
+@keyframes titan-fitting-breathe {
+  from { opacity: .52; }
+  to { opacity: 1; }
+}
+
+@container (max-width: 530px) {
+  .titan-fitting-stage:has(.titan-fitting-bath) {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.65fr) minmax(0, 1fr);
+  }
+  .titan-fitting-stage .titan-fitting-bath span {
+    inset-block-end: 0;
+    max-width: 90%;
+    font-size: .67rem;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+}

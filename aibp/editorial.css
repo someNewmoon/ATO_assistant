@@ -25,10 +25,10 @@ h1, h2, h3, .card-column-title { font-family: "Songti SC", "Noto Serif CJK SC", 
 .title-actions .return-main-link { order: 10; margin-left: auto; background: var(--accent-strong); border: 1px solid var(--accent-strong); color: #fff; }
 /* 面板上的浮层控件（状态框 / 暴击槽 / 换大卡）与决战版图上的地形板块、骇物棋子都自带配色、
  * 直接画在卡图或版图上，不能套用这套按钮外观。 */
-body :is(button, select, input:not([type="checkbox"]), textarea):not(.panel-state-marker):not(.critical-mass-slot):not(.panel-card-switch):not(.battle-map-terrain, .battle-piece-apostle, .room-tool-dock button) { border-radius: 0; border-color: var(--line); background: var(--panel); color: var(--ink); box-shadow: none; }
+body :is(button, select, input:not([type="checkbox"]), textarea):not(.panel-state-marker):not(.critical-mass-slot):not(.panel-card-switch):not(.battle-map-terrain, .battle-piece-apostle, .room-tool-dock button, .titan-fitting-bath) { border-radius: 0; border-color: var(--line); background: var(--panel); color: var(--ink); box-shadow: none; }
 body input[type="checkbox"] { accent-color: var(--accent); }
 body :is(button, a, select, input, textarea):focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
-body button:not(:disabled):not(.panel-state-marker):not(.critical-mass-slot):not(.panel-card-switch):not(.battle-map-terrain, .battle-piece-apostle, .room-tool-dock button):hover { background: var(--accent-soft); border-color: var(--accent); transform: none; }
+body button:not(:disabled):not(.panel-state-marker):not(.critical-mass-slot):not(.panel-card-switch):not(.battle-map-terrain, .battle-piece-apostle, .room-tool-dock button, .titan-fitting-bath):hover { background: var(--accent-soft); border-color: var(--accent); transform: none; }
 .sidebar-toggle { background: var(--panel); color: var(--accent-strong); border-color: var(--line); }
 body:not(.sidebar-collapsed) .sidebar-toggle { left: 212px; top: 24px; }
 .title-actions .return-main-link { border-radius: 0; }
